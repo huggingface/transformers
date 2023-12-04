@@ -24,6 +24,7 @@ from transformers.utils import is_torch_available
 if is_torch_available():
     from transformers import RWKVWorldTokenizer
 
+
 @require_torch
 class RWKVWorldTokenizationTest(unittest.TestCase):
     def test_rwkv_world_tokenizer_encode(self):

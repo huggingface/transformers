@@ -46,23 +46,43 @@ RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all RWKV models at https://huggingface.co/models?filter=rwkv
 ]
 
-def rwkv_linear_attention_v5(B, H, S, T, n_head, hidden, time_decay, time_first, receptance, key, value, gate, lxw, lxb, ow, state, return_state=False, seq_mode=True):
-    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1,1,1).reshape(n_head, -1, 1)
-    time_first = time_first.float().reshape(-1,1,1).reshape(n_head, -1, 1)
+
+def rwkv_linear_attention_v5(
+    B,
+    H,
+    S,
+    T,
+    n_head,
+    hidden,
+    time_decay,
+    time_first,
+    receptance,
+    key,
+    value,
+    gate,
+    lxw,
+    lxb,
+    ow,
+    state,
+    return_state=False,
+    seq_mode=True,
+):
+    time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(n_head, -1, 1)
+    time_first = time_first.float().reshape(-1, 1, 1).reshape(n_head, -1, 1)
     lxw = lxw.float()
     lxb = lxb.float()
     # if seq_mode:
     out = torch.empty((B, T, H, S), dtype=receptance.dtype, device=receptance.device)
     for t in range(T):
-        rt = receptance[:,:,t:t+1,:]
-        kt = key[:,:,:,t:t+1]
-        vt = value[:,:,t:t+1,:]
+        rt = receptance[:, :, t : t + 1, :]
+        kt = key[:, :, :, t : t + 1]
+        vt = value[:, :, t : t + 1, :]
         at = kt @ vt
         out[:, t] = (rt @ (time_first * at + state)).squeeze(2)
         state = at + time_decay * state
 
-    out = out.reshape(B*T, H*S)
-    out = F.group_norm(out, num_groups=H, weight=lxw, bias=lxb).reshape(B, T, H*S)
+    out = out.reshape(B * T, H * S)
+    out = F.group_norm(out, num_groups=H, weight=lxw, bias=lxb).reshape(B, T, H * S)
     out = out.to(dtype=hidden.dtype) * gate
     out = out @ ow
 
@@ -86,7 +106,6 @@ class RwkvSelfAttention(nn.Module):
         self.time_decay = nn.Parameter(torch.empty(num_attention_heads, config.head_size))
         self.time_faaaa = nn.Parameter(torch.empty(num_attention_heads, config.head_size))
         self.time_mix_gate = nn.Parameter(torch.empty(1, 1, hidden_size))
-    
 
         self.time_mix_key = nn.Parameter(torch.empty(1, 1, hidden_size))
         self.time_mix_value = nn.Parameter(torch.empty(1, 1, hidden_size))
@@ -111,22 +130,21 @@ class RwkvSelfAttention(nn.Module):
             if state is not None:
                 shifted[:, 0] = state[0][:, :, self.layer_id]
         if len(shifted.size()) == 2:
-            shifted = shifted.unsqueeze(1)       
+            shifted = shifted.unsqueeze(1)
         key = hidden * self.time_mix_key + shifted * (1 - self.time_mix_key)
         value = hidden * self.time_mix_value + shifted * (1 - self.time_mix_value)
         receptance = hidden * self.time_mix_receptance + shifted * (1 - self.time_mix_receptance)
-        gate = hidden* self.time_mix_gate + shifted * (1 - self.time_mix_gate)
-
+        gate = hidden * self.time_mix_gate + shifted * (1 - self.time_mix_gate)
 
         # https://github.com/BlinkDL/ChatRWKV/blob/main/rwkv_pip_package/src/rwkv/model.py#L693
         key = self.key(key).to(torch.float32).view(B, T, H, S).transpose(1, 2).transpose(-2, -1)
         value = self.value(value).to(torch.float32).view(B, T, H, S).transpose(1, 2)
         receptance = self.receptance(receptance).to(torch.float32).view(B, T, H, S).transpose(1, 2)
         gate = F.silu(self.gate(gate))
-        
+
         if state is not None:
             state[0][:, :, self.layer_id] = hidden[:, -1]
-        
+
         return receptance, key, value, gate, state
 
     def forward(self, hidden, state=None, use_cache=False, seq_mode=True):
@@ -172,13 +190,15 @@ class RwkvFeedForward(nn.Module):
         hidden_size = config.hidden_size
         # https://github.com/BlinkDL/RWKV-LM/blob/3db37a72356b736966ddd377268f02b80963af3f/RWKV-v4neo/train.py#L168
         intermediate_size = (
-            config.intermediate_size if config.intermediate_size is not None else int((config.hidden_size * 3.5) // 32 * 32)
+            config.intermediate_size
+            if config.intermediate_size is not None
+            else int((config.hidden_size * 3.5) // 32 * 32)
         )
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.time_mix_key = nn.Parameter(torch.empty(1, 1, hidden_size))
         self.time_mix_receptance = nn.Parameter(torch.empty(1, 1, hidden_size))
-        
+
         self.key = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.receptance = nn.Linear(hidden_size, hidden_size, bias=False)
         self.value = nn.Linear(intermediate_size, hidden_size, bias=False)
@@ -203,7 +223,6 @@ class RwkvFeedForward(nn.Module):
             state[2][:, :, self.layer_id] = hidden[:, -1]
 
         return receptance * value, state
-
 
 
 class RwkvBlock(nn.Module):

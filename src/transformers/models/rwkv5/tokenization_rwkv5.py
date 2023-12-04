@@ -45,8 +45,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 class TRIE:
     __slots__ = tuple("ch,to,values,front".split(","))
-    to:list
-    values:set
+    to: list
+    values: set
+
     def __init__(self, front=None, ch=None):
         self.ch = ch
         self.to = [None for ch in range(256)]
@@ -56,64 +57,59 @@ class TRIE:
     def __repr__(self):
         fr = self
         ret = []
-        while(fr!=None):
-            if(fr.ch!=None):
+        while fr != None:
+            if fr.ch != None:
                 ret.append(fr.ch)
             fr = fr.front
-        return "<TRIE %s %s>"%(ret[::-1], self.values)
-    
-    def add(self, key:bytes, idx:int=0, val=None):
-        if(idx == len(key)):
-            if(val is None):
+        return "<TRIE %s %s>" % (ret[::-1], self.values)
+
+    def add(self, key: bytes, idx: int = 0, val=None):
+        if idx == len(key):
+            if val is None:
                 val = key
             self.values.add(val)
             return self
         ch = key[idx]
-        if(self.to[ch] is None):
+        if self.to[ch] is None:
             self.to[ch] = TRIE(front=self, ch=ch)
-        return self.to[ch].add(key, idx=idx+1, val=val)
-    
-    def find_longest(self, key:bytes, idx:int=0):
-        u:TRIE = self
-        ch:int = key[idx]
-        
-        while(u.to[ch] is not None):
+        return self.to[ch].add(key, idx=idx + 1, val=val)
+
+    def find_longest(self, key: bytes, idx: int = 0):
+        u: TRIE = self
+        ch: int = key[idx]
+
+        while u.to[ch] is not None:
             u = u.to[ch]
             idx += 1
-            if(u.values):
+            if u.values:
                 ret = idx, u, u.values
-            if(idx==len(key)):
+            if idx == len(key):
                 break
             ch = key[idx]
         return ret
+
 
 class RWKVWorldTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
-    def __init__(
-            self,
-            vocab_file,
-            errors="replace",
-            pad_token="0",
-            **kwargs
-    ):
+    def __init__(self, vocab_file, errors="replace", pad_token="0", **kwargs):
         self.add_bos_token = False
         self.encoder = {}
-        sorted = [] # must be already sorted
+        sorted = []  # must be already sorted
         with open(vocab_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
         for l in lines:
-            idx = int(l[:l.index(' ')])
-            x = eval(l[l.index(' '):l.rindex(' ')])
+            idx = int(l[: l.index(" ")])
+            x = eval(l[l.index(" ") : l.rindex(" ")])
             x = x.encode("utf-8") if isinstance(x, str) else x
             assert isinstance(x, bytes)
-            assert len(x) == int(l[l.rindex(' '):])
+            assert len(x) == int(l[l.rindex(" ") :])
             sorted += [x]
             self.encoder[idx] = x
-        
+
         self.decoder = {}
-        for k,v in self.encoder.items():
+        for k, v in self.encoder.items():
             self.decoder[v] = int(k)
 
         self.trie = TRIE()
@@ -122,7 +118,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         self.errors = errors  # how to handle errors in decoding
         self.cache = {}
         self.first_max_length = 0
-        
+
         # pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
             errors=errors,
@@ -136,12 +132,12 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
-    
+
     def add_tokens(self, new_tokens, special_tokens: bool = False):
         for token in new_tokens:
             token_id = self.convert_tokens_to_ids(token)
             self.added_tokens_decoder[token_id] = token
-    
+
     def convert_ids_to_tokens(self, ids, skip_special_tokens=False):
         if isinstance(ids, int):
             ids = [ids]
@@ -167,8 +163,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return output + bos_token_ids + token_ids_1
 
     def get_special_tokens_mask(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None,
-            already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -199,19 +194,19 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
-    def encodeBytes(self, src:bytes):
-        idx:int = 0
+    def encodeBytes(self, src: bytes):
+        idx: int = 0
         tokens = []
-        while (idx < len(src)):
-            _idx:int = idx
+        while idx < len(src):
+            _idx: int = idx
             idx, _, values = self.trie.find_longest(src, idx)
-            assert(idx != _idx)
-            _, token = next(iter(values))            
+            assert idx != _idx
+            _, token = next(iter(values))
             tokens.append(token)
         return tokens
-    
+
     def decodeBytes(self, tokens):
-        return b''.join(map(lambda i: self.encoder[i], tokens))
+        return b"".join(map(lambda i: self.encoder[i], tokens))
 
     def _tokenize(self, text, **kwargs):
         """Tokenize a string."""
@@ -219,21 +214,21 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
     def _decode_tokens(self, tokens):
         try:
-            return self.decodeBytes(tokens).decode('utf-8')
+            return self.decodeBytes(tokens).decode("utf-8")
         except:
-            return '\ufffd' # bad utf-8
+            return "\ufffd"  # bad utf-8
 
-    def _decode(self,
-               token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
-               skip_special_tokens: bool = False,
-               **kwargs
-               ) -> str:
-        
+    def _decode(
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        **kwargs,
+    ) -> str:
         def remove_zeros_from_first_segment(token_ids, first_max_length):
             first_segment = token_ids[:first_max_length]
             first_segment_cleaned = [token for token in first_segment if token != 0]
             return first_segment_cleaned + token_ids[first_max_length:]
-        
+
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
         token_ids = remove_zeros_from_first_segment(token_ids, self.first_max_length)
@@ -251,7 +246,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
                     break
                 out_tokens += [token]
                 tmp = self._decode_tokens(out_tokens[out_last:])
-                if '\ufffd' not in tmp:
+                if "\ufffd" not in tmp:
                     out_str += tmp
                     out_last = i + 1
             return out_str
@@ -306,7 +301,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text, max_length=None, pad_token_id=0):
             def pad_sequence(seq, max_len, pad_tok):
@@ -384,7 +379,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         def get_input_ids(text, max_length=None, pad_token_id=0):
             def pad_sequence(seq, max_len, pad_tok):
@@ -411,7 +406,6 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
                 raise ValueError(
                     "Input is not valid. Should be a string, a list/tuple of strings or a list/tuple of integers."
                 )
-
 
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -463,7 +457,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         )
 
         return BatchEncoding(batch_outputs)
-    
+
     def decode(
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
@@ -538,5 +532,5 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
         if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length:]
+            input_ids = input_ids[-self.model_max_length :]
         return input_ids
