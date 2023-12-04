@@ -1298,7 +1298,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
             elif torch.version.hip:
                 if importlib.util.find_spec("flash_attn") is None:
-                    raise ImportError(f"{preface} the package flash_attn seem to be not installed. {install_message}")
+                    raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
                 flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
                 if flash_attention_version < version.parse("2.0.4"):
                     raise ImportError(
