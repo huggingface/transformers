@@ -14,60 +14,62 @@ rendered properly in your Markdown viewer.
 
 -->
 
+
 # Image tasks with IDEFICS
 
 [[open-in-colab]]
 
-While individual tasks can be tackled by fine-tuning specialized models, an alternative approach 
-that has recently emerged and gained popularity is to use large models for a diverse set of tasks without fine-tuning. 
-For instance, large language models can handle such NLP tasks as summarization, translation, classification, and more. 
-This approach is no longer limited to a single modality, such as text, and in this guide, we will illustrate how you can 
-solve image-text tasks with a large multimodal model called IDEFICS. 
+個別のタスクは特殊なモデルを微調整することで対処できますが、別のアプローチも可能です。
+最近登場して人気を博しているのは、微調整を行わずにさまざまなタスクに大規模なモデルを使用することです。
+たとえば、大規模な言語モデルは、要約、翻訳、分類などの NLP タスクを処理できます。
+このアプローチは、テキストなどの単一のモダリティに限定されなくなりました。このガイドでは、次のような方法を説明します。
+IDEFICS と呼ばれる大規模なマルチモーダル モデルを使用して、画像とテキストのタスクを解決します。
 
-[IDEFICS](../model_doc/idefics) is an open-access vision and language model based on [Flamingo](https://huggingface.co/papers/2204.14198), 
-a state-of-the-art visual language model initially developed by DeepMind. The model accepts arbitrary sequences of image 
-and text inputs and generates coherent text as output. It can answer questions about images, describe visual content, 
-create stories grounded in multiple images, and so on. IDEFICS comes in two variants - [80 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-80b) 
-and [9 billion parameters](https://huggingface.co/HuggingFaceM4/idefics-9b), both of which are available on the 🤗 Hub. For each variant, you can also find fine-tuned instructed 
-versions of the model adapted for conversational use cases.
+[IDEFICS](../model_doc/idefics) は、[Flamingo](https://huggingface.co/papers/2204.14198) に基づくオープンアクセスのビジョンおよび言語モデルです。
+DeepMind によって最初に開発された最先端の視覚言語モデル。モデルは任意の画像シーケンスを受け入れます
+テキストを入力し、出力として一貫したテキストを生成します。画像に関する質問に答えたり、視覚的なコンテンツについて説明したり、
+複数のイメージに基づいたストーリーを作成するなど。 IDEFICS には 2 つのバリエーションがあります - [800 億パラメータ](https://huggingface.co/HuggingFaceM4/idefics-80b)
+および [90 億のパラメータ](https://huggingface.co/HuggingFaceM4/idefics-9b)、どちらも 🤗 Hub で入手できます。各バリエーションについて、細かく調整された指示も見つけることができます。
+会話のユースケースに適応したモデルのバージョン。
 
-This model is exceptionally versatile and can be used for a wide range of image and multimodal tasks. However, 
-being a large model means it requires significant computational resources and infrastructure. It is up to you to decide whether 
-this approach suits your use case better than fine-tuning specialized models for each individual task. 
+このモデルは非常に多用途で、幅広い画像タスクやマルチモーダル タスクに使用できます。しかし、
+大規模なモデルであるということは、大量の計算リソースとインフラストラクチャが必要であることを意味します。それはあなた次第です
+このアプローチは、個別のタスクごとに特化したモデルを微調整するよりも、ユースケースに適しています。
 
-In this guide, you'll learn how to: 
-- [Load IDEFICS](#loading-the-model) and [load the quantized version of the model](#loading-the-quantized-version-of-the-model)
-- Use IDEFICS for: 
-  - [Image captioning](#image-captioning)
-  - [Prompted image captioning](#prompted-image-captioning)
-  - [Few-shot prompting](#few-shot-prompting)
-  - [Visual question answering](#visual-question-answering)
-  - [Image classificaiton](#image-classification)
-  - [Image-guided text generation](#image-guided-text-generation)
-- [Run inference in batch mode](#running-inference-in-batch-mode)
-- [Run IDEFICS instruct for conversational use](#idefics-instruct-for-conversational-use)
+このガイドでは、次の方法を学習します。
+- [IDEFICS をロード](#loading-the-model) および [モデルの量子化バージョンをロード](#loading-the-quantized-version-of-the-model)
+- IDEFICS を次の目的で使用します。
+  - [画像キャプション](#image-captioning)
+  - [プロンプト画像キャプション](#prompted-image-captioning)
+  - [Few-shot プロンプト](#few-shot-prompting)
+  - [ビジュアル質問回答](#visual-question-answering)
+  - [画像分類](#image-classification)
+  - [画像ガイド付きテキスト生成](#image-guided-text-generation)
+- [バッチモードで推論を実行する](#running-inference-in-batch-mode)
+- [会話用に IDEFICS 命令を実行](#idefics-instruct-for-conversational-use)
 
-Before you begin, make sure you have all the necessary libraries installed. 
+始める前に、必要なライブラリがすべてインストールされていることを確認してください。
 
 ```bash
 pip install -q bitsandbytes sentencepiece accelerate transformers
 ```
 
 <Tip>
-To run the following examples with a non-quantized version of the model checkpoint you will need at least 20GB of GPU memory.
+量子化されていないバージョンのモデル チェックポイントを使用して次の例を実行するには、少なくとも 20GB の GPU メモリが必要です。
 </Tip>
 
 ## Loading the model
 
-Let's start by loading the model's 9 billion parameters checkpoint: 
+まずはモデルの 90 億個のパラメーターのチェックポイントをロードしましょう。
 
 ```py
 >>> checkpoint = "HuggingFaceM4/idefics-9b"
 ```
 
-Just like for other Transformers models, you need to load a processor and the model itself from the checkpoint. 
-The IDEFICS processor wraps a [`LlamaTokenizer`] and IDEFICS image processor into a single processor to take care of 
-preparing text and image inputs for the model.
+他の Transformers モデルと同様に、プロセッサとモデル自体をチェックポイントからロードする必要があります。
+IDEFICS プロセッサは、[`LlamaTokenizer`] と IDEFICS 画像プロセッサを単一のプロセッサにラップして処理します。
+モデルのテキストと画像の入力を準備します。
+
 
 ```py
 >>> import torch
@@ -79,14 +81,15 @@ preparing text and image inputs for the model.
 >>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
 ```
 
-Setting `device_map` to `"auto"` will automatically determine how to load and store the model weights in the most optimized 
-manner given existing devices.
+`device_map`を`auto`に設定すると、モデルの重みを最も最適化された状態でロードおよび保存する方法が自動的に決定されます。
+既存のデバイスを考慮した方法。
 
 ### Quantized model
 
-If high-memory GPU availability is an issue, you can load the quantized version of the model. To load the model and the 
-processor in 4bit precision, pass a `BitsAndBytesConfig` to the `from_pretrained` method and the model will be compressed 
-on the fly while loading.
+ハイメモリ GPU の可用性が問題となる場合は、モデルの量子化されたバージョンをロードできます。モデルと
+プロセッサを 4 ビット精度で使用する場合、`BitsAndBytesConfig`を`from_pretrained`メソッドに渡すと、モデルが圧縮されます。
+ロード中にその場で。
+
 
 ```py
 >>> import torch
@@ -106,25 +109,26 @@ on the fly while loading.
 ... )
 ```
 
-Now that you have the model loaded in one of the suggested ways, let's move on to exploring tasks that you can use IDEFICS for.
+提案された方法のいずれかでモデルをロードしたので、IDEFICS を使用できるタスクの探索に進みましょう。
 
 ## Image captioning
-Image captioning is the task of predicting a caption for a given image. A common application is to aid visually impaired 
-people navigate through different situations, for instance, explore image content online. 
 
-To illustrate the task, get an image to be captioned, e.g.:
+画像のキャプション付けは、特定の画像のキャプションを予測するタスクです。一般的な用途は視覚障害者を支援することです
+人々はさまざまな状況をナビゲートします。たとえば、オンラインで画像コンテンツを探索します。
+
+タスクを説明するには、キャプションを付ける画像を取得します。例:
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-im-captioning.jpg" alt="Image of a puppy in a flower bed"/>
 </div>
 
-Photo by [Hendo Wang](https://unsplash.com/@hendoo). 
+写真提供：[Hendo Wang](https://unsplash.com/@hendoo)
 
-IDEFICS accepts text and image prompts. However, to caption an image, you do not have to provide a text prompt to the 
-model, only the preprocessed input image. Without a text prompt, the model will start generating text from the 
-BOS (beginning-of-sequence) token thus creating a caption.
+IDEFICS はテキストと画像のプロンプトを受け入れます。ただし、画像にキャプションを付けるには、テキスト プロンプトをユーザーに提供する必要はありません。
+モデル、前処理された入力画像のみ。テキスト プロンプトがない場合、モデルはテキストの生成を開始します。
+BOS (Beginning-of-sequence) トークンによりキャプションが作成されます。
 
-As image input to the model, you can use either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+モデルへの画像入力として、画像オブジェクト (`PIL.Image`) または画像を取得できる URL のいずれかを使用できます。
 
 ```py
 >>> prompt = [
@@ -142,24 +146,24 @@ A puppy in a flower bed
 
 <Tip>
 
-It is a good idea to include the `bad_words_ids` in the call to `generate` to avoid errors arising when increasing 
-the `max_new_tokens`: the model will want to generate a new `<image>` or `<fake_token_around_image>` token when there 
-is no image being generated by the model.
-You can set it on-the-fly as in this guide, or store in the `GenerationConfig` as described in the [Text generation strategies](../generation_strategies) guide.
+増加時に発生するエラーを避けるために、`generate`の呼び出しに`bad_words_ids`を含めることをお勧めします。
+`max_new_tokens`: モデルは、新しい `<image>` または `<fake_token_around_image>` トークンを生成する必要があります。
+モデルによって画像が生成されていません。
+このガイドのようにオンザフライで設定することも、[テキスト生成戦略](../generation_strategies) ガイドで説明されているように `GenerationConfig` に保存することもできます。
 </Tip>
 
 ## Prompted image captioning
 
-You can extend image captioning by providing a text prompt, which the model will continue given the image. Let's take 
-another image to illustrate:
+テキスト プロンプトを提供することで画像キャプションを拡張でき、モデルは画像を指定して続行します。持っていきましょう
+別の図で説明します。
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-prompted-im-captioning.jpg" alt="Image of the Eiffel Tower at night"/>
 </div>
 
-Photo by [Denys Nevozhai](https://unsplash.com/@dnevozhai).
+写真提供：[Denys Nevozhai](https://unsplash.com/@dnevozhai)。
    
-Textual and image prompts can be passed to the model's processor as a single list to create appropriate inputs.
+テキストおよび画像のプロンプトを単一のリストとしてモデルのプロセッサに渡し、適切な入力を作成できます。
 
 ```py
 >>> prompt = [
@@ -178,20 +182,20 @@ This is an image of the Eiffel Tower in Paris, France.
 
 ## Few-shot prompting
 
-While IDEFICS demonstrates great zero-shot results, your task may require a certain format of the caption, or come with 
-other restrictions or requirements that increase task's complexity. Few-shot prompting can be used to enable in-context learning.
-By providing examples in the prompt, you can steer the model to generate results that mimic the format of given examples. 
+IDEFICS はゼロショットで優れた結果を示しますが、タスクによっては特定の形式のキャプションが必要になる場合や、キャプションが付属する場合があります。
+タスクの複雑さを増大させるその他の制限または要件。少数のショットのプロンプトを使用して、コンテキスト内の学習を有効にすることができます。
+プロンプトに例を指定することで、指定された例の形式を模倣した結果を生成するようにモデルを操作できます。
 
-Let's use the previous image of the Eiffel Tower as an example for the model and build a prompt that demonstrates to the model 
-that in addition to learning what the object in an image is, we would also like to get some interesting information about it. 
-Then, let's see, if we can get the same response format for an image of the Statue of Liberty:
+前のエッフェル塔の画像をモデルの例として使用し、モデルにデモンストレーションするプロンプトを作成してみましょう。
+画像内のオブジェクトが何であるかを知ることに加えて、それに関する興味深い情報も取得したいと考えています。
+次に、自由の女神の画像に対して同じ応答形式を取得できるかどうかを見てみましょう。
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-few-shot.jpg" alt="Image of the Statue of Liberty"/>
 </div>
 
-Photo by [Juan Mayobre](https://unsplash.com/@jmayobres).
-  
+写真提供：[Juan Mayobre](https://unsplash.com/@jmayobres)。
+
 ```py
 >>> prompt = ["User:",
 ...            "https://images.unsplash.com/photo-1543349689-9a4d426bee8e?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3501&q=80",
@@ -213,24 +217,24 @@ User: Describe this image.
 Assistant: An image of the Statue of Liberty. Fun fact: the Statue of Liberty is 151 feet tall.
 ```
 
-Notice that just from a single example (i.e., 1-shot) the model has learned how to perform the task. For more complex tasks, 
-feel free to experiment with a larger number of examples (e.g., 3-shot, 5-shot, etc.).
+モデルは 1 つの例 (つまり、1 ショット) だけからタスクの実行方法を学習していることに注目してください。より複雑なタスクの場合は、
+より多くの例 (3 ショット、5 ショットなど) を自由に試してみてください。
 
 ## Visual question answering
 
-Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. Similar to image 
-captioning it can be used in accessibility applications, but also in education (reasoning about visual materials), customer 
-service (questions about products based on images), and image retrieval.
+Visual Question Answering (VQA) は、画像に基づいて自由形式の質問に答えるタスクです。画像に似ている
+キャプションは、アクセシビリティ アプリケーションだけでなく、教育 (視覚資料についての推論) にも使用できます。
+サービス（画像を基にした商品に関する質問）、画像検索など。
 
-Let's get a new image for this task: 
+このタスク用に新しい画像を取得しましょう。
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-vqa.jpg" alt="Image of a couple having a picnic"/>
 </div>
 
-Photo by [Jarritos Mexican Soda](https://unsplash.com/@jarritos). 
+写真提供  [Jarritos Mexican Soda](https://unsplash.com/@jarritos).
 
-You can steer the model from image captioning to visual question answering by prompting it with appropriate instructions: 
+適切な指示をプロンプトすることで、モデルを画像キャプションから視覚的な質問への応答に導くことができます。
 
 ```py
 >>> prompt = [
@@ -251,19 +255,19 @@ Instruction: Provide an answer to the question. Use the image to answer.
 
 ## Image classification
 
-IDEFICS is capable of classifying images into different categories without being explicitly trained on data containing 
-labeled examples from those specific categories. Given a list of categories and using its image and text understanding 
-capabilities, the model can infer which category the image likely belongs to. 
+IDEFICS は、次のデータを含むデータについて明示的にトレーニングしなくても、画像をさまざまなカテゴリに分類できます。
+これらの特定のカテゴリからのラベル付きの例。カテゴリのリストを指定し、その画像とテキストを使用して理解する
+機能を利用すると、モデルは画像がどのカテゴリに属する​​可能性が高いかを推測できます。
 
-Say, we have this image of a vegetable stand: 
+たとえば、次のような野菜スタンドの画像があるとします。
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-classification.jpg" alt="Image of a vegetable stand"/>
 </div>
 
-Photo by [Peter Wendt](https://unsplash.com/@peterwendt).
+写真提供：[Peter Wendt](https://unsplash.com/@peterwendt)。
 
-We can instruct the model to classify the image into one of the categories that we have:
+画像を次のいずれかのカテゴリに分類するようにモデルに指示できます。
 
 ```py
 >>> categories = ['animals','vegetables', 'city landscape', 'cars', 'office']
@@ -280,23 +284,23 @@ We can instruct the model to classify the image into one of the categories that 
 >>> print(generated_text[0])
 Instruction: Classify the following image into a single category from the following list: ['animals', 'vegetables', 'city landscape', 'cars', 'office'].
 Category: Vegetables
-```  
+```
 
-In the example above we instruct the model to classify the image into a single category, however, you can also prompt the model to do rank classification.
+上の例では、画像を 1 つのカテゴリに分類するようにモデルに指示していますが、ランク分類を行うようにモデルに指示することもできます。
 
 ## Image-guided text generation
 
-For more creative applications, you can use image-guided text generation to generate text based on an image. This can be 
-useful to create descriptions of products, ads, descriptions of a scene, etc. 
+よりクリエイティブなアプリケーションの場合は、画像ガイド付きテキスト生成を使用して、画像に基づいてテキストを生成できます。これは可能です
+製品、広告、シーンの説明などを作成するのに役立ちます。
 
-Let's prompt IDEFICS to write a story based on a simple image of a red door: 
+IDEFICS に、赤いドアの単純な画像に基づいてストーリーを書くように促してみましょう。
 
 <div class="flex justify-center">
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/idefics-story-generation.jpg" alt="Image of a red door with a pumpkin on the steps"/>
 </div>
 
-Photo by [Craig Tidball](https://unsplash.com/@devonshiremedia).
-  
+写真提供：[Craig Tidball](https://unsplash.com/@devonshiremedia)。
+
 ```py
 >>> prompt = ["Instruction: Use the image to write a story. \n",
 ...     "https://images.unsplash.com/photo-1517086822157-2b0358e7684a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2203&q=80",
@@ -329,19 +333,20 @@ He was wearing a long black coat and a top hat.
 The little girl ran
 ```
 
-Looks like IDEFICS noticed the pumpkin on the doorstep and went with a spooky Halloween story about a ghost.
+IDEFICS は玄関先にあるカボチャに気づき、幽霊に関する不気味なハロウィーンの話をしたようです。
 
 <Tip>
 
-For longer outputs like this, you will greatly benefit from tweaking the text generation strategy. This can help 
-you significantly improve the quality of the generated output. Check out [Text generation strategies](../generation_strategies) 
-to learn more. 
+このような長い出力の場合、テキスト生成戦略を微調整すると大きなメリットが得られます。これは役に立ちます
+生成される出力の品質が大幅に向上します。 [テキスト生成戦略](../generation_strategies) を確認してください。
+詳しく知ることができ。
+
 </Tip>
 
 ## Running inference in batch mode
 
-All of the earlier sections illustrated IDEFICS for a single example. In a very similar fashion, you can run inference 
-for a batch of examples by passing a list of prompts:
+これまでのすべてのセクションでは、IDEFICS を 1 つの例として説明しました。非常に似た方法で、推論を実行できます。
+プロンプトのリストを渡すことにより、サンプルのバッチを取得します。
 
 ```py
 >>> prompts = [
@@ -375,13 +380,13 @@ This is an image of a vegetable stand.
 
 ## IDEFICS instruct for conversational use
 
-For conversational use cases, you can find fine-tuned instructed versions of the model on the 🤗 Hub: 
-`HuggingFaceM4/idefics-80b-instruct` and `HuggingFaceM4/idefics-9b-instruct`.
+会話型のユースケースの場合は、🤗 ハブでモデルの微調整された指示されたバージョンを見つけることができます。
+`HuggingFaceM4/idefics-80b-instruct` および `HuggingFaceM4/idefics-9b-instruct`。
 
-These checkpoints are the result of fine-tuning the respective base models on a mixture of supervised and instruction 
-fine-tuning datasets, which boosts the downstream performance while making the models more usable in conversational settings.
+これらのチェックポイントは、教師ありモデルと命令モデルを組み合わせたそれぞれの基本モデルを微調整した結果です。
+データセットを微調整することで、ダウンストリームのパフォーマンスを向上させながら、会話設定でモデルをより使いやすくします。
 
-The use and prompting for the conversational use is very similar to using the base models: 
+会話での使用とプロンプトは、基本モデルの使用と非常に似ています。
 
 ```py
 >>> import torch
