@@ -57,6 +57,7 @@ class Dinov2ModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
+        mlp_ratio=1,
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
@@ -75,6 +76,7 @@ class Dinov2ModelTester:
         self.is_training = is_training
         self.use_labels = use_labels
         self.hidden_size = hidden_size
+        self.mlp_ratio = mlp_ratio
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -106,6 +108,7 @@ class Dinov2ModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            mlp_ratio=self.mlp_ratio,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -229,6 +232,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
+
+    def test_initialization(self):
+        for i in range(1000):
+            super(Dinov2ModelTest, self).test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()
