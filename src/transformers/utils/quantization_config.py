@@ -620,7 +620,7 @@ class AwqConfig(QuantizationConfigMixin):
 
             if not awq_version_supports_fusing:
                 raise ValueError(
-                    "You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package."
+                    f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
         if self.do_fuse and self.modules_to_fuse is not None:
