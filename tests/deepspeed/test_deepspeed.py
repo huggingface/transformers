@@ -562,8 +562,6 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
         # see the note above how to get identical loss on a small bs
-        print("no_grad_accum_loss", no_grad_accum_loss)
-        print("yes_grad_accum_loss", yes_grad_accum_loss)
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):

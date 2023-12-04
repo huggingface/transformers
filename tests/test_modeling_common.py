@@ -3159,7 +3159,6 @@ class ModelTesterMixin:
                 )
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
-                print("----- load model eager")
                 model_eager = (
                     model_class.from_pretrained(
                         tmpdirname,
@@ -3170,7 +3169,6 @@ class ModelTesterMixin:
                     .eval()
                 )
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                break
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:

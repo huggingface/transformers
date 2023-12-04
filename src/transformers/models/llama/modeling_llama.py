@@ -739,8 +739,6 @@ class LlamaDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        print("config._attn_implementation", config._attn_implementation)
-
         self.self_attn = LLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config)
 
         self.mlp = LlamaMLP(config)
