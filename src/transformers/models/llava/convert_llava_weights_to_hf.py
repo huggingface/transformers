@@ -26,8 +26,6 @@ from transformers import (
 )
 
 
-IMAGE_TOKEN_INDEX = -200
-
 KEYS_TO_MODIFY_MAPPING = {
     "model.vision_tower.": "",
     "model.mm_projector": "multi_modal_projector",
@@ -69,6 +67,19 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
 
     state_dict = torch.load(state_dict_path, map_location="cpu")
     state_dict = convert_state_dict_to_hf(state_dict)
+
+    embed_tokens = state_dict["language_model.model.embed_tokens.weight"]
+    lm_head = state_dict["language_model.lm_head.weight"]
+
+    new_embed_tokens = torch.zeros((embed_tokens.shape[0] + 1, embed_tokens.shape[1]), dtype=embed_tokens.dtype)
+    new_embed_tokens.data[: config.text_config.vocab_size - 1, :] = embed_tokens
+
+    state_dict["language_model.model.embed_tokens.weight"] = new_embed_tokens
+
+    new_lm_head = torch.zeros((lm_head.shape[0] + 1, lm_head.shape[1]), dtype=lm_head.dtype)
+    new_lm_head.data[: config.text_config.vocab_size - 1, :] = lm_head
+
+    state_dict["language_model.lm_head.weight"] = new_lm_head
 
     model.load_state_dict(state_dict, strict=True, assign=True)
 

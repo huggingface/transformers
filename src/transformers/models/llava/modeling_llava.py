@@ -298,7 +298,11 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 3. Create the full embedding, already padded to the maximum position
         max_embed_dim = text_to_overwrite.max()
         final_embedding = torch.zeros(
-            input_ids.shape[0], max_embed_dim + 1, inputs_embeds.shape[-1], device=input_ids.device
+            input_ids.shape[0],
+            max_embed_dim + 1,
+            inputs_embeds.shape[-1],
+            device=input_ids.device,
+            dtype=image_features.dtype,
         )
         final_attention_mask = torch.zeros(
             input_ids.shape[0], max_embed_dim + 1, dtype=torch.long, device=input_ids.device
