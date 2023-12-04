@@ -122,9 +122,6 @@ class PatchTSTConfig(PretrainedConfig):
             The dropout probability for head.
         prediction_length (`int`, *optional*, defaults to 24):
             The prediction horizon that the model will output.
-        num_targets (`int`, *optional*, defaults to 1):
-            Number of targets for regression and classification tasks. For classification, it is the number of
-            classes.
         output_range (`list`, *optional*):
             Output range for regression task. The range of output values can be set to enforce the model to produce
             values within a range.
@@ -196,7 +193,6 @@ class PatchTSTConfig(PretrainedConfig):
         pooling_type: str = "mean",
         head_dropout: float = 0.0,
         prediction_length: int = 24,
-        num_targets: int = 1,
         output_range: Optional[List] = None,
         # distribution head
         num_parallel_samples: int = 100,
@@ -256,7 +252,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Regression
-        self.num_targets = num_targets
         self.output_range = output_range
 
         super().__init__(**kwargs)

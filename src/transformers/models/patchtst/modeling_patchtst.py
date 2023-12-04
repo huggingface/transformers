@@ -243,7 +243,7 @@ def random_masking(
             Define the value of masked patches for pretraining.
 
     Returns:
-        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as input Tensor and mask tensor of shape [bs x c x
+        `tuple(torch.Tensor)`: inputs_mask, masked input, same shape as input Tensor and mask tensor of shape [batch_size x c x
         n]
     """
     if mask_ratio < 0 or mask_ratio >= 1:
@@ -255,22 +255,24 @@ def random_masking(
     len_keep = int(sequence_length * (1 - mask_ratio))
 
     if channel_consistent_masking:
-        noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], bs x 1 x  L
-        noise = noise.repeat(1, num_channels, 1)  # bs x num_channels x time
+        noise = torch.rand(batch_size, 1, sequence_length, device=device)  # noise in [0, 1], batch_size x 1 x  L
+        noise = noise.repeat(1, num_channels, 1)  # batch_size x num_channels x time
     else:
-        # noise in [0, 1], bs x num_channels x L
+        # noise in [0, 1], batch_size x num_channels x L
         noise = torch.rand(batch_size, num_channels, sequence_length, device=device)
 
-    # mask: [bs x num_channels x num_patch]
+    # mask: [batch_size x num_channels x num_patch]
     mask = torch.ones(batch_size, num_channels, sequence_length, device=device)
     mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
-    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x num_channels x L]
+    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [batch_size x num_channels x L]
 
     mask = torch.gather(mask, dim=-1, index=ids_restore)
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patches x patch_length]
+    mask = mask.unsqueeze(-1).repeat(
+        1, 1, 1, num_features
+    )  # mask: [batch_size x num_channels x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -338,7 +340,9 @@ def forecast_masking(
     perm = torch.randperm(mask.shape[0])
     mask = mask[perm]
 
-    mask = mask.unsqueeze(-1).repeat(1, 1, 1, num_features)  # mask: [bs x num_channels x num_patch x patch_len]
+    mask = mask.unsqueeze(-1).repeat(
+        1, 1, 1, num_features
+    )  # mask: [batch_size x num_channels x num_patch x patch_len]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
 
@@ -385,11 +389,11 @@ class PatchTSTPatchify(nn.Module):
             raise ValueError(
                 f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
             )
-        # output: [bs x new_sequence_length x num_channels]
+        # output: [batch_size x new_sequence_length x num_channels]
         output = past_values[:, self.sequence_start :, :]
-        # output: [bs x num_patches x num_input_channels x patch_length]
+        # output: [batch_size x num_patches x num_input_channels x patch_length]
         output = output.unfold(dimension=-2, size=self.patch_length, step=self.patch_stride)
-        # output: [bs x num_input_channels x num_patches x patch_length]
+        # output: [batch_size x num_input_channels x num_patches x patch_length]
         output = output.transpose(-2, -3).contiguous()
         return output
 
@@ -449,7 +453,7 @@ class PatchTSTMasking(nn.Module):
         else:
             raise ValueError(f"Invalid mask type {self.mask_type}.")
 
-        # mask: [bs x num_input_channels x num_patch]
+        # mask: [batch_size x num_input_channels x num_patch]
         mask = mask.bool()
         return masked_input, mask
 
@@ -540,12 +544,12 @@ class PatchTSTEncoderLayer(nn.Module):
             # hidden_states: [(bs*num_channels) x sequence_length x d_model]
             hidden_state = self.norm_sublayer1(hidden_state + self.dropout_path1(attn_output))
 
-        # hidden_state: [bs x num_channels x sequence_length x d_model]
+        # hidden_state: [batch_size x num_channels x sequence_length x d_model]
         hidden_state = hidden_state.reshape(batch_size, num_input_channels, sequence_length, d_model)
 
         # second sublayer: attention across variable at any given time
         if self.channel_attention:
-            # hidden_state: [bs x sequence_length x num_channels x d_model]
+            # hidden_state: [batch_size x sequence_length x num_channels x d_model]
             hidden_state = hidden_state.transpose(2, 1).contiguous()
             # hidden_state: [(bs*sequence_length) x num_channels x d_model]
             hidden_state = hidden_state.view(batch_size * sequence_length, num_input_channels, d_model)
@@ -565,9 +569,9 @@ class PatchTSTEncoderLayer(nn.Module):
                 hidden_state = self.norm_sublayer2(hidden_state + self.dropout_path2(attn_output))
 
             # Reshape hidden state
-            # hidden_state: [bs x sequence_length x num_channels x d_model]
+            # hidden_state: [batch_size x sequence_length x num_channels x d_model]
             hidden_state = hidden_state.reshape(batch_size, sequence_length, num_input_channels, d_model)
-            # hidden_state: [bs x num_channels x sequence_length x d_model]
+            # hidden_state: [batch_size x num_channels x sequence_length x d_model]
             hidden_state = hidden_state.transpose(1, 2).contiguous()
 
         # Third sublayer: mixing across hidden
@@ -582,7 +586,7 @@ class PatchTSTEncoderLayer(nn.Module):
             # Add: residual connection with residual dropout
             hidden_state = self.norm_sublayer3(hidden_state + self.dropout_path3(self.ff(hidden_state)))
 
-        # [bs x num_channels x sequence_length x d_model]
+        # [batch_size x num_channels x sequence_length x d_model]
         hidden_state = hidden_state.reshape(batch_size, num_input_channels, sequence_length, d_model)
 
         outputs = (hidden_state,)
@@ -654,7 +658,7 @@ class PatchTSTEmbedding(nn.Module):
                 f"has to be the same as the number of channels in the batch input ({num_input_channels})"
             )
         if self.share_embedding:
-            embeddings = self.input_embedding(patch_input)  # x: [bs x num_channels  x num_patches x d_model]
+            embeddings = self.input_embedding(patch_input)  # x: [batch_size x num_channels  x num_patches x d_model]
         else:
             embeddings = [self.input_embedding[i](patch_input[:, i, :, :]) for i in range(num_input_channels)]
             embeddings = torch.stack(embeddings, dim=1)
@@ -703,16 +707,16 @@ class PatchTSTPositionalEncoding(nn.Module):
 
     def forward(self, patch_input: torch.Tensor):
         if self.use_cls_token:
-            # patch_input: [bs x num_channels x num_patches x d_model]
+            # patch_input: [batch_size x num_channels x num_patches x d_model]
             patch_input = self.positional_dropout(patch_input + self.position_enc[1:, :])
             # append cls token where cls_token: [1 x num_channels x 1 x d_model]
             cls_token = self.cls_token + self.position_enc[:1, :]
-            # get the same copy of cls_token for all the samples in batch: [bs x num_channels x 1 x d_model]
+            # get the same copy of cls_token for all the samples in batch: [batch_size x num_channels x 1 x d_model]
             cls_tokens = cls_token.expand(patch_input.shape[0], self.num_input_channels, -1, -1)
-            # hidden_state: [bs x num_channels x (num_patches+1) x d_model]
+            # hidden_state: [batch_size x num_channels x (num_patches+1) x d_model]
             hidden_state = torch.cat((cls_tokens, patch_input), dim=2)
         else:
-            # hidden_state: [bs x num_channels x num_patches x d_model]
+            # hidden_state: [batch_size x num_channels x num_patches x d_model]
             hidden_state = self.positional_dropout(patch_input + self.position_enc)
         return hidden_state
 
@@ -769,8 +773,8 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
                 encoder_states = encoder_states + (hidden_state,)
 
             layer_outputs = encoder_layer(hidden_state=hidden_state, output_attentions=output_attentions)
-            # get hidden state. hidden_state shape is [bs x num_channels x num_patches x d_model]
-            # or [bs x num_channels x (num_patches+1) x d_model] if use cls_token
+            # get hidden state. hidden_state shape is [batch_size x num_channels x num_patches x d_model]
+            # or [batch_size x num_channels x (num_patches+1) x d_model] if use cls_token
             hidden_state = layer_outputs[0]
             # append attention matrix at each layer
             if output_attentions:
@@ -864,7 +868,7 @@ class PatchTSTForRegressionOutput(ModelOutput):
     Parameters:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-        regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+        regression_outputs (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Regression outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -929,7 +933,7 @@ class PatchTSTForClassificationOutput(ModelOutput):
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_targets)`):
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
             Prediction scores of the PatchTST modeling head (scores before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
@@ -957,7 +961,7 @@ class SamplePatchTSTOutput(ModelOutput):
     distribution.
 
     Parameters:
-        sequences `(batch_size, num_samples, prediction_length, num_targets)`):
+        sequences `(batch_size, num_samples, prediction_length, num_labels)`):
                 Sampled values from the chosen distribution.
     """
 
@@ -1230,10 +1234,10 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
 
-        # x: tensor [bs x sequence_length x num_input_channels]
+        # x: tensor [batch_size x sequence_length x num_input_channels]
         scaled_past_values, loc, scale = self.scaler(past_values, past_observed_mask)
 
-        # patched_values: [bs x num_input_channels x num_patches x patch_length] for pretrain
+        # patched_values: [batch_size x num_input_channels x num_patches x patch_length] for pretrain
         patched_values = self.patchifier(scaled_past_values)
         if self.do_mask_input:
             masked_values, mask = self.masking(patched_values)
@@ -1282,7 +1286,7 @@ class PatchTSTMaskPretrainHead(nn.Module):
                             `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True
 
         """
-        embedding = self.linear(self.dropout(embedding))  # [bs x num_channels x num_patches x patch_length]
+        embedding = self.linear(self.dropout(embedding))  # [batch_size x num_channels x num_patches x patch_length]
         if self.use_cls_token:
             embedding = embedding[:, :, 1:, :]  # remove the first cls token
         return embedding
@@ -1374,8 +1378,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # past_values: [bs x num_channels x num_patches x d_model] or
-        # [bs x num_channels x (num_patches+1) x d_model] if use cls_token
+        # past_values: [batch_size x num_channels x num_patches x d_model] or
+        # [batch_size x num_channels x (num_patches+1) x d_model] if use cls_token
         model_output = self.model(
             past_values=past_values,
             past_observed_mask=past_observed_mask,
@@ -1384,8 +1388,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             return_dict=True,
         )
 
-        # last_hidden_state: [bs x num_channels x num_patches x patch_length] or
-        # [bs x num_channels x (num_patches+1) x patch_length] if use cls_token
+        # last_hidden_state: [batch_size x num_channels x num_patches x patch_length] or
+        # [batch_size x num_channels x (num_patches+1) x patch_length] if use cls_token
         x_hat = self.head(model_output.last_hidden_state)
 
         # calculate masked_loss
@@ -1410,7 +1414,7 @@ class PatchTSTClassificationHead(nn.Module):
         self.pooling_type = config.pooling_type
         self.flatten = nn.Flatten(start_dim=1)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
-        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_targets)
+        self.linear = nn.Linear(config.num_input_channels * config.d_model, config.num_labels)
 
     def forward(self, embedding: torch.Tensor):
         """
@@ -1419,23 +1423,23 @@ class PatchTSTClassificationHead(nn.Module):
                      `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
                 Embedding from the model
         Returns:
-            `torch.Tensor` of shape `(bs, num_targets)`
+            `torch.Tensor` of shape `(bs, num_labels)`
 
         """
         if self.use_cls_token:
-            # use the first output token, pooled_embedding: bs x num_channels x d_model
+            # use the first output token, pooled_embedding: batch_size x num_channels x d_model
             pooled_embedding = embedding[:, :, 0, :]
         elif self.pooling_type == "mean":
-            # pooled_embedding: [bs x num_channels x d_model]
+            # pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
-            # pooled_embedding: [bs x num_channels x d_model]
+            # pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding.max(dim=2)
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
-        # pooled_embedding: bs x num_channels * d_model
+        # pooled_embedding: batch_size x num_channels * d_model
         pooled_embedding = self.flatten(pooled_embedding)
-        # output: bs x n_classes
+        # output: batch_size x n_classes
         output = self.linear(self.dropout(pooled_embedding))
         return output
 
@@ -1462,8 +1466,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        target_values: torch.Tensor = None,
         past_observed_mask: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1472,8 +1476,6 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         Parameters:
             past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
                 Input sequence to the model
-            target_values (`torch.Tensor`, *optional*):
-                Labels associates with the `past_values`
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
@@ -1484,6 +1486,8 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
                 Whether or not to return the hidden states of all layers
             output_attentions (`bool`, *optional*):
                 Whether or not to return the output attention of all layers
+            target_values (`torch.Tensor`, *optional*):
+                Labels associated with the `past_values`.
             return_dict (`bool`, *optional*):
                 Whether or not to return a `ModelOutput` instead of a plain tuple.
 
@@ -1499,7 +1503,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         >>> # classification task with two input channel2 and 3 classes
         >>> config = PatchTSTConfig(
         ...     num_input_channels=2,
-        ...     num_targets=3,
+        ...     num_labels=3,
         ...     context_length=512,
         ...     patch_length=12,
         ...     stride=12,
@@ -1525,9 +1529,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
-        if target_values is not None:
+        if labels is not None:
             loss = nn.CrossEntropyLoss()
-            loss_val = loss(y_hat, target_values)
+            loss_val = loss(y_hat, labels)
 
         if not return_dict:
             outputs = (y_hat,) + model_output[1:-3]
@@ -1594,44 +1598,44 @@ class PatchTSTPredictionHead(nn.Module):
 
         """
         if self.use_cls_token:
-            # pooled_embedding: [bs x num_channels x d_model]
+            # pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding[:, :, 0, :]
         else:
             if self.pooling_type == "mean":
-                # pooled_embedding: [bs x num_channels x d_model]
+                # pooled_embedding: [batch_size x num_channels x d_model]
                 pooled_embedding = embedding.mean(dim=2)
             elif self.pooling_type == "max":
-                # pooled_embedding: [bs x num_channels x d_model]
+                # pooled_embedding: [batch_size x num_channels x d_model]
                 pooled_embedding = embedding.max(dim=2)
             else:
-                # pooled_embedding: [bs x num_channels x num_patches x d_model]
+                # pooled_embedding: [batch_size x num_channels x num_patches x d_model]
                 pooled_embedding = embedding
 
         if not self.share_projection:
             output = []
             for i in range(self.num_input_channels):
-                # pooled_embedding: [bs x (d_model * num_patches)] or [bs x d_model)]
+                # pooled_embedding: [batch_size x (d_model * num_patches)] or [batch_size x d_model)]
                 pooled_embedding = self.flattens[i](pooled_embedding[:, i, :])
                 pooled_embedding = self.dropouts[i](pooled_embedding)
-                # pooled_embedding: [bs x forecast_len]
-                #  or tuple ([bs x forecast_len], [bs x forecast_len]) if using distribution head
+                # pooled_embedding: [batch_size x forecast_len]
+                #  or tuple ([batch_size x forecast_len], [batch_size x forecast_len]) if using distribution head
                 pooled_embedding = self.projections[i](pooled_embedding)
                 output.append(pooled_embedding)
-            # output: [bs x num_channels x forecast_len]
+            # output: [batch_size x num_channels x forecast_len]
             output = torch.stack(output, dim=1)
         else:
-            # pooled_embedding: [bs x num_channels x (d_model * num_patches)] or [bs x num_channels x d_model)]
+            # pooled_embedding: [batch_size x num_channels x (d_model * num_patches)] or [batch_size x num_channels x d_model)]
             pooled_embedding = self.flatten(pooled_embedding)
             pooled_embedding = self.dropout(pooled_embedding)
-            # output: [bs x num_channels x forecast_len] or
-            # tuple ([bs x num_channels x forecast_len], [bs x num_channels x forecast_len]) if using distribution head
+            # output: [batch_size x num_channels x forecast_len] or
+            # tuple ([batch_size x num_channels x forecast_len], [batch_size x num_channels x forecast_len]) if using distribution head
             output = self.projection(pooled_embedding)
 
         if isinstance(output, tuple):
-            # output: ([bs x forecast_len x num_channels], [bs x forecast_len x num_channels])
+            # output: ([batch_size x forecast_len x num_channels], [batch_size x forecast_len x num_channels])
             output = tuple(z.transpose(2, 1) for z in output)
         else:
-            output = output.transpose(2, 1)  # [bs x forecast_len x num_channels]
+            output = output.transpose(2, 1)  # [batch_size x forecast_len x num_channels]
         return output
 
 
@@ -1680,8 +1684,8 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     ) -> Union[Tuple, PatchTSTForPredictionOutput]:
         r"""
         Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`):
+                Input sequence to the model.
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
                 Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
                 in `[0, 1]`:
@@ -1689,7 +1693,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 - 1 for values that are **observed**,
                 - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
             future_values (`torch.Tensor` of shape `(bs, forecast_len, num_input_channels)`, *optional*):
-                Future target values associated with the `past_values`
+                Future target values associated with the `past_values`.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers
             output_attentions (`bool`, *optional*):
@@ -1816,9 +1820,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
             distribution = self.distribution_output.distribution(
                 outputs.prediction_outputs, loc=outputs.loc, scale=outputs.scale
             )
-            # get samples: list of [bs x forecast_len x num_channels]
+            # get samples: list of [batch_size x forecast_len x num_channels]
             samples = [distribution.sample() for _ in range(num_parallel_samples)]
-            # samples: [bs x num_samples x forecast_len x num_channels]
+            # samples: [batch_size x num_samples x forecast_len x num_channels]
             samples = torch.stack(samples, dim=1)
         else:
             samples = outputs.prediction_outputs.unsqueeze(1)
@@ -1844,7 +1848,7 @@ class PatchTSTRegressionHead(nn.Module):
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
         if distribution_output is None:
-            self.projection = nn.Linear(head_dim, config.num_targets)
+            self.projection = nn.Linear(head_dim, config.num_labels)
         else:
             self.projection = distribution_output.get_parameter_projection(head_dim)
 
@@ -1852,28 +1856,28 @@ class PatchTSTRegressionHead(nn.Module):
         """
         Parameters:
             embedding (`torch.Tensor` of shape `(bs, num_channels, num_patches, d_model)` or
-                    `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True, *required*):
+                    `(bs, num_channels, num_patches+1, d_model)` if `cls_token` is set to True):
                 Embedding from the model
         Returns:
             `torch.Tensor` of shape `(bs, output_dim)`
 
         """
         if self.use_cls_token:
-            # use the first output token, pooled_embedding: [bs x num_channels x d_model]
+            # use the first output token, pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding[:, :, 0, :]
         elif self.pooling_type == "mean":
-            # pooled_embedding: [bs x num_channels x d_model]
+            # pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
-            # pooled_embedding: [bs x num_channels x d_model]
+            # pooled_embedding: [batch_size x num_channels x d_model]
             pooled_embedding = embedding.max(dim=2)
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # flatten the input
-        # pooled_embedding: bs x (num_channels * d_model)
+        # pooled_embedding: batch_size x (num_channels * d_model)
         pooled_embedding = self.dropout(self.flatten(pooled_embedding))
         # projection
-        # output: bs x output_dim or a tuple of this shape for distribution head
+        # output: batch_size x output_dim or a tuple of this shape for distribution head
         output = self.projection(pooled_embedding)
         # apply sigmoid to bound the output if required
         if (self.distribution_output is None) & (self.y_range is not None):  # linear head
@@ -1899,11 +1903,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             self.distribution_output = None
         else:
             if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_labels)
             elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_labels)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_labels)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -1923,8 +1927,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
     ) -> Union[tuple, PatchTSTForRegressionOutput]:
         r"""
         Parameters:
-            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`, *required*):
-                Input sequence to the model
+            past_values (`torch.Tensor` of shape `(bs, sequence_length, num_input_channels)`):
+                Input sequence to the model.
             target_values (`torch.Tensor` of shape `(bs, num_input_channels)`):
                 Target values associates with the `past_values`
             past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
@@ -1967,7 +1971,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             output_attentions=output_attentions,
             return_dict=True,
         )
-        # get output head. y_hat is of shape [bs x num_targets] or tuple of this shape
+        # get output head. y_hat is of shape [batch_size x num_labels] or tuple of this shape
         y_hat = self.head(model_output.last_hidden_state)
 
         loss = None
@@ -2012,7 +2016,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         Return:
             [`SamplePatchTSTOutput`] where the outputs `sequences` tensor will have shape `(batch_size, number of
-            samples, num_targets)`.
+            samples, num_labels)`.
         """
         # get number of samples
         num_parallel_samples = self.config.num_parallel_samples
@@ -2027,8 +2031,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
 
         # get distribution
         distribution = self.distribution_output.distribution(outputs.regression_outputs)
-        # get samples: list of [bs x num_targets]
+        # get samples: list of [batch_size x num_labels]
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
-        # samples: [bs x num_samples x num_targets]
+        # samples: [batch_size x num_samples x num_labels]
         samples = torch.stack(samples, dim=1)
         return SamplePatchTSTOutput(sequences=samples)

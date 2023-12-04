@@ -69,7 +69,7 @@ class PatchTSTModelTester:
         attention_probs_dropout_prob=0.1,
         distil=False,
         seed=42,
-        num_targets=2,
+        num_labels=2,
         mask_type="random",
         random_mask_ratio=0,
     ):
@@ -93,7 +93,7 @@ class PatchTSTModelTester:
         self.random_mask_ratio = random_mask_ratio
 
         self.seed = seed
-        self.num_targets = num_targets
+        self.num_labels = num_labels
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.patch_stride + 1
         # define seq_length so that it can pass the test_attention_outputs
@@ -114,7 +114,7 @@ class PatchTSTModelTester:
             context_length=self.context_length,
             activation_function=self.hidden_act,
             seed=self.seed,
-            num_targets=self.num_targets,
+            num_labels=self.num_labels,
             mask_type=self.mask_type,
             random_mask_ratio=self.random_mask_ratio,
         )
@@ -194,12 +194,12 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # else if classification model:
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
-            inputs_dict["target_values"] = labels
+            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_labels, rng=rng)
+            inputs_dict["labels"] = labels
             inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed)
-            target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
+            target_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_labels], rng=rng)
             inputs_dict["target_values"] = target_values
             inputs_dict.pop("future_values")
         return inputs_dict
@@ -272,10 +272,10 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "past_values",
                     "past_observed_mask",
                 ]
-            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
-                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-            ):
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
                 expected_arg_names = ["past_values", "target_values", "past_observed_mask"]
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
+                expected_arg_names = ["past_values", "past_observed_mask", "labels"]
             else:
                 expected_arg_names = [
                     "past_values",
@@ -373,7 +373,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         torch.manual_seed(0)
         with torch.no_grad():
             outputs = model.generate(past_values=batch["past_values"].to(torch_device))
-        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_targets))
+        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.num_labels))
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
         expected_slice = torch.tensor(
