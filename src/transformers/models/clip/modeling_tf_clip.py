@@ -759,6 +759,8 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             use_bias=False,
             name="text_projection",
         )
+        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = vision_config.hidden_size
 
     def build(self, input_shape: tf.TensorShape = None):
         self.logit_scale = self.add_weight(
