@@ -88,6 +88,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Update some packages
+        working-directory: /transformers
+        run: python3 -m pip install -U datasets
+
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -164,6 +168,10 @@ jobs:
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
 
+      - name: Update some packages
+        working-directory: /transformers
+        run: python3 -m pip install -U datasets
+
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
@@ -239,6 +247,10 @@ jobs:
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
         run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Update some packages
+        working-directory: /transformers
+        run: python3 -m pip install -U datasets
 
       - name: Install
         working-directory: /transformers

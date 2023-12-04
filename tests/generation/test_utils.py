@@ -104,11 +104,7 @@ class GenerationTesterMixin:
             if isinstance(config.eos_token_id, int):
                 config.eos_token_id = [config.eos_token_id]
             config.pad_token_id = config.eos_token_id[0]
-        # TransfoXL has no attention mask
-        if "transfoxl" in config.__class__.__name__.lower():
-            attention_mask = None
-        else:
-            attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :sequence_length]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:batch_size, :sequence_length]
 
         return config, input_ids, attention_mask, max_length
 

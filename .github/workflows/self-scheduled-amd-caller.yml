@@ -5,21 +5,13 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_amd_scheduled_ci_caller__*
+      - run_amd_scheduled_ci_caller*
 
 jobs:
-  run_amd_ci_mi210:
-    name: AMD mi210
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
-    uses: ./.github/workflows/self-scheduled-amd.yml
-    with:
-      gpu_flavor: mi210
-    secrets: inherit
-
-  run_amd_ci_mi250:
-    name: AMD mi250
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_scheduled_ci_caller')))
-    uses: ./.github/workflows/self-scheduled-amd.yml
-    with:
-      gpu_flavor: mi250
-    secrets: inherit
+  run_scheduled_amd_ci:
+    name: Trigger Scheduled AMD CI
+    runs-on: ubuntu-22.04
+    if: ${{ always() }}
+    steps:
+      - name: Trigger scheduled AMD CI via workflow_run
+        run: echo "Trigger scheduled AMD CI via workflow_run"
