@@ -2096,7 +2096,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         if state_dict is None:
-            # if model parameters are offloaded, onload and send state dicts to CPU
+            # if model parameters are offloaded, make module map
             if (
                 hasattr(model_to_save, "_hf_hook")
                 and isinstance(model_to_save._hf_hook, AlignDevicesHook)
@@ -2201,27 +2201,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         for shard_file, shard in shards.items():
-            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard):
+            # remake shard with onloaded parameters if necessary
+            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard) and any(isinstance(module_map[key]._hf_hook, AlignDevicesHook)):
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: '' for name in shard}
                 # extract data for shard state dict
                 for key in state_dict.keys():
-                    if module_map and hasattr(module_map[key], "_hf_hook") and isinstance(module_map[key]._hf_hook, AlignDevicesHook):
-                        original_values[key] = state_dict[key]
-                        module = (module_map[key])
-                        root = key[:key.rfind('.')]
+                    original_values[key] = state_dict[key]
+                    module = (module_map[key])
+                    root = key[:key.rfind('.')]
+                    preforward = False
+                    if (module_map 
+                        and hasattr(module_map[key], "_hf_hook") 
+                        and isinstance(module_map[key]._hf_hook, AlignDevicesHook)
+                        and module_map[key]._hf_hook.offload
+                        ):
+                        preforward = True
                         module._hf_hook.pre_forward(module)
-                        for m_key in module.state_dict():
-                            params = module.state_dict()[m_key]
-                            if (root + f".{m_key}") in state_dict:
-                                state_dict[root + f".{m_key}"] = params
+
+                    for m_key in module.state_dict():
+                        params = module.state_dict()[m_key]
+                        if (root + f".{m_key}") in state_dict:
+                            state_dict[root + f".{m_key}"] = params
+
+                    if preforward:
                         module._hf_hook.post_forward(module, torch.tensor([]))
 
                 # transform shard's state dict back to single shard
-                shard, _ = shard_checkpoint(state_dict) # will be ({name: tensor}, None) so don't overload index
-                print ('Shard remade: ', list(shard.keys()))
-                print ('Shard file: ', shard_file)
+                shard, _ = shard_checkpoint(state_dict) # will be ({name: tensor}, None)
                 name = list(shard.keys())[0] # will have one name
                 shard = shard[name]
 
