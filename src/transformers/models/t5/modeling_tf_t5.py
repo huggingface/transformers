@@ -641,7 +641,9 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             TFT5Block(config, has_relative_attention_bias=bool(i == 0), name=f"block_._{i}")
             for i in range(config.num_layers)
         ]
-        self.final_layer_norm = TFT5LayerNorm(config.d_model, epsilon=config.layer_norm_epsilon, name="final_layer_norm")
+        self.final_layer_norm = TFT5LayerNorm(
+            config.d_model, epsilon=config.layer_norm_epsilon, name="final_layer_norm"
+        )
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
     def _prune_heads(self, heads_to_prune):
