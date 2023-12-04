@@ -1322,8 +1322,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
         self.clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         self.num_labels = num_labels
-        self.head = nn.Linear(self.config.projection_dim, num_labels)
-        self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+        self.classifier = nn.Linear(self.config.projection_dim, config.num_labels)
 
     def forward(
         self,
