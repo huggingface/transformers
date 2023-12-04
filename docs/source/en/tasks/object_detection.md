@@ -139,6 +139,17 @@ To get an even better understanding of the data, visualize an example in the dat
 ...     box = annotations["bbox"][i]
 ...     class_idx = annotations["category"][i]
 ...     x, y, w, h = tuple(box)
+...     # Check if coordinates are normalized or not
+...     if max(box) > 1.0:
+...         # Coordinates are un-normalized, no need to re-scale them
+...         x1, y1 = int(x), int(y)
+...         x2, y2 = int(x + w), int(y + h)
+...     else:
+...         # Coordinates are normalized, re-scale them
+...         x1 = int(x * width)
+...         y1 = int(y * height)
+...         x2 = int((x + w) * width)
+...         y2 = int((y + h) * height)
 ...     draw.rectangle((x, y, x + w, y + h), outline="red", width=1)
 ...     draw.text((x, y), id2label[class_idx], fill="white")
 
