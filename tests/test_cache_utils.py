@@ -20,7 +20,7 @@ from transformers.testing_utils import require_torch, is_torch_available
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache
+    from transformers import DynamicCache, LlamaForCausalLM
 
 
 @require_torch
@@ -71,4 +71,34 @@ class CacheTest(unittest.TestCase):
             for key_value_idx in range(2):
                 self.assertTrue(
                     torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
+                )
+
+    def test_reorder_cache_retrocompatibility(self):
+        """ Tests that Cache.reorder_cache is retrocompatible with the legacy code path """
+        legacy_reorder_fn = LlamaForCausalLM._reorder_cache  # An example of a legacy `_reorder_cache` function
+
+        legacy_cache = ()
+        new_cache = DynamicCache()
+
+        # Creates a new cache with 10 layers in both formats
+        for layer_idx in range(10):
+            new_key = torch.rand((4, 4, 8, 16))
+            new_value = torch.rand((4, 4, 8, 16))
+            new_cache.update(new_key, new_value, layer_idx)
+            legacy_cache += ((new_key, new_value),)
+
+        # Let's create some dummy beam indices. From the shape above, it is equivalent to the case where num_beams=4
+        # and batch_size=1
+        beam_idx = torch.randint(low=0, high=4, size=(4,))
+
+        legacy_cache_reordered = legacy_reorder_fn(legacy_cache, beam_idx)
+        new_cache.reorder_cache(beam_idx)
+
+        # Let's check that the results are the same
+        for layer_idx in range(10):
+            for key_value_idx in range(2):
+                self.assertTrue(
+                    torch.allclose(
+                        new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
+                    )
                 )
