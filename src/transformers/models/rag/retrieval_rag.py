@@ -23,7 +23,7 @@ import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
+from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
 
@@ -131,7 +131,7 @@ class LegacyIndex(Index):
     def _load_passages(self):
         logger.info(f"Loading passages from {self.index_path}")
         passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
-        if not os.getenv("TRUST_REMOTE_CODE", False):
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
             raise ValueError(
                 "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
                 "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
@@ -147,7 +147,7 @@ class LegacyIndex(Index):
         resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
         self.index = faiss.read_index(resolved_index_path)
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
-        if not os.getenv("TRUST_REMOTE_CODE", False):
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
             raise ValueError(
                 "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
                 "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
