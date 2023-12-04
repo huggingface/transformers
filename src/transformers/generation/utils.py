@@ -3191,7 +3191,6 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            breakpoint()
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -3261,6 +3260,8 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
+            if cur_len == 8:
+                breakpoint()
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
