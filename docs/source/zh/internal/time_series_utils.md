@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -14,36 +14,18 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Trainer
+# 时间序列工具
 
-This page lists all the utility functions used by [`Trainer`].
 
-Most of those are only useful if you are studying the code of the Trainer in the library.
+此页面列出了可用于时间序列类模型的所有实用函数和类。
 
-## Utilities
+其中大多数仅在您研究时间序列模型的代码，或希望添加到分布输出类集合时有用。
 
-[[autodoc]] EvalPrediction
 
-[[autodoc]] IntervalStrategy
+## 输出分布
 
-[[autodoc]] enable_full_determinism
+[[autodoc]] time_series_utils.NormalOutput
 
-[[autodoc]] set_seed
+[[autodoc]] time_series_utils.StudentTOutput
 
-[[autodoc]] torch_distributed_zero_first
-
-## Callbacks internals
-
-[[autodoc]] trainer_callback.CallbackHandler
-
-## Distributed Evaluation
-
-[[autodoc]] trainer_pt_utils.DistributedTensorGatherer
-
-## Trainer Argument Parser
-
-[[autodoc]] HfArgumentParser
-
-## Debug Utilities
-
-[[autodoc]] debug_utils.DebugUnderflowOverflow
+[[autodoc]] time_series_utils.NegativeBinomialOutput
