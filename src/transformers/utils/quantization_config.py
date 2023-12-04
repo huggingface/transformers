@@ -545,7 +545,7 @@ class AwqConfig(QuantizationConfigMixin):
             that quantize their own models using `llm-awq` library.
         do_fuse (`bool`, *optional*, defaults to `False`):
             Whether to fuse attention and mlp layers together for faster inference
-        fuse_max_seq_len (`int`, *optional*, defaults to `None`):
+        fuse_max_seq_len (`int`, *optional*):
             The Maximum sequence length to generate when using fusing.
         modules_to_fuse (`dict`, *optional*, default to `None`):
             Overwrite the natively supported fusing scheme with the one specified by the users.
