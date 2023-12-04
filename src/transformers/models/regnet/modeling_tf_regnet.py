@@ -53,6 +53,7 @@ TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFRegNetConvLayer(tf.keras.layers.Layer):
     def __init__(
         self,
+        in_channels: int,
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
@@ -75,6 +76,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.identity
+        self.in_channels = in_channels
 
     def call(self, hidden_state):
         hidden_state = self.convolution(self.padding(hidden_state))
@@ -92,6 +94,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_channels = config.num_channels
         self.embedder = TFRegNetConvLayer(
+            in_channels=config.num_channels,
             out_channels=config.embedding_size,
             kernel_size=3,
             stride=2,
@@ -120,12 +123,13 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, out_channels: int, stride: int = 2, **kwargs):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs):
         super().__init__(**kwargs)
         self.convolution = tf.keras.layers.Conv2D(
             filters=out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.in_channels = in_channels
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.normalization(self.convolution(inputs), training=training)
@@ -163,17 +167,17 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
         # `self.layers` instead of `self.layer` because that is a reserved argument.
         self.layers = [
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
             TFRegNetConvLayer(
-                out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
+                out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
             ),
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2"),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None, name="layer.2"),
         ]
         self.activation = ACT2FN[config.hidden_act]
 
@@ -197,17 +201,17 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
         self.layers = [
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
             TFRegNetConvLayer(
-                out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
+                out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
             ),
             TFRegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4)), name="layer.2"),
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.3"),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None, name="layer.3"),
         ]
         self.activation = ACT2FN[config.hidden_act]
 

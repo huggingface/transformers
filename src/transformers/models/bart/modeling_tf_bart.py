@@ -470,6 +470,7 @@ class TFBartClassificationHead(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(inner_dim, name="dense")
         self.dropout = tf.keras.layers.Dropout(pooler_dropout)
         self.out_proj = tf.keras.layers.Dense(num_classes, name="out_proj")
+        self.input_dim = inner_dim
 
     def call(self, inputs):
         hidden_states = self.dropout(inputs)
@@ -680,6 +681,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         )
         self.layers = [TFBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        self.embed_dim = config.d_model
 
     @unpack_inputs
     def call(

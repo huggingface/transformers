@@ -496,6 +496,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -643,6 +644,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.embed_dim = config.hidden_size
 
     def call(
         self,

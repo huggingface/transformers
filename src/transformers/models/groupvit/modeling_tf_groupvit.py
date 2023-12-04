@@ -1004,6 +1004,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -1103,6 +1104,7 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
         self.embeddings = TFGroupViTVisionEmbeddings(config, name="embeddings")
         self.encoder = TFGroupViTVisionEncoder(config, name="encoder")
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.embed_dim = config.hidden_size
 
     def call(
         self,

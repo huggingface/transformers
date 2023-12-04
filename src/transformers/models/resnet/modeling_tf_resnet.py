@@ -51,7 +51,13 @@ TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFResNetConvLayer(tf.keras.layers.Layer):
     def __init__(
-        self, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        activation: str = "relu",
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.pad_value = kernel_size // 2
@@ -61,6 +67,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
+        self.in_channels = in_channels
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # Pad to match that done in the PyTorch Conv2D model
@@ -84,6 +91,7 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.embedder = TFResNetConvLayer(
+            config.num_channels,
             config.embedding_size,
             kernel_size=7,
             stride=2,
@@ -112,13 +120,14 @@ class TFResNetShortCut(tf.keras.layers.Layer):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, out_channels: int, stride: int = 2, **kwargs) -> None:
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs) -> None:
         super().__init__(**kwargs)
         self.convolution = tf.keras.layers.Conv2D(
             out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.in_channels = in_channels
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
@@ -137,10 +146,10 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
     ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
-        self.conv1 = TFResNetConvLayer(out_channels, stride=stride, name="layer.0")
-        self.conv2 = TFResNetConvLayer(out_channels, activation=None, name="layer.1")
+        self.conv1 = TFResNetConvLayer(in_channels, out_channels, stride=stride, name="layer.0")
+        self.conv2 = TFResNetConvLayer(out_channels, out_channels, activation=None, name="layer.1")
         self.shortcut = (
-            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
@@ -176,11 +185,11 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        self.conv0 = TFResNetConvLayer(reduces_channels, kernel_size=1, name="layer.0")
-        self.conv1 = TFResNetConvLayer(reduces_channels, stride=stride, name="layer.1")
-        self.conv2 = TFResNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2")
+        self.conv0 = TFResNetConvLayer(in_channels, reduces_channels, kernel_size=1, name="layer.0")
+        self.conv1 = TFResNetConvLayer(reduces_channels, reduces_channels, stride=stride, name="layer.1")
+        self.conv2 = TFResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None, name="layer.2")
         self.shortcut = (
-            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )

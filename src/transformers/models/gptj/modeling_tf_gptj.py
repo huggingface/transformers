@@ -282,6 +282,7 @@ class TFGPTJMLP(tf.keras.layers.Layer):
 
         self.act = get_tf_activation(config.activation_function)
         self.dropout = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.embed_dim = config.n_embd
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.fc_in(hidden_states)
@@ -357,6 +358,7 @@ class TFGPTJMainLayer(tf.keras.layers.Layer):
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFGPTJBlock(config, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.embed_dim = config.n_embd
 
     def get_input_embeddings(self):
         return self.wte

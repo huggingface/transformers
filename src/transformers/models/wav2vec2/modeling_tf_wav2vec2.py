@@ -1431,6 +1431,9 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
         self.dropout = tf.keras.layers.Dropout(config.final_dropout)
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, name="lm_head")
+        self.output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
 
     def freeze_feature_extractor(self):
         """

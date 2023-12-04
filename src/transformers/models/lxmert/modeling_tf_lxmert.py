@@ -174,6 +174,8 @@ class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
         self.box_layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="box_layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.feat_dim = config.visual_feat_dim
+        self.pos_dim = config.visual_pos_dim
 
     def call(self, visn_input, training=False):
         feats, boxes = visn_input
@@ -284,6 +286,7 @@ class TFLxmertAttention(tf.keras.layers.Layer):
         )
 
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.ctx_dim = config.hidden_size
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]

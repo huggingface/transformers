@@ -674,9 +674,10 @@ class TFSegformerMLP(tf.keras.layers.Layer):
     Linear Embedding.
     """
 
-    def __init__(self, config: SegformerConfig, **kwargs):
+    def __init__(self, input_dim: int, config: SegformerConfig, **kwargs):
         super().__init__(**kwargs)
         self.proj = tf.keras.layers.Dense(config.decoder_hidden_size, name="proj")
+        self.input_dim = input_dim
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         height = shape_list(hidden_states)[1]
@@ -693,7 +694,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
         for i in range(config.num_encoder_blocks):
-            mlp = TFSegformerMLP(config, name=f"linear_c.{i}")
+            mlp = TFSegformerMLP(config, input_dim=config.hidden_sizes[i], name=f"linear_c.{i}")
             mlps.append(mlp)
         self.mlps = mlps
 

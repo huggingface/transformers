@@ -178,6 +178,7 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.mlp = TFMLP(4 * nx, config, name="mlp")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
+        self.nx = nx
 
     def call(self, x, attention_mask, head_mask, output_attentions, training=False):
         output_attn = self.attn(x, attention_mask, head_mask, output_attentions, training=training)

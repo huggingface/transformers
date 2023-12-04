@@ -107,6 +107,7 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
         self,
         config: CvtConfig,
         patch_size: int,
+        num_channels: int,
         embed_dim: int,
         stride: int,
         padding: int,
@@ -117,6 +118,7 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
         self.convolution_embeddings = TFCvtConvEmbeddings(
             config,
             patch_size=patch_size,
+            num_channels=num_channels,
             embed_dim=embed_dim,
             stride=stride,
             padding=padding,
@@ -133,7 +135,16 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
 class TFCvtConvEmbeddings(tf.keras.layers.Layer):
     """Image to Convolution Embeddings. This convolutional operation aims to model local spatial contexts."""
 
-    def __init__(self, config: CvtConfig, patch_size: int, embed_dim: int, stride: int, padding: int, **kwargs):
+    def __init__(
+        self,
+        config: CvtConfig,
+        patch_size: int,
+        num_channels: int,
+        embed_dim: int,
+        stride: int,
+        padding: int,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.padding = tf.keras.layers.ZeroPadding2D(padding=padding)
         self.patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
@@ -148,6 +159,7 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
         )
         # Using the same default epsilon as PyTorch
         self.normalization = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="normalization")
+        self.num_channels = num_channels
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         if isinstance(pixel_values, dict):
@@ -548,6 +560,7 @@ class TFCvtStage(tf.keras.layers.Layer):
         self.embedding = TFCvtEmbeddings(
             self.config,
             patch_size=config.patch_sizes[self.stage],
+            num_channels=config.num_channels if self.stage == 0 else config.embed_dim[self.stage - 1],
             stride=config.patch_stride[self.stage],
             embed_dim=config.embed_dim[self.stage],
             padding=config.patch_padding[self.stage],

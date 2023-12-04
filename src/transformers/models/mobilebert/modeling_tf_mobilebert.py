@@ -180,6 +180,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.embedded_input_size = self.embedding_size * (3 if self.trigram_input else 1)
 
     def build(self, input_shape):
         with tf.name_scope("word_embeddings"):

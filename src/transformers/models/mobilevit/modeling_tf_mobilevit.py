@@ -85,6 +85,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
     def __init__(
         self,
         config: MobileViTConfig,
+        in_channels: int,
         out_channels: int,
         kernel_size: int,
         stride: int = 1,
@@ -132,6 +133,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
                 self.activation = config.hidden_act
         else:
             self.activation = None
+        self.in_channels = in_channels
 
     def call(self, features: tf.Tensor, training: bool = False) -> tf.Tensor:
         padded_features = self.padding(features)
@@ -160,11 +162,12 @@ class TFMobileViTInvertedResidual(tf.keras.layers.Layer):
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
         self.expand_1x1 = TFMobileViTConvLayer(
-            config, out_channels=expanded_channels, kernel_size=1, name="expand_1x1"
+            config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1, name="expand_1x1"
         )
 
         self.conv_3x3 = TFMobileViTConvLayer(
             config,
+            in_channels=expanded_channels,
             out_channels=expanded_channels,
             kernel_size=3,
             stride=stride,
@@ -175,6 +178,7 @@ class TFMobileViTInvertedResidual(tf.keras.layers.Layer):
 
         self.reduce_1x1 = TFMobileViTConvLayer(
             config,
+            in_channels=expanded_channels,
             out_channels=out_channels,
             kernel_size=1,
             use_activation=False,
@@ -405,11 +409,16 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
             self.downsampling_layer = None
 
         self.conv_kxk = TFMobileViTConvLayer(
-            config, out_channels=in_channels, kernel_size=config.conv_kernel_size, name="conv_kxk"
+            config,
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=config.conv_kernel_size,
+            name="conv_kxk",
         )
 
         self.conv_1x1 = TFMobileViTConvLayer(
             config,
+            in_channels=in_channels,
             out_channels=hidden_size,
             kernel_size=1,
             use_normalization=False,
@@ -424,11 +433,15 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
         self.conv_projection = TFMobileViTConvLayer(
-            config, out_channels=in_channels, kernel_size=1, name="conv_projection"
+            config, in_channels=hidden_size, out_channels=in_channels, kernel_size=1, name="conv_projection"
         )
 
         self.fusion = TFMobileViTConvLayer(
-            config, out_channels=in_channels, kernel_size=config.conv_kernel_size, name="fusion"
+            config,
+            in_channels=2 * in_channels,
+            out_channels=in_channels,
+            kernel_size=config.conv_kernel_size,
+            name="fusion",
         )
 
     def unfolding(self, features: tf.Tensor) -> Tuple[tf.Tensor, Dict]:
@@ -640,6 +653,7 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
 
         self.conv_stem = TFMobileViTConvLayer(
             config,
+            in_channels=config.num_channels,
             out_channels=config.neck_hidden_sizes[0],
             kernel_size=3,
             stride=2,
@@ -650,7 +664,11 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
 
         if self.expand_output:
             self.conv_1x1_exp = TFMobileViTConvLayer(
-                config, out_channels=config.neck_hidden_sizes[6], kernel_size=1, name="conv_1x1_exp"
+                config,
+                in_channels=config.neck_hidden_sizes[5],
+                out_channels=config.neck_hidden_sizes[6],
+                kernel_size=1,
+                name="conv_1x1_exp",
             )
 
         self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first", name="pooler")
@@ -886,13 +904,14 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
 
 
 class TFMobileViTASPPPooling(tf.keras.layers.Layer):
-    def __init__(self, config: MobileViTConfig, out_channels: int, **kwargs) -> None:
+    def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs) -> None:
         super().__init__(**kwargs)
 
         self.global_pool = tf.keras.layers.GlobalAveragePooling2D(keepdims=True, name="global_pool")
 
         self.conv_1x1 = TFMobileViTConvLayer(
             config,
+            in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
             stride=1,
@@ -917,6 +936,7 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
 
+        in_channels = config.neck_hidden_sizes[-2]
         out_channels = config.aspp_out_channels
 
         if len(config.atrous_rates) != 3:
@@ -926,6 +946,7 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
 
         in_projection = TFMobileViTConvLayer(
             config,
+            in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
             use_activation="relu",
@@ -937,6 +958,7 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
             [
                 TFMobileViTConvLayer(
                     config,
+                    in_channels=in_channels,
                     out_channels=out_channels,
                     kernel_size=3,
                     dilation=rate,
@@ -947,11 +969,14 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
             ]
         )
 
-        pool_layer = TFMobileViTASPPPooling(config, out_channels, name=f"convs.{len(config.atrous_rates) + 1}")
+        pool_layer = TFMobileViTASPPPooling(
+            config, in_channels, out_channels, name=f"convs.{len(config.atrous_rates) + 1}"
+        )
         self.convs.append(pool_layer)
 
         self.project = TFMobileViTConvLayer(
             config,
+            in_channels=5 * out_channels,
             out_channels=out_channels,
             kernel_size=1,
             use_activation="relu",
@@ -987,6 +1012,7 @@ class TFMobileViTDeepLabV3(tf.keras.layers.Layer):
 
         self.classifier = TFMobileViTConvLayer(
             config,
+            in_channels=config.aspp_out_channels,
             out_channels=config.num_labels,
             kernel_size=1,
             use_normalization=False,

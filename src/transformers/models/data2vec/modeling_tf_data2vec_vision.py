@@ -979,6 +979,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
 
     def __init__(
         self,
+        in_channels: int,
         out_channels: int,
         kernel_size: Union[int, Tuple[int, int]],
         padding: str = "valid",
@@ -997,6 +998,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         )
         self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
+        self.in_channels = in_channels
 
     def call(self, input: tf.Tensor) -> tf.Tensor:
         output = self.conv(input)
@@ -1100,10 +1102,11 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: Tuple[int, ...], channels: int, **kwargs) -> None:
+    def __init__(self, pool_scales: Tuple[int, ...], in_channels: int, out_channels: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.pool_scales = pool_scales
-        self.channels = channels
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
         self.layer_list = []
         for idx, pool_scale in enumerate(pool_scales):
@@ -1111,7 +1114,9 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
             self.layer_list.append(
                 [
                     TFAdaptiveAvgPool2D(output_shape=pool_scale),
-                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
+                    TFData2VecVisionConvModule(
+                        in_channels=in_channels, out_channels=self.out_channels, kernel_size=1, name=f"{idx}.1"
+                    ),
                 ]
             )
 
@@ -1146,21 +1151,39 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
 
         # PSP Module
-        self.psp_modules = TFData2VecVisionPyramidPoolingModule(self.pool_scales, self.channels, name="psp_modules")
-        self.bottleneck = TFData2VecVisionConvModule(self.channels, kernel_size=3, padding="same", name="bottleneck")
+        self.psp_modules = TFData2VecVisionPyramidPoolingModule(
+            self.pool_scales, self.in_channels[-1], self.channels, name="psp_modules"
+        )
+        self.bottleneck = TFData2VecVisionConvModule(
+            self.in_channels[-1] + len(self.pool_scales) * self.channels,
+            self.channels,
+            kernel_size=3,
+            padding="same",
+            name="bottleneck",
+        )
         # FPN Module
         self.lateral_convs = []
         self.fpn_convs = []
-        for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
-            l_conv = TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}")
+        for idx, in_channels in enumerate(self.in_channels[:-1]):  # skip the top layer
+            l_conv = TFData2VecVisionConvModule(
+                in_channels, out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}"
+            )
             fpn_conv = TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=3, padding="same", name=f"fpn_convs.{idx}"
+                in_channels=self.channels,
+                out_channels=self.channels,
+                kernel_size=3,
+                padding="same",
+                name=f"fpn_convs.{idx}",
             )
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
         self.fpn_bottleneck = TFData2VecVisionConvModule(
-            out_channels=self.channels, kernel_size=3, padding="same", name="fpn_bottleneck"
+            in_channels=len(self.in_channels) * self.channels,
+            out_channels=self.channels,
+            kernel_size=3,
+            padding="same",
+            name="fpn_bottleneck",
         )
 
     def psp_forward(self, inputs):
@@ -1230,6 +1253,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
+                in_channels=self.in_channels,
                 out_channels=self.channels,
                 kernel_size=kernel_size,
                 padding="same",
@@ -1240,6 +1264,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         for i in range(self.num_convs - 1):
             convs.append(
                 TFData2VecVisionConvModule(
+                    in_channels=self.channels,
                     out_channels=self.channels,
                     kernel_size=kernel_size,
                     padding="same",
@@ -1253,7 +1278,11 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
             self.convs = convs
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
+                self.in_channels + self.channels,
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                name="conv_cat",
             )
 
         self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
