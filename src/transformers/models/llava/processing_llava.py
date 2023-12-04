@@ -59,7 +59,7 @@ class LlavaProcessor(ProcessorMixin):
         self,
         text=None,
         images=None,
-        padding=None,
+        padding=False,
         truncation=None,
         transform: Callable = None,
         max_length=None,

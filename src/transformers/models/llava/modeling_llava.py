@@ -228,6 +228,10 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         # set the pad token id to the token image -200? or just to the new index
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+
+        # Resize the text embedding to take into accoint `<image>` token
+        self.language_model.resize_token_embeddings(config.text_config.vocab_size + 1)
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -252,6 +256,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
+
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         # TODO make sur this works as expected
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
@@ -262,7 +267,12 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
+    def _merge_input_ids_with_image_features(
+        self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
+    ):
         # 1. Create a mask to know where image tokens are
+        image_token_mask = input_ids == self.config.image_token_index
+        num_image_tokens = torch.sum(image_token_mask, dim=-1)
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
         nb_text_tokens_per_images = image_features.shape[1]
@@ -276,6 +286,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         final_embedding = torch.zeros(input_ids.shape[0], max_embed_dim, inputs_embeds.shape[-1])
         final_attention_mask = torch.zeros(input_ids.shape[0], max_embed_dim, dtype=torch.long)
 
+        # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
@@ -390,6 +401,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
