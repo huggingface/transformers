@@ -3984,7 +3984,7 @@ class GenerationMixin:
             )
             if model_kwargs["past_key_values"] is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], beam_idx
+                    model_kwargs["past_key_values"], reordering_indices
                 )
 
             # increase cur_len
