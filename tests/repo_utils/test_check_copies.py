@@ -120,7 +120,7 @@ class RobertaBertDummyModel:
         self.a = a
         self.b = b
 
-    # ignore copied
+    # Ignore copy
     def only_in_roberta_to_be_ignored(self, c):
         return 3
 
@@ -131,7 +131,7 @@ class RobertaBertDummyModel:
     def existing_common(self, c):
         return 4
 
-    # ignore copied
+    # Ignore copy
     def existing_diff_to_be_ignored(self, c):
         return 6
 """
@@ -168,7 +168,7 @@ class RobertaBertDummyModel:
         self.a = a
         self.b = b
 
-    # ignore copied
+    # Ignore copy
     def only_in_roberta_to_be_ignored(self, c):
         return 3
 
@@ -185,7 +185,7 @@ class RobertaBertDummyModel:
     def existing_diff_not_ignored(self, c):
         return 5
 
-    # ignore copied
+    # Ignore copy
     def existing_diff_to_be_ignored(self, c):
         return 6
 """
@@ -211,11 +211,11 @@ class RobertaBertDummyModel:
     def existing_diff_not_ignored(self, c):
         return 8
 
-    # ignore copied
+    # Ignore copy
     def existing_diff_to_be_ignored(self, c):
         return 6
 
-    # ignore copied
+    # Ignore copy
     def only_in_roberta_to_be_ignored(self, c):
         return 3
 """

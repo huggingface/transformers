@@ -652,7 +652,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
         name_mappings_2 = {k: k for k in observed_code_blocks.keys()}
 
         # Update code blocks' name and content:
-        #   If `"# ignore copied"` is found in a block of the observed code:
+        #   If `"# Ignore copy"` is found in a block of the observed code:
         #     1. if it's a block only in the observed code --> add it to the theoretical code.
         #     2. if it's also in the theoretical code () --> put its content (body) to the corresponding block under the
         #        same name in the theoretical code.
@@ -662,7 +662,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
         ignored_new_block_index = 0
         for name in list(observed_code_blocks.keys()):
             code = observed_code_blocks[name]
-            if "# ignore copied" in code:
+            if "# Ignore copy" in code:
                 if name in theoretical_code_blocks:
                     # in the target --> just copy the content
                     del theoretical_code_blocks[name]

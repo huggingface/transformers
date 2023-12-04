@@ -30,7 +30,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
 class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    # ignore copied
+    # Ignore copy
     tokenizer_class = LongformerTokenizer
     test_slow_tokenizer = True
     rust_tokenizer_class = LongformerTokenizerFast
