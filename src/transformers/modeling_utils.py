@@ -2097,11 +2097,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if model parameters are offloaded, make module map
-            if (
-                hasattr(model_to_save, "_hf_hook")
-                and isinstance(model_to_save._hf_hook, AlignDevicesHook)
-            ):
-                state_dict = {}
+            if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -2136,7 +2132,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")}
+            shared_ptrs = {
+                ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")
+            }
             warn_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
@@ -2202,18 +2200,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard):
                 original_values = {}
                 # init state_dict for this shard
-                state_dict = {name: '' for name in shard}
+                state_dict = {name: "" for name in shard}
                 # extract data for shard state dict
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
-                    module = (module_map[key])
-                    root = key[:key.rfind('.')]
+                    module = module_map[key]
+                    root = key[: key.rfind(".")]
                     preforward = False
-                    if (module_map 
-                        and hasattr(module_map[key], "_hf_hook") 
+                    if (
+                        module_map
+                        and hasattr(module_map[key], "_hf_hook")
                         and isinstance(module_map[key]._hf_hook, AlignDevicesHook)
                         and module_map[key]._hf_hook.offload
-                        ):
+                    ):
                         preforward = True
                         module._hf_hook.pre_forward(module)
 
@@ -2226,8 +2225,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module._hf_hook.post_forward(module, torch.tensor([]))
 
                 # transform shard's state dict back to single shard
-                shard, _ = shard_checkpoint(state_dict) # will be ({name: tensor}, None)
-                name = list(shard.keys())[0] # will have one name
+                shard, _ = shard_checkpoint(state_dict)  # will be ({name: tensor}, None)
+                name = list(shard.keys())[0]  # will have one name
                 shard = shard[name]
 
             if safe_serialization:

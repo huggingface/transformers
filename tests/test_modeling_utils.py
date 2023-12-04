@@ -807,7 +807,7 @@ class ModelUtilsTest(TestCasePlus):
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         input_tokens = tokenizer.encode("Four score and seven years ago", return_tensors="pt")
         cpu_output = onloaded_model(input_tokens)[0]
-        
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             offload_folder = os.path.join(tmp_dir, "offload")
             offloaded_model = AutoModelForCausalLM.from_pretrained(
