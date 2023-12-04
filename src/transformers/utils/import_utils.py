@@ -623,7 +623,7 @@ def is_flash_attn_2_available():
         return False
 
 
-def is_flash_attn_greater_or_equal_210():
+def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
 
