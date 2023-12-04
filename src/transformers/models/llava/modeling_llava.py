@@ -291,14 +291,12 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 3. Create the full embedding, already padded to the maximum position
         max_embed_dim = text_to_overwrite.max()
         final_embedding = torch.zeros(input_ids.shape[0], max_embed_dim+1, inputs_embeds.shape[-1])
+        final_attention_mask = torch.zeros(input_ids.shape[0], max_embed_dim+1, dtype = torch.long)
 
         # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"] 
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding.scatter_(-2, text_to_overwrite.unsqueeze(2).expand_as(inputs_embeds), inputs_embeds)
-
-        # equivalent to
-        # batch_indices = torch.arange(final_embedding.size(0)).view(-1, 1).expand_as(text_to_overwrite)
-        # final_embedding[batch_indices,text_to_overwrite] = inputs_embeds # we also right on the start image token
+        final_attention_mask.scatter_(-1, text_to_overwrite, attention_mask.long())
 
         # 4. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
@@ -306,10 +304,9 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # Make sur to not write on the padding. This currently does not work for left padded inputs no?
         image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
+        final_attention_mask |= image_to_overwrite
 
-        # TODO last thing is to update the positions ids, easy you can just offset the index to overwrite.
-        # TODO update the attention mask correctly
-        return final_embedding, attention_mask, position_ids
+        return final_embedding, final_attention_mask, (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
                     
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
