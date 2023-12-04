@@ -104,10 +104,11 @@ def construct_full_unpacked_stream(
         if image_tokens[batch_index]:
             # Find indices where image_indicator_id appears
             image_indicator_indices = (subsequence_stream == image_indicator_id).nonzero(as_tuple=True)[0]
-
+         
             # Assert that the number of image indicators matches the number of image tokens
-            assert len(image_indicator_indices) == len(image_tokens[batch_index]), \
-                "Number of image indicators does not match the number of image tokens."
+            if len(image_indicator_indices) > 0:
+                assert len(image_indicator_indices) == len(image_tokens[batch_index]), \
+                    "Number of image indicators does not match the number of image tokens."
 
             # Replace image_indicator_id with actual image tokens
             offset = 0
@@ -235,22 +236,6 @@ def _tokenize_prompts_with_image_and_batch(
     - set the sequence length to be the max of length of prompts plus the number of tokens we would like to generate
     - pad all the sequences to this length so we can convert them into a 3D tensor.
     """
-
-    if image_tokens is not None:
-        for i, single_prompt in enumerate(prompts):
-            for j, (prompt, image_token) in enumerate(zip(single_prompt, image_tokens)):
-                image_indicator_count = prompt.count('|IMAGESTART|')
-                if image_indicator_count > len(image_token):
-                    raise ValueError(f"Image place indicators exceed the number of images provided. Have {image_indicator_count} images?")
-                elif image_indicator_count < len(image_token):
-                    insert_count = len(image_token) - image_indicator_count
-                    logger.warning(f"Inserting {insert_count} image place indicators before the prompt.")
-                    prompt = "|IMAGESTART|" * insert_count + prompt
-
-                assert prompt.count('|IMAGESTART|') == len(image_token)
-                # Write back the modified prompt to the prompts list
-                prompts[i][j] = prompt
-
 
     # If not tool use, tranform the coordinates while tokenizing
     if scale_factors is not None:
@@ -481,48 +466,62 @@ class FuyuProcessor(ProcessorMixin):
         """
         requires_backends(self, ["torch"])
 
-        # --- Check input validity ---
+        # --- Check input validity and Insert the appropriate number of image place indicators before the prompt---
+        
         if not return_attention_mask:
             raise ValueError("`return_attention_mask=False` is not supported for this model.")
-        if all(item is None for item in text) and all(item is None for item in images):
-            raise ValueError("You have to specify either text or images. Both cannot be None.")
-        # if text is not None and images is None:
-        if any(item is not None for item in text) and all(item is None for item in images):
-            logger.warning("You are processing a text with no associated image. Make sure it is intended.")
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            return text_encoding
 
-        if all(item is None for item in text) and any(item is not None for item in images):
-            logger.warning("You are processing an image with no associated text. Make sure it is intended.")
-            prompts = [[""] for _ in range(len(images))]
-        if any(item is not None for item in text) and any(item is not None for item in images):
-            if isinstance(text, str):
-                prompts = [[text]]
-            elif isinstance(text, list):
-                prompts = [[text_seq if text_seq is not None else ""] for text_seq in text]
+        prompts = []
+        images_list = []
+        for text_item, image_group in zip(text, images):
+            # Handle the case where there is no text but there are images
+            if text_item is None and image_group is not None:
+                prompt = "|IMAGESTART|" * len([img for img in image_group if img is not None])
+                prompts.append([prompt])
+                images_list.append([img for img in image_group if img is not None])
+            
+            # Handle the case where there is text and possibly images
+            elif text_item is not None:
+                # Counting the number of "|IMAGESTART|" in text_item
+                image_indicator_count = text_item.count('|IMAGESTART|')
+                
+                # Text with images
+                if image_group is not None:
+                   
+                    not_none_image_count = len([img for img in image_group if img is not None])
+                    
+                    if image_indicator_count > not_none_image_count:
+                        raise ValueError(f"Image place indicators exceed the number of images provided. Have {image_indicator_count} images?")
+                    
+                    elif image_indicator_count < not_none_image_count:
+                        
+                        insert_count = len(image_group) - image_indicator_count
+                        logger.warning(f"Inserting {insert_count} image place indicators before the prompt.")
+                        text_item = "|IMAGESTART|" * insert_count + text_item
+                   
+                    prompt = text_item        
+                    prompts.append([prompt])
+                    images_list.append([img for img in image_group if img is not None])
 
+                # Text without images
+                else:
+                    if image_indicator_count > 0:
+                        raise ValueError(f"Image place indicators exceed the number of images provided. Have {image_indicator_count} images?")
+                    
+                    else:
+                        prompt = text_item        
+                        prompts.append([prompt])
+                        images_list.append([])
+            
+            # Handle the case where both text and image are None
+            else:
+                raise ValueError("You have to specify either text or images. Both cannot be None.")
+
+        
         # --- Preprocess images using self.image_processor ---
 
         # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
-        image_encoding = self.image_processor.preprocess(images, return_tensors="pt")
+        image_encoding = self.image_processor.preprocess(images_list, return_tensors="pt")
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
