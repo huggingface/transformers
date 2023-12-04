@@ -35,8 +35,3 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## BitsAndBytesConfig
 
 [[autodoc]] BitsAndBytesConfig
-
-
-## Quantization with 🤗 Optimum 
-
-Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your use case.
