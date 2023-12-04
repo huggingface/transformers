@@ -2057,11 +2057,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
 
-        if (
-            getattr(self.config, "quantization_config", None) is not None
-            and self.config.quantization_config.quant_method == QuantizationMethod.AWQ
-            and self.config.quantization_config.is_using_fused_modules
-        ):
+        if getattr(self, "_awq_is_fused", False):
             raise ValueError("You cannot save an AWQ model that uses fused modules!")
 
         if "save_config" in kwargs:
@@ -2812,13 +2808,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantization_method_from_config = config.quantization_config.get(
                 "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
-        if quantization_method_from_config is not None and quantization_method_from_args is not None:
-            if quantization_method_from_config != quantization_method_from_args:
-                raise ValueError(
-                    f"The model is already quantized with {quantization_method_from_config}. "
-                    f"You can't quantize it again with {quantization_method_from_args}"
-                )
-        if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+        if (
+            quantization_method_from_config in (QuantizationMethod.GPTQ, QuantizationMethod.AWQ)
+            and quantization_method_from_args is not None
+        ):
             loading_attr_dict = quantization_config.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 config.quantization_config[attr] = val
@@ -3575,9 +3568,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             quantization_config is not None
             and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.is_using_fused_modules
+            and quantization_config.do_fuse
         ):
             model = fuse_awq_modules(model, quantization_config)
+            model._awq_is_fused = True
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
