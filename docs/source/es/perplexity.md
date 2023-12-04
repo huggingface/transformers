@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 La perplejidad, perplexity en inglés (PPL), es una de las métricas más comunes para evaluar modelos de lenguaje. Antes de sumergirnos, debemos tener en cuenta que esta métrica se aplica específicamente a modelos de lenguaje clásicos (a veces llamados modelos autorregresivos o causales) y no está bien definida para modelos de lenguaje enmascarados como BERT (ver [resumen del modelo](model_summary)).
 
-La perplejidad se define como la media negativa exponenciada de la verosimilitud de una secuencia. Si tenemos una secuencia tokenizada \(X = (x_0, x_1, \dots, x_t)\), entonces la perplejidad de \(X\) es,
+La perplejidad se define como la media negativa exponenciada de la verosimilitud de una secuencia. Si tenemos una secuencia tokenizada \\(X = (x_0, x_1, \dots, x_t)\\), entonces la perplejidad de \\(X\\) es,
 
 $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) } \right\}$$
 
