@@ -267,9 +267,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
-    def _merge_input_ids_with_image_features(
-        self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
-    ):
         # 1. Create a mask to know where image tokens are
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
@@ -279,20 +276,19 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 2. Compute the positions where text should be written
         new_token_positions = torch.cumsum((image_token_mask * (nb_text_tokens_per_images-1) + 1), -1) -1
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
+
         # 3. Create the full embedding, already padded to the maximum position
         max_embed_dim = (num_image_tokens.max() * (nb_text_tokens_per_images - 1)) + input_ids.shape[-1]
         final_embedding = torch.zeros(input_ids.shape[0], max_embed_dim, inputs_embeds.shape[-1])
         final_attention_mask = torch.zeros(input_ids.shape[0], max_embed_dim, dtype=torch.long)
 
-        # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
+        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
 
-        # 4. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
+        # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-
-        # Make sur to not write on the padding. This currently does not work for left padded inputs no?
         image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
         final_attention_mask |= image_to_overwrite
