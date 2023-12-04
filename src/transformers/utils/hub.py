@@ -104,10 +104,10 @@ if (
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
     logger.warning(
-        "In Transformers v4.0.0, the default path to cache downloaded models changed from"
-        " '~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have"
+        "In Transformers v4.22.0, the default path to cache downloaded models changed from"
+        " '~/.cache/torch/transformers' to '~/.cache/huggingface/hub'. Since you don't seem to have"
         " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
-        " '~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should"
+        " '~/.cache/huggingface/hub' to avoid redownloading models you have already in the cache. You should"
         " only see this message once."
     )
     shutil.move(old_default_cache_path, constants.HF_HUB_CACHE)
@@ -1126,7 +1126,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
     if new_cache_dir is None:
         new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        # Migrate from old cache in .cache/huggingface/hub
+        # Migrate from old cache in .cache/huggingface/transformers
         old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
         if os.path.isdir(str(old_cache)):
             cache_dir = str(old_cache)
