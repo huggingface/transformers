@@ -545,7 +545,7 @@ class AwqConfig(QuantizationConfigMixin):
             that quantize their own models using `llm-awq` library.
         do_fuse (`bool`, *optional*, defaults to `False`):
             Whether to fuse attention and mlp layers together for faster inference
-        fuse_max_seq_len (`int`, *optional*):
+        fuse_max_seq_len (`int`, *optional*, defaults to `None`):
             The Maximum sequence length to generate when using fusing.
         modules_to_fuse (`dict`, *optional*, default to `None`):
             Overwrite the natively supported fusing scheme with the one specified by the users.
@@ -620,7 +620,7 @@ class AwqConfig(QuantizationConfigMixin):
 
             if not awq_version_supports_fusing:
                 raise ValueError(
-                    "You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package."
+                    f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
         if self.do_fuse and self.modules_to_fuse is not None:
@@ -638,4 +638,3 @@ class AwqConfig(QuantizationConfigMixin):
                     f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
                 )
 
-        # TODO: awq version check for fused modules.
