@@ -2105,15 +2105,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
-                    module_state_dict = module.state_dict()
-
                     for key in module_state_dict:
-                        params = module_state_dict[key]
-                        state_dict[name + f".{key}"] = params
                         module_map[name + f".{key}"] = module
 
-            else:
-                state_dict = model_to_save.state_dict()
+            state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
