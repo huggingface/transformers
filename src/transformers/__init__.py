@@ -273,6 +273,7 @@ _import_structure = {
     "models.convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextV2Config"],
     "models.cpm": [],
     "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig", "CpmAntTokenizer"],
+    "models.crate": ["CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CrateConfig"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
@@ -1553,6 +1554,19 @@ else:
             "CpmAntForCausalLM",
             "CpmAntModel",
             "CpmAntPreTrainedModel",
+        ]
+    )
+    _import_structure["models.crate"].extend(
+        [
+            "CRATE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CrateForCausalLM",
+            "CrateForMaskedLM",
+            "CrateForMultipleChoice",
+            "CrateForQuestionAnswering",
+            "CrateForSequenceClassification",
+            "CrateForTokenClassification",
+            "CrateModel",
+            "CratePreTrainedModel",
         ]
     )
     _import_structure["models.ctrl"].extend(
@@ -4547,6 +4561,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
     from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
+    from .models.crate import CRATE_PRETRAINED_CONFIG_ARCHIVE_MAP, CrateConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
@@ -5684,6 +5699,17 @@ if TYPE_CHECKING:
             CpmAntForCausalLM,
             CpmAntModel,
             CpmAntPreTrainedModel,
+        )
+        from .models.crate import (
+            CRATE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CrateForCausalLM,
+            CrateForMaskedLM,
+            CrateForMultipleChoice,
+            CrateForQuestionAnswering,
+            CrateForSequenceClassification,
+            CrateForTokenClassification,
+            CrateModel,
+            CratePreTrainedModel,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
