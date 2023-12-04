@@ -31,20 +31,19 @@ from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_outputs import (
-    FlaxBaseModelOutputWithPast,
-    FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
-)
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
+from ...modeling_flax_outputs import (FlaxBaseModelOutputWithPast,
+                                      FlaxCausalLMOutputWithCrossAttentions,
+                                      FlaxSequenceClassifierOutput)
+from ...modeling_flax_utils import (ACT2FN, FlaxPreTrainedModel,
+                                    append_call_sample_docstring, logging)
 from ...utils import add_start_docstrings
 from .configuration_mistral import MistralConfig
-
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MistralConfig"
 _CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
+_REAL_CHECKPOINT_FOR_DOC = "ksmcg/Mistral-tiny"
 
 MISTRAL_START_DOCSTRING = r"""
 
@@ -697,7 +696,11 @@ class FlaxMistralModel(FlaxMistralPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxMistralModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPast, _CONFIG_FOR_DOC, revision="refs/pr/95"
+    FlaxMistralModel,
+    _REAL_CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutputWithPast,
+    _CONFIG_FOR_DOC,
+    # revision="refs/pr/95"
 )
 
 
@@ -797,10 +800,10 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMistralForCausalLM,
-    _CHECKPOINT_FOR_DOC,
+    _REAL_CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
-    revision="refs/pr/95",
+    # revision="refs/pr/95",
 )
 
 
@@ -881,8 +884,8 @@ class FlaxMistralForSequenceClassification(FlaxMistralPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMistralForSequenceClassification,
-    _CHECKPOINT_FOR_DOC,
+    _REAL_CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
-    revision="refs/pr/95",
+    # revision="refs/pr/95",
 )
