@@ -1741,6 +1741,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         condition_on_prev_tokens: Optional[bool] = None,
+        temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        compression_ratio_threshold: Optional[float] = 2.4,
+        logprob_threshold: Optional[float] = -1.0,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps: Optional[bool] = None,
@@ -1902,6 +1905,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         ```
 
         """
+        temperature = 0.0
+        compression_ratio_threshold = None
+        logprob_threshold = None
 
         if "inputs" in kwargs:
             input_features = kwargs.pop("inputs")
@@ -2180,6 +2186,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # batch size can decrease during the run
         cur_bsz = prev_bsz = batch_size
 
+        temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
+        return_scores = compression_ratio_threshold is not None or logprob_threshold is not None
+        return_dict_in_generate = return_dict_in_generate or return_scores
+
         init_tokens = [self.generation_config.decoder_start_token_id]
         if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
             i = 1
@@ -2286,17 +2296,23 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             print("Init", decoder_input_ids[0, :6].tolist())
 
             # 6.6 Batch generate current chunk
-            seek_outputs = super().generate(
-                segment_input,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
-                return_dict_in_generate=return_dict_in_generate,
-                decoder_input_ids=decoder_input_ids,
-                **kwargs,
-            )
+            for temperature in temperatures:
+                do_sample = temperature > 0.0
+
+                seek_outputs = super().generate(
+                    segment_input,
+                    generation_config,
+                    logits_processor,
+                    stopping_criteria,
+                    prefix_allowed_tokens_fn,
+                    synced_gpus,
+                    temperature=temperature,
+                    do_sample=do_sample,
+                    return_scores=return_scores,
+                    return_dict_in_generate=return_dict_in_generate,
+                    decoder_input_ids=decoder_input_ids,
+                    **kwargs,
+                )
 
             if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
                 num_frames = getattr(generation_config, "num_frames", None)
@@ -2313,9 +2329,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             else:
                 seek_sequences = seek_outputs
 
+            if compression_ratio_threshold is not None:
+                pass
+
             if condition_on_prev_tokens is not None:
                 # remove all previously passed decoder input ids except start token
                 seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] - 1:]
+
+            if return_scores:
+                scores = seek_outputs["scores"] if return_scores else None
+                logprops = self._retrieve_logprobs(scores, seek_sequences)
 
             # print("hf tokens", seek_sequences)
             # import ipdb; ipdb.set_trace()
