@@ -32,7 +32,7 @@ logger = logging.get_logger(__name__)
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
     "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/config.json",
-    "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
+    "bigscience/bhttps://huggingface.co/docs/transformers/parallelismloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
     "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/config.json",
     "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/config.json",
     "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/config.json",
@@ -76,7 +76,7 @@ class BloomConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            document](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232). Note also that this is enabled only when
             `slow_but_exact=True`.
