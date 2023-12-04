@@ -1912,7 +1912,7 @@ class GenerationTesterMixin:
         # 👉 tests with and without beam search so that we can test with and without cache reordering.
         # 👉 tests with and without sampling so we can cover the most common use cases.
         for model_class in self.all_generative_model_classes:
-            if "use_legacy_cache" not in inspect.signature(model_class.forward).parameters:
+            if not model_class._supports_cache_class:
                 self.skipTest("This model does not support the new cache format")
 
             config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
@@ -1931,12 +1931,10 @@ class GenerationTesterMixin:
             # Sets seed before calling `generate` for the case with do_sample=True
             seed = torch.randint(0, 1000000, (1,)).item()
             set_seed(seed)
-            legacy_results = model.generate(
-                input_ids, attention_mask=attention_mask, use_legacy_cache=True, **generation_kwargs
-            )
+            legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
             new_results = model.generate(
-                input_ids, attention_mask=attention_mask, use_legacy_cache=False, **generation_kwargs
+                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
             )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being

@@ -5,7 +5,7 @@ import torch
 
 class Cache:
     """
-    Base, abstract class for all caches.
+    Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
     def update(
@@ -28,6 +28,9 @@ class Cache:
             cache_kwargs (`Dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
                 cache to be created.
+
+        Return:
+            A tuple containing the updated key and value states.
         """
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
@@ -35,31 +38,32 @@ class Cache:
 class DynamicCache(Cache):
     """
     A cache that grows dynamically as more tokens are generated. This is the default for generative models.
+
+    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
+    `[batch_size, num_heads, seq_len, head_dim]`.
     """
 
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
 
-    def __getitem__(self, key: int) -> List[Tuple[torch.Tensor]]:
+    def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
         Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
         sequence length.
         """
-        if key == 0:
-            return self.key_cache
-        elif key == 1:
-            return self.value_cache
+        if layer_idx < len(self):
+            return (self.key_cache[layer_idx], self.value_cache[layer_idx])
         else:
-            raise KeyError(f"Cache only supports 0 (key) and 1 (value) indexing, got {key}")
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
 
     def __iter__(self):
         """
         Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
         keys and values
         """
-        yield self.key_cache
-        yield self.value_cache
+        for layer_idx in range(len(self)):
+            yield (self.key_cache[layer_idx], self.value_cache[layer_idx])
 
     def __len__(self):
         """
@@ -87,6 +91,9 @@ class DynamicCache(Cache):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
                 Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+
+        Return:
+            A tuple containing the updated key and value states.
         """
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
@@ -98,18 +105,29 @@ class DynamicCache(Cache):
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        legacy_cache = []
+        """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
+        legacy_cache = ()
         for layer_idx in range(len(self)):
-            legacy_cache.append((self.key_cache[layer_idx], self.value_cache[layer_idx]))
-        return tuple(legacy_cache)
+            legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
+        return legacy_cache
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
         cache = cls()
         if past_key_values is not None:
             for layer_idx in range(len(past_key_values)):
@@ -117,19 +135,15 @@ class DynamicCache(Cache):
                 cache.update(key_states, value_states, layer_idx)
         return cache
 
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
-
 
 class SinkCache(Cache):
     """
     A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
     generate beyond the length of its context window, without losing fluency in the conversation. As it discards past
     tokens, the model will lose the ability to generate tokens that depend on the context that was discarded.
+
+    It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
+    `[batch_size, num_heads, seq_len, head_dim]`.
 
     Parameters:
         window_length (`int`):
@@ -146,14 +160,15 @@ class SinkCache(Cache):
         self.cos_sin_cache = {}
 
     @staticmethod
-    def rotate_half(x):
-        """Rotates half the hidden dims of the input."""
+    def _rotate_half(x):
         x1 = x[..., : x.shape[-1] // 2]
         x2 = x[..., x.shape[-1] // 2 :]
         return torch.cat((-x2, x1), dim=-1)
 
-    def apply_key_rotary_pos_emb(self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        rotated_key_states = (key_states * cos) + (self.rotate_half(key_states) * sin)
+    def _apply_key_rotary_pos_emb(
+        self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+    ) -> torch.Tensor:
+        rotated_key_states = (key_states * cos) + (self._rotate_half(key_states) * sin)
         return rotated_key_states
 
     def get_rerotation_cos_sin(
@@ -179,9 +194,10 @@ class SinkCache(Cache):
         return self.cos_sin_cache[key_states.shape[-2]]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
-            cache_length = 0
+            return 0
         cache_length = self.key_cache[layer_idx].shape[-2]
         return min(cache_length, self.window_length - 1)
 
@@ -206,6 +222,9 @@ class SinkCache(Cache):
                 Additional arguments for the cache subclass. The following arguments can be used in `SinkCache`: `sin`,
                 `cos` and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the
                 rotation as the tokens are shifted.
+
+        Return:
+            A tuple containing the updated key and value states.
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
@@ -233,7 +252,7 @@ class SinkCache(Cache):
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
-                rerotation_cos, rerotation_sin = self.get_rerotation_cos_sin(key_states, cos, sin)
+                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(key_states, cos, sin)
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
                         key_states[..., :partial_rotation_size],
@@ -260,6 +279,7 @@ class SinkCache(Cache):
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
             device = self.key_cache[layer_idx].device
             self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
