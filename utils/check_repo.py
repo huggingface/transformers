@@ -220,6 +220,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFCLIPVisionModel",
     "TFGroupViTTextModel",
     "TFGroupViTVisionModel",
+    "FastForSceneTextRecognition",
     "FlaxCLIPTextModel",
     "FlaxCLIPTextModelWithProjection",
     "FlaxCLIPVisionModel",
@@ -329,7 +330,6 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("donut-swin", "donut"),
     ]
 )
-
 
 # This is to make sure the transformers module imported is the one in the repo.
 transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
@@ -985,6 +985,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "TextNetBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
