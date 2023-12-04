@@ -22,16 +22,16 @@ class Cache:
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache. These are specific to each subclass and allow new types of cache to
-                be created -- all used keys are validated.
+                Additional arguments for the cache subclass. These are specific to each subclass and allow new types of
+                cache to be created.
         """
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
 
 class DynamicCache(Cache):
     def __init__(self) -> None:
-        self.key_cache: List[Tuple[torch.Tensor]] = []
-        self.value_cache: List[Tuple[torch.Tensor]] = []
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
 
     def __getitem__(self, key: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -78,7 +78,7 @@ class DynamicCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache. No additional arguments are used in `DynamicCache`.
+                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
         """
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
@@ -95,17 +95,18 @@ class DynamicCache(Cache):
         return self.key_cache[layer_idx].shape[-2]
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        return (
-            tuple(self.key_cache[layer_idx] for layer_idx in range(len(self.key_cache))),
-            tuple(self.value_cache[layer_idx] for layer_idx in range(len(self.value_cache))),
-        )
+        legacy_cache = []
+        for layer_idx in range(len(self.key_cache)):
+            legacy_cache.append((self.key_cache[layer_idx], self.value_cache[layer_idx]))
+        return tuple(legacy_cache)
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[List[torch.FloatTensor]]) -> "DynamicCache":
         if past_key_values is None:
             return cls()
         cache = cls()
-        for layer_idx, (key_states, value_states) in enumerate(zip(*past_key_values)):
+        for layer_idx in range(len(past_key_values)):
+            key_states, value_states = past_key_values[layer_idx]
             cache.update(key_states, value_states, layer_idx)
         return cache
 
@@ -119,8 +120,8 @@ class DynamicCache(Cache):
 
 class SinkCache(Cache):
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
-        self.key_cache: List[Tuple[torch.Tensor]] = []
-        self.value_cache: List[Tuple[torch.Tensor]] = []
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
@@ -183,9 +184,9 @@ class SinkCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache. The following arguments can be used in `SinkCache`: `sin`, `cos`
-                and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the rotation
-                as the tokens are shifted.
+                Additional arguments for the cache subclass. The following arguments can be used in `SinkCache`: `sin`,
+                `cos` and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the
+                rotation as the tokens are shifted.
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
