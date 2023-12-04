@@ -60,7 +60,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 <Tip>
 
-FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`, and is supported only on NVIDIA and AMD GPUs. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
+FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
   
 </Tip>
 
