@@ -27,13 +27,14 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import (
+from ....tokenization_utils import PreTrainedTokenizer
+from ....utils import (
     cached_file,
     is_sacremoses_available,
     is_torch_available,
     logging,
     requires_backends,
+    strtobool,
     torch_only_method,
 )
 
@@ -181,6 +182,12 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         language="en",
         **kwargs,
     ):
+        logger.error(
+            "`TransfoXL` was deprecated due to security issues linked to `pickle.load` in `TransfoXLTokenizer`. "
+            "See more details on this model's documentation page: "
+            "`https://github.com/huggingface/transformers/blob/main/docs/source/en/model_doc/transfo-xl.md`."
+        )
+
         requires_backends(self, "sacremoses")
         if special is None:
             special = []
@@ -206,6 +213,14 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             vocab_dict = None
             if pretrained_vocab_file is not None:
                 # Priority on pickle files (support PyTorch and TF)
+                if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+                    raise ValueError(
+                        "This part uses `pickle.load` which is insecure and will execute arbitrary code that is "
+                        "potentially malicious. It's recommended to never unpickle data that could have come from an "
+                        "untrusted source, or that could have been tampered with. If you already verified the pickle "
+                        "data and decided to use it, you can set the environment variable "
+                        "`TRUST_REMOTE_CODE` to `True` to allow it."
+                    )
                 with open(pretrained_vocab_file, "rb") as f:
                     vocab_dict = pickle.load(f)
 
@@ -784,6 +799,13 @@ def get_lm_corpus(datadir, dataset):
         corpus = torch.load(fn_pickle)
     elif os.path.exists(fn):
         logger.info("Loading cached dataset from pickle...")
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
     else:

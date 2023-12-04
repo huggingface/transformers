@@ -207,7 +207,7 @@ class TrainerCallback:
 
     The argument `args`, `state` and `control` are positionals for all events, all the others are grouped in `kwargs`.
     You can unpack the ones you need in the signature of the event using them. As an example, see the code of the
-    simple [`~transformer.PrinterCallback`].
+    simple [`~transformers.PrinterCallback`].
 
     Example:
 
