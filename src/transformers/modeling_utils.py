@@ -1292,7 +1292,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
                 if flash_attention_version < version.parse("2.1.0"):
                     raise ImportError(
-                        f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Make sure to have that version installed - detected version {flash_attention_version}. {install_message}"
+                        f"{preface} you need flash_attn package version to be greater or equal than 2.1.0. Detected version {flash_attention_version}. {install_message}"
                     )
                 else:
                     raise ImportError(f"{preface} Flash Attention 2 is not available. {install_message}")
