@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import tempfile
 import unittest
 
@@ -106,6 +107,11 @@ class AwqTest(unittest.TestCase):
             cls.model_name,
             device_map=cls.device_map,
         )
+
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        gc.collect()
 
     def test_quantized_model_conversion(self):
         """
@@ -231,6 +237,22 @@ class AwqFusedTest(unittest.TestCase):
     EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
 
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    def _check_fused_modules(self, model):
+        has_fused_modules = False
+        fused_modules_name = ["QuantAttentionFused", "QuantFusedMLP", "FasterTransformerRMSNorm"]
+
+        for _, module in model.named_modules():
+            if module.__class__.__name__ in fused_modules_name:
+                has_fused_modules = True
+                break
+
+        self.assertTrue(has_fused_modules, "Modules fusing not performed correctly!")
+
     def test_raise_save_pretrained(self):
         """
         Test that `save_pretrained` is effectively blocked for fused models
@@ -243,6 +265,8 @@ class AwqFusedTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
+
+        self._check_fused_modules(model)
 
         with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -259,6 +283,9 @@ class AwqFusedTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
+
+        self._check_fused_modules(model)
+
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
 
         inputs = tokenizer(self.prompt, return_tensors="pt").to(torch_device)
@@ -279,6 +306,9 @@ class AwqFusedTest(unittest.TestCase):
             low_cpu_mem_usage=True,
             revision=self.model_revision,
         ).to(torch_device)
+
+        self._check_fused_modules(model)
+
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, revision=self.model_revision)
 
         tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -311,9 +341,12 @@ class AwqFusedTest(unittest.TestCase):
             self.custom_mapping_model_id,
             quantization_config=quantization_config,
             trust_remote_code=True,
-            device_map="auto",
+            device_map="balanced",
             revision=self.custom_model_revision,
         )
+
+        self._check_fused_modules(model)
+
         tokenizer = AutoTokenizer.from_pretrained(
             self.custom_mapping_model_id, revision=self.custom_model_revision, trust_remote_code=True
         )
