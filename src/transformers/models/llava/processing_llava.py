@@ -20,12 +20,13 @@ from typing import Callable, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, AddedToken
+from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...utils import TensorType, is_torch_available
 
 
 if is_torch_available():
-    import torch
+    pass
+
 
 class LlavaProcessor(ProcessorMixin):
     r"""
@@ -112,9 +113,11 @@ class LlavaProcessor(ProcessorMixin):
         self.num_tokens_per_images = 576
         # text = list(map(lambda k:k.replace("<image>", "<image>"*self.num_tokens_per_images), text))
         # Attention mask have to be created later on? Or not?
-        text_inputs = self.tokenizer(text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length)
+        text_inputs = self.tokenizer(
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+        )
 
-        return BatchFeature(data={**text_inputs,"pixel_values": pixel_values})
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
     def batch_decode(self, *args, **kwargs):
         """

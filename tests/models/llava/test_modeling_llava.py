@@ -72,20 +72,20 @@ class LlavaVisionText2TextModelTester:
         },
         is_training=True,
         vision_config=dict(
-                    batch_size=12,
-                    image_size=30,
-                    patch_size=2,
-                    num_channels=3,
-                    is_training=True,
-                    hidden_size=32,
-                    projection_dim=32,
-                    num_hidden_layers=2,
-                    num_attention_heads=4,
-                    intermediate_size=37,
-                    dropout=0.1,
-                    attention_dropout=0.1,
-                    initializer_range=0.02,
-                    )
+            batch_size=12,
+            image_size=30,
+            patch_size=2,
+            num_channels=3,
+            is_training=True,
+            hidden_size=32,
+            projection_dim=32,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            intermediate_size=37,
+            dropout=0.1,
+            attention_dropout=0.1,
+            initializer_range=0.02,
+        ),
     ):
         self.parent = parent
         self.ignore_index = ignore_index
@@ -156,7 +156,7 @@ class LlavaForVisionText2TextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LlavaForVisionText2Text,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
-    test_resize_embeddings = True # TODO we need to support resizing
+    test_resize_embeddings = True  # TODO we need to support resizing
     test_head_masking = False
 
     def setUp(self):
@@ -192,12 +192,20 @@ class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
         inputs = self.processor.tokenizer(
             ["Hey how are you", "This seems<s>Odd not?</s>."], return_tensors="pt", padding=True
         )
-        torch.testing.assert_close(inputs["input_ids"], torch.tensor([[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]))
-        torch.testing.assert_close(inputs["attention_mask"], torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]))
+        torch.testing.assert_close(
+            inputs["input_ids"],
+            torch.tensor(
+                [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
+            ),
+        )
+        torch.testing.assert_close(
+            inputs["attention_mask"], torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        )
 
         # model.prepare_inputs_labels_for_multimodal(input_ids = inputs["input_ids"], past_key_values = None, attention_mask = inputs["attention_mask"], position_ids=None, labels=None,images=None)
         prepared_inputs = self.model.prepare_inputs_for_generation(**inputs)
-        torch.testing.assert_close(prepared_inputs,
+        torch.testing.assert_close(
+            prepared_inputs,
             (
                 torch.tensor(
                     [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
@@ -213,34 +221,37 @@ class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForVisionText2Text.from_pretrained("ArthurZ/llava-1.5-7b")
-        EXPECTED_OUTPUTS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]]) # fmt: skip
+        EXPECTED_OUTPUTS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]])  # fmt: skip
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]]) # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]])  # fmt: skip
         torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         output = model.generate(**inputs, max_new_tokens=200)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
 
-        EXPECTED_DECODED_TEXT = """\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which appears to be a pier or dock extending into a body of water, there are a few things to be cautious about. First, be aware of the water depth and any potential hazards, such as submerged rocks or debris. Second, be mindful of the weather conditions, as sudden changes in weather can make the pier or dock unsafe to walk on. Third, be cautious of the surrounding environment, as there might be wildlife or other potential hazards in the area. Lastly, be aware of any local regulations or guidelines for the use of the pier or dock, as some areas may have specific rules or restrictions in place.""" # fmt: skip
+        EXPECTED_DECODED_TEXT = """\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which appears to be a pier or dock extending into a body of water, there are a few things to be cautious about. First, be aware of the water depth and any potential hazards, such as submerged rocks or debris. Second, be mindful of the weather conditions, as sudden changes in weather can make the pier or dock unsafe to walk on. Third, be cautious of the surrounding environment, as there might be wildlife or other potential hazards in the area. Lastly, be aware of any local regulations or guidelines for the use of the pier or dock, as some areas may have specific rules or restrictions in place."""  # fmt: skip
         self.assertEqual(self.processor.decode(output[0][2:], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForVisionText2Text.from_pretrained("ArthurZ/llava-1.5-7b")
-        EXPECTED_OUTPUTS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]]) # fmt: skip
+        EXPECTED_OUTPUTS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]])  # fmt: skip
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
-        prompts = ["<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:", "<image>\nUSER: What is this?\nASSISTANT: A car!\nUSER:\nAnd this?<image>"]
+        prompts = [
+            "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:",
+            "<image>\nUSER: What is this?\nASSISTANT: A car!\nUSER:\nAnd this?<image>",
+        ]
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        
+
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         raw_image_bis = Image.open(requests.get(url, stream=True).raw)
-    
-        inputs = self.processor(prompts, [raw_image,raw_image_bis,raw_image], return_tensors="pt")
+
+        inputs = self.processor(prompts, [raw_image, raw_image_bis, raw_image], return_tensors="pt")
 
         # EXPECTED_INPUT_IDS = torch.tensor([[1, -200, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]]) # fmt: skip
         # torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
@@ -250,7 +261,6 @@ class LlavaForVisionText2TextIntegrationTest(unittest.TestCase):
 
         # EXPECTED_DECODED_TEXT = """\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which appears to be a pier or dock extending into a body of water, there are a few things to be cautious about. First, be aware of the water depth and any potential hazards, such as submerged rocks or debris. Second, be mindful of the weather conditions, as sudden changes in weather can make the pier or dock unsafe to walk on. Third, be cautious of the surrounding environment, as there might be wildlife or other potential hazards in the area. Lastly, be aware of any local regulations or guidelines for the use of the pier or dock, as some areas may have specific rules or restrictions in place.""" # fmt: skip
         # self.assertEqual(self.processor.decode(output[0][2:], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
 
     def test_small_model_logits_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
