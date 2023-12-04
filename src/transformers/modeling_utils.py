@@ -2202,7 +2202,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
-            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard) and any(isinstance(module_map[key]._hf_hook, AlignDevicesHook)):
+            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard):
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: '' for name in shard}
