@@ -33,15 +33,13 @@ transformer with rotary position embedding, or RoFormer, achieves superior perfo
 release the theoretical analysis along with some preliminary experiment results on Chinese data. The undergoing
 experiment for English benchmark will soon be updated.*
 
-Tips:
-
-- RoFormer is a BERT-like autoencoding model with rotary position embeddings. Rotary position embeddings have shown
-  improved performance on classification tasks with long texts.
-
-
 This model was contributed by [junnyu](https://huggingface.co/junnyu). The original code can be found [here](https://github.com/ZhuiyiTechnology/roformer).
 
-## Documentation resources
+## Usage tips
+RoFormer is a BERT-like autoencoding model with rotary position embeddings. Rotary position embeddings have shown 
+improved performance on classification tasks with long texts.
+
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -66,6 +64,9 @@ This model was contributed by [junnyu](https://huggingface.co/junnyu). The origi
 
 [[autodoc]] RoFormerTokenizerFast
     - build_inputs_with_special_tokens
+
+<frameworkcontent>
+<pt>
 
 ## RoFormerModel
 
@@ -102,6 +103,9 @@ This model was contributed by [junnyu](https://huggingface.co/junnyu). The origi
 [[autodoc]] RoFormerForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFRoFormerModel
 
 [[autodoc]] TFRoFormerModel
@@ -137,6 +141,9 @@ This model was contributed by [junnyu](https://huggingface.co/junnyu). The origi
 [[autodoc]] TFRoFormerForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxRoFormerModel
 
 [[autodoc]] FlaxRoFormerModel
@@ -166,3 +173,6 @@ This model was contributed by [junnyu](https://huggingface.co/junnyu). The origi
 
 [[autodoc]] FlaxRoFormerForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>

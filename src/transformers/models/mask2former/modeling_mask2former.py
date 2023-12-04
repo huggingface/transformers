@@ -245,21 +245,6 @@ class Mask2FormerForUniversalSegmentationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.detr.modeling_detr._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
-    """
-    batch_size, source_len = mask.size()
-    target_len = target_len if target_len is not None else source_len
-
-    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
 def sample_point(
     input_features: torch.Tensor, point_coordinates: torch.Tensor, add_dim=False, **kwargs
@@ -1864,20 +1849,14 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
                 continue
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
                     None,
                     None,
+                    output_attentions,
                 )
 
             else:
@@ -2011,13 +1990,12 @@ class Mask2FormerMaskPredictor(nn.Module):
     def forward(self, outputs: torch.Tensor, pixel_embeddings: torch.Tensor, attention_mask_target_size: int = None):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
-        # Sum up over the channels
-        # (batch_size, num_queries, num_channels, 1, 1)
-        mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
-        # (batch_size, 1, num_channels, height, width)
-        pixel_embeddings = pixel_embeddings.unsqueeze(1)
-        # (batch_size, num_queries, height, width)
-        outputs_mask = (mask_embeddings * pixel_embeddings).sum(2)
+        # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
+        batch_size, num_queries, num_channels = mask_embeddings.shape
+        _, _, height, width = pixel_embeddings.shape
+        outputs_mask = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
+        for c in range(num_channels):
+            outputs_mask += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
 
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
@@ -2559,5 +2537,5 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         if not return_dict:
             output = tuple(v for v in output.values() if v is not None)
             if loss is not None:
-                output = ((loss)) + output
+                output = (loss) + output
         return output

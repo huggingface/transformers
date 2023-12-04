@@ -136,9 +136,9 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
+        input_image (`np.ndarray`):
+            The image to resize.
+        size (`int` or `Tuple[int, int]` or `List[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
@@ -332,10 +332,13 @@ def prepare_coco_detection_annotation(
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
+        # Converting the filtered keypoints list to a numpy array
         keypoints = np.asarray(keypoints, dtype=np.float32)
+        # Apply the keep mask here to filter the relevant annotations
+        keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
-        new_target["keypoints"] = keypoints[keep]
+        new_target["keypoints"] = keypoints
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
@@ -478,8 +481,7 @@ def post_process_panoptic_sample(
     threshold=0.85,
 ) -> Dict:
     """
-    Converts the output of [`ConditionalDetrForSegmentation`] into panoptic segmentation predictions for a single
-    sample.
+    Converts the output of [`ConditionalDetrForSegmentation`] into panoptic segmentation predictions for a single sample.
 
     Args:
         out_logits (`torch.Tensor`):
@@ -1233,7 +1235,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         if annotations is not None:
             if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
                 raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts"
+                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts "
                     "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
                     "being a list of annotations in the COCO format."
                 )
@@ -1454,8 +1456,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation with Detr->ConditionalDetr
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports
-        PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):
@@ -1511,8 +1512,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return_coco_annotation: Optional[bool] = False,
     ) -> List[Dict]:
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports
-        PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):
@@ -1596,8 +1596,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
-        Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
+        PyTorch.
 
         Args:
             outputs ([`ConditionalDetrForSegmentation`]):

@@ -60,7 +60,7 @@ Le [`pipeline`] est le moyen le plus simple d'utiliser un modèle pré-entraîn�
 | Traduction                  | Traduit du texte d'un langage à un autre                                                                      | Texte                | pipeline(task="translation")                  |
 | Classification d'image       | Attribue une catégorie à une image                                                                           | Image                | pipeline(task="image-classification")         |
 | Segmentation d'image           | Attribue une catégorie à chaque pixel d'une image (supporte la segmentation sémantique, panoptique et d'instance) | Image                | pipeline(task="image-segmentation")           |
-| Détection d'objects             | Prédit les délimitations et catégories d'objects dans une image                                                | Image                | pipeline(task="object-detection")             |
+| Détection d'objets             | Prédit les délimitations et catégories d'objets dans une image                                                | Image                | pipeline(task="object-detection")             |
 | Classification d'audio       | Attribue une catégorie à un fichier audio                                                                    | Audio                | pipeline(task="audio-classification")         |
 | Reconnaissance automatique de la parole | Extrait le discours d'un fichier audio en texte                                                                  | Audio                | pipeline(task="automatic-speech-recognition") |
 | Question réponse visuels    | Etant données une image et une question, répond correctement à une question sur l'image                                   | Modalités multiples  | pipeline(task="vqa")                          |
@@ -99,7 +99,7 @@ Le [`pipeline`] peut aussi itérer sur un jeu de données entier pour n'importe 
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 ```
 
-Chargez un jeu de données audio (voir le 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart#audio) pour plus de détails) sur lequel vous souhaitez itérer. Pour cet example, nous chargons le jeu de données [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) :
+Chargez un jeu de données audio (voir le 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart#audio) pour plus de détails) sur lequel vous souhaitez itérer. Pour cet exemple, nous chargeons le jeu de données [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) :
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -155,7 +155,7 @@ Utilisez [`TFAutoModelForSequenceClassification`] et [`AutoTokenizer`] pour char
 </tf>
 </frameworkcontent>
 
-Specifiez le modèle et le tokenizer dans le [`pipeline`], et utilisez le `classifier` sur le texte en français :
+Spécifiez le modèle et le tokenizer dans le [`pipeline`], et utilisez le `classifier` sur le texte en français :
 
 ```py
 >>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
@@ -418,7 +418,7 @@ En fonction de votre tâche, vous passerez généralement les paramètres suivan
    >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
    ```
 
-2. [`TrainingArguments`] contient les hyperparamètres du modèle que vous pouvez changer comme le taux d'apprentissage, la taille due l'échantillon, et le nombre d'époques pour s'entraîner. Les valeurs par défaut sont utilisées si vous ne spécifiez pas d'hyperparamètres d'apprentissage :
+2. [`TrainingArguments`] contient les hyperparamètres du modèle que vous pouvez changer comme le taux d'apprentissage, la taille de l'échantillon, et le nombre d'époques pour s'entraîner. Les valeurs par défaut sont utilisées si vous ne spécifiez pas d'hyperparamètres d'apprentissage :
 
    ```py
    >>> from transformers import TrainingArguments

@@ -13,12 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import tempfile
 import unittest
 
 import datasets
 import numpy as np
 import pytest
-from requests import ReadTimeout
+from huggingface_hub.file_download import http_get
+from requests import ConnectTimeout, ReadTimeout
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -488,7 +491,7 @@ class LoadImageTester(unittest.TestCase):
 
     @is_flaky()
     def test_load_img_url_timeout(self):
-        with self.assertRaises(ReadTimeout):
+        with self.assertRaises((ReadTimeout, ConnectTimeout)):
             load_image(INVOICE_URL, timeout=0.001)
 
     def test_load_img_local(self):
@@ -499,6 +502,40 @@ class LoadImageTester(unittest.TestCase):
             img_arr.shape,
             (480, 640, 3),
         )
+
+    def test_load_img_base64_prefix(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f
+                )
+
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
+
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
+    def test_load_img_base64(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f
+                )
+
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
+
+        self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_rgba(self):
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")

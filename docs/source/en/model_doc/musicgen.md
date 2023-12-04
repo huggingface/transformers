@@ -46,6 +46,16 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
 [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen-).
 
+## Usage tips
+
+- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) , you can convert them using the **conversion script** available at
+`src/transformers/models/musicgen/convert_musicgen_transformers.py` with the following command:
+
+```bash
+python src/transformers/models/musicgen/convert_musicgen_transformers.py \
+    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
+```
+
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
@@ -56,6 +66,11 @@ or by overriding the model's generation config (see below).
 Generation is limited by the sinusoidal positional embeddings to 30 second inputs. Meaning, MusicGen cannot generate more
 than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
 given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
+
+Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen. The mono channel versions 
+generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), 
+and each set of codebooks is decoded independently through the audio compression model. The audio streams for each 
+channel are combined to give the final stereo output.
 
 ### Unconditional Generation
 
@@ -214,28 +229,7 @@ The MusicGen model can be de-composed into three distinct stages:
 
 Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenForCausalLM`],
 or as a composite model that includes the text encoder and audio encoder/decoder, corresponding to the class
-[`MusicgenForConditionalGeneration`].
-
-Since the text encoder and audio encoder/decoder models are frozen during training, the MusicGen decoder [`MusicgenForCausalLM`]
-can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can
-be combined with the frozen text encoder and audio encoder/decoders to recover the composite [`MusicgenForConditionalGeneration`]
-model.
-
-Below, we demonstrate how to construct the composite [`MusicgenForConditionalGeneration`] model from its three constituent
-parts, as would typically be done following training of the MusicGen decoder LM:
-
-```python
->>> from transformers import AutoConfig, AutoModelForTextEncoding, AutoModel, MusicgenForCausalLM, MusicgenForConditionalGeneration
-
->>> text_encoder = AutoModelForTextEncoding.from_pretrained("t5-base")
->>> audio_encoder = AutoModel.from_pretrained("facebook/encodec_32khz")
->>> decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder
->>> decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config)
-
->>> model = MusicgenForConditionalGeneration.from_sub_models_pretrained(text_encoder, audio_encoder, decoder)
-```
-
-If only the decoder needs to be loaded from the pre-trained checkpoint for the composite model, it can be loaded by first 
+[`MusicgenForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first 
 specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
 
 ```python
@@ -248,6 +242,11 @@ specifying the correct config, or be accessed through the `.decoder` attribute o
 >>> # Option 2: load the entire composite model, but only return the decoder
 >>> decoder = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small").decoder
 ```
+
+Since the text encoder and audio encoder/decoder models are frozen during training, the MusicGen decoder [`MusicgenForCausalLM`]
+can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can
+be combined with the frozen text encoder and audio encoder/decoders to recover the composite [`MusicgenForConditionalGeneration`]
+model.
 
 Tips:
 * MusicGen is trained on the 32kHz checkpoint of Encodec. You should ensure you use a compatible version of the Encodec model.

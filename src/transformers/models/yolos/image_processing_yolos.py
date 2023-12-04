@@ -152,9 +152,9 @@ def get_resize_output_image_size(
     image size is computed by keeping the aspect ratio of the input image size.
 
     Args:
-        image_size (`Tuple[int, int]`):
-            The input image size.
-        size (`int`):
+        input_image (`np.ndarray`):
+            The image to resize.
+        size (`int` or `Tuple[int, int]` or `List[int]`):
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
@@ -329,10 +329,13 @@ def prepare_coco_detection_annotation(
 
     if annotations and "keypoints" in annotations[0]:
         keypoints = [obj["keypoints"] for obj in annotations]
+        # Converting the filtered keypoints list to a numpy array
         keypoints = np.asarray(keypoints, dtype=np.float32)
+        # Apply the keep mask here to filter the relevant annotations
+        keypoints = keypoints[keep]
         num_keypoints = keypoints.shape[0]
         keypoints = keypoints.reshape((-1, 3)) if num_keypoints else keypoints
-        new_target["keypoints"] = keypoints[keep]
+        new_target["keypoints"] = keypoints
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
@@ -1137,7 +1140,7 @@ class YolosImageProcessor(BaseImageProcessor):
         if annotations is not None:
             if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
                 raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts"
+                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts "
                     "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
                     "being a list of annotations in the COCO format."
                 )

@@ -387,9 +387,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(
-            shape_list(lengths)[0], bs
-        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(lengths)[0], bs),
+            f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched",
+        )
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -408,17 +409,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             position_ids = tf.tile(position_ids, (bs, 1))
 
         # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-        tf.debugging.assert_equal(
-            shape_list(position_ids), [bs, slen]
-        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen]),
+            f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched",
+        )
         # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(langs), [bs, slen]
-            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
+            (
+                tf.debugging.assert_equal(shape_list(langs), [bs, slen]),
+                f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched",
+            )
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -649,9 +652,8 @@ XLM_INPUTS_DOCSTRING = r"""
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, tf.Tensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding.
+            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the attention
+            blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential decoding.
 
             The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
@@ -700,20 +702,20 @@ class TFXLMModel(TFXLMPreTrainedModel):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        langs: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        lengths: tf.Tensor | None = None,
+        cache: Dict[str, tf.Tensor] | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+    ) -> TFBaseModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,

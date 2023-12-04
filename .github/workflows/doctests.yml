@@ -20,7 +20,7 @@ env:
 
 jobs:
   run_doctests:
-    runs-on: [self-hosted, doc-tests-gpu]
+    runs-on: [single-gpu, nvidia-gpu, t4, ci]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -34,7 +34,7 @@ jobs:
           nvidia-smi
 
       - name: Install transformers in edit mode
-        run: python3 -m pip install -e .
+        run: python3 -m pip install -e .[flax]
 
       - name: GPU visibility
         run: |
@@ -66,7 +66,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [run_doctests]
     steps:

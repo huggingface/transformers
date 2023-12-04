@@ -43,15 +43,12 @@ if requirements_available:
     from transformers import Pop2PianoTokenizer
 
 
-## TODO : changing checkpoints from `susnato/pop2piano_dev` to `sweetcocoa/pop2piano` after the PR is approved
-
-
 @require_torch
 @require_pretty_midi
 class Pop2PianoTokenizerTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        self.tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 
     def get_input_notes(self):
         notes = [
@@ -246,30 +243,30 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertListEqual(subwords, subwords_loaded)
 
     def test_padding_side_in_kwargs(self):
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev", padding_side="left")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="left")
         self.assertEqual(tokenizer_p.padding_side, "left")
 
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev", padding_side="right")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", padding_side="right")
         self.assertEqual(tokenizer_p.padding_side, "right")
 
         self.assertRaises(
             ValueError,
             Pop2PianoTokenizer.from_pretrained,
-            "susnato/pop2piano_dev",
+            "sweetcocoa/pop2piano",
             padding_side="unauthorized",
         )
 
     def test_truncation_side_in_kwargs(self):
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev", truncation_side="left")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", truncation_side="left")
         self.assertEqual(tokenizer_p.truncation_side, "left")
 
-        tokenizer_p = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev", truncation_side="right")
+        tokenizer_p = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano", truncation_side="right")
         self.assertEqual(tokenizer_p.truncation_side, "right")
 
         self.assertRaises(
             ValueError,
             Pop2PianoTokenizer.from_pretrained,
-            "susnato/pop2piano_dev",
+            "sweetcocoa/pop2piano",
             truncation_side="unauthorized",
         )
 

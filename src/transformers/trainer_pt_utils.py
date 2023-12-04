@@ -55,6 +55,13 @@ except ImportError:
 logger = logging.get_logger(__name__)
 
 
+def get_dataloader_sampler(dataloader):
+    if hasattr(dataloader, "batch_sampler") and dataloader.batch_sampler is not None:
+        return get_dataloader_sampler(dataloader.batch_sampler)
+    elif hasattr(dataloader, "sampler"):
+        return dataloader.sampler
+
+
 def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
     if isinstance(tensor_or_array, torch.Tensor):
         if hasattr(torch, "atleast_1d"):
@@ -889,7 +896,7 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
             metrics_copy[k] = f"{ int(v) >> 30 }GF"
-        elif type(metrics_copy[k]) == float:
+        elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
     return metrics_copy
@@ -1087,6 +1094,14 @@ def get_module_class_from_name(module, name):
             module_class = get_module_class_from_name(child_module, name)
             if module_class is not None:
                 return module_class
+
+
+def remove_dummy_checkpoint(is_main_process, output_dir, filenames):
+    if is_main_process:
+        for filename in filenames:
+            file = os.path.join(output_dir, filename)
+            if os.path.isfile(file):
+                os.remove(file)
 
 
 if is_sagemaker_mp_enabled():

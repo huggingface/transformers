@@ -127,6 +127,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "time_series_transformer"
     attribute_map = {
         "hidden_size": "d_model",

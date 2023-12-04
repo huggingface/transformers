@@ -30,11 +30,12 @@ class AltCLIPProcessor(ProcessorMixin):
     the [`~AltCLIPProcessor.__call__`] and [`~AltCLIPProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`]):
+        image_processor ([`CLIPImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizerFast`]):
+        tokenizer ([`XLMRobertaTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")

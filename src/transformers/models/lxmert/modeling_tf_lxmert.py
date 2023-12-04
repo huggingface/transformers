@@ -1251,22 +1251,22 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        visual_feats=None,
-        visual_pos=None,
-        attention_mask=None,
-        visual_attention_mask=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        masked_lm_labels=None,
-        obj_labels=None,
-        matched_label=None,
-        ans=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: TFModelInputType | None = None,
+        visual_feats: tf.Tensor | None = None,
+        visual_pos: tf.Tensor | None = None,
+        attention_mask: tf.Tensor | None = None,
+        visual_attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        masked_lm_labels: tf.Tensor | None = None,
+        obj_labels: Dict[str, Tuple[tf.Tensor, tf.Tensor]] | None = None,
+        matched_label: tf.Tensor | None = None,
+        ans: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor] | TFLxmertForPreTrainingOutput:
         r"""
         masked_lm_labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1282,7 +1282,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
             - 0 indicates that the sentence does not match the image,
             - 1 indicates that the sentence does match the image.
-        ans (`Torch.Tensor` of shape `(batch_size)`, *optional*, defaults to `None`):
+        ans (`tf.Tensor` of shape `(batch_size)`, *optional*, defaults to `None`):
             a one hot representation hof the correct answer *optional*
 
         Returns:

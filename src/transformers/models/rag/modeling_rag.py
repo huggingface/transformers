@@ -229,6 +229,7 @@ class RagPreTrainedModel(PreTrainedModel):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
 
     """
+
     config_class = RagConfig
     base_model_prefix = "rag"
 
@@ -1213,7 +1214,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
+            reordered_past += (
+                tuple(_reorder_stacked(past_state, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
 
         return reordered_past
 

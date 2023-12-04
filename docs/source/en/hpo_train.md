@@ -54,6 +54,18 @@ For optuna, see optuna [object_parameter](https://optuna.readthedocs.io/en/stabl
 ...     }
 ```
 
+Optuna provides multi-objective HPO. You can pass `direction` in `hyperparameter_search` and define your own compute_objective to return multiple objective values. The Pareto Front (`List[BestRun]`) will be returned in hyperparameter_search, you should refer to the test case `TrainerHyperParameterMultiObjectOptunaIntegrationTest` in [test_trainer](https://github.com/huggingface/transformers/blob/main/tests/trainer/test_trainer.py). It's like following
+
+```py
+>>> best_trials = trainer.hyperparameter_search(
+...     direction=["minimize", "maximize"],
+...     backend="optuna",
+...     hp_space=optuna_hp_space,
+...     n_trials=20,
+...     compute_objective=compute_objective,
+... )
+```
+
 For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/api/search_space.html), it's like following:
 
 ```py
@@ -87,7 +99,7 @@ Define a `model_init` function and pass it to the [`Trainer`], as an example:
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         use_auth_token=True if model_args.use_auth_token else None,
+...         token=True if model_args.use_auth_token else None,
 ...     )
 ```
 

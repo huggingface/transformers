@@ -39,6 +39,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("clip", "TFCLIPModel"),
         ("convbert", "TFConvBertModel"),
         ("convnext", "TFConvNextModel"),
+        ("convnextv2", "TFConvNextV2Model"),
         ("ctrl", "TFCTRLModel"),
         ("cvt", "TFCvtModel"),
         ("data2vec-vision", "TFData2VecVisionModel"),
@@ -200,6 +201,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image-classsification
         ("convnext", "TFConvNextForImageClassification"),
+        ("convnextv2", "TFConvNextV2ForImageClassification"),
         ("cvt", "TFCvtForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
@@ -362,6 +364,7 @@ TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("wav2vec2", "TFW
 TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("layoutlm", "TFLayoutLMForQuestionAnswering"),
+        ("layoutlmv3", "TFLayoutLMv3ForQuestionAnswering"),
     ]
 )
 
@@ -409,6 +412,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("bert", "TFBertForMultipleChoice"),
         ("camembert", "TFCamembertForMultipleChoice"),
         ("convbert", "TFConvBertForMultipleChoice"),
+        ("deberta-v2", "TFDebertaV2ForMultipleChoice"),
         ("distilbert", "TFDistilBertForMultipleChoice"),
         ("electra", "TFElectraForMultipleChoice"),
         ("flaubert", "TFFlaubertForMultipleChoice"),

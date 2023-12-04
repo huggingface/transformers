@@ -119,10 +119,17 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
-        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
-        self.n_additional_single_gpu_failures = all_additional_failures["single"]
-        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        if len(additional_results) > 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            self.n_additional_single_gpu_failures = all_additional_failures["single"]
+            self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        else:
+            self.n_additional_single_gpu_failures = 0
+            self.n_additional_multi_gpu_failures = 0
+            self.n_additional_unknown_gpu_failures = 0
+
         self.n_additional_failures = (
             self.n_additional_single_gpu_failures
             + self.n_additional_multi_gpu_failures
@@ -314,7 +321,7 @@ class Message:
         return entries_changed
 
     @property
-    def model_failures(self) -> Dict:
+    def model_failures(self) -> List[Dict]:
         # Obtain per-model failures
         def per_model_sum(model_category_dict):
             return dicts_to_sum(model_category_dict["failed"].values())
@@ -769,12 +776,15 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
-    runner_status = os.environ.get("RUNNER_STATUS")
-    runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    # runner_status = os.environ.get("RUNNER_STATUS")
+    # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
 
-    runner_not_available = True if runner_status is not None and runner_status != "success" else False
-    runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    # runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
+    # Let's keep the lines regardig runners' status (we might be able to use them again in the future)
+    runner_not_available = False
+    runner_failed = False
     setup_failed = True if setup_status is not None and setup_status != "success" else False
 
     org = "huggingface"
@@ -897,6 +907,12 @@ if __name__ == "__main__":
         job_name_prefix = f"{framework} {version}"
     elif ci_event.startswith("Nightly CI"):
         job_name_prefix = "Nightly CI"
+    elif ci_event.startswith("Push CI (AMD) - "):
+        flavor = ci_event.replace("Push CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
+    elif ci_event.startswith("Scheduled CI (AMD) - "):
+        flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
@@ -966,6 +982,11 @@ if __name__ == "__main__":
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
+    elif ci_event.startswith("Scheduled CI (AMD)"):
+        del additional_files["TensorFlow pipelines"]
+        del additional_files["Torch CUDA extension tests"]
+    elif ci_event.startswith("Push CI (AMD)"):
+        additional_files = {}
 
     additional_results = {
         key: {
@@ -1027,6 +1048,6 @@ if __name__ == "__main__":
     message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
 
     # send report only if there is any failure (for push CI)
-    if message.n_failures or ci_event != "push":
+    if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
         message.post()
         message.post_reply()

@@ -14,14 +14,12 @@ docs/source/en/custom_models.md
 docs/source/en/custom_tools.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
-docs/source/en/generation_strategies.md
 docs/source/en/glossary.md
 docs/source/en/hpo_train.md
 docs/source/en/index.md
 docs/source/en/installation.md
 docs/source/en/internal/audio_utils.md
 docs/source/en/internal/file_utils.md
-docs/source/en/internal/generation_utils.md
 docs/source/en/internal/image_processing_utils.md
 docs/source/en/internal/modeling_utils.md
 docs/source/en/internal/pipelines_utils.md
@@ -45,7 +43,6 @@ docs/source/en/main_classes/output.md
 docs/source/en/main_classes/pipelines.md
 docs/source/en/main_classes/processors.md
 docs/source/en/main_classes/quantization.md
-docs/source/en/main_classes/text_generation.md
 docs/source/en/main_classes/tokenizer.md
 docs/source/en/main_classes/trainer.md
 docs/source/en/model_doc/albert.md
@@ -154,6 +151,7 @@ docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
 docs/source/en/model_doc/lxmert.md
 docs/source/en/model_doc/m2m_100.md
+docs/source/en/model_doc/madlad-400.md
 docs/source/en/model_doc/marian.md
 docs/source/en/model_doc/mask2former.md
 docs/source/en/model_doc/maskformer.md
@@ -164,6 +162,7 @@ docs/source/en/model_doc/mega.md
 docs/source/en/model_doc/megatron-bert.md
 docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
+docs/source/en/model_doc/mistral.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md
@@ -274,9 +273,7 @@ docs/source/en/pad_truncation.md
 docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_infer_cpu.md
-docs/source/en/perf_infer_gpu_many.md
 docs/source/en/perf_infer_gpu_one.md
-docs/source/en/perf_infer_special.md
 docs/source/en/perf_torch_compile.md
 docs/source/en/perf_train_cpu.md
 docs/source/en/perf_train_cpu_many.md
@@ -297,6 +294,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
+docs/source/en/tasks/idefics.md  # causes other tests to fail
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -367,16 +365,6 @@ src/transformers/dynamic_module_utils.py
 src/transformers/feature_extraction_sequence_utils.py
 src/transformers/feature_extraction_utils.py
 src/transformers/file_utils.py
-src/transformers/generation/beam_constraints.py
-src/transformers/generation/beam_search.py
-src/transformers/generation/flax_logits_process.py
-src/transformers/generation/flax_utils.py
-src/transformers/generation/stopping_criteria.py
-src/transformers/generation/streamers.py
-src/transformers/generation/tf_logits_process.py
-src/transformers/generation_flax_utils.py
-src/transformers/generation_tf_utils.py
-src/transformers/generation_utils.py
 src/transformers/hf_argparser.py
 src/transformers/hyperparameter_search.py
 src/transformers/image_processing_utils.py
@@ -413,7 +401,6 @@ src/transformers/models/auto/modeling_tf_auto.py
 src/transformers/models/autoformer/configuration_autoformer.py
 src/transformers/models/autoformer/modeling_autoformer.py
 src/transformers/models/bark/convert_suno_to_hf.py
-src/transformers/models/bark/generation_configuration_bark.py
 src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/bart/modeling_flax_bart.py
 src/transformers/models/bart/modeling_tf_bart.py
@@ -445,12 +432,13 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
-src/transformers/models/blip_2/modeling_blip_2.py
+src/transformers/models/blip_2/modeling_blip_2.py  # causes other tests to fail
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
 src/transformers/models/bridgetower/configuration_bridgetower.py
 src/transformers/models/bridgetower/modeling_bridgetower.py
+src/transformers/models/bros/convert_bros_to_pytorch.py
 src/transformers/models/byt5/convert_byt5_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/camembert/modeling_camembert.py
 src/transformers/models/camembert/modeling_tf_camembert.py
@@ -509,6 +497,11 @@ src/transformers/models/deprecated/tapex/tokenization_tapex.py
 src/transformers/models/deprecated/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/deprecated/trajectory_transformer/convert_trajectory_transformer_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/deprecated/trajectory_transformer/modeling_trajectory_transformer.py
+src/transformers/models/deprecated/transfo_xl/convert_transfo_xl_original_tf_checkpoint_to_pytorch.py
+src/transformers/models/deprecated/transfo_xl/modeling_tf_transfo_xl.py
+src/transformers/models/deprecated/transfo_xl/modeling_tf_transfo_xl_utilities.py
+src/transformers/models/deprecated/transfo_xl/modeling_transfo_xl.py
+src/transformers/models/deprecated/transfo_xl/modeling_transfo_xl_utilities.py
 src/transformers/models/deprecated/van/configuration_van.py
 src/transformers/models/deprecated/van/convert_van_to_pytorch.py
 src/transformers/models/deprecated/van/modeling_van.py
@@ -543,7 +536,6 @@ src/transformers/models/electra/convert_electra_original_tf_checkpoint_to_pytorc
 src/transformers/models/electra/modeling_flax_electra.py
 src/transformers/models/encodec/configuration_encodec.py
 src/transformers/models/encodec/convert_encodec_checkpoint_to_pytorch.py
-src/transformers/models/encoder_decoder/configuration_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_flax_encoder_decoder.py
 src/transformers/models/encoder_decoder/modeling_tf_encoder_decoder.py
@@ -580,6 +572,7 @@ src/transformers/models/funnel/configuration_funnel.py
 src/transformers/models/funnel/convert_funnel_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/funnel/modeling_funnel.py
 src/transformers/models/funnel/modeling_tf_funnel.py
+src/transformers/models/fuyu/convert_fuyu_model_weights_to_hf.py
 src/transformers/models/git/configuration_git.py
 src/transformers/models/git/convert_git_to_pytorch.py
 src/transformers/models/glpn/configuration_glpn.py
@@ -631,6 +624,7 @@ src/transformers/models/instructblip/processing_instructblip.py
 src/transformers/models/jukebox/configuration_jukebox.py
 src/transformers/models/jukebox/convert_jukebox.py
 src/transformers/models/jukebox/modeling_jukebox.py
+src/transformers/models/kosmos2/convert_kosmos2_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/led/configuration_led.py
 src/transformers/models/led/modeling_led.py
 src/transformers/models/led/modeling_tf_led.py
@@ -640,7 +634,6 @@ src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
-src/transformers/models/llama/tokenization_llama_fast.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
@@ -679,6 +672,8 @@ src/transformers/models/megatron_gpt2/checkpoint_reshaping_and_interoperability.
 src/transformers/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py
 src/transformers/models/mgp_str/configuration_mgp_str.py
 src/transformers/models/mgp_str/modeling_mgp_str.py
+src/transformers/models/mistral/configuration_mistral.py
+src/transformers/models/mistral/modeling_mistral.py
 src/transformers/models/mluke/convert_mluke_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/mobilebert/convert_mobilebert_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/mobilenet_v1/configuration_mobilenet_v1.py
@@ -706,6 +701,7 @@ src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
 src/transformers/models/nllb_moe/convert_nllb_moe_sharded_original_checkpoint_to_pytorch.py
 src/transformers/models/nllb_moe/modeling_nllb_moe.py
+src/transformers/models/nougat/convert_nougat_to_hf.py
 src/transformers/models/nystromformer/configuration_nystromformer.py
 src/transformers/models/nystromformer/convert_nystromformer_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/nystromformer/modeling_nystromformer.py
@@ -723,6 +719,8 @@ src/transformers/models/pegasus/modeling_tf_pegasus.py
 src/transformers/models/pegasus_x/modeling_pegasus_x.py
 src/transformers/models/perceiver/configuration_perceiver.py
 src/transformers/models/perceiver/convert_perceiver_haiku_to_pytorch.py
+src/transformers/models/persimmon/convert_persimmon_weights_to_hf.py
+src/transformers/models/persimmon/modeling_persimmon.py
 src/transformers/models/pix2struct/configuration_pix2struct.py
 src/transformers/models/pix2struct/convert_pix2struct_original_pytorch_to_hf.py
 src/transformers/models/pix2struct/image_processing_pix2struct.py
@@ -764,7 +762,6 @@ src/transformers/models/roberta/modeling_flax_roberta.py
 src/transformers/models/roberta_prelayernorm/convert_roberta_prelayernorm_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/roberta_prelayernorm/modeling_flax_roberta_prelayernorm.py
 src/transformers/models/roc_bert/configuration_roc_bert.py
-src/transformers/models/roformer/configuration_roformer.py
 src/transformers/models/roformer/convert_roformer_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/roformer/modeling_flax_roformer.py
 src/transformers/models/roformer/modeling_roformer.py
@@ -778,6 +775,8 @@ src/transformers/models/sam/image_processing_sam.py
 src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
 src/transformers/models/sam/processing_sam.py
+src/transformers/models/seamless_m4t/convert_fairseq2_to_hf.py
+src/transformers/models/seamless_m4t_v2/convert_fairseq2_to_hf.py
 src/transformers/models/segformer/configuration_segformer.py
 src/transformers/models/segformer/convert_segformer_original_to_pytorch.py
 src/transformers/models/sew/convert_sew_original_pytorch_checkpoint_to_pytorch.py
@@ -817,7 +816,8 @@ src/transformers/models/t5/modeling_flax_t5.py
 src/transformers/models/t5/modeling_t5.py
 src/transformers/models/t5/modeling_tf_t5.py
 src/transformers/models/table_transformer/configuration_table_transformer.py
-src/transformers/models/table_transformer/convert_table_transformer_original_pytorch_checkpoint_to_pytorch.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf.py
+src/transformers/models/table_transformer/convert_table_transformer_to_hf_no_timm.py
 src/transformers/models/tapas/configuration_tapas.py
 src/transformers/models/tapas/convert_tapas_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/tapas/modeling_tapas.py
@@ -825,11 +825,6 @@ src/transformers/models/tapas/modeling_tf_tapas.py
 src/transformers/models/timesformer/convert_timesformer_to_pytorch.py
 src/transformers/models/timm_backbone/configuration_timm_backbone.py
 src/transformers/models/timm_backbone/modeling_timm_backbone.py
-src/transformers/models/transfo_xl/convert_transfo_xl_original_tf_checkpoint_to_pytorch.py
-src/transformers/models/transfo_xl/modeling_tf_transfo_xl.py
-src/transformers/models/transfo_xl/modeling_tf_transfo_xl_utilities.py
-src/transformers/models/transfo_xl/modeling_transfo_xl.py
-src/transformers/models/transfo_xl/modeling_transfo_xl_utilities.py
 src/transformers/models/trocr/convert_trocr_unilm_to_pytorch.py
 src/transformers/models/tvlt/configuration_tvlt.py
 src/transformers/models/tvlt/modeling_tvlt.py
@@ -925,9 +920,7 @@ src/transformers/pipelines/object_detection.py
 src/transformers/pipelines/pt_utils.py
 src/transformers/pipelines/question_answering.py
 src/transformers/pipelines/table_question_answering.py
-src/transformers/pipelines/text2text_generation.py
 src/transformers/pipelines/text_classification.py
-src/transformers/pipelines/text_generation.py
 src/transformers/pipelines/token_classification.py
 src/transformers/pipelines/video_classification.py
 src/transformers/pipelines/visual_question_answering.py

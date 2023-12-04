@@ -61,7 +61,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (`bool`, *optional*, defaults to `True`):
+        do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
             Whether to strip the text when tokenizing (removing excess spaces before and after the string).
@@ -102,7 +102,7 @@ class XLNetTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<eop>', '<eod>']`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -148,9 +148,17 @@ class XLNetTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -169,14 +177,6 @@ class XLNetTokenizer(PreTrainedTokenizer):
         )
 
         self._pad_token_type_id = 3
-
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):

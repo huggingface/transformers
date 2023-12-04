@@ -165,7 +165,146 @@ To further improve performance from ASR models, language model decoding can be u
 
 ### Speech Synthesis (TTS)
 
-Individual TTS models are available for each of the 1100+ languages. The models and inference documentation can be found [here](https://huggingface.co/facebook/mms-tts).
+MMS-TTS uses the same model architecture as VITS, which was added to 🤗 Transformers in v4.33. MMS trains a separate 
+model checkpoint for each of the 1100+ languages in the project. All available checkpoints can be found on the Hugging 
+Face Hub: [facebook/mms-tts](https://huggingface.co/models?sort=trending&search=facebook%2Fmms-tts), and the inference 
+documentation under [VITS](https://huggingface.co/docs/transformers/main/en/model_doc/vits).
+
+#### Inference
+
+To use the MMS model, first update to the latest version of the Transformers library:
+
+```bash
+pip install --upgrade transformers accelerate
+```
+
+Since the flow-based model in VITS is non-deterministic, it is good practice to set a seed to ensure reproducibility of 
+the outputs. 
+
+- For languages with a Roman alphabet, such as English or French, the tokenizer can be used directly to 
+pre-process the text inputs. The following code example runs a forward pass using the MMS-TTS English checkpoint:
+
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+
+inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+
+set_seed(555)  # make deterministic
+
+with torch.no_grad():
+   outputs = model(**inputs)
+
+waveform = outputs.waveform[0]
+```
+
+The resulting waveform can be saved as a `.wav` file:
+
+```python
+import scipy
+
+scipy.io.wavfile.write("synthesized_speech.wav", rate=model.config.sampling_rate, data=waveform)
+```
+
+Or displayed in a Jupyter Notebook / Google Colab:
+
+```python
+from IPython.display import Audio
+
+Audio(waveform, rate=model.config.sampling_rate)
+```
+
+For certain languages with non-Roman alphabets, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
+perl package is required to pre-process the text inputs to the Roman alphabet.
+
+You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of 
+the pre-trained `tokenizer`:
+
+```python
+from transformers import VitsTokenizer
+
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+print(tokenizer.is_uroman)
+```
+
+If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
+since currently the tokenizer does not support performing the pre-processing itself.
+
+To do this, first clone the uroman repository to your local machine and set the bash variable `UROMAN` to the local path:
+
+```bash
+git clone https://github.com/isi-nlp/uroman.git
+cd uroman
+export UROMAN=$(pwd)
+```
+
+You can then pre-process the text input using the following code snippet. You can either rely on using the bash variable 
+`UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromaize` function:
+
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+import os
+import subprocess
+
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
+model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+
+def uromanize(input_string, uroman_path):
+    """Convert non-Roman strings to Roman using the `uroman` perl package."""
+    script_path = os.path.join(uroman_path, "bin", "uroman.pl")
+
+    command = ["perl", script_path]
+
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # Execute the perl command
+    stdout, stderr = process.communicate(input=input_string.encode())
+
+    if process.returncode != 0:
+        raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
+
+    # Return the output as a string and skip the new-line character at the end
+    return stdout.decode()[:-1]
+
+text = "이봐 무슨 일이야"
+uromaized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
+
+inputs = tokenizer(text=uromaized_text, return_tensors="pt")
+
+set_seed(555)  # make deterministic
+with torch.no_grad():
+   outputs = model(inputs["input_ids"])
+
+waveform = outputs.waveform[0]
+```
+
+**Tips:**
+
+* The MMS-TTS checkpoints are trained on lower-cased, un-punctuated text. By default, the `VitsTokenizer` *normalizes* the inputs by removing any casing and punctuation, to avoid passing out-of-vocabulary characters to the model. Hence, the model is agnostic to casing and punctuation, so these should be avoided in the text prompt. You can disable normalisation by setting `noramlize=False` in the call to the tokenizer, but this will lead to un-expected behaviour and is discouraged.
+* The speaking rate can be varied by setting the attribute `model.speaking_rate` to a chosen value. Likewise, the randomness of the noise is controlled by `model.noise_scale`:
+
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+
+inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+
+# make deterministic
+set_seed(555)  
+
+# make speech faster and more noisy
+model.speaking_rate = 1.5
+model.noise_scale = 0.8
+
+with torch.no_grad():
+   outputs = model(**inputs)
+```
 
 ### Language Identification (LID)
 
@@ -173,11 +312,12 @@ Different LID models are available based on the number of languages they can rec
 
 #### Inference
 First, we install transformers and some other libraries
-```
-pip install torch accelerate torchaudio datasets
+
+```bash
+pip install torch accelerate datasets[audio]
 pip install --upgrade transformers
 ````
-pip install torch datasets[audio]
+
 Next, we load a couple of audio samples via `datasets`. Make sure that the audio data is sampled to 16000 kHz.
 
 ```py
@@ -237,4 +377,13 @@ processor.id2label.values()
 
 ### Audio Pretrained Models
 
-Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , [1Bil](https://huggingface.co/facebook/mms-1b). The architecture is based on the Wav2Vec2 model, so one can refer to [Wav2Vec2's documentation page](wav2vec2) for further details on how to finetune with models for various downstream tasks.
+Pretrained models are available for two different sizes - [300M](https://huggingface.co/facebook/mms-300m) , 
+[1Bil](https://huggingface.co/facebook/mms-1b). 
+
+<Tip>
+
+The MMS for ASR architecture is based on the Wav2Vec2 model, refer to [Wav2Vec2's documentation page](wav2vec2) for further 
+details on how to finetune with models for various downstream tasks.
+
+MMS-TTS uses the same model architecture as VITS, refer to [VITS's documentation page](vits) for API reference.
+</Tip>

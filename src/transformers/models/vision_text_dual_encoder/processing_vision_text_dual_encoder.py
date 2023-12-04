@@ -32,11 +32,12 @@ class VisionTextDualEncoderProcessor(ProcessorMixin):
     information.
 
     Args:
-        image_processor ([`AutoImageProcessor`]):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizer`]):
+        tokenizer ([`PreTrainedTokenizer`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"

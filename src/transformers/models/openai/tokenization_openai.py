@@ -269,8 +269,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super().__init__(unk_token=unk_token, **kwargs)
-
         try:
             import ftfy
             from spacy.lang.en import English
@@ -291,6 +289,8 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(unk_token=unk_token, **kwargs)
 
     @property
     def do_lower_case(self):

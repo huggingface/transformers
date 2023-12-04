@@ -19,10 +19,14 @@
     title: 스크립트로 학습하기
   - local: accelerate
     title: 🤗 Accelerate로 분산 학습 구성하기
+  - local: peft
+    title: 🤗 PEFT로 어댑터 로드 및 학습하기
   - local: model_sharing
     title: 만든 모델 공유하기
   - local: transformers_agents
     title: 에이전트
+  - local: llm_tutorial
+    title: 대규모 언어 모델로 생성하기
   title: 튜토리얼
 - sections:
   - sections:
@@ -45,17 +49,17 @@
     title: 자연어처리
     isExpanded: false
   - sections:
-      - local: in_translation
-        title: (번역중) Audio classification
+      - local: tasks/audio_classification
+        title: 오디오 분류
       - local: tasks/asr
         title: 자동 음성 인식
-    title: (번역중) 오디오
+    title: 오디오
     isExpanded: false
   - sections:
       - local: tasks/image_classification
         title: 이미지 분류
-      - local: in_translation
-        title: (번역중) Semantic segmentation
+      - local: tasks/semantic_segmentation
+        title: 의미적 분할(Semantic segmentation)
       - local: tasks/video_classification
         title: 영상 분류
       - local: tasks/object_detection
@@ -66,7 +70,7 @@
         title: 제로샷(zero-shot) 이미지 분류
       - local: tasks/monocular_depth_estimation
         title: 단일 영상 기반 깊이 추정
-    title: (번역중) 컴퓨터 비전
+    title: 컴퓨터 비전
     isExpanded: false
   - sections:
       - local: tasks/image_captioning
@@ -101,8 +105,8 @@
       title: (번역중) Benchmarks
     - local: in_translation
       title: (번역중) Notebooks with examples
-    - local: in_translation
-      title: (번역중) Community resources
+    - local: community
+      title: 커뮤니티 리소스
     - local: custom_tools
       title: 사용자 정의 도구와 프롬프트
     - local: troubleshooting
@@ -113,8 +117,8 @@
       title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
-    - local: in_translation
-      title: (번역중) Training on many GPUs
+    - local: perf_train_gpu_many
+      title: 다중 GPU에서 훈련 진행하기
     - local: perf_train_cpu
       title: CPU에서 훈련
     - local: perf_train_cpu_many
@@ -130,29 +134,29 @@
     - local: perf_infer_gpu_one
       title: 하나의 GPU를 활용한 추론
     - local: perf_infer_gpu_many
-      title: 여러 GPU에서 추론
+      title: 다중 GPU에서 추론
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
-    - local: in_translation
-      title: (번역중) Instantiating a big model
-    - local: in_translation
-      title: (번역중) Debugging
+    - local: big_models
+      title: 대형 모델을 인스턴스화
+    - local: debugging
+      title: 디버깅
     - local: hpo_train
       title: Trainer API를 사용한 하이퍼파라미터 탐색
     - local: tf_xla
       title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
-    - local: in_translation
-      title: (번역중) How to contribute to transformers?
+    - local: contributing
+      title: 🤗 Transformers에 기여하는 방법
     - local: add_new_model
-      title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법
     - local: add_tensorflow_model
       title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
-    - local: in_translation
-      title: (번역중) How to add a pipeline to 🤗 Transformers?
+    - local: add_new_pipeline
+      title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
     - local: testing
       title: 테스트
     - local: pr_checks
@@ -170,8 +174,8 @@
     title: 🤗 Transformers로 작업을 해결하는 방법
   - local: model_summary
     title: Transformer 모델군
-  - local: in_translation
-    title: (번역중) Summary of the tokenizers
+  - local: tokenizer_summary
+    title: 토크나이저 요약
   - local: attention
     title: 어텐션 매커니즘
   - local: pad_truncation
@@ -182,6 +186,8 @@
     title: 고정 길이 모델의 펄플렉서티(Perplexity)
   - local: pipeline_webserver
     title: 추론 웹 서버를 위한 파이프라인
+  - local: model_memory_anatomy
+    title: 모델 학습 해부하기
   title: (번역중) 개념 가이드
 - sections:
   - sections:
@@ -331,8 +337,10 @@
         title: (번역중) Jukebox
       - local: in_translation
         title: (번역중) LED
-      - local: in_translation
-        title: (번역중) LLaMA
+      - local: model_doc/llama
+        title: LLaMA
+      - local: model_doc/llama2
+        title: LLaMA2
       - local: in_translation
         title: (번역중) Longformer
       - local: in_translation
@@ -559,8 +567,8 @@
         title: (번역중) Wav2Vec2Phoneme
       - local: in_translation
         title: (번역중) WavLM
-      - local: in_translation
-        title: (번역중) Whisper
+      - local: model_doc/whisper
+        title: Whisper
       - local: in_translation
         title: (번역중) XLS-R
       - local: in_translation

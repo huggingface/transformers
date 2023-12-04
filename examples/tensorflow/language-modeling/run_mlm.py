@@ -76,7 +76,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -123,7 +123,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=None,
         metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
         },
     )
     trust_remote_code: bool = field(
@@ -131,7 +131,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -244,7 +244,10 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
         if model_args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token
@@ -265,6 +268,7 @@ def main():
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
     if training_args.output_dir is not None:
+        training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
 
     if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_max_length:
@@ -276,8 +280,8 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        config_path = Path(training_args.output_dir) / CONFIG_NAME
-        weights_path = Path(training_args.output_dir) / TF2_WEIGHTS_NAME
+        config_path = training_args.output_dir / CONFIG_NAME
+        weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
         if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
             logger.warning(
@@ -349,7 +353,7 @@ def main():
         )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
 
     # region Load pretrained model and tokenizer
@@ -382,7 +386,7 @@ def main():
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
     # endregion
@@ -403,7 +407,7 @@ def main():
     else:
         if data_args.max_seq_length > tokenizer.model_max_length:
             logger.warning(
-                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )
         max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -473,7 +477,7 @@ def main():
         # might be slower to preprocess.
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+        # https://huggingface.co/docs/datasets/process#map
 
         tokenized_datasets = tokenized_datasets.map(
             group_texts,

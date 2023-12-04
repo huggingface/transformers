@@ -2300,12 +2300,12 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         for layer_past in past_key_values:
             # buckets
             if layer_past[0] is not None:
-                reord_buckets = layer_past[0].index_select(0, beam_idx)
+                reord_buckets = layer_past[0].index_select(0, beam_idx.to(layer_past[0].device))
             else:
                 reord_buckets = None
 
             # hidden states
-            reord_hidden_states = layer_past[1].index_select(0, beam_idx)
+            reord_hidden_states = layer_past[1].index_select(0, beam_idx.to(layer_past[1].device))
             reord_past_buckets_states.append((reord_buckets, reord_hidden_states))
         return reord_past_buckets_states
 

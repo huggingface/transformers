@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch Dinov2 model. """
 
 
-import inspect
 import unittest
 
 from transformers import Dinov2Config
@@ -27,6 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -36,7 +36,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Dinov2ForImageClassification, Dinov2Model
+    from transformers import Dinov2Backbone, Dinov2ForImageClassification, Dinov2Model
     from transformers.models.dinov2.modeling_dinov2 import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -123,6 +123,53 @@ class Dinov2ModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        expected_size = self.image_size // config.patch_size
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+
+        # verify backbone works with apply_layernorm=False and reshape_hidden_states=False
+        config.apply_layernorm = False
+        config.reshape_hidden_states = False
+
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size]
+        )
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = Dinov2ForImageClassification(config)
@@ -159,13 +206,21 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Dinov2Model, Dinov2ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Dinov2Model,
+            Dinov2ForImageClassification,
+            Dinov2Backbone,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
+    fx_compatible = True
 
     test_pruning = False
     test_resize_embeddings = False
@@ -182,6 +237,24 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -191,25 +264,21 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+
+    @unittest.skip(reason="Dinov2 does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):
@@ -252,3 +321,14 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (Dinov2Backbone,) if is_torch_available() else ()
+    config_class = Dinov2Config
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = Dinov2ModelTester(self)

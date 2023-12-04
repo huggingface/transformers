@@ -296,23 +296,6 @@ class TapexTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            do_lower_case=do_lower_case,
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            max_cell_length=max_cell_length,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -331,6 +314,24 @@ class TapexTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
         # additional properties
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            do_lower_case=do_lower_case,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            max_cell_length=max_cell_length,
+            **kwargs,
+        )
+
         self.max_cell_length = max_cell_length
         self.table_linearize = IndexedRowTableLinearize()
 

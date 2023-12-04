@@ -15,7 +15,7 @@
 """
 Utility that checks whether the copies defined in the library match the original or not. This includes:
 - All code commented with `# Copied from` comments,
-- The list of models in the main README.md matches the ones in the localized READMEs and in the index.md,
+- The list of models in the main README.md matches the ones in the localized READMEs,
 - Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
 
 This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
@@ -40,10 +40,8 @@ import argparse
 import glob
 import os
 import re
+import subprocess
 from typing import List, Optional, Tuple
-
-import black
-from doc_builder.style_doc import style_docstrings_in_code
 
 from transformers.utils import direct_transformers_import
 
@@ -51,6 +49,7 @@ from transformers.utils import direct_transformers_import
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_copies.py
 TRANSFORMERS_PATH = "src/transformers"
+MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
@@ -132,12 +131,15 @@ def _should_continue(line: str, indent: str) -> bool:
     return line.startswith(indent) or len(line.strip()) == 0 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
-def find_code_in_transformers(object_name: str) -> str:
+def find_code_in_transformers(object_name: str, base_path: str = None) -> str:
     """
     Find and return the source code of an object.
 
     Args:
-        object_name (`str`): The name of the object we want the source code of.
+        object_name (`str`):
+            The name of the object we want the source code of.
+        base_path (`str`, *optional*):
+            The path to the base folder where files are checked. If not set, it will be set to `TRANSFORMERS_PATH`.
 
     Returns:
         `str`: The source code of the object.
@@ -145,9 +147,21 @@ def find_code_in_transformers(object_name: str) -> str:
     parts = object_name.split(".")
     i = 0
 
+    # We can't set this as the default value in the argument, otherwise `CopyCheckTester` will fail, as it uses a
+    # patched temp directory.
+    if base_path is None:
+        base_path = TRANSFORMERS_PATH
+
+    # Detail: the `Copied from` statement is originally designed to work with the last part of `TRANSFORMERS_PATH`,
+    # (which is `transformers`). The same should be applied for `MODEL_TEST_PATH`. However, its last part is `models`
+    # (to only check and search in it) which is a bit confusing. So we keep the copied statement staring with
+    # `tests.models.` and change it to `tests` here.
+    if base_path == MODEL_TEST_PATH:
+        base_path = "tests"
+
     # First let's find the module where our object lives.
     module = parts[i]
-    while i < len(parts) and not os.path.isfile(os.path.join(TRANSFORMERS_PATH, f"{module}.py")):
+    while i < len(parts) and not os.path.isfile(os.path.join(base_path, f"{module}.py")):
         i += 1
         if i < len(parts):
             module = os.path.join(module, parts[i])
@@ -156,7 +170,7 @@ def find_code_in_transformers(object_name: str) -> str:
             f"`object_name` should begin with the name of a module of transformers but got {object_name}."
         )
 
-    with open(os.path.join(TRANSFORMERS_PATH, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
+    with open(os.path.join(base_path, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
     # Now let's find the class / func in the code!
@@ -186,6 +200,7 @@ def find_code_in_transformers(object_name: str) -> str:
 
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
+_re_copy_warning_for_test_file = re.compile(r"^(\s*)#\s*Copied from\s+tests\.(\S+\.\S+)\s*($|\S.*$)")
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 _re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
@@ -209,9 +224,17 @@ def get_indent(code: str) -> str:
     return ""
 
 
-def blackify(code: str) -> str:
+def run_ruff(code):
+    command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    stdout, _ = process.communicate(input=code.encode())
+    return stdout.decode()
+
+
+def stylify(code: str) -> str:
     """
-    Applies the black part of our `make style` command to some code.
+    Applies the ruff part of our `make style` command to some code. This formats the code using `ruff format`.
+    As `ruff` does not provide a python api this cannot be done on the fly.
 
     Args:
         code (`str`): The code to format.
@@ -222,10 +245,8 @@ def blackify(code: str) -> str:
     has_indent = len(get_indent(code)) > 0
     if has_indent:
         code = f"class Bla:\n{code}"
-    mode = black.Mode(target_versions={black.TargetVersion.PY37}, line_length=119)
-    result = black.format_str(code, mode=mode)
-    result, _ = style_docstrings_in_code(result)
-    return result[len("class Bla:\n") :] if has_indent else result
+    formatted_code = run_ruff(code)
+    return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
 def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
@@ -284,14 +305,20 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
     line_index = 0
     # Not a for loop cause `lines` is going to change (if `overwrite=True`).
     while line_index < len(lines):
-        search = _re_copy_warning.search(lines[line_index])
+        search_re = _re_copy_warning
+        if filename.startswith("tests"):
+            search_re = _re_copy_warning_for_test_file
+
+        search = search_re.search(lines[line_index])
         if search is None:
             line_index += 1
             continue
 
         # There is some copied code here, let's retrieve the original.
         indent, object_name, replace_pattern = search.groups()
-        theoretical_code = find_code_in_transformers(object_name)
+
+        base_path = TRANSFORMERS_PATH if not filename.startswith("tests") else MODEL_TEST_PATH
+        theoretical_code = find_code_in_transformers(object_name, base_path=base_path)
         theoretical_indent = get_indent(theoretical_code)
 
         start_index = line_index + 1 if indent == theoretical_indent else line_index
@@ -328,8 +355,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
-
-            theoretical_code = blackify(theoretical_code)
+            theoretical_code = stylify(theoretical_code)
 
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
@@ -350,13 +376,16 @@ def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[
 def check_copies(overwrite: bool = False):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
-    READMEs/index.md are consistent.
+    READMEs are consistent.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the copies when they don't match.
     """
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
+    all_test_files = glob.glob(os.path.join(MODEL_TEST_PATH, "**/*.py"), recursive=True)
+    all_files = list(all_files) + list(all_test_files)
+
     diffs = []
     for filename in all_files:
         new_diffs = is_copy_consistent(filename, overwrite)
@@ -517,21 +546,6 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
-def convert_readme_to_index(model_list: str) -> str:
-    """
-    Converts the model list of the README to the index.md format (adapting links to the doc to relative links).
-
-    Args:
-        model_list (`str`): The model list of the main README.
-
-    Returns:
-        `str`: The model list in the format for the index.
-    """
-    # We need to replce both link to the main doc and stable doc (the order of the next two instructions is important).
-    model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
-    return model_list.replace("https://huggingface.co/docs/transformers/", "")
-
-
 def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
     """
     Find the text in a file between two prompts.
@@ -591,19 +605,13 @@ def check_model_list_copy(overwrite: bool = False):
                 "automatically fix them."
             )
 
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    index_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.md"),
-        start_prompt="<!--This list is updated automatically from the README",
-        end_prompt="### Supported frameworks",
-    )
     md_list = get_model_list(
         filename="README.md",
         start_prompt=LOCALIZED_READMES["README.md"]["start_prompt"],
         end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
     )
 
-    # Buld the converted Markdown.
+    # Build the converted Markdown.
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
         _start_prompt = value["start_prompt"]
@@ -614,18 +622,6 @@ def check_model_list_copy(overwrite: bool = False):
         readmes_match, converted_md_list = convert_to_localized_md(md_list, localized_md_list, _format_model_list)
 
         converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
-
-    # Build the converted index and compare it.
-    converted_md_list = convert_readme_to_index(md_list)
-    if converted_md_list != index_list:
-        if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
-        else:
-            raise ValueError(
-                "The model list in the README changed and the list in `index.md` has not been updated. Run "
-                "`make fix-copies` to fix this."
-            )
 
     # Compare the converted Markdowns
     for converted_md_list in converted_md_lists:

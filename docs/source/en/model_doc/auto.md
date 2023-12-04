@@ -49,7 +49,7 @@ You will then be able to use the auto classes like you would usually do!
 
 <Tip warning={true}>
 
-If your `NewModelConfig` is a subclass of [`~transformer.PretrainedConfig`], make sure its
+If your `NewModelConfig` is a subclass of [`~transformers.PretrainedConfig`], make sure its
 `model_type` attribute is set to the same key you use when registering the config (here `"new-model"`).
 
 Likewise, if your `NewModel` is a subclass of [`PreTrainedModel`], make sure its
@@ -265,6 +265,10 @@ The following auto classes are available for the following computer vision tasks
 ### AutoModelForImageSegmentation
 
 [[autodoc]] AutoModelForImageSegmentation
+
+### AutoModelForImageToImage
+
+[[autodoc]] AutoModelForImageToImage
 
 ### AutoModelForSemanticSegmentation
 

@@ -118,6 +118,17 @@ class Bnb4BitTest(Base4bitTest):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_quantization_num_parameters(self):
+        r"""
+        Test if the number of returned parameters is correct
+
+        See: https://github.com/huggingface/transformers/issues/25978
+        """
+        num_params_4bit = self.model_4bit.num_parameters()
+        num_params_fp16 = self.model_fp16.num_parameters()
+
+        self.assertEqual(num_params_4bit, num_params_fp16)
+
     def test_quantization_config_json_serialization(self):
         r"""
         A simple test to check if the quantization config is correctly serialized and deserialized
@@ -145,6 +156,14 @@ class Bnb4BitTest(Base4bitTest):
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
 
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.model_4bit.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.model_4bit.config._pre_quantization_dtype == torch.float16)
+
     def test_linear_are_4bit(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
@@ -160,6 +179,22 @@ class Bnb4BitTest(Base4bitTest):
                 if name not in ["lm_head"] + T5PreTrainedModel._keep_in_fp32_modules:
                     # 4-bit parameters are packed in uint8 variables
                     self.assertTrue(module.weight.dtype == torch.uint8)
+
+    def test_rwkv_4bit(self):
+        r"""
+        A simple test to check if 4-bit RWKV inference works as expected.
+        """
+        model_id = "RWKV/rwkv-4-169m-pile"
+
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_use_double_quant=True)
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+        tok = AutoTokenizer.from_pretrained(model_id)
+
+        text = "Hello my name is"
+        input_ids = tok.encode(text, return_tensors="pt").to(0)
+
+        _ = model.generate(input_ids, max_new_tokens=30)
 
     def test_generate_quality(self):
         r"""

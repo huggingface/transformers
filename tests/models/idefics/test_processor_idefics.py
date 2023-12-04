@@ -141,6 +141,24 @@ class IdeficsProcessorTest(TestCasePlus):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
+    def test_tokenizer_padding(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer(padding_side="right")
+
+        processor = IdeficsProcessor(tokenizer=tokenizer, image_processor=image_processor)
+
+        predicted_tokens = [
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+            "<s> Describe this image.\nAssistant:<unk><unk><unk><unk><unk><unk><unk><unk><unk><unk>",
+        ]
+        prompts = [[prompt] for prompt in self.prepare_prompts()[2]]
+        max_length = processor(prompts, padding="max_length", truncation=True, max_length=20)
+        longest = processor(prompts, padding="longest", truncation=True, max_length=30)
+        decoded_max_length = processor.tokenizer.decode(max_length["input_ids"][-1])
+        decoded_longest = processor.tokenizer.decode(longest["input_ids"][-1])
+        self.assertEqual(decoded_max_length, predicted_tokens[1])
+        self.assertEqual(decoded_longest, predicted_tokens[0])
+
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()

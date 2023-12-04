@@ -43,7 +43,7 @@ Please refer to the [`VisionEncoderDecoder`] class on how to use this model.
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/microsoft/unilm/tree/6f60612e7cc86a2a1ae85c47231507a587ab4e01/trocr).
 
-Tips:
+## Usage tips
 
 - The quickest way to get started with TrOCR is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/TrOCR), which show how to use the model

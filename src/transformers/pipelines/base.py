@@ -19,6 +19,7 @@ import json
 import os
 import pickle
 import sys
+import traceback
 import types
 import warnings
 from abc import ABC, abstractmethod
@@ -248,6 +249,7 @@ def infer_framework_load_model(
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 
+        all_traceback = {}
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
             if framework == "pt" and model.endswith(".h5"):
@@ -270,10 +272,16 @@ def infer_framework_load_model(
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError):
+                all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
-            raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
+            error = ""
+            for class_name, trace in all_traceback.items():
+                error += f"while loading with {class_name}, an error is thrown:\n{trace}\n"
+            raise ValueError(
+                f"Could not load model {model} with any of the following classes: {class_tuple}. See the original errors:\n\n{error}\n"
+            )
 
     if framework is None:
         framework = infer_framework(model.__class__)
@@ -437,9 +445,9 @@ class PipelineDataFormat:
     pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -542,9 +550,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using CSV data format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -586,9 +594,9 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using JSON file format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -630,9 +638,9 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -828,7 +836,7 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str, safe_serialization: bool = False):
+    def save_pretrained(self, save_directory: str, safe_serialization: bool = True):
         """
         Save the pipeline's model and tokenizer.
 
@@ -836,7 +844,7 @@ class Pipeline(_ScikitCompat):
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
-                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow
+                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -871,6 +879,9 @@ class Pipeline(_ScikitCompat):
 
         if self.feature_extractor is not None:
             self.feature_extractor.save_pretrained(save_directory)
+
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(save_directory)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)

@@ -102,7 +102,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
             The size to use for resizing the image. Only has an effect if `do_resize` is set to `True`. If `size` is a
             sequence like (h, w), output size will be matched to this. If `size` is an int, then image will be resized
             to (size, size).
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BICUBIC`):
+        resample (`int`, *optional*, defaults to `Resampling.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
@@ -124,6 +124,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std (`List[int]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
+
     model_input_names = ["pixel_values"]
 
     def __init__(
@@ -448,7 +449,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
@@ -498,7 +499,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 
         results = []

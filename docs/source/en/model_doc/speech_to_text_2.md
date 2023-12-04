@@ -31,8 +31,7 @@ This model was contributed by [Patrick von Platen](https://huggingface.co/patric
 
 The original code can be found [here](https://github.com/pytorch/fairseq/blob/1f7ef9ed1e1061f8c7f88f8b94c7186834398690/fairseq/models/wav2vec/wav2vec2_asr.py#L266).
 
-
-Tips:
+## Usage tips
 
 - Speech2Text2 achieves state-of-the-art results on the CoVoST Speech Translation dataset. For more information, see
   the [official models](https://huggingface.co/models?other=speech2text2) .
@@ -98,7 +97,7 @@ predicted token ids.
 
 See [model hub](https://huggingface.co/models?filter=speech2text2) to look for Speech2Text2 checkpoints.
 
-## Documentation resources
+## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
 

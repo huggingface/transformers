@@ -136,8 +136,8 @@ To get an even better understanding of the data, visualize an example in the dat
 >>> label2id = {v: k for k, v in id2label.items()}
 
 >>> for i in range(len(annotations["id"])):
-...     box = annotations["bbox"][i - 1]
-...     class_idx = annotations["category"][i - 1]
+...     box = annotations["bbox"][i]
+...     class_idx = annotations["category"][i]
 ...     x, y, w, h = tuple(box)
 ...     draw.rectangle((x, y, x + w, y + h), outline="red", width=1)
 ...     draw.text((x, y), id2label[class_idx], fill="white")

@@ -13,68 +13,159 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Efficient Inference on a Single GPU
+# GPU inference
 
-In addition to this guide, relevant information can be found as well in [the guide for training on a single GPU](perf_train_gpu_one) and [the guide for inference on CPUs](perf_infer_cpu).
-
-## BetterTransformer
-
-[BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) converts 🤗 Transformers models to use the PyTorch-native fastpath execution, which calls optimized kernels like Flash Attention under the hood.  
-
-BetterTransformer is also supported for faster inference on single and multi-GPU for text, image, and audio models.
+GPUs are the standard choice of hardware for machine learning, unlike CPUs, because they are optimized for memory bandwidth and parallelism. To keep up with the larger sizes of modern models or to run these large models on existing and older hardware, there are several optimizations you can use to speed up GPU inference. In this guide, you'll learn how to use FlashAttention-2 (a more memory-efficient attention mechanism), BetterTransformer (a PyTorch native fastpath execution), and bitsandbytes to quantize your model to a lower precision. Finally, learn how to use 🤗 Optimum to accelerate inference with ONNX Runtime on Nvidia and AMD GPUs.
 
 <Tip>
 
-Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast your model to the appropriate dtype before using BetterTransformer.
+The majority of the optimizations described here also apply to multi-GPU setups!
+
+</Tip>
+
+## FlashAttention-2
+
+<Tip>
+
+FlashAttention-2 is experimental and may change considerably in future versions.
+
+</Tip>
+
+[FlashAttention-2](https://huggingface.co/papers/2205.14135) is a faster and more efficient implementation of the standard attention mechanism that can significantly speedup inference by:
+
+1. additionally parallelizing the attention computation over sequence length
+2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
+
+FlashAttention-2 supports inference with Llama, Mistral, Falcon and Bark models. You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
+
+Before you begin, make sure you have FlashAttention-2 installed. For NVIDIA GPUs, the library is installable through pip: `pip install flash-attn --no-build-isolation`. We strongly suggest to refer to the [detailed installation instructions](https://github.com/Dao-AILab/flash-attention?tab=readme-ov-file#installation-and-features).
+
+FlashAttention-2 is also supported on AMD GPUs, with the current support limited to **Instinct MI210 and Instinct MI250**. We strongly suggest to use the following [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
+
+To enable FlashAttention-2, add the `use_flash_attention_2` parameter to [`~AutoModelForCausalLM.from_pretrained`]:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
+
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    torch_dtype=torch.bfloat16, 
+    use_flash_attention_2=True,
+)
+```
+
+<Tip>
+
+FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
   
 </Tip>
 
-### Encoder models
+FlashAttention-2 can be combined with other optimization techniques like quantization to further speedup inference. For example, you can combine FlashAttention-2 with 8-bit or 4-bit quantization:
 
-PyTorch-native [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) attention fastpath, called BetterTransformer, can be used with Transformers through the integration in the [🤗 Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview).
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaForCausalLM
 
-PyTorch's attention fastpath allows to speed up inference through kernel fusions and the use of [nested tensors](https://pytorch.org/docs/stable/nested.html). Detailed benchmarks can be found in [this blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2).
+model_id = "tiiuae/falcon-7b"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-After installing the [`optimum`](https://github.com/huggingface/optimum) package, to use Better Transformer during inference, the relevant internal modules are replaced by calling [`~PreTrainedModel.to_bettertransformer`]:
+# load in 8bit
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    load_in_8bit=True,
+    use_flash_attention_2=True,
+)
+
+# load in 4bit
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, 
+    load_in_4bit=True,
+    use_flash_attention_2=True,
+)
+```
+
+### Expected speedups
+
+You can benefit from considerable speedups for inference, especially for inputs with long sequences. However, since FlashAttention-2 does not support computing attention scores with padding tokens, you must manually pad/unpad the attention scores for batched inference when the sequence contains padding tokens. This leads to a significant slowdown for batched generations with padding tokens.
+
+To overcome this, you should use FlashAttention-2 without padding tokens in the sequence during training (by packing a dataset or [concatenating sequences](https://github.com/huggingface/transformers/blob/main/examples/pytorch/language-modeling/run_clm.py#L516) until reaching the maximum sequence length).
+
+For a single forward pass on [tiiuae/falcon-7b](https://hf.co/tiiuae/falcon-7b) with a sequence length of 4096 and various batch sizes without padding tokens, the expected speedup is:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/falcon-7b-inference-large-seqlen.png">
+</div>
+
+For a single forward pass on [meta-llama/Llama-7b-hf](https://hf.co/meta-llama/Llama-7b-hf) with a sequence length of 4096 and various batch sizes without padding tokens, the expected speedup is:
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-7b-inference-large-seqlen.png">
+</div>
+
+For sequences with padding tokens (generating with padding tokens), you need to unpad/pad the input sequences to correctly compute the attention scores. With a relatively small sequence length, a single forward pass creates overhead leading to a small speedup (in the example below, 30% of the input is filled with padding tokens):
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-small-seqlen-padding.png">
+</div>
+
+But for larger sequence lengths, you can expect even more speedup benefits:
+
+<Tip>
+
+FlashAttention is more memory efficient, meaning you can train on much larger sequence lengths without running into out-of-memory issues. You can potentially reduce memory usage up to 20x for larger sequence lengths. Take a look at the [flash-attention](https://github.com/Dao-AILab/flash-attention) repository for more details.
+
+</Tip>
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-large-seqlen-padding.png">
+</div>
+
+## BetterTransformer
+
+<Tip>
+
+Check out our benchmarks with BetterTransformer and scaled dot product attention in the [Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0](https://pytorch.org/blog/out-of-the-box-acceleration/) and learn more about the fastpath execution in the [BetterTransformer](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) blog post.
+
+</Tip>
+
+BetterTransformer accelerates inference with its fastpath (native PyTorch specialized implementation of Transformer functions) execution. The two optimizations in the fastpath execution are:
+
+1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
+2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
+
+BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernels like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
+
+Before you start, make sure you have 🤗 Optimum [installed](https://huggingface.co/docs/optimum/installation).
+
+Then you can enable BetterTransformer with the [`PreTrainedModel.to_bettertransformer`] method:
 
 ```python
 model = model.to_bettertransformer()
 ```
 
-The method [`~PreTrainedModel.reverse_bettertransformer`] allows to go back to the original modeling, which should be used before saving the model in order to use the canonical transformers modeling:
+You can return the original Transformers model with the [`~PreTrainedModel.reverse_bettertransformer`] method. You should use this before saving your model to use the canonical Transformers modeling:
 
-```python
+```py
 model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
-Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) to learn more about what is possible to do with `BetterTransformer` API for encoder models.
+### FlashAttention
 
-### Decoder models
+SDPA can also call FlashAttention kernels under the hood. FlashAttention can only be used for models using the `fp16` or `bf16` dtype, so make sure to cast your model to the appropriate dtype before using it.
 
-For text models, especially decoder-based models (GPT, T5, Llama, etc.), the BetterTransformer API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` operator](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
-
-To convert a model to BetterTransformer:
-
-```python
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
-
-# Use it for training or inference
-```
-
-SDPA can also call [Flash Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. To enable Flash Attention or to check that it is available in a given setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
-
+To enable FlashAttention or to check whether it is available in a given setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
 
 ```diff
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
 # convert the model to BetterTransformer
 model.to_bettertransformer()
 
@@ -87,45 +178,32 @@ inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-If you see a bug with a traceback saying 
+If you see a bug with the traceback below, try using nightly version of PyTorch which may have broader coverage for FlashAttention:
 
 ```bash
-RuntimeError: No available kernel.  Aborting execution.
-```
+RuntimeError: No available kernel. Aborting execution.
 
-try using the PyTorch nightly version, which may have a broader coverage for Flash Attention:
-
-```bash
+# install PyTorch nightly
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
 ```
 
+## bitsandbytes
 
-Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.
+bitsandbytes is a quantization library that includes support for 4-bit and 8-bit quantization. Quantization reduces your model size compared to its native full precision version, making it easier to fit large models onto GPUs with limited memory.
 
-## `bitsandbytes` integration for FP4 mixed-precision inference
+Make sure you have bitsnbytes and 🤗 Accelerate installed:
 
-You can install `bitsandbytes` and benefit from easy model compression on GPUs. Using FP4 quantization you can expect to reduce up to 8x the model size compared to its native full precision version. Check out below how to get started.
+```bash
+# these versions support 8-bit and 4-bit
+pip install bitsandbytes>=0.39.0 accelerate>=0.20.0
 
-<Tip>
+# install Transformers
+pip install transformers
+```
 
-Note that this feature can also be used in a multi GPU setup.
+### 4-bit
 
-</Tip>
-
-### Requirements [[requirements-for-fp4-mixedprecision-inference]]
-
-- Latest `bitsandbytes` library
-`pip install bitsandbytes>=0.39.0`
-
-- Install latest `accelerate` from source
-`pip install git+https://github.com/huggingface/accelerate.git`
-
-- Install latest `transformers` from source
-`pip install git+https://github.com/huggingface/transformers.git`
-
-### Running FP4 models - single GPU setup - Quickstart
-
-You can quickly run a FP4 model on a single GPU by running the following code:
+To load a model in 4-bit for inference, use the `load_in_4bit` parameter. The `device_map` parameter is optional, but we recommend setting it to `"auto"` to allow 🤗 Accelerate to automatically and efficiently allocate the model given the available resources in the environment.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -133,16 +211,8 @@ from transformers import AutoModelForCausalLM
 model_name = "bigscience/bloom-2b5"
 model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
 ```
-Note that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
-### Running FP4 models - multi GPU setup
-
-The way to load your mixed 4-bit model in multiple GPUs is as follows (same command as single GPU setup):
-```py
-model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
-```
-But you can control the GPU RAM you want to allocate on each GPU using `accelerate`. Use the `max_memory` argument as follows:
+To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 600MB of memory to the first GPU and 1GB of memory to the second GPU:
 
 ```py
 max_memory_mapping = {0: "600MB", 1: "1GB"}
@@ -151,44 +221,16 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
     model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
 )
 ```
-In this example, the first GPU will use 600MB of memory and the second 1GB.
 
-### Advanced usage
-
-For more advanced usage of this method, please have a look at the [quantization](main_classes/quantization) documentation page.
-
-## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
+### 8-bit
 
 <Tip>
 
-Note that this feature can also be used in a multi GPU setup.
+If you're curious and interested in learning more about the concepts underlying 8-bit quantization, read the [Gentle Introduction to 8-bit Matrix Multiplication for transformers at scale using Hugging Face Transformers, Accelerate and bitsandbytes](https://huggingface.co/blog/hf-bitsandbytes-integration) blog post.
 
 </Tip>
 
-From the paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://arxiv.org/abs/2208.07339), we support Hugging Face integration for all models in the Hub with a few lines of code.
-The method reduces `nn.Linear` size by 2 for `float16` and `bfloat16` weights and by 4 for `float32` weights, with close to no impact to the quality by operating on the outliers in half-precision.
-
-![HFxbitsandbytes.png](https://cdn-uploads.huggingface.co/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
-
-Int8 mixed-precision matrix decomposition works by separating a matrix multiplication into two streams: (1) a systematic feature outlier stream matrix multiplied in fp16 (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no predictive degradation is possible for very large models.
-For more details regarding the method, check out the [paper](https://arxiv.org/abs/2208.07339) or our [blogpost about the integration](https://huggingface.co/blog/hf-bitsandbytes-integration).
-
-![MixedInt8.gif](https://cdn-uploads.huggingface.co/production/uploads/1660567469965-62441d1d9fdefb55a0b7d12c.gif)
-
-Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature.
-Below are some notes to help you use this module, or follow the demos on [Google colab](#colab-demos).
-
-### Requirements [[requirements-for-int8-mixedprecision-matrix-decomposition]]
-
-- If you have `bitsandbytes<0.37.0`, make sure you run on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100). For `bitsandbytes>=0.37.0`, all GPUs should be supported.
-- Install the correct version of `bitsandbytes` by running:
-`pip install bitsandbytes>=0.31.5`
-- Install `accelerate`
-`pip install accelerate>=0.12.0`
-
-### Running mixed-Int8 models - single GPU setup
-
-After installing the required libraries, the way to load your mixed 8-bit model is as follows:
+To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `device_map` parameter is optional, but we recommend setting it to `"auto"` to allow 🤗 Accelerate to automatically and efficiently allocate the model given the available resources in the environment:
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -197,12 +239,7 @@ model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 ```
 
-For text generation, we recommend:
-
-* using the model's `generate()` method instead of the `pipeline()` function. Although inference is possible with the `pipeline()` function, it is not optimized for mixed-8bit models, and will be slower than using the `generate()` method. Moreover, some sampling strategies are like nucleaus sampling are not supported by the `pipeline()` function for mixed-8bit models.
-* placing all inputs on the same device as the model.
-
-Here is a simple example:
+If you're loading a model in 8-bit for text generation, you should use the [`~transformers.GenerationMixin.generate`] method instead of the [`Pipeline`] function which is not optimized for 8-bit models and will be slower. Some sampling strategies, like nucleus sampling, are also not supported by the [`Pipeline`] for 8-bit models. You should also place all inputs on the same device as the model:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -217,15 +254,7 @@ generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-
-### Running mixed-int8 models - multi GPU setup
-
-The way to load your mixed 8-bit model in multiple GPUs is as follows (same command as single GPU setup):
-```py
-model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
-```
-But you can control the GPU RAM you want to allocate on each GPU using `accelerate`. Use the `max_memory` argument as follows:
+To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
 
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
@@ -234,27 +263,56 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
     model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
 )
 ```
-In this example, the first GPU will use 1GB of memory and the second 2GB.
 
-### Colab demos
+<Tip>
 
-With this method you can infer on models that were not possible to infer on a Google Colab before.
-Check out the demo for running T5-11b (42GB in fp32)! Using 8-bit quantization on Google Colab:
+Feel free to try running a 11 billion parameter [T5 model](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing) or the 3 billion parameter [BLOOM model](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing) for inference on Google Colab's free tier GPUs!
 
-[![Open In Colab: T5-11b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing)
+</Tip>
 
-Or this demo for BLOOM-3B:
+## 🤗 Optimum
 
-[![Open In Colab: BLOOM-3b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing)
+<Tip>
 
-## Advanced usage: mixing FP4 (or Int8) and BetterTransformer
+Learn more details about using ORT with 🤗 Optimum in the [Accelerated inference on NVIDIA GPUs](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#accelerated-inference-on-nvidia-gpus) and [Accelerated inference on AMD GPUs](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/amdgpu#accelerated-inference-on-amd-gpus) guides. This section only provides a brief and simple example.
 
-You can combine the different methods described above to get the best performance for your model. For example, you can use BetterTransformer with FP4 mixed-precision inference + flash attention:
+</Tip>
+
+ONNX Runtime (ORT) is a model accelerator that supports accelerated inference on Nvidia GPUs, and AMD GPUs that use [ROCm](https://www.amd.com/en/products/software/rocm.html) stack. ORT uses optimization techniques like fusing common operations into a single node and constant folding to reduce the number of computations performed and speedup inference. ORT also places the most computationally intensive operations on the GPU and the rest on the CPU to intelligently distribute the workload between the two devices.
+
+ORT is supported by 🤗 Optimum which can be used in 🤗 Transformers. You'll need to use an [`~optimum.onnxruntime.ORTModel`] for the task you're solving, and specify the `provider` parameter which can be set to either [`CUDAExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#cudaexecutionprovider), [`ROCMExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/amdgpu) or [`TensorrtExecutionProvider`](https://huggingface.co/docs/optimum/onnxruntime/usage_guides/gpu#tensorrtexecutionprovider). If you want to load a model that was not yet exported to ONNX, you can set `export=True` to convert your model on-the-fly to the ONNX format:
+
+```py
+from optimum.onnxruntime import ORTModelForSequenceClassification
+
+ort_model = ORTModelForSequenceClassification.from_pretrained(
+  "distilbert-base-uncased-finetuned-sst-2-english",
+  export=True,
+  provider="CUDAExecutionProvider",
+)
+```
+
+Now you're free to use the model for inference:
+
+```py
+from optimum.pipelines import pipeline
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+
+pipeline = pipeline(task="text-classification", model=ort_model, tokenizer=tokenizer, device="cuda:0")
+result = pipeline("Both the music and visual were astounding, not to mention the actors performance.")
+```
+
+## Combine optimizations
+
+It is often possible to combine several of the optimization techniques described above to get the best inference performance possible for your model. For example, you can load a model in 4-bit, and then enable BetterTransformer with FlashAttention:
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
+# load model in 4-bit
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_compute_dtype=torch.float16
@@ -263,9 +321,13 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=quantization_config)
 
+# enable BetterTransformer
+model = model.to_bettertransformer()
+
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
+# enable FlashAttention
 with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
     outputs = model.generate(**inputs)
 

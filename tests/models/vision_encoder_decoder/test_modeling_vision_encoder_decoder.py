@@ -18,10 +18,13 @@ import tempfile
 import unittest
 
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from packaging import version
 
-from transformers import DonutProcessor, TrOCRProcessor
+from transformers import DonutProcessor, NougatProcessor, TrOCRProcessor
 from transformers.testing_utils import (
+    require_levenshtein,
+    require_nltk,
     require_sentencepiece,
     require_torch,
     require_vision,
@@ -925,9 +928,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
 
         # verify generated sequence
-        # fmt: off
-        expected_sequence = "<s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total>"  # noqa: E231
-        # fmt: on
+        expected_sequence = "<s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total>"  # noqa: E231  # fmt: skip
         self.assertEqual(sequence, expected_sequence)
 
         # verify scores
@@ -996,5 +997,81 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 outputs.scores[0][0, :3], torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device), atol=1e-4
+            )
+        )
+
+
+@require_levenshtein
+@require_nltk
+@require_torch
+@require_vision
+@slow
+class NougatModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        return NougatProcessor.from_pretrained("facebook/nougat-base") if is_vision_available() else None
+
+    @cached_property
+    def default_model(self):
+        return VisionEncoderDecoderModel.from_pretrained("facebook/nougat-base").to(torch_device)
+
+    @cached_property
+    def default_image(self):
+        filepath = hf_hub_download(
+            repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_pdf.png", repo_type="dataset"
+        )
+        image = Image.open(filepath).convert("RGB")
+        return image
+
+    def test_forward_pass(self):
+        processor = self.default_processor
+        model = self.default_model
+        image = self.default_image
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        decoder_input_ids = torch.tensor([[0]]).to(torch_device)
+        outputs = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids)
+        logits = outputs.logits
+
+        # verify the logits
+        expected_shape = torch.Size((1, 1, model.decoder.config.vocab_size))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [1.6253, -4.2179, 5.8532, -2.7911, -5.0609, -4.7397, -4.2890, -5.1073, -4.8908, -4.9729]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+
+    def test_generation(self):
+        processor = self.default_processor
+        model = self.default_model
+        image = self.default_image
+        pixel_values = processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+
+        outputs = model.generate(
+            pixel_values,
+            min_length=1,
+            max_length=3584,
+            bad_words_ids=[[processor.tokenizer.unk_token_id]],
+            return_dict_in_generate=True,
+            output_scores=True,
+        )
+
+        # verify generated sequence
+        generated = processor.batch_decode(outputs.sequences, skip_special_tokens=True)[0]
+        expected_raw_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\nThe paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
+        self.assertTrue(generated == expected_raw_generation)
+
+        # verify postprocessed sequence
+        generated = processor.post_process_generation(generated, fix_markdown=False)
+        expected_generation = "\n\n# Nougat: Neural Optical Understanding for Academic Documents\n\n Lukas Blecher\n\nCorrespondence to: lblecher@meta.com\n\nGuillem Cucurull\n\nThomas Scialom\n\nRobert Stojnic\n\nMeta AI\n\nThe paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\n###### Abstract\n\nScientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (**N**eural **O**ptical **U**nderstanding for **A**cademic Documents), a Visual Transformer model that performs an _Optical Character Recognition_ (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.\n\n## 1 Introduction\n\nThe majority of scientific knowledge is stored in books or published in scientific journals, most commonly in the Portable Document Format (PDF). Next to HTML, PDFs are the second most prominent data format on the internet, making up 2.4% of common crawl [1]. However, the information stored in these files is very difficult to extract into any other formats. This is especially true for highly specialized documents, such as scientific research papers, where the semantic information of mathematical expressions is lost.\n\nExisting Optical Character Recognition (OCR) engines, such as Tesseract OCR [2], excel at detecting and classifying individual characters and words in an image, but fail to understand the relationship between them due to their line-by-line approach. This means that they treat superscripts and subscripts in the same way as the surrounding text, which is a significant drawback for mathematical expressions. In mathematical notations like fractions, exponents, and matrices, relative positions of characters are crucial.\n\nConverting academic research papers into machine-readable text also enables accessibility and searchability of science as a whole. The information of millions of academic papers can not be fully accessed because they are locked behind an unreadable format. Existing corpora, such as the S2ORC dataset [3], capture the text of 12M2 papers using GROBID [4], but are missing meaningful representations of the mathematical equations.\n\nFootnote 2: The paper reports 8.1M papers but the authors recently updated the numbers on the GitHub page https://github.com/allenai/s2orc\n\nTo this end, we introduce Nougat, a transformer based model that can convert images of document pages to formatted markup text.\n\nThe primary contributions in this paper are\n\n* Release of a pre-trained model capable of converting a PDF to a lightweight markup language. We release the code and the model on GitHub3 Footnote 3: https://github.com/facebookresearch/nougat\n* We introduce a pipeline to create dataset for pairing PDFs to source code\n* Our method is only dependent on the image of a page, allowing access to scanned papers and books"
+        self.assertTrue(generated == expected_generation)
+
+        # verify scores
+        self.assertEqual(len(outputs.scores), 741)
+        self.assertTrue(
+            torch.allclose(
+                outputs.scores[0][0, :3], torch.tensor([1.6253, -4.2179, 5.8532], device=torch_device), atol=1e-4
             )
         )

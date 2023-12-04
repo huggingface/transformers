@@ -91,6 +91,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             tokenizer](https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66)
             that uses the tokens 2 - 104 only for pretraining
     """
+
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -139,6 +140,11 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
+        # pegasus was design to support changing the index of the first tokens. If one of the padding/eos/unk/mask token
+        # is different from default, we must rebuild the vocab
+        from_slow = kwargs.pop("from_slow", None)
+        from_slow = from_slow or str(pad_token) != "<pad>" or str(eos_token) != "</s>" or str(unk_token) != "<unk>"
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -149,10 +155,14 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             mask_token_sent=mask_token_sent,
             offset=offset,
             additional_special_tokens=additional_special_tokens,
+            from_slow=from_slow,
             **kwargs,
         )
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp

@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 <Tip warning={true}>
 
-Transformers Agent is an experimental API which is subject to change at any time. Results returned by the agents
+Transformers Agents is an experimental API which is subject to change at any time. Results returned by the agents
 can vary as the APIs or underlying models are prone to change.
 
 </Tip>

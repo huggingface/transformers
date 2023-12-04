@@ -67,11 +67,15 @@ Example of using a model with Character tokenization:
 >>> outputs = bertjapanese(**inputs)
 ```
 
-Tips:
-
-- This implementation is the same as BERT, except for tokenization method. Refer to the [documentation of BERT](bert) for more usage examples.
-
 This model was contributed by [cl-tohoku](https://huggingface.co/cl-tohoku).
+
+<Tip> 
+
+This implementation is the same as BERT, except for tokenization method. Refer to [BERT documentation](bert) for 
+API reference information.  
+
+</Tip>
+
 
 ## BertJapaneseTokenizer
 

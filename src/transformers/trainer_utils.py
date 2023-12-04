@@ -38,15 +38,13 @@ from .utils import (
     is_torch_mps_available,
     is_torch_npu_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     requires_backends,
 )
 
 
 if is_torch_available():
     import torch
-
-if is_tf_available():
-    import tensorflow as tf
 
 
 def seed_worker(_):
@@ -79,6 +77,8 @@ def enable_full_determinism(seed: int, warn_only: bool = False):
         torch.backends.cudnn.benchmark = False
 
     if is_tf_available():
+        import tensorflow as tf
+
         tf.config.experimental.enable_op_determinism()
 
 
@@ -97,8 +97,38 @@ def set_seed(seed: int):
         # ^^ safe to call this function even if cuda is not available
     if is_torch_npu_available():
         torch.npu.manual_seed_all(seed)
+    if is_torch_xpu_available():
+        torch.xpu.manual_seed_all(seed)
     if is_tf_available():
+        import tensorflow as tf
+
         tf.random.set_seed(seed)
+
+
+def neftune_post_forward_hook(module, input, output):
+    """
+    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
+    layers. This method is slightly adapted from the original source code that can be found here:
+    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
+    ```python
+    model = ...
+    model.embed_tokens.neftune_noise_alpha = 0.1
+    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
+    ```
+    Args:
+        module (`torch.nn.Module`):
+            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
+            the desired noise alpha value.
+        input (`torch.Tensor`):
+            The input tensor to the model.
+        output (`torch.Tensor`):
+            The output tensor of the model (i.e. the embeddings).
+    """
+    if module.training:
+        dims = torch.tensor(output.size(1) * output.size(2))
+        mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
+        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
+    return output
 
 
 class EvalPrediction:
@@ -108,7 +138,7 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*)
+        inputs (`np.ndarray`, *optional*):
     """
 
     def __init__(
@@ -211,7 +241,7 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: float
+    objective: Union[float, List[float]]
     hyperparameters: Dict[str, Any]
     run_summary: Optional[Any] = None
 
@@ -332,7 +362,7 @@ def total_processes_number(local_rank):
     return 1
 
 
-def speed_metrics(split, start_time, num_samples=None, num_steps=None):
+def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_tokens=None):
     """
     Measure and return speed performance metrics.
 
@@ -343,6 +373,7 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
+    - num_tokens: number of tokens processed
     """
     runtime = time.time() - start_time
     result = {f"{split}_runtime": round(runtime, 4)}
@@ -354,6 +385,9 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     if num_steps is not None:
         steps_per_second = num_steps / runtime
         result[f"{split}_steps_per_second"] = round(steps_per_second, 3)
+    if num_tokens is not None:
+        tokens_per_second = num_tokens / runtime
+        result[f"{split}_tokens_per_second"] = round(tokens_per_second, 3)
     return result
 
 
@@ -422,6 +456,16 @@ class TrainerMemoryTracker:
 
             self.torch = torch
             self.gpu = {}
+        elif is_torch_xpu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        elif is_torch_npu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
         else:
             self.torch = None
 
@@ -472,12 +516,24 @@ class TrainerMemoryTracker:
         gc.collect()
 
         if self.torch is not None:
-            self.torch.cuda.reset_peak_memory_stats()
-            self.torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                self.torch.cuda.reset_peak_memory_stats()
+                self.torch.cuda.empty_cache()
+            elif is_torch_xpu_available():
+                self.torch.xpu.reset_peak_memory_stats()
+                self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.reset_peak_memory_stats()
+                self.torch.npu.empty_cache()
 
         # gpu
         if self.torch is not None:
-            self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
+            if torch.cuda.is_available():
+                self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
+            elif is_torch_xpu_available():
+                self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
 
         # cpu
         self.cpu_mem_used_at_start = self.cpu_mem_used()
@@ -501,7 +557,12 @@ class TrainerMemoryTracker:
         gc.collect()
 
         if self.torch is not None:
-            self.torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                self.torch.cuda.empty_cache()
+            elif is_torch_xpu_available():
+                self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.empty_cache()
 
         # concepts:
         # - alloc_delta:  the difference of allocated memory between the end and the start
@@ -510,8 +571,18 @@ class TrainerMemoryTracker:
 
         # gpu
         if self.torch is not None:
-            self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
-            self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            if torch.cuda.is_available():
+                self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            elif is_torch_xpu_available():
+                self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_now = self.torch.npu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
+            else:
+                raise ValueError("No available GPU device found!")
+
             self.gpu[self.cur_stage] = {
                 "begin": self.gpu_mem_used_at_start,
                 "end": self.gpu_mem_used_now,
@@ -621,21 +692,13 @@ def number_of_arguments(func):
     return len(inspect.signature(func).parameters)
 
 
-class ShardedDDPOption(ExplicitEnum):
-    SIMPLE = "simple"
-    ZERO_DP_2 = "zero_dp_2"
-    ZERO_DP_3 = "zero_dp_3"
-    OFFLOAD = "offload"
-    AUTO_WRAP = "auto_wrap"
-
-
 def find_executable_batch_size(
     function: callable = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
     A basic decorator that will try to execute `function`. If it fails from exceptions related to out-of-memory or
-    CUDNN, the batch size is cut in half and passed to `function` `function` must take in a `batch_size` parameter as
+    CUDNN, the batch size is cut in half and passed to `function`. `function` must take in a `batch_size` parameter as
     its first argument.
         function (`callable`, *optional*)
             A function to wrap
@@ -664,6 +727,8 @@ class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
     NO_SHARD = "no_shard"
+    HYBRID_SHARD = "hybrid_shard"
+    HYBRID_SHARD_ZERO2 = "hybrid_shard_zero2"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 

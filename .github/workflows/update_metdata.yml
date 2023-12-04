@@ -8,7 +8,7 @@ on:
 
 jobs:
   build_and_package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash -l {0}
@@ -19,7 +19,7 @@ jobs:
       - name: Setup environment
         run: |
           pip install --upgrade pip
-          pip install datasets pandas
+          pip install datasets pandas==2.0.3
           pip install .[torch,tf,flax]
 
       - name: Update metadata
