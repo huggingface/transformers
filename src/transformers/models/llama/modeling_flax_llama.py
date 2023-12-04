@@ -40,7 +40,8 @@ from .configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2"
+_CHECKPOINT_FOR_DOC = "afmck/testing-llama-tiny"
+_REAL_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2"
 
 LLAMA_START_DOCSTRING = r"""
 
@@ -633,7 +634,12 @@ class FlaxLlamaModel(FlaxLlamaPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxLlamaModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC, revision="refs/pr/4"
+    FlaxLlamaModel,
+    _CHECKPOINT_FOR_DOC,
+    FlaxBaseModelOutput,
+    _CONFIG_FOR_DOC,
+    revision="refs/pr/4",
+    real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
 
@@ -719,5 +725,10 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC, revision="refs/pr/4"
+    FlaxLlamaForCausalLM,
+    _CHECKPOINT_FOR_DOC,
+    FlaxCausalLMOutput,
+    _CONFIG_FOR_DOC,
+    revision="refs/pr/4",
+    real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
