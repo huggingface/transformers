@@ -144,7 +144,7 @@ quantization_config = AwqConfig(
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config).to(0)
 ```
 
-Note that you need to prealably define `fuse_max_seq_len` to `AwqConfig`. That total sequence length should include the context length and the expected generation length. You can set it to a large value to be on the safe zone.
+Note that you need to define `fuse_max_seq_len` to `AwqConfig`. That total sequence length should include the context length and the expected generation length. You can set it to a large value to be on the safe zone.
 
 You can also apply module fusing for other architectures that are not supported.
 
