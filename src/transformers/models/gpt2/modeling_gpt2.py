@@ -1534,7 +1534,20 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
+        expected_output=[
+            "Lead",
+            "Lead",
+            "Lead",
+            "Position",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+        ],
     )
     # fmt: on
     def forward(

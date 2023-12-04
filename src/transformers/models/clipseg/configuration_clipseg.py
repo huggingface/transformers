@@ -86,6 +86,7 @@ class CLIPSegTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "clipseg_text_model"
 
     def __init__(

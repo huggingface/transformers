@@ -119,6 +119,7 @@ class XmodConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "xmod"
 
     def __init__(

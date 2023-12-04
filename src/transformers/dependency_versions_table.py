@@ -2,11 +2,10 @@
 # 1. modify the `_deps` dict in setup.py
 # 2. run `make deps_table_update``
 deps = {
-    "Pillow": "Pillow<10.0.0",
-    "accelerate": "accelerate>=0.20.3",
+    "Pillow": "Pillow>=10.0.1,<=15.0",
+    "accelerate": "accelerate>=0.21.0",
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
-    "black": "black~=23.1",
     "codecarbon": "codecarbon==1.2.0",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
@@ -62,7 +61,7 @@ deps = {
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff": "ruff>=0.0.241,<=0.0.259",
+    "ruff": "ruff>=0.1.5,<=0.2",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.3.1",

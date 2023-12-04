@@ -726,10 +726,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_disk_offload(self):
         pass
 
-    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
-    def test_assisted_decoding_sample(self):
-        pass
-
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(
@@ -905,6 +901,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
     Original implementation of the routers here:
 
     """
+
     config = SwitchTransformersConfig(
         num_experts=2,
         hidden_size=8,

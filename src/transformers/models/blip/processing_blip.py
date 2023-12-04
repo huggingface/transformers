@@ -37,6 +37,7 @@ class BlipProcessor(ProcessorMixin):
         tokenizer (`BertTokenizerFast`):
             An instance of ['BertTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "BlipImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")

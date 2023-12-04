@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch DPT model. """
 
 
-import inspect
 import unittest
 
 from transformers import Dinov2Config, DPTConfig
@@ -153,18 +152,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="DPT with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_inputs_embeds(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_for_depth_estimation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
