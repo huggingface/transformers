@@ -2376,10 +2376,14 @@ class TFGenerationMixin:
             # get log probabilities from logits, process logits with processors (*e.g.* min_length, ...), and
             # add new logprobs to existing running logprobs scores.
             log_probs = tf.nn.log_softmax(logits)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+            log_probs = logits_processor(
+                flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len + decoder_prompt_len
+            )
             log_probs = unflatten_beam_dim(log_probs, num_beams)
             if do_sample:
-                log_probs = logits_warper(flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len)
+                log_probs = logits_warper(
+                    flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs), cur_len + decoder_prompt_len
+                )
                 log_probs = unflatten_beam_dim(log_probs, num_beams)
             log_probs_processed = log_probs
             log_probs = log_probs + tf.expand_dims(running_scores, axis=2)
@@ -2391,7 +2395,9 @@ class TFGenerationMixin:
                 if output_scores:
                     all_scores.append(
                         logits_warper(
-                            flatten_beam_dim(running_sequences), flatten_beam_dim(log_probs_processed), cur_len
+                            flatten_beam_dim(running_sequences),
+                            flatten_beam_dim(log_probs_processed),
+                            cur_len + decoder_prompt_len,
                         )
                     )
                 if output_attentions and self.config.is_encoder_decoder:
