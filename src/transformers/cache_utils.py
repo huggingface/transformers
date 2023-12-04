@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
@@ -9,9 +9,22 @@ class Cache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cos: Optional[torch.Tensor] = None,    # needed for models having RoPE position embeddings
-        sin: Optional[torch.Tensor] = None,    # needed for models having RoPE position embeddings
+        cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache. These are specific to each subclass and allow new types of cache to
+                be created -- all used keys are validated.
+        """
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
 
@@ -52,9 +65,21 @@ class DynamicCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache. No additional arguments are used in `DynamicCache`.
+        """
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
@@ -84,22 +109,12 @@ class DynamicCache(Cache):
             cache.update(key_states, value_states, layer_idx)
         return cache
 
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_single(
-    key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, position_ids: Optional[torch.IntTensor] = None
-) -> torch.Tensor:
-    if position_ids:
-        cos = cos[position_ids].unsqueeze(1)  # [seq_len, dim] -> [batch_size, 1, seq_len, head_dim]
-        sin = sin[position_ids].unsqueeze(1)
-    rotated_key_states = (key_states * cos) + (rotate_half(key_states) * sin)
-    return rotated_key_states
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
 class SinkCache(Cache):
@@ -109,6 +124,17 @@ class SinkCache(Cache):
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
+
+    @staticmethod
+    def rotate_half(x):
+        """Rotates half the hidden dims of the input."""
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_key_rotary_pos_emb(self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        rotated_key_states = (key_states * cos) + (self.rotate_half(key_states) * sin)
+        return rotated_key_states
 
     def get_rerotation_cos_sin(
         self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
@@ -144,9 +170,30 @@ class SinkCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cos: Optional[torch.Tensor] = None,
-        sin: Optional[torch.Tensor] = None,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+
+        Parameters:
+            key_states (`torch.Tensor`):
+                The new key states to cache.
+            value_states (`torch.Tensor`):
+                The new value states to cache.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+            cache_kwargs (`Dict[str, Any]`, `optional`):
+                Additional arguments for the cache. The following arguments can be used in `SinkCache`: `sin`, `cos`
+                and `partial_rotation_size`. These arguments are used with models using RoPE, to recompute the rotation
+                as the tokens are shifted.
+        """
+        # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
+        # with partially rotated position embeddings, like Phi or Persimmon.
+        sin = cache_kwargs.get("sin")
+        cos = cache_kwargs.get("cos")
+        partial_rotation_size = cache_kwargs.get("partial_rotation_size")
+        using_rope = cos is not None and sin is not None
+
         # [bsz, num_heads, seq_len, head_dim]
         if len(self.key_cache) <= layer_idx:
             # Empty cache
@@ -160,15 +207,25 @@ class SinkCache(Cache):
 
         else:
             # Shifting cache
-            rotated_keys = self.key_cache[layer_idx][
+            keys_to_keep = self.key_cache[layer_idx][
                 :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
             ]
-            rerotation_cos, rerotation_sin = self.get_rerotation_cos_sin(key_states, cos, sin)
-            rerotated_keys = apply_rotary_pos_emb_single(rotated_keys, rerotation_cos, rerotation_sin)
 
-            # Concatenate sink tokens, shifted & rotated tokens, and new tokens
+            # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
+            if using_rope:
+                rerotation_cos, rerotation_sin = self.get_rerotation_cos_sin(key_states, cos, sin)
+                if partial_rotation_size is not None:
+                    keys_to_keep, keys_pass = (
+                        key_states[..., :partial_rotation_size],
+                        key_states[..., partial_rotation_size:],
+                    )
+                keys_to_keep = self.apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
+                if partial_rotation_size is not None:
+                    keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
+
+            # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
             self.key_cache[layer_idx] = torch.cat(
-                [self.key_cache[layer_idx][:, :, : self.num_sink_tokens], rerotated_keys, key_states], dim=-2
+                [self.key_cache[layer_idx][:, :, : self.num_sink_tokens], keys_to_keep, key_states], dim=-2
             )
             self.value_cache[layer_idx] = torch.cat(
                 [
@@ -181,3 +238,10 @@ class SinkCache(Cache):
                 dim=-2,
             )
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        for layer_idx in range(len(self.key_cache)):
+            device = self.key_cache[layer_idx].device
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+            device = self.value_cache[layer_idx].device
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))

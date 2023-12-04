@@ -403,7 +403,8 @@ class LlamaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cos, sin)
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -830,8 +831,8 @@ LLAMA_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         use_legacy_cache (`bool`, *optional*):
-            If set to `True` (default), will return `past_key_values` as described input above. Otherwise, will return
-            a subclass of `Cache`
+            If set to `True` (default), will return `past_key_values` as a tuple, which is what we call the "legacy"
+            cache format. Otherwise, will return a subclass of [`~cache_utils.Cache`]
 """
 
 
