@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache
+from ..cache_utils import DynamicCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -2953,6 +2953,32 @@ class GenerationMixin:
         else:
             return input_ids
 
+    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+        """
+        Temporary function to handle the different types of cache reordering processes.
+
+        TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
+        for this function, with `Cache.reorder_cache` being the sole remaining code path
+        """
+        model_class = self.__class__.__name__.lower()
+        # Exception 1: code path for models using the legacy cache format
+        if isinstance(past_key_values, tuple):
+            past_key_values = self._reorder_cache(past_key_values, beam_idx)
+        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
+        # cache format is standardized, to avoid adding complexity to the codebase.
+        elif "bloom" in model_class or "gptbigcode" in model_class:
+            if not isinstance(past_key_values, DynamicCache):
+                raise ValueError(
+                    f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
+                    "legacy tuple format or `DynamicCache`"
+                )
+            past_key_values = self._reorder_cache(past_key_values, beam_idx)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        # Standard code path: use the `Cache.reorder_cache`
+        else:
+            past_key_values.reorder_cache(beam_idx)
+        return past_key_values
+
     def beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -3226,10 +3252,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if using_new_cache:
-                    model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
+                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3564,10 +3587,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if using_new_cache:
-                    model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
+                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3952,12 +3972,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
-                model_kwargs["past_key_values"] = self._reorder_cache(
-                    model_kwargs["past_key_values"], reordering_indices
-                )
-                if using_new_cache:
-                    model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
+                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             # increase cur_len
             cur_len = cur_len + 1
@@ -4297,10 +4312,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                using_new_cache = isinstance(model_kwargs["past_key_values"], Cache)
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
-                if using_new_cache:
-                    model_kwargs["past_key_values"] = DynamicCache.from_legacy_cache(model_kwargs["past_key_values"])
+                self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
