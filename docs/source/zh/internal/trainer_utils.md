@@ -14,13 +14,14 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Trainer
+# Trainer的工具
 
-This page lists all the utility functions used by [`Trainer`].
+此页面列出了 [`Trainer`] 使用的所有实用函数。
 
-Most of those are only useful if you are studying the code of the Trainer in the library.
+其中大多数仅在您研究库中Trainer的代码时有用。
 
-## Utilities
+
+## 工具
 
 [[autodoc]] EvalPrediction
 
@@ -32,18 +33,18 @@ Most of those are only useful if you are studying the code of the Trainer in the
 
 [[autodoc]] torch_distributed_zero_first
 
-## Callbacks internals
+## Callbacks内部机制
 
 [[autodoc]] trainer_callback.CallbackHandler
 
-## Distributed Evaluation
+## 分布式评估
 
 [[autodoc]] trainer_pt_utils.DistributedTensorGatherer
 
-## Trainer Argument Parser
+## Trainer参数解析
 
 [[autodoc]] HfArgumentParser
 
-## Debug Utilities
+## Debug工具
 
 [[autodoc]] debug_utils.DebugUnderflowOverflow
