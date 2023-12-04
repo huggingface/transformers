@@ -131,7 +131,7 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.embedding_dim = embedding_dim
         self.num_positions = num_positions
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         """
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
@@ -147,7 +147,9 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
 
         self.weight.assign(weight)
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
 
     @staticmethod
     def _init_weight(n_pos: int, dim: int):
@@ -330,6 +332,23 @@ class TFPegasusAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build(self.embed_dim)
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build(self.embed_dim)
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build(self.embed_dim)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build(self.embed_dim)
+
 
 # Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartEncoderLayer with MBart->Pegasus
 class TFPegasusEncoderLayer(tf.keras.layers.Layer):
@@ -346,6 +365,7 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -387,6 +407,26 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
 
         return hidden_states, self_attn_weights
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build(self.embed_dim)
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build(self.config.encoder_ffn_dim)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartDecoderLayer with MBart->Pegasus
 class TFPegasusDecoderLayer(tf.keras.layers.Layer):
@@ -416,6 +456,7 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -496,6 +537,32 @@ class TFPegasusDecoderLayer(tf.keras.layers.Layer):
             cross_attn_weights,
             present_key_value,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "encoder_attn", None) is not None:
+            with tf.name_scope(self.encoder_attn.name):
+                self.encoder_attn.build(None)
+        if getattr(self, "encoder_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.encoder_attn_layer_norm.name):
+                self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build(self.embed_dim)
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build(self.config.decoder_ffn_dim)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 class TFPegasusPreTrainedModel(TFPreTrainedModel):
@@ -812,6 +879,21 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFPegasusDecoder(tf.keras.layers.Layer):
@@ -1047,6 +1129,21 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                 cross_attentions=all_cross_attns,
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFPegasusMainLayer(tf.keras.layers.Layer):
@@ -1158,6 +1255,20 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+        if getattr(self, "shared", None) is not None:
+            with tf.name_scope(self.shared.name):
+                self.shared.build(None)  # TODO Matt might be wrong
+
 
 @add_start_docstrings(
     "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
@@ -1244,6 +1355,14 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
@@ -1452,3 +1571,14 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+        if getattr(self, "bias_layer", None) is not None:
+            with tf.name_scope(self.bias_layer.name):
+                self.bias_layer.build(None)  # TODO Matt might be wrong
