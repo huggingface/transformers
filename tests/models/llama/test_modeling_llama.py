@@ -437,7 +437,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
-        self.assertTrue(model_sdpa.config.attn_implementation == "sdpa")
+        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = LlamaForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf",
@@ -446,7 +446,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             attn_implementation="eager",
         ).to(torch_device)
 
-        self.assertTrue(model_eager.config.attn_implementation == "eager")
+        self.assertTrue(model_eager.config._attn_implementation == "eager")
 
         for name, submodule in model_eager.named_modules():
             if "SdpaAttention" in submodule.__class__.__name__:

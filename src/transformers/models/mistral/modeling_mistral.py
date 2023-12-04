@@ -602,7 +602,7 @@ class MistralDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MISTRAL_ATTENTION_CLASSES[config.attn_implementation](config)
+        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config)
 
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -792,7 +792,7 @@ class MistralModel(MistralPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([MistralDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False

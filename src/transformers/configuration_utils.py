@@ -377,7 +377,7 @@ class PretrainedConfig(PushToHubMixin):
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
         # Attention implementation to use, if relevant.
-        self._attn_implementation = kwargs.pop("attn_implementation", None)
+        self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
@@ -428,22 +428,20 @@ class PretrainedConfig(PushToHubMixin):
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     @property
-    def attn_implementation(self):
-        if hasattr(self, "_attn_implementation"):
-            if self._attn_implementation is None:
+    def _attn_implementation(self):
+        # This property is made private for now (as it may not be changed alone and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
+        if hasattr(self, "_attn_implementation_internal"):
+            if self._attn_implementation_internal is None:
                 # `config.attn_implementation` should never be None, for backward compatibility.
                 return "eager"
             else:
-                return self._attn_implementation
+                return self._attn_implementation_internal
         else:
-            return None
+            return "eager"
 
-    @attn_implementation.setter
-    def attn_implementation(self, value):
-        # No specific check is implemented here, as we want to allow syntax as `config.attn_implementation = "flash_attention_2"` before the model
-        # loading. Proper implementation/external library availability checks are done at load time.
-        # Modifying this property alone on an already loaded model (model.config) has no impact, `model.use_attn_implementation("flash_attention_2")` should be used instead.
-        self._attn_implementation = value
+    @_attn_implementation.setter
+    def _attn_implementation(self, value):
+        self._attn_implementation_internal = value
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
@@ -770,6 +768,9 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
+        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+
         config = cls(**config_dict)
 
         if hasattr(config, "pruned_heads"):
@@ -884,8 +885,8 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
-        if "_attn_implementation" in serializable_config_dict:
-            del serializable_config_dict["_attn_implementation"]
+        if "_attn_implementation_internal" in serializable_config_dict:
+            del serializable_config_dict["_attn_implementation_internal"]
 
         return serializable_config_dict
 
@@ -903,8 +904,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
-        if "_attn_implementation" in output:
-            del output["_attn_implementation"]
+        if "_attn_implementation_internal" in output:
+            del output["_attn_implementation_internal"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

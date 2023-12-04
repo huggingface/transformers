@@ -511,7 +511,7 @@ class MBartEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -581,7 +581,7 @@ class MBartDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -594,7 +594,7 @@ class MBartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.encoder_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -933,7 +933,7 @@ class MBartEncoder(MBartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([MBartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1111,7 +1111,7 @@ class MBartDecoder(MBartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([MBartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 

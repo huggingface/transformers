@@ -276,7 +276,7 @@ class PegasusEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = PEGASUS_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = PEGASUS_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -347,7 +347,7 @@ class PegasusDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = PEGASUS_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = PEGASUS_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -360,7 +360,7 @@ class PegasusDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = PEGASUS_ATTENTION_CLASSES[config.attn_implementation](
+        self.encoder_attn = PEGASUS_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,

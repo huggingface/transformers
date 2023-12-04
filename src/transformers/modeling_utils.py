@@ -1230,17 +1230,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
-            1. An implementation specified in `config.attn_implementation`.
+            1. An implementation specified in `config._attn_implementation` (due for example to the argument attn_implementation="sdpa" in from_pretrained).
             2. If use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
             3. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
             4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
-        # Here we use config._attn_implementation to check whether the attention implementation was explicitely set by the user.
-        # The property `PretrainedConfig.attn_implementation` is never `None`, for backward compatibility.
-        if hasattr(config, "_attn_implementation") and config._attn_implementation is not None:
-            if config.attn_implementation != "flash_attention_2" and use_flash_attention_2:
+        # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitely set by the user.
+        # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility.
+        if hasattr(config, "_attn_implementation") and config._attn_implementation_internal is not None:
+            if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
-                    f'Both config.attn_implementation ("{config.attn_implementation}"), with `config.attn_implementation != "flash_attention_2"`. This is not compatible, we recommend you to just use `config.attn_implementation = "flash_attention_2"` or to pass the argument `attn_implementation="flash_attention_2"`.'
+                    f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible. We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
@@ -1260,7 +1260,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # use_flash_attention_2 takes priority over SDPA.
             config = cls._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
         elif not hard_check_only:
-            config.attn_implementation = "eager"
+            config._attn_implementation = "eager"
 
         return config
 
@@ -1401,7 +1401,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "initialise the model on a GPU by passing a device_map that contains only GPU devices as keys."
             )
         if not hard_check_only:
-            config.attn_implementation = "flash_attention_2"
+            config._attn_implementation = "flash_attention_2"
         return config
 
     @classmethod
@@ -1409,7 +1409,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Checks the availability of SDPA for a given model.
 
-        If all checks pass and `hard_check_only` is False, the method will set the config attribute `attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_2" so that the model can initialize the correct attention module.
         """
         if hard_check_only:
             if not cls._supports_sdpa:
@@ -1430,7 +1430,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return config
 
         if not hard_check_only:
-            config.attn_implementation = "sdpa"
+            config._attn_implementation = "sdpa"
         return config
 
     def enable_input_require_grads(self):

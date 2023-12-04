@@ -436,7 +436,7 @@ class BarkBlock(nn.Module):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        self.attn = BARK_ATTENTION_CLASSES[config.attn_implementation](config, is_causal=is_causal)
+        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
 
         self.mlp = BarkMLP(config)
 
@@ -669,7 +669,7 @@ class BarkCausalModel(BarkPreTrainedModel):
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
@@ -1265,7 +1265,7 @@ class BarkFineModel(BarkPreTrainedModel):
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
@@ -1904,7 +1904,7 @@ class BarkModel(BarkPreTrainedModel):
             config, torch_dtype, device_map, hard_check_only=hard_check_only
         )
 
-        config.semantic_config.attn_implementation = config.attn_implementation
-        config.coarse_acoustics_config.attn_implementation = config.attn_implementation
-        config.fine_acoustics_config.attn_implementation = config.attn_implementation
+        config.semantic_config._attn_implementation = config._attn_implementation
+        config.coarse_acoustics_config._attn_implementation = config._attn_implementation
+        config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config

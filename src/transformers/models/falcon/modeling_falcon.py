@@ -765,7 +765,7 @@ class FalconDecoderLayer(nn.Module):
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        self.self_attention = FALCON_ATTENTION_CLASSES[config.attn_implementation](config)
+        self.self_attention = FALCON_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
@@ -963,7 +963,7 @@ class FalconPreTrainedModel(PreTrainedModel):
             return config
 
         if not hard_check_only:
-            config.attn_implementation = "sdpa"
+            config._attn_implementation = "sdpa"
         return config
 
 
@@ -984,7 +984,7 @@ class FalconModel(FalconPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)

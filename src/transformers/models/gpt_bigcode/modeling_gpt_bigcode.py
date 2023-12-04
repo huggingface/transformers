@@ -620,7 +620,7 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
             # as SDPA expects seq_length to be at index -2 for the key as well
             attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
         else:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
                 "GPTBigCodeModel is using GPTBigCodeSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` and `head_mask` not None. Falling back to the manual attention implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards."
             )
@@ -674,7 +674,7 @@ class GPTBigCodeBlock(nn.Module):
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        self.attn = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](config, layer_idx=layer_idx)
+        self.attn = GPTBIGCODE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
 
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
@@ -682,7 +682,7 @@ class GPTBigCodeBlock(nn.Module):
             if config.multi_query:
                 raise NotImplementedError("Cross-attention not implemented for MQA")
 
-            self.crossattention = GPTBIGCODE_ATTENTION_CLASSES[config.attn_implementation](
+            self.crossattention = GPTBIGCODE_ATTENTION_CLASSES[config._attn_implementation](
                 config, is_cross_attention=True, layer_idx=layer_idx
             )
 
@@ -908,8 +908,8 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         self.gradient_checkpointing = False
 
-        self._use_sdpa = config.attn_implementation == "sdpa"
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
         self.post_init()

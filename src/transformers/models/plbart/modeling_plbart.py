@@ -271,7 +271,7 @@ class PLBartEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = PLBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -346,7 +346,7 @@ class PLBartDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.self_attn = PLBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -359,7 +359,7 @@ class PLBartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = PLBART_ATTENTION_CLASSES[config.attn_implementation](
+        self.encoder_attn = PLBART_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -674,8 +674,8 @@ class PLBartEncoder(PLBartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
-        self._use_sdpa = config.attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.gradient_checkpointing = False
@@ -857,8 +857,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
-        self._use_sdpa = config.attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 

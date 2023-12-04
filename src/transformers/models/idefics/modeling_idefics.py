@@ -988,7 +988,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             return config
 
         if not hard_check_only:
-            config.attn_implementation = "sdpa"
+            config._attn_implementation = "sdpa"
         return config
 
 

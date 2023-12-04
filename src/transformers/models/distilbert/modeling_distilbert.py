@@ -485,7 +485,7 @@ class TransformerBlock(nn.Module):
         if config.dim % config.n_heads != 0:
             raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
-        self.attention = DISTILBERT_ATTENTION_CLASSES[config.attn_implementation](config)
+        self.attention = DISTILBERT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -705,7 +705,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
-        self._use_flash_attention_2 = config.attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
         self.post_init()

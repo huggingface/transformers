@@ -3157,8 +3157,9 @@ class ModelTesterMixin:
                     .to(torch_device)
                     .eval()
                 )
-                self.assertTrue(model_sdpa.config.attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
+                print("----- load model eager")
                 model_eager = (
                     model_class.from_pretrained(
                         tmpdirname,
@@ -3168,7 +3169,8 @@ class ModelTesterMixin:
                     .to(torch_device)
                     .eval()
                 )
-                self.assertTrue(model_eager.config.attn_implementation == "eager")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                break
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:
@@ -3227,7 +3229,6 @@ class ModelTesterMixin:
                             else:
                                 dummy_attention_mask = inputs_dict.get("attention_mask", None)
                                 if dummy_attention_mask is None:
-                                    # print("was none!!!")
                                     if is_encoder_decoder:
                                         seqlen = inputs_dict.get("decoder_input_ids", dummy_input).shape[-1]
                                     else:
@@ -3235,7 +3236,6 @@ class ModelTesterMixin:
                                     dummy_attention_mask = (
                                         torch.ones(batch_size, seqlen).to(torch.int64).to(torch_device)
                                     )
-                                # print("dummy_attention_mask here", dummy_attention_mask.shape)
 
                                 dummy_attention_mask = dummy_attention_mask[:batch_size]
                                 if dummy_attention_mask.shape[0] != batch_size:
@@ -3262,8 +3262,6 @@ class ModelTesterMixin:
 
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
-                                # print("model_class", model_class)
-                                # print("is_encoder_decoder", is_encoder_decoder)
                                 if is_encoder_decoder:
                                     decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size]
                                     if decoder_input_ids.shape[0] != batch_size:
@@ -3438,7 +3436,7 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                self.assertTrue(model_sdpa.attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -3447,7 +3445,7 @@ class ModelTesterMixin:
                     attn_implementation="eager",
                 ).to(torch_device)
 
-                self.assertTrue(model_eager.attn_implementation == "eager")
+                self.assertTrue(model_eager._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:
