@@ -915,7 +915,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 state = jax.tree_util.tree_map(jnp.array, state)
             else:
                 # keep the params on CPU if we don't want to initialize
-                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.devices("cpu")[0]), state)
+                state = jax.tree_util.tree_map(lambda x: jax.device_put(x, jax.local_devices(backend="cpu")[0]), state)
 
         if "batch_stats" in state:  # if flax model contains batch norm layers
             # if model is base model only use model_prefix key
