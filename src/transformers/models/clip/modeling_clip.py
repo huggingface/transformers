@@ -1318,7 +1318,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
     Repo with custom implementation: https://github.com/Andron00e/CLIPForImageClassification
     Pre-trained model on hub: https://huggingface.co/Andron00e/CLIPForImageClassification-v1
     """
-    def __init__(self, config: CLIPConfig, num_labels: int):
+    def __init__(self, config: CLIPConfig):
         super().__init__(config)
         self.clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
         self.num_labels = num_labels
