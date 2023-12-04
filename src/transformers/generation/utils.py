@@ -3258,10 +3258,10 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+
+            breakpoint()
             if model_kwargs["past_key_values"] is not None:
                 self._temporary_reorder_cache(model_kwargs["past_key_values"], beam_idx)
-            if cur_len == 8:
-                breakpoint()
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
