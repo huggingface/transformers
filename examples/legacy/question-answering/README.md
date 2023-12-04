@@ -18,7 +18,7 @@ in Huang et al. [Improve Transformer Models with Better Relative Position Embedd
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_name_or_path zhiheng-huang/bert-base-uncased-embedding-relative-key-query \
     --dataset_name squad \
     --do_train \
@@ -46,7 +46,7 @@ gpu training leads to the f1 score of 90.71.
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_name_or_path zhiheng-huang/bert-large-uncased-whole-word-masking-embedding-relative-key-query \
     --dataset_name squad \
     --do_train \
@@ -68,7 +68,7 @@ Training with the above command leads to the f1 score of 93.52, which is slightl
 Here is an example using distributed training on 8 V100 GPUs and Bert Whole Word Masking uncased model to reach a F1 > 93 on SQuAD1.1:
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8 ./examples/question-answering/run_squad.py \
+torchrun --nproc_per_node=8 ./examples/question-answering/run_squad.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --dataset_name squad \
     --do_train \
