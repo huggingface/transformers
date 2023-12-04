@@ -480,6 +480,12 @@ class MistralFlashAttention2(MistralAttention):
             use_sliding_windows (`bool`, *optional*):
                 Whether to activate sliding window attention.
         """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -501,7 +507,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal,
+                    causal=causal,
                 )
             else:
                 attn_output_unpad = flash_attn_varlen_func(
@@ -514,7 +520,7 @@ class MistralFlashAttention2(MistralAttention):
                     max_seqlen_k=max_seqlen_in_batch_k,
                     dropout_p=dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal,
+                    causal=causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
@@ -527,7 +533,7 @@ class MistralFlashAttention2(MistralAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal,
+                    causal=causal,
                 )
             else:
                 attn_output = flash_attn_func(
@@ -536,7 +542,7 @@ class MistralFlashAttention2(MistralAttention):
                     value_states,
                     dropout,
                     softmax_scale=softmax_scale,
-                    causal=self.is_causal,
+                    causal=causal,
                     window_size=(self.config.sliding_window, self.config.sliding_window),
                 )
 
