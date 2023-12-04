@@ -273,8 +273,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 1. Create a mask to know where image tokens are
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
-        image_token_mask = input_ids == self.config.image_token_index
-        num_image_tokens = torch.sum(image_token_mask, dim=-1)
         nb_text_tokens_per_images = image_features.shape[1]
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
 
@@ -286,7 +284,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         final_embedding = torch.zeros(input_ids.shape[0], max_embed_dim, inputs_embeds.shape[-1])
         final_attention_mask = torch.zeros(input_ids.shape[0], max_embed_dim, dtype=torch.long)
 
-        # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # 3. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
