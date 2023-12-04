@@ -2321,8 +2321,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 if return_dict_in_generate:
                     def split_by_batch_index(values, key, batch_idx):
                         if key == "scores":
-                            return list(v[batch_idx] for v in values)
-                        return values[batch_idx]
+                            return list(v[batch_idx].cpu() for v in values)
+                        if key == "past_key_values":
+                            # we don't save `past_key_values` as this is too costly
+                            return None
+                        return values[batch_idx].cpu()
 
                     seek_sequences = seek_outputs["sequences"]
                     seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(cur_bsz)]
@@ -2423,7 +2426,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     @staticmethod
     def _retrieve_avg_logprobs(scores, tokens, eos_token_id):
-        scores = torch.stack([torch.stack(score) for score in scores])
+        scores = torch.stack([torch.stack(score) for score in scores]).to(tokens.device)
         logprobs = F.log_softmax(scores.float(), dim=-1).to(scores.dtype)
         tokens = tokens[:, -scores.shape[1]:]
 
