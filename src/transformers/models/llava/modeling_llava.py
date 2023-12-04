@@ -274,7 +274,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         nb_image_pad = max_embed_dim -1 - new_token_positions[:,-1]
         if left_padding:
             new_token_positions += nb_image_pad[:,None]   # offset for left padding
-            
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
         # 3. Create the full embedding, already padded to the maximum position
@@ -287,8 +286,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
-        image_to_overwrite = torch.all(final_embedding == 0, dim=-1).long()
-        image_to_overwrite[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
+        image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
+        image_to_overwrite[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices].bool()
         # TODO the following line does not take into account left padding. We should write the image centering right?
         # we have to use some variables for that
         if left_padding:
