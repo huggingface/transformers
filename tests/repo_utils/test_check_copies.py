@@ -248,8 +248,8 @@ def create_tmp_repo(tmp_dir):
         "bertcopy": MOCK_BERT_COPY_CODE,
         "dummy_bert_match": MOCK_DUMMY_BERT_CODE_MATCH,
         "dummy_roberta_match": MOCK_DUMMY_ROBERTA_CODE_MATCH,
-        "dummy_bert_not_match": MOCK_DUMMY_BERT_CODE_NOT_MATCH,
-        "dummy_roberta_not_match": MOCK_DUMMY_ROBERTA_CODE_NOT_MATCH,
+        "dummy_bert_no_match": MOCK_DUMMY_BERT_CODE_NOT_MATCH,
+        "dummy_roberta_no_match": MOCK_DUMMY_ROBERTA_CODE_NOT_MATCH,
     }
     for model, code in models.items():
         model_subdir = model_dir / model
