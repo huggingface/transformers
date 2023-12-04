@@ -291,7 +291,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # TODO the following line does not take into account left padding. We should write the image centering right?
         # we have to use some variables for that
         if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) >= nb_image_pad[:,None] 
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) > nb_image_pad[:,None] 
         else:
             image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:,None] 
         # image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
