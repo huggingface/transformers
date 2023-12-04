@@ -98,7 +98,6 @@ class PatchTSMixerConfig(PretrainedConfig):
             A value added to the denominator for numerical stability of normalization.
 
 
-
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are masked randomly. In Forecast masking, points are masked towards the end.
@@ -117,6 +116,7 @@ class PatchTSMixerConfig(PretrainedConfig):
             across channels.
         unmasked_channel_indices (`list`, *optional*):
             Channels that are not masked during pretraining.
+
 
 
         head_dropout (`float`, *optional*, defaults to 0.2):

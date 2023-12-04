@@ -1313,9 +1313,9 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         else:
             self.masking = None
 
-        if config.scaling == "mean" or config.scaling is True:
+        if config.scaling == "mean":
             self.scaler = PatchTSMixerMeanScaler(config)
-        elif config.scaling == "std":
+        elif config.scaling == "std" or config.scaling is True:
             self.scaler = PatchTSMixerStdScaler(config)
         else:
             self.scaler = PatchTSMixerNOPScaler(config)
@@ -1858,7 +1858,10 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
             self.post_init()
 
     @add_start_docstrings_to_model_forward(PATCHTSMIXER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PatchTSMixerForTimeSeriesClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=PatchTSMixerForTimeSeriesClassificationOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         past_values: torch.Tensor,
