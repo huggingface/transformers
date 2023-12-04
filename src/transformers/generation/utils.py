@@ -2969,7 +2969,7 @@ class GenerationMixin:
         """
         model_class = self.__class__.__name__.lower()
         # Exception 1: code path for models using the legacy cache format
-        if isinstance(past_key_values, tuple):
+        if isinstance(past_key_values, (tuple, list)):
             past_key_values = self._reorder_cache(past_key_values, beam_idx)
         # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
         # cache format is standardized, to avoid adding complexity to the codebase.
