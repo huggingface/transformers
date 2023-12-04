@@ -97,6 +97,9 @@ class BertCopyModel(BertCopyPreTrainedModel):
 
 MOCK_DUMMY_BERT_CODE_MATCH = """
 class BertDummyModel:
+    attr_1 = 1
+    attr_2 = 2
+
     def __init__(self, a=1, b=2):
         self.a = a
         self.b = b
@@ -116,6 +119,10 @@ class BertDummyModel:
 MOCK_DUMMY_ROBERTA_CODE_MATCH = """
 # Copied from transformers.models.dummy_bert_match.modeling_dummy_bert_match.BertDummyModel with BertDummy->RobertaBertDummy
 class RobertaBertDummyModel:
+
+    attr_1 = 1
+    attr_2 = 2
+
     def __init__(self, a=1, b=2):
         self.a = a
         self.b = b
@@ -137,8 +144,11 @@ class RobertaBertDummyModel:
 """
 
 
-MOCK_DUMMY_BERT_CODE_NOT_MATCH = """
+MOCK_DUMMY_BERT_CODE_NO_MATCH = """
 class BertDummyModel:
+    attr_1 = 1
+    attr_2 = 2
+
     def __init__(self, a=1, b=2):
         self.a = a
         self.b = b
@@ -161,9 +171,13 @@ class BertDummyModel:
 """
 
 
-MOCK_DUMMY_ROBERTA_CODE_NOT_MATCH = """
-# Copied from transformers.models.dummy_bert_not_match.modeling_dummy_bert_not_match.BertDummyModel with BertDummy->RobertaBertDummy
+MOCK_DUMMY_ROBERTA_CODE_NO_MATCH = """
+# Copied from transformers.models.dummy_bert_no_match.modeling_dummy_bert_no_match.BertDummyModel with BertDummy->RobertaBertDummy
 class RobertaBertDummyModel:
+
+    attr_1 = 1
+    attr_2 = 3
+
     def __init__(self, a=1, b=2):
         self.a = a
         self.b = b
@@ -192,8 +206,11 @@ class RobertaBertDummyModel:
 
 
 EXPECTED_REPLACED_CODE = """
-# Copied from transformers.models.dummy_bert_not_match.modeling_dummy_bert_not_match.BertDummyModel with BertDummy->RobertaBertDummy
+# Copied from transformers.models.dummy_bert_no_match.modeling_dummy_bert_no_match.BertDummyModel with BertDummy->RobertaBertDummy
 class RobertaBertDummyModel:
+    attr_1 = 1
+    attr_2 = 2
+
     def __init__(self, a=1, b=2):
         self.a = a
         self.b = b
@@ -248,8 +265,8 @@ def create_tmp_repo(tmp_dir):
         "bertcopy": MOCK_BERT_COPY_CODE,
         "dummy_bert_match": MOCK_DUMMY_BERT_CODE_MATCH,
         "dummy_roberta_match": MOCK_DUMMY_ROBERTA_CODE_MATCH,
-        "dummy_bert_no_match": MOCK_DUMMY_BERT_CODE_NOT_MATCH,
-        "dummy_roberta_no_match": MOCK_DUMMY_ROBERTA_CODE_NOT_MATCH,
+        "dummy_bert_no_match": MOCK_DUMMY_BERT_CODE_NO_MATCH,
+        "dummy_roberta_no_match": MOCK_DUMMY_ROBERTA_CODE_NO_MATCH,
     }
     for model, code in models.items():
         model_subdir = model_dir / model
@@ -309,7 +326,7 @@ class CopyCheckTester(unittest.TestCase):
                 diffs = is_copy_consistent(file_to_check)
                 self.assertEqual(diffs, [["models.bert.modeling_bert.BertModel", 22]])
 
-                diffs = is_copy_consistent(file_to_check, overwrite=True)
+                _ = is_copy_consistent(file_to_check, overwrite=True)
 
                 with open(file_to_check, "r", encoding="utf-8") as f:
                     self.assertEqual(f.read(), MOCK_BERT_COPY_CODE)
@@ -324,13 +341,13 @@ class CopyCheckTester(unittest.TestCase):
                 diffs = is_copy_consistent(file_to_check)
                 self.assertEqual(diffs, [])
 
-    def test_is_copy_consistent_with_ignored_not_match(self):
+    def test_is_copy_consistent_with_ignored_no_match(self):
         path_to_check = [
             "src",
             "transformers",
             "models",
-            "dummy_roberta_not_match",
-            "modeling_dummy_roberta_not_match.py",
+            "dummy_roberta_no_match",
+            "modeling_dummy_roberta_no_match.py",
         ]
         with tempfile.TemporaryDirectory() as tmp_folder:
             # Base check with an inconsistency
@@ -339,13 +356,13 @@ class CopyCheckTester(unittest.TestCase):
                 file_to_check = os.path.join(tmp_folder, *path_to_check)
 
                 diffs = is_copy_consistent(file_to_check)
-                # line 16: `def only_in_roberta_not_ignored(self, c):` in `MOCK_DUMMY_ROBERTA_CODE_NOT_MATCH`.
+                # line 6: `attr_2 = 3` in `MOCK_DUMMY_ROBERTA_CODE_NO_MATCH`.
                 # (which has a leading `\n`.)
                 self.assertEqual(
-                    diffs, [["models.dummy_bert_not_match.modeling_dummy_bert_not_match.BertDummyModel", 16]]
+                    diffs, [["models.dummy_bert_no_match.modeling_dummy_bert_no_match.BertDummyModel", 6]]
                 )
 
-                diffs = is_copy_consistent(file_to_check, overwrite=True)
+                _ = is_copy_consistent(file_to_check, overwrite=True)
 
                 with open(file_to_check, "r", encoding="utf-8") as f:
                     self.assertEqual(f.read(), EXPECTED_REPLACED_CODE)
