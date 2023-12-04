@@ -18,14 +18,15 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The RWKV5 model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM)
+The RWKV5 model was proposed in [this repo](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v5)
 
 It suggests a tweak in the traditional Transformer attention to make it linear. This way, the model can be used as recurrent network: passing inputs for timestamp 0 and timestamp 1 together is the same as passing inputs at timestamp 0, then inputs at timestamp 1 along with the state of timestamp 0 (see example below).
 
 This can be more efficient than a regular Transformer and can deal with sentence of any length (even if the model uses a fixed context length for training).
 
-This model was contributed by [sgugger](https://huggingface.co/sgugger).
-The original code can be found [here](https://github.com/BlinkDL/RWKV-LM).
+Compared to RWKV4, RWKV5 has upgraded its model architecture by introducing multi-head attention, achieving better results.
+
+The original code can be found [here](https://github.com/BlinkDL/RWKV-LM/tree/main/RWKV-v5).
 
 Example of use as an RNN:
 

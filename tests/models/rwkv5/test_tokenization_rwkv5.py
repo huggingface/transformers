@@ -24,14 +24,10 @@ from transformers.utils import is_torch_available
 if is_torch_available():
     from transformers import RWKVWorldTokenizer
 
-
-SAMPLE_VOCAB = get_tests_dir("fixtures/rwkv_vocab_v20230424.json")
-
-
 @require_torch
 class RWKVWorldTokenizationTest(unittest.TestCase):
     def test_rwkv_world_tokenizer_encode(self):
-        tokenizer = RWKVWorldTokenizer.from_pretrained(os.path.dirname(SAMPLE_VOCAB))
+        tokenizer = RWKVWorldTokenizer.from_pretrained("RWKV/rwkv-5-world-169m")
         s1 = tokenizer("Hello")["input_ids"]
         self.assertListEqual(s1, [33155])
         s2 = tokenizer("S:2")["input_ids"]

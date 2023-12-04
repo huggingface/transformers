@@ -54,6 +54,7 @@ class Rwkv5ModelTester:
         vocab_size=99,
         hidden_size=32,
         attention_hidden_size=None,
+        head_size=4,
         num_attention_heads=4,
         num_hidden_layers=2,
         intermediate_size=37,
@@ -79,6 +80,7 @@ class Rwkv5ModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size
+        self.head_size = head_size
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -149,6 +151,7 @@ class Rwkv5ModelTester:
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             attention_hidden_size=self.attention_hidden_size,
+            head_size=self.head_size,
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             intermediate_size=self.intermediate_size,
@@ -208,7 +211,7 @@ class Rwkv5ModelTester:
 
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, 1, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
     def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
@@ -219,7 +222,7 @@ class Rwkv5ModelTester:
         result = model(input_ids, labels=input_ids)
         print(result.loss.shape)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.vocab_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = Rwkv5Model(config=config)
@@ -230,12 +233,13 @@ class Rwkv5ModelTester:
         output_whole = outputs.last_hidden_state
 
         outputs = model(input_ids[:, :2])
+        output_one = outputs.last_hidden_state
 
         # Using the state computed on the first inputs, we will get the same output
         outputs = model(input_ids[:, 2:], state=outputs.state)
         output_two = outputs.last_hidden_state
 
-        self.parent.assertTrue(torch.allclose(output_two, output_whole, atol=1e-5))
+        self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
