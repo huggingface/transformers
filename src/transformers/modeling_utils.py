@@ -1128,6 +1128,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
 
+    # Has support for a `Cache` instance as `past_key_values`
+    _supports_cache_class = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
