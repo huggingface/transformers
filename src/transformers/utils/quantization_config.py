@@ -638,4 +638,3 @@ class AwqConfig(QuantizationConfigMixin):
                     f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
                 )
 
-        # TODO: awq version check for fused modules.
