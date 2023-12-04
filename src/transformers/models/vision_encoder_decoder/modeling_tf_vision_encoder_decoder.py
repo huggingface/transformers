@@ -717,8 +717,3 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             "Resizing the embedding layers via the TFVisionEncoderDecoderModel directly is not supported. "
             "Please use the respective methods of the wrapped objects (model.decoder.resize_token_embeddings(...))"
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
