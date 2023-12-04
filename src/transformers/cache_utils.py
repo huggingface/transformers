@@ -4,6 +4,10 @@ import torch
 
 
 class Cache:
+    """
+    Base, abstract class for all caches.
+    """
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -29,6 +33,10 @@ class Cache:
 
 
 class DynamicCache(Cache):
+    """
+    A cache that grows dynamically as more tokens are generated. This is the default for generative models.
+    """
+
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
@@ -96,18 +104,17 @@ class DynamicCache(Cache):
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         legacy_cache = []
-        for layer_idx in range(len(self.key_cache)):
+        for layer_idx in range(len(self)):
             legacy_cache.append((self.key_cache[layer_idx], self.value_cache[layer_idx]))
         return tuple(legacy_cache)
 
     @classmethod
-    def from_legacy_cache(cls, past_key_values: Optional[List[torch.FloatTensor]]) -> "DynamicCache":
-        if past_key_values is None:
-            return cls()
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         cache = cls()
-        for layer_idx in range(len(past_key_values)):
-            key_states, value_states = past_key_values[layer_idx]
-            cache.update(key_states, value_states, layer_idx)
+        if past_key_values is not None:
+            for layer_idx in range(len(past_key_values)):
+                key_states, value_states = past_key_values[layer_idx]
+                cache.update(key_states, value_states, layer_idx)
         return cache
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
@@ -119,6 +126,18 @@ class DynamicCache(Cache):
 
 
 class SinkCache(Cache):
+    """
+    A cache that as described in the [Attention Sinks paper](https://arxiv.org/abs/2309.17453). It allows the model to
+    generate beyond the length of its context window, without losing fluency in the conversation. As it discards past
+    tokens, the model will lose the ability to generate tokens that depend on the context that was discarded.
+
+    Parameters:
+        window_length (`int`):
+            The length of the context window.
+        num_sink_tokens (`int`):
+            The number of sink tokens. See the original paper for more information.
+    """
+
     def __init__(self, window_length: int, num_sink_tokens: int) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
