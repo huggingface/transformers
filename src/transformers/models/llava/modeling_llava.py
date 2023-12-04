@@ -303,7 +303,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 4. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
 
-        # Make sur to not write on the padding
+        # Make sur to not write on the padding. This currently does not work for left padded inputs no?
         image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
 
@@ -389,6 +389,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
+                # TODO take into account the padding side for the final embedding, padding in the position_ids and attention_mask
+                # Also TODO Truncate sequences to max length as image embeddings can make the sequence longer
                 inputs_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, inputs_embeds, input_ids, attention_mask, position_ids)
                 if labels is None:
                     labels = torch.full_like(input_ids, self.config.ignore_index)
