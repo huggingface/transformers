@@ -114,11 +114,6 @@ class TFOPTLearnedPositionalEmbedding(tf.keras.layers.Embedding):
 
         return super().call(positions + self.offset)
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->OPT
 class TFOPTAttention(tf.keras.layers.Layer):
@@ -273,23 +268,6 @@ class TFOPTAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "k_proj", None) is not None:
-            with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
-        if getattr(self, "q_proj", None) is not None:
-            with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
-        if getattr(self, "v_proj", None) is not None:
-            with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
-        if getattr(self, "out_proj", None) is not None:
-            with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
-
 
 class TFOPTDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
@@ -310,7 +288,6 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        self.config = config
 
     def call(
         self,
@@ -376,26 +353,6 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             hidden_states = self.final_layer_norm(hidden_states)
 
         return (hidden_states, self_attn_weights, present_key_value)
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "self_attn_layer_norm", None) is not None:
-            with tf.name_scope(self.self_attn_layer_norm.name):
-                self.self_attn_layer_norm.build([None, None, self.embed_dim])
-        if getattr(self, "fc1", None) is not None:
-            with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
-        if getattr(self, "fc2", None) is not None:
-            with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.ffn_dim)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.embed_dim])
-        if getattr(self, "self_attn", None) is not None:
-            with tf.name_scope(self.self_attn.name):
-                self.self_attn.build(None)  # TODO Matt might be wrong
 
 
 OPT_START_DOCSTRING = r"""
@@ -739,21 +696,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embed_tokens", None) is not None:
-            with tf.name_scope(self.embed_tokens.name):
-                self.embed_tokens.build(None)
-        if getattr(self, "embed_positions", None) is not None:
-            with tf.name_scope(self.embed_positions.name):
-                self.embed_positions.build(None)
-        if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
-
 
 @keras_serializable
 class TFOPTMainLayer(tf.keras.layers.Layer):
@@ -814,14 +756,6 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "decoder", None) is not None:
-            with tf.name_scope(self.decoder.name):
-                self.decoder.build(None)
 
 
 @add_start_docstrings(
@@ -906,14 +840,6 @@ class TFOPTModel(TFOPTPreTrainedModel):
             hidden_states=hs,
             attentions=attns,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "model", None) is not None:
-            with tf.name_scope(self.model.name):
-                self.model.build(None)
 
 
 @add_start_docstrings(
@@ -1080,11 +1006,3 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             loss=output.loss,
             logits=output.logits,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "model", None) is not None:
-            with tf.name_scope(self.model.name):
-                self.model.build(None)
