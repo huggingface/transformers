@@ -2716,6 +2716,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         quantization_method_from_args = None
 
+        if quantization_config is not None:
+            quantization_method_from_args = getattr(
+                quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
+            )
+
         if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
@@ -2817,9 +2822,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config.quantization_config[attr] = val
             quantization_method_from_args = None
             logger.warning(
-                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
-                "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. use_exllama, exllama_config, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                f"You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
+                f"`quantization_config` attribute and has already quantized weights. However, loading attributes"
+                f" (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
