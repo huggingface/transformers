@@ -287,14 +287,11 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        image_to_overwrite[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices].bool()
-        # TODO the following line does not take into account left padding. We should write the image centering right?
-        # we have to use some variables for that
         if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) > nb_image_pad[:,None] 
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) >= nb_image_pad[:,None]
         else:
             image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:,None] 
-        # image_to_overwrite &= image_to_overwrite.cumsum(-1) <= (num_image_tokens * nb_text_tokens_per_images)[:, None]
+        # TODO one operation is missing here, to include one missing token
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
