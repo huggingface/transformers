@@ -160,7 +160,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape=None):
+    def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -186,12 +186,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                     ),
                 )
 
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build([None, None, self.config.hidden_size])
+        super().build(input_shape)
 
     def call(
         self,
@@ -284,8 +279,6 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -375,20 +368,6 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
             outputs = outputs + (past_key_value,)
         return outputs
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "query", None) is not None:
-            with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
-        if getattr(self, "key", None) is not None:
-            with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
-        if getattr(self, "value", None) is not None:
-            with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Tapas
 class TFTapasSelfOutput(tf.keras.layers.Layer):
@@ -400,8 +379,6 @@ class TFTapasSelfOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -409,17 +386,6 @@ class TFTapasSelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
-        if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Tapas
@@ -462,17 +428,6 @@ class TFTapasAttention(tf.keras.layers.Layer):
 
         return outputs
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "self_attention", None) is not None:
-            with tf.name_scope(self.self_attention.name):
-                self.self_attention.build(None)
-        if getattr(self, "dense_output", None) is not None:
-            with tf.name_scope(self.dense_output.name):
-                self.dense_output.build(None)
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Tapas
 class TFTapasIntermediate(tf.keras.layers.Layer):
@@ -487,22 +442,12 @@ class TFTapasIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Tapas
@@ -515,9 +460,6 @@ class TFTapasOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.intermediate_size = config.intermediate_size
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -525,17 +467,6 @@ class TFTapasOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
-        if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Tapas
@@ -624,20 +555,6 @@ class TFTapasLayer(tf.keras.layers.Layer):
 
         return outputs
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "intermediate", None) is not None:
-            with tf.name_scope(self.intermediate.name):
-                self.intermediate.build(None)
-        if getattr(self, "bert_output", None) is not None:
-            with tf.name_scope(self.bert_output.name):
-                self.bert_output.build(None)
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Tapas
 class TFTapasEncoder(tf.keras.layers.Layer):
@@ -708,15 +625,6 @@ class TFTapasEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "layer", None) is not None:
-            for layer in self.layer:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
-
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Tapas
 class TFTapasPooler(tf.keras.layers.Layer):
@@ -729,8 +637,6 @@ class TFTapasPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -739,14 +645,6 @@ class TFTapasPooler(tf.keras.layers.Layer):
         pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Tapas
@@ -766,8 +664,6 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = config.hidden_act
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -775,17 +671,6 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states)
 
         return hidden_states
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
-        if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Tapas
@@ -802,15 +687,10 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
-    def build(self, input_shape=None):
+    def build(self, input_shape: tf.TensorShape):
         self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "transform", None) is not None:
-            with tf.name_scope(self.transform.name):
-                self.transform.build(None)
+        super().build(input_shape)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
@@ -971,20 +851,6 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embeddings", None) is not None:
-            with tf.name_scope(self.embeddings.name):
-                self.embeddings.build(None)
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
-        if getattr(self, "pooler", None) is not None:
-            with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
 
 
 class TFTapasPreTrainedModel(TFPreTrainedModel):
@@ -1167,14 +1033,6 @@ class TFTapasModel(TFTapasPreTrainedModel):
 
         return outputs
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "tapas", None) is not None:
-            with tf.name_scope(self.tapas.name):
-                self.tapas.build(None)
-
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
 class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -1270,17 +1128,6 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "tapas", None) is not None:
-            with tf.name_scope(self.tapas.name):
-                self.tapas.build(None)
-        if getattr(self, "lm_head", None) is not None:
-            with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(None)
 
 
 class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
@@ -1705,20 +1552,6 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "tapas", None) is not None:
-            with tf.name_scope(self.tapas.name):
-                self.tapas.build(None)
-        if getattr(self, "compute_token_logits", None) is not None:
-            with tf.name_scope(self.compute_token_logits.name):
-                self.compute_token_logits.build(None)  # TODO Matt might be wrong
-        if getattr(self, "compute_column_logits", None) is not None:
-            with tf.name_scope(self.compute_column_logits.name):
-                self.compute_column_logits.build(None)  # TODO Matt might be wrong
-
 
 @add_start_docstrings(
     """
@@ -1737,8 +1570,6 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
-        self.hidden_size = config.hidden_size
-        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -1822,20 +1653,6 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "tapas", None) is not None:
-            with tf.name_scope(self.tapas.name):
-                self.tapas.build(None)
-        if getattr(self, "dropout", None) is not None:
-            with tf.name_scope(self.dropout.name):
-                self.dropout.build(None)
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
 
 
 """ TAPAS utilities."""
