@@ -1287,7 +1287,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
             if torch.version.cuda:
                 if importlib.util.find_spec("flash_attn") is None:
-                    raise ImportError(f"{preface} the package flash_attn seem to be not installed. {install_message}")
+                    raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
 
                 flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
                 if flash_attention_version < version.parse("2.1.0"):
