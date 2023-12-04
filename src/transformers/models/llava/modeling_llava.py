@@ -365,11 +365,23 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     )
 
                 image_features = self.multi_modal_projector(selected_image_feature)
-                # TODO take into account the padding side for the final embedding, padding in the position_ids and attention_mask
-                # Also TODO Truncate sequences to max length as image embeddings can make the sequence longer
                 inputs_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(image_features, inputs_embeds, input_ids, attention_mask, position_ids)
                 if labels is None:
                     labels = torch.full_like(input_ids, self.config.ignore_index)
+            else:
+                # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
+                # generation with cache
+                if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
+                    target_seqlen = past_key_values[-1][-1].shape[-2] + 1
+
+                    extended_attention_mask = torch.ones(
+                        (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
+                        dtype=attention_mask.dtype,
+                        device=attention_mask.device,
+                    )
+
+                    attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
+                    position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -387,18 +399,19 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            )
+            # if attention_mask is not None:
+            #     shift_attention_mask = attention_mask[..., 1:]
+            #     shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+            #     shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+            # else:
+            #     shift_logits = logits[..., :-1, :].contiguous()
+            #     shift_labels = labels[..., 1:].contiguous()
+            # # Flatten the tokens
+            # loss_fct = CrossEntropyLoss()
+            # loss = loss_fct(
+            #     shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            # )
+            pass
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -412,42 +425,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def _optionally_pad_inputs_embeds(
-        self, inputs_embeds, attention_mask, position_ids, labels, max_seqlen, batch_size
-    ):
-        r"""
-        Optionally pad the input embeddings by correctly setting the padding tokens
-        on the correct places inside the attention mask, position ids and labels.
-        """
-        padded_inputs_embeds = []
-        padded_labels = torch.full(
-            (batch_size, max_seqlen),
-            self.config.ignore_index,
-            dtype=labels[0].dtype,
-            device=labels[0].device,
-        )
-
-        for i, (current_embeds, cur_new_labels) in enumerate(zip(inputs_embeds, labels)):
-            # Get the current sequence length and padding side
-            # then optionally padd the input embeds
-            current_seq_len = current_embeds.shape[0]
-            padding_side = getattr(self.config, "tokenizer_padding_side", "right")
-            padded_embedding = pad_sequence(current_embeds, max_seqlen, padding_side)
-
-            padded_inputs_embeds.append(padded_embedding)
-
-            if current_seq_len > 0:
-                start_index = -current_seq_len if padding_side == "left" else 0
-                end_index = None if padding_side == "left" else current_seq_len
-
-                padded_labels[i, start_index:end_index] = cur_new_labels
-                attention_mask[i, start_index:end_index] = True
-                position_ids[i, start_index:end_index] = torch.arange(
-                    0, current_seq_len, dtype=position_ids.dtype, device=position_ids.device
-                )
-
-        inputs_embeds = torch.stack(padded_inputs_embeds, dim=0)
-        return inputs_embeds, attention_mask, position_ids, padded_labels
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, **kwargs):
         # Call `prepare_inputs_for_generation` from the LM
