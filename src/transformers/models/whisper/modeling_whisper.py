@@ -2183,8 +2183,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         init_tokens = [self.generation_config.decoder_start_token_id]
         if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
             i = 1
-            while len(forced_decoder_ids) > i and forced_decoder_ids[0][0] == i:
-                init_tokens += [forced_decoder_ids[i - 1][1]]
+            while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
+                init_tokens += [forced_decoder_ids[0][1]]
                 forced_decoder_ids = forced_decoder_ids[1:]
                 i += 1
 
