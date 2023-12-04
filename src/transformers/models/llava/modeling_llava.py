@@ -225,14 +225,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
-
-        # set the pad token id to the token image -200? or just to the new index
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-
-        # Resize the text embedding to take into accoint `<image>` token
-        self.language_model.resize_token_embeddings(config.text_config.vocab_size + 1)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
