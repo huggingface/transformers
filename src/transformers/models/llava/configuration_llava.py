@@ -78,7 +78,7 @@ class LlavaConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=-200,
+        image_token_index=32000,
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
