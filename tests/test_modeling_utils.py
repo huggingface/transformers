@@ -804,15 +804,22 @@ class ModelUtilsTest(TestCasePlus):
 
         # check_models_equal requires onloaded tensors
         onloaded_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map="cpu")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        input_tokens = tokenizer.encode("Four score and seven years ago", return_tensors="pt")
+        cpu_output = onloaded_model(input_tokens)[0]
+        
         with tempfile.TemporaryDirectory() as tmp_dir:
             offload_folder = os.path.join(tmp_dir, "offload")
             offloaded_model = AutoModelForCausalLM.from_pretrained(
                 "hf-internal-testing/tiny-random-gpt2", device_map=device_map, offload_folder=offload_folder
             )
-            offloaded_model.save_pretrained(tmp_dir)
+            presaved_output = offloaded_model(input_tokens)[0]
+            offloaded_model.save_pretrained(tmp_dir, max_shard_size="1MB")
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
+            postsaved_output = saved_model(input_tokens)[0]
 
-        self.assertTrue(check_models_equal(onloaded_model, saved_model))
+        self.assertTrue(torch.allclose(cpu_output, presaved_output))
+        self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
     @require_safetensors
     def test_use_safetensors(self):

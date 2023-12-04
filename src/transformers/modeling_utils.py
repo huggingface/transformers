@@ -2091,57 +2091,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 current_peft_config = self.peft_config[active_adapter]
                 current_peft_config.save_pretrained(save_directory)
 
+        # for offloaded modules
+        module_map = {}
+
         # Save the model
         if state_dict is None:
-            # if model parameters are offloaded, onload and send state dicts to CPU
+            # if model parameters are offloaded, make module map
             if (
                 hasattr(model_to_save, "_hf_hook")
                 and isinstance(model_to_save._hf_hook, AlignDevicesHook)
-                and True
-                in {
-                    module._hf_hook.offload
-                    for _, module in model_to_save.named_modules()
-                    if hasattr(module, "_hf_hook")
-                }
             ):
                 state_dict = {}
-                placeholders = []
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
-                    if (
-                        hasattr(module, "_hf_hook")
-                        and isinstance(module._hf_hook, AlignDevicesHook)
-                        and module._hf_hook.offload
-                    ):
-                        original_device = module._hf_hook.execution_device
-                        # assign hook execution device to cpu
-                        module._hf_hook.execution_device = "cpu"
-                        # onload meta tensors to execution device
-                        try:
-                            module._hf_hook.pre_forward(module)
-                        except MemoryError:
-                            print("Model must fit in CPU memory to call save_pretrained!")
-                        module_state_dict = module.state_dict()
-                        # offload meta tensors from cpu
-                        module._hf_hook.post_forward(module, torch.tensor([]))
-                        # re-assign hook to original execution device
-                        module._hf_hook.execution_device = original_device
-                    else:
-                        module_state_dict = module.state_dict()
+                    module_state_dict = module.state_dict()
 
                     for key in module_state_dict:
-                        # ignore placeholder parameters that are still on the meta device
-                        if str(module_state_dict[key].device) == "meta":
-                            placeholders.append(key)
-                            continue
-                        params = module_state_dict[key]
-                        state_dict[name + f".{key}"] = params
-                if placeholders:
-                    warnings.warn(f"The following modules contain unsaved placeholder tensors: {placeholders}")
+                        module_map[name + f".{key}"] = module
 
-            else:
-                state_dict = model_to_save.state_dict()
+            state_dict = model_to_save.state_dict()
 
         # Translate state_dict from smp to hf if saving with smp >= 1.10
         if IS_SAGEMAKER_MP_POST_1_10:
@@ -2167,7 +2136,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ptrs[id(tensor)].append(name)
 
             # These are all the pointers of shared tensors.
-            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1}
+            shared_ptrs = {ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")}
             warn_names = set()
             for names in shared_ptrs.values():
                 # Removing the keys which are declared as known duplicates on
@@ -2229,6 +2198,38 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         for shard_file, shard in shards.items():
+            # remake shard with onloaded parameters if necessary
+            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard):
+                original_values = {}
+                # init state_dict for this shard
+                state_dict = {name: '' for name in shard}
+                # extract data for shard state dict
+                for key in state_dict.keys():
+                    original_values[key] = state_dict[key]
+                    module = (module_map[key])
+                    root = key[:key.rfind('.')]
+                    preforward = False
+                    if (module_map 
+                        and hasattr(module_map[key], "_hf_hook") 
+                        and isinstance(module_map[key]._hf_hook, AlignDevicesHook)
+                        and module_map[key]._hf_hook.offload
+                        ):
+                        preforward = True
+                        module._hf_hook.pre_forward(module)
+
+                    for m_key in module.state_dict():
+                        params = module.state_dict()[m_key]
+                        if (root + f".{m_key}") in state_dict:
+                            state_dict[root + f".{m_key}"] = params
+
+                    if preforward:
+                        module._hf_hook.post_forward(module, torch.tensor([]))
+
+                # transform shard's state dict back to single shard
+                shard, _ = shard_checkpoint(state_dict) # will be ({name: tensor}, None)
+                name = list(shard.keys())[0] # will have one name
+                shard = shard[name]
+
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
