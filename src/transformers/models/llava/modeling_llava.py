@@ -44,27 +44,6 @@ LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Llava models at https://huggingface.co/models?filter=llava
 ]
 
-
-# Helper function to handle padding based on configuration
-def pad_sequence(sequence, max_len, padding_side="right"):
-    cur_len = sequence.shape[0]
-    if padding_side == "left":
-        return torch.cat(
-            (
-                torch.zeros((max_len - cur_len, sequence.shape[1]), dtype=sequence.dtype, device=sequence.device),
-                sequence,
-            ),
-            dim=0,
-        )
-    else:
-        return torch.cat(
-            (
-                sequence,
-                torch.zeros((max_len - cur_len, sequence.shape[1]), dtype=sequence.dtype, device=sequence.device),
-            ),
-            dim=0,
-        )
-
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
 class LlavaCausalLMOutputWithPast(ModelOutput):
@@ -173,7 +152,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-LLAMA_INPUTS_DOCSTRING = r"""
+LLAVA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -308,7 +287,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         return final_embedding, final_attention_mask, (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
                     
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
