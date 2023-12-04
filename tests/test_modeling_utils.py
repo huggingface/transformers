@@ -1166,7 +1166,7 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-
+@slow
 @require_torch
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
