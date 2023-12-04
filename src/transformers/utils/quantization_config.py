@@ -635,7 +635,7 @@ class AwqConfig(QuantizationConfigMixin):
             ]
             if not all(key in self.modules_to_fuse for key in required_keys):
                 raise ValueError(
-                    f"Required fiels are missing in the fusing mapping, required fields are {required_keys}"
+                    f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
                 )
 
         # TODO: awq version check for fused modules.
