@@ -962,7 +962,7 @@ class BeamHypotheses:
         if generated_len is not None:
             score = sum_logprobs / (generated_len**self.length_penalty)
         else:
-            raise ValueError("`generated_len` has to be defined for beam score calculation")
+            score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
 
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp, beam_indices))
@@ -973,7 +973,7 @@ class BeamHypotheses:
             else:
                 self.worst_score = min(score, self.worst_score)
 
-    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: int) -> bool:
+    def is_done(self, best_sum_logprobs: float, cur_len: int, decoder_prompt_len: Optional[int] = 0) -> bool:
         """
         If there are enough hypotheses and that none of the hypotheses being generated can become better than the worst
         one in the heap, then we are done with this sentence.
