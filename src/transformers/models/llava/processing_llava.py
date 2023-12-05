@@ -18,7 +18,7 @@ Processor class for Llava.
 
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchFeature
+from ...feature_extraction_utils import BatchFeature
 import warnings
 
 # Copied from transformers.models.clip.processing_clip.CLIPProcessor with CLIPTokenizer->LlamaTokenizer,CLIP->Llava,LlavaImageProcessor->CLIPImageProcessor,BatchEncoding->BatchFeature
