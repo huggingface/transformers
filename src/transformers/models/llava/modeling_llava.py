@@ -305,7 +305,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
                 f" the number of image given to the model is {nb_images}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
+        final_embedding[image_to_overwrite] = image_features.reshape(-1, embed_dim)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
         return final_embedding, final_attention_mask, position_ids

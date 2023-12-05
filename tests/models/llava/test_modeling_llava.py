@@ -41,7 +41,7 @@ class LlavaVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        ignore_index=-100,
+        ignore_index=99,
         image_token_index=1,
         projector_hidden_act="gelu",
         seq_length=7,
@@ -106,6 +106,7 @@ class LlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
+        self.encoder_seq_length = 231
 
     def get_config(self):
         return LlavaConfig(
@@ -134,13 +135,12 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size-1)
         attention_mask = input_ids.ne(1).to(torch_device)
         input_ids[:,1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
-            "labels": input_ids,
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
