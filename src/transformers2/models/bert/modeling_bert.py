@@ -1347,7 +1347,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         self.cls = BertOnlyMLMHead(config)
         self.char_tokenizer = config.char_tokenizer
         self.wordpiece_tokenizer = config.wordpiece_tokenizer
-        self.device2 = config.device2
+        # self.device2 = config.device2
         
         # Initialize weights and apply final processing
         self.post_init()
@@ -1488,7 +1488,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             row_word_tokens = self.tokenize_preserve_words(strings[i])
             wp_ids[i, :row_word_tokens.shape[0]] = row_word_tokens
 
-        wp_ids = wp_ids.to(self.device2)
+        wp_ids = wp_ids.to(self.device)
         return wp_ids
 
 
