@@ -84,6 +84,17 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         hidden_state = self.activation(hidden_state)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convolution", None) is not None:
+            with tf.name_scope(self.convolution.name):
+                self.convolution.build(self.in_channels)
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build(None)
+
 
 class TFRegNetEmbeddings(tf.keras.layers.Layer):
     """
@@ -116,6 +127,14 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         hidden_state = self.embedder(pixel_values)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+
 
 class TFRegNetShortCut(tf.keras.layers.Layer):
     """
@@ -133,6 +152,17 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.normalization(self.convolution(inputs), training=training)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convolution", None) is not None:
+            with tf.name_scope(self.convolution.name):
+                self.convolution.build(self.in_channels)
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build(None)
 
 
 class TFRegNetSELayer(tf.keras.layers.Layer):
@@ -155,6 +185,18 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
             pooled = layer_module(pooled)
         hidden_state = hidden_state * pooled
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+        if getattr(self, "attention", None) is not None:
+            for layer in self.attention:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFRegNetXLayer(tf.keras.layers.Layer):
@@ -190,6 +232,18 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         hidden_state = self.activation(hidden_state)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 class TFRegNetYLayer(tf.keras.layers.Layer):
     """
@@ -224,6 +278,18 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         hidden_state = self.activation(hidden_state)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 class TFRegNetStage(tf.keras.layers.Layer):
     """
@@ -246,6 +312,15 @@ class TFRegNetStage(tf.keras.layers.Layer):
         for layer_module in self.layers:
             hidden_state = layer_module(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFRegNetEncoder(tf.keras.layers.Layer):
@@ -337,6 +412,20 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 class TFRegNetPreTrainedModel(TFPreTrainedModel):
     """
@@ -422,6 +511,14 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "regnet", None) is not None:
+            with tf.name_scope(self.regnet.name):
+                self.regnet.build(None)
+
 
 @add_start_docstrings(
     """
@@ -483,3 +580,15 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "regnet", None) is not None:
+            with tf.name_scope(self.regnet.name):
+                self.regnet.build(None)
+        if getattr(self, "classifier", None) is not None:
+            for layer in self.classifier:
+                with tf.name_scope(layer.name):
+                    layer.build(None)

@@ -127,6 +127,23 @@ class TFBlipTextEmbeddings(tf.keras.layers.Layer):
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "word_embeddings", None) is not None:
+            with tf.name_scope(self.word_embeddings.name):
+                self.word_embeddings.build(None)
+        if getattr(self, "position_embeddings", None) is not None:
+            with tf.name_scope(self.position_embeddings.name):
+                self.position_embeddings.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L97
 class TFBlipTextSelfAttention(tf.keras.layers.Layer):
@@ -160,6 +177,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
             self.distance_embedding = tf.keras.layers.Embedding(
                 2 * config.max_position_embeddings - 1, self.attention_head_size
             )
+        self.is_cross_attention = is_cross_attention
 
     def transpose_for_scores(self, x):
         new_x_shape = tf.concat(
@@ -250,6 +268,25 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
         outputs = outputs + (past_key_value,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if self.is_cross_attention:
+            kv_shape = self.config.encoder_hidden_size
+        else:
+            kv_shape = self.config.hidden_size
+
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build(self.config.hidden_size)
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build(kv_shape)
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build(kv_shape)
+
 
 class TFBlipTextSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: BlipTextConfig, **kwargs):
@@ -260,6 +297,7 @@ class TFBlipTextSelfOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: Optional[bool] = None) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -267,6 +305,17 @@ class TFBlipTextSelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#242
@@ -302,6 +351,17 @@ class TFBlipTextAttention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self", None) is not None:
+            with tf.name_scope(self.self.name):
+                self.self.build(None)
+        if getattr(self, "self_output", None) is not None:
+            with tf.name_scope(self.self_output.name):
+                self.self_output.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->BlipText
 class TFBlipTextIntermediate(tf.keras.layers.Layer):
@@ -316,12 +376,21 @@ class TFBlipTextIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
 
 
 class TFBlipTextOutput(tf.keras.layers.Layer):
@@ -333,6 +402,7 @@ class TFBlipTextOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -340,6 +410,17 @@ class TFBlipTextOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.intermediate_size)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFBlipTextLayer(tf.keras.layers.Layer):
@@ -399,6 +480,20 @@ class TFBlipTextLayer(tf.keras.layers.Layer):
         outputs = outputs + (present_key_value,)
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "self_output", None) is not None:
+            with tf.name_scope(self.self_output.name):
+                self.self_output.build(None)
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L386
@@ -481,6 +576,15 @@ class TFBlipTextEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->BlipText
 class TFBlipTextPooler(tf.keras.layers.Layer):
@@ -493,6 +597,7 @@ class TFBlipTextPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -501,6 +606,14 @@ class TFBlipTextPooler(tf.keras.layers.Layer):
         pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->BlipText
@@ -520,6 +633,7 @@ class TFBlipTextPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = config.hidden_act
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -527,6 +641,17 @@ class TFBlipTextPredictionHeadTransform(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
@@ -546,7 +671,16 @@ class TFBlipTextLMPredictionHead(tf.keras.layers.Layer):
 
     def build(self, input_shape=None):
         self.bias = self.add_weight(name="bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transform", None) is not None:
+            with tf.name_scope(self.transform.name):
+                self.transform.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(self.config.hidden_size)
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -562,6 +696,14 @@ class TFBlipTextOnlyMLMHead(tf.keras.layers.Layer):
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
 
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L548
@@ -802,6 +944,20 @@ class TFBlipTextModel(TFBlipTextPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 # Adapted from https://github.com/salesforce/BLIP/blob/main/models/med.py#L811
 class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
@@ -942,3 +1098,14 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "bert", None) is not None:
+            with tf.name_scope(self.bert.name):
+                self.bert.build(None)
+        if getattr(self, "cls", None) is not None:
+            with tf.name_scope(self.cls.name):
+                self.cls.build(None)
