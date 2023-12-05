@@ -21,9 +21,12 @@ RUN apt update && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip
+RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic<2"
 RUN python3 -m pip uninstall -y apex torch torchvision torchaudio
 RUN python3 -m pip install torch==$PYTORCH torchvision==$TORCH_VISION torchaudio==$TORCH_AUDIO --index-url https://download.pytorch.org/whl/rocm$ROCM --no-cache-dir
+
+# Pre-build **latest** DeepSpeed, so it's be ready for testing (to avoid timeout)
+RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache-dir -v --disable-pip-version-check 2>&1
 
 ARG REF=main
 WORKDIR /
@@ -32,7 +35,7 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
+RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
