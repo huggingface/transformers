@@ -344,7 +344,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=text, images=image, return_tensors="pt")
-        
+
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
