@@ -416,11 +416,6 @@ class TFHubertWeightNormConv1D(tf.keras.layers.Conv1D):
 
     def build(self, input_shape):
         if not self.built:
-            input_shape = input_shape.as_list()
-            # If a specific input shape is passed in, we need to modify it to account for padding
-            # Not necessary if those portions of the shape are None
-            if input_shape[-2] is not None:
-                input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
 
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
@@ -531,12 +526,16 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         )
         self.padding = TFHubertSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = get_tf_activation(config.feat_extract_activation)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        self.conv.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
