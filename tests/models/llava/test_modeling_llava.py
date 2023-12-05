@@ -207,7 +207,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
 
-        EXPECTED_DECODED_TEXT = "'\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are several things one should be cautious about. First, the dock'"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are several things one should be cautious about. First, the dock"  # fmt: skip
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
     @slow
