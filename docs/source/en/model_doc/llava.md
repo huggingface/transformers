@@ -52,7 +52,7 @@ We have benchmarked our implementation against the original [`BakLlava`](https:/
 | original       | 8          | 1                    | 4.24           |
 | transformers   | 8          | 1                    | 1.98           |
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
+This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ) and [ybelkada](https://huggingface.co/ybelkada).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main/llava).
 
 ### Using Flash Attention 2
