@@ -18,10 +18,10 @@ Processor class for Llava.
 
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_base import BatchFeature
 import warnings
 
-# Copied from transformers.models.clip.processing_clip.CLIPProcessor with CLIPTokenizer->LlamaTokenizer,CLIP->Llava,LlavaImageProcessor->CLIPImageProcessor
+# Copied from transformers.models.clip.processing_clip.CLIPProcessor with CLIPTokenizer->LlamaTokenizer,CLIP->Llava,LlavaImageProcessor->CLIPImageProcessor,BatchEncoding->BatchFeature
 class LlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
@@ -85,7 +85,7 @@ class LlavaProcessor(ProcessorMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -109,7 +109,7 @@ class LlavaProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
