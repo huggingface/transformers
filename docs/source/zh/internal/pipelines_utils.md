@@ -14,36 +14,32 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Trainer
+# pipelines的工具
 
-This page lists all the utility functions used by [`Trainer`].
 
-Most of those are only useful if you are studying the code of the Trainer in the library.
+此页面列出了库为pipelines提供的所有实用程序功能。
 
-## Utilities
+其中大多数只有在您研究库中模型的代码时才有用。
 
-[[autodoc]] EvalPrediction
 
-[[autodoc]] IntervalStrategy
+## 参数处理
 
-[[autodoc]] enable_full_determinism
+[[autodoc]] pipelines.ArgumentHandler
 
-[[autodoc]] set_seed
+[[autodoc]] pipelines.ZeroShotClassificationArgumentHandler
 
-[[autodoc]] torch_distributed_zero_first
+[[autodoc]] pipelines.QuestionAnsweringArgumentHandler
 
-## Callbacks internals
+## 数据格式
 
-[[autodoc]] trainer_callback.CallbackHandler
+[[autodoc]] pipelines.PipelineDataFormat
 
-## Distributed Evaluation
+[[autodoc]] pipelines.CsvPipelineDataFormat
 
-[[autodoc]] trainer_pt_utils.DistributedTensorGatherer
+[[autodoc]] pipelines.JsonPipelineDataFormat
 
-## Trainer Argument Parser
+[[autodoc]] pipelines.PipedPipelineDataFormat
 
-[[autodoc]] HfArgumentParser
+## 实用函数
 
-## Debug Utilities
-
-[[autodoc]] debug_utils.DebugUnderflowOverflow
+[[autodoc]] pipelines.PipelineException
