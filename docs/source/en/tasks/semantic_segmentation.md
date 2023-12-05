@@ -23,8 +23,8 @@ rendered properly in your Markdown viewer.
 Image segmentation models separate areas corresponding to different areas of interest in an image. These models work by assigning a label to each pixel. There are several types of segmentation: semantic segmentation, instance segmentation, and panoptic segmentation.
 
 In this guide, we will:
-1. [Take a look at different types of segmentation](#Types-of-Segmentation),
-2. [Have an end-to-end fine-tuning example for semantic segmentation](#Fine-tuning-a-Model-for-Segmentation). 
+1. [Take a look at different types of segmentation](#types-of-segmentation).
+2. [Have an end-to-end fine-tuning example for semantic segmentation](#fine-tuning-a-model-for-segmentation).
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -255,6 +255,59 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 >>> label2id = {v: k for k, v in id2label.items()}
 >>> num_labels = len(id2label)
 ```
+
+#### Custom dataset
+
+You could also create and use your own dataset if prefer to train with the [run_semantic_segmentation.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py) script instead of a notebook instance. The script requires:
+
+1. a [`~datasets.DatasetDict`] with two [`~datasets.Image`] columns, "image" and "label"
+
+     ```py
+     from datasets import Dataset, DatasetDict, Image
+
+     image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"]
+     label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
+
+     image_paths_validation = [...]
+     label_paths_validation = [...]
+
+     def create_dataset(image_paths, label_paths):
+         dataset = Dataset.from_dict({"image": sorted(image_paths),
+                                     "label": sorted(label_paths)})
+         dataset = dataset.cast_column("image", Image())
+         dataset = dataset.cast_column("label", Image())
+
+     return dataset
+
+     # step 1: create Dataset objects
+     train_dataset = create_dataset(image_paths_train, label_paths_train)
+     validation_dataset = create_dataset(image_paths_validation, label_paths_validation)
+
+     # step 2: create DatasetDict
+     dataset = DatasetDict({
+          "train": train_dataset,
+          "validation": validation_dataset,
+          }
+     )
+
+     # step 3: push to Hub (assumes you have ran the huggingface-cli login command in a terminal/notebook)
+     dataset.push_to_hub("your-name/dataset-repo")
+
+     # optionally, you can push to a private repo on the Hub
+     # dataset.push_to_hub("name of repo on the hub", private=True)
+     ```
+
+2. an id2label dictionary mapping the class integers to their class names
+
+     ```py
+     import json
+     # simple example
+     id2label = {0: 'cat', 1: 'dog'}
+     with open('id2label.json', 'w') as fp:
+     json.dump(id2label, fp)
+     ```
+
+As an example, take a look at this [example dataset](nielsr/ade20k-demo) which was created with the steps shown above.
 
 ### Preprocess
 
