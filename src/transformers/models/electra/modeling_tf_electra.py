@@ -103,6 +103,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -192,6 +193,20 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
             outputs = outputs + (past_key_value,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build(self.config.hidden_size)
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build(self.config.hidden_size)
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build(self.config.hidden_size)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Electra
 class TFElectraSelfOutput(tf.keras.layers.Layer):
@@ -203,6 +218,7 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -210,6 +226,17 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
@@ -252,6 +279,17 @@ class TFElectraAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Electra
 class TFElectraIntermediate(tf.keras.layers.Layer):
@@ -266,12 +304,21 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Electra
@@ -284,6 +331,7 @@ class TFElectraOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -291,6 +339,17 @@ class TFElectraOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.intermediate_size)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Electra
@@ -379,6 +438,20 @@ class TFElectraLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Electra
 class TFElectraEncoder(tf.keras.layers.Layer):
@@ -449,6 +522,15 @@ class TFElectraEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Electra
 class TFElectraPooler(tf.keras.layers.Layer):
@@ -470,6 +552,14 @@ class TFElectraPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(None)
+
 
 # Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings with Albert->Electra
 class TFElectraEmbeddings(tf.keras.layers.Layer):
@@ -485,7 +575,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -507,7 +597,12 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.embedding_size])
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
@@ -566,6 +661,17 @@ class TFElectraDiscriminatorPredictions(tf.keras.layers.Layer):
 
         return logits
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
+        if getattr(self, "dense_prediction", None) is not None:
+            with tf.name_scope(self.dense_prediction.name):
+                self.dense_prediction.build(self.config.hidden_size)
+
 
 class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -573,6 +679,7 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dense = tf.keras.layers.Dense(config.embedding_size, name="dense")
+        self.config = config
 
     def call(self, generator_hidden_states, training=False):
         hidden_states = self.dense(generator_hidden_states)
@@ -580,6 +687,17 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.embedding_size])
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
 
 
 class TFElectraPreTrainedModel(TFPreTrainedModel):
@@ -781,6 +899,17 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+
 
 @dataclass
 class TFElectraForPreTrainingOutput(ModelOutput):
@@ -977,6 +1106,14 @@ class TFElectraModel(TFElectraPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1048,6 +1185,17 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "discriminator_predictions", None) is not None:
+            with tf.name_scope(self.discriminator_predictions.name):
+                self.discriminator_predictions.build(None)
 
 
 class TFElectraMaskedLMHead(tf.keras.layers.Layer):
@@ -1177,6 +1325,20 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             attentions=generator_hidden_states.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "generator_predictions", None) is not None:
+            with tf.name_scope(self.generator_predictions.name):
+                self.generator_predictions.build(None)
+        if getattr(self, "generator_lm_head", None) is not None:
+            with tf.name_scope(self.generator_lm_head.name):
+                self.generator_lm_head.build(None)
+
 
 class TFElectraClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
@@ -1196,6 +1358,7 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
+        self.config = config
 
     def call(self, inputs, **kwargs):
         x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -1206,6 +1369,17 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
         x = self.out_proj(x)
 
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build(self.config.hidden_size)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build(self.config.hidden_size)
 
 
 @add_start_docstrings(
@@ -1278,6 +1452,17 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1297,6 +1482,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -1370,6 +1556,20 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(self.config.hidden_size)
+
 
 @add_start_docstrings(
     """
@@ -1391,6 +1591,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1448,6 +1649,17 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             attentions=discriminator_hidden_states.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(self.config.hidden_size)
+
 
 @add_start_docstrings(
     """
@@ -1465,6 +1677,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1541,3 +1754,14 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "electra", None) is not None:
+            with tf.name_scope(self.electra.name):
+                self.electra.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build(self.config.hidden_size)
