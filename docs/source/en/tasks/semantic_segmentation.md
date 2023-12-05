@@ -307,7 +307,7 @@ You could also create and use your own dataset if prefer to train with the [run_
      json.dump(id2label, fp)
      ```
 
-As an example, take a look at this [example dataset](nielsr/ade20k-demo) which was created with the steps shown above.
+As an example, take a look at this [example dataset](https://huggingface.co/datasets/nielsr/ade20k-demo) which was created with the steps shown above.
 
 ### Preprocess
 
