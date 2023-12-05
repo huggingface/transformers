@@ -27,7 +27,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_llava"] = [
         "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "LlavaForVisionText2Text",
+        "LlavaForCausalLM",
         "LlavaPreTrainedModel",
     ]
     _import_structure["processing_llava"] = ["LlavaProcessor"]
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlavaForVisionText2Text,
+            LlavaForCausalLM,
             LlavaPreTrainedModel,
         )
         from .processing_llava import LlavaProcessor

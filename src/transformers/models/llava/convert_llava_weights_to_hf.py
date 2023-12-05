@@ -21,7 +21,7 @@ from transformers import (
     AutoTokenizer,
     CLIPImageProcessor,
     LlavaConfig,
-    LlavaForVisionText2Text,
+    LlavaForCausalLM,
     LlavaProcessor,
 )
 
@@ -62,7 +62,7 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     config.pad_token_id = 32001
 
     with torch.device("meta"):
-        model = LlavaForVisionText2Text(config)
+        model = LlavaForCausalLM(config)
 
     # Pad to 64 for performance reasons
     pad_shape = 64

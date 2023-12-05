@@ -40,7 +40,7 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 [[autodoc]] LlavaProcessor
 
-## LlavaForVisionText2Text
+## LlavaForCausalLM
 
-[[autodoc]] LlavaForVisionText2Text
+[[autodoc]] LlavaForCausalLM
     - forward
