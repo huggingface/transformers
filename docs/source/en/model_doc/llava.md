@@ -89,8 +89,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
 
-outputs = pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
-print(outputs)
+pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
 >>> {"generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT: Lava"}
 ```
 
