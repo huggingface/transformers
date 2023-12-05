@@ -149,7 +149,11 @@ class TFMobileBertIntermediate(tf.keras.layers.Layer):
 
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
     def __init__(self, feat_size, *args, **kwargs):
+        self.feat_size = feat_size
         super().__init__(*args, **kwargs)
+
+    def build(self, input_shape=None):
+        super().build([None, None, self.feat_size])
 
 
 class TFNoNorm(tf.keras.layers.Layer):
@@ -1229,7 +1233,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
-        self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
+        self.seq_relationship = TFMobileBertOnlyNSPHead(config, name="seq_relationship___cls")
 
     def get_lm_head(self):
         return self.predictions.predictions
