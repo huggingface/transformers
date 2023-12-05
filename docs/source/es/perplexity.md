@@ -20,11 +20,11 @@ rendered properly in your Markdown viewer.
 
 La perplejidad, perplexity en inglés (PPL), es una de las métricas más comunes para evaluar modelos de lenguaje. Antes de sumergirnos, debemos tener en cuenta que esta métrica se aplica específicamente a modelos de lenguaje clásicos (a veces llamados modelos autorregresivos o causales) y no está bien definida para modelos de lenguaje enmascarados como BERT (ver [resumen del modelo](model_summary)).
 
-La perplejidad se define como la media negativa exponenciada de la verosimilitud de una secuencia. Si tenemos una secuencia tokenizada \\(X = (x_0, x_1, \dots, x_t)\\), entonces la perplejidad de \\(X\\) es,
+La perplejidad se define como la media negativa exponenciada del log-likelihood de una secuencia. Si tenemos una secuencia tokenizada \\(X = (x_0, x_1, \dots, x_t)\\), entonces la perplejidad de \\(X\\) es,
 
 $$\text{PPL}(X) = \exp \left\{ {-\frac{1}{t}\sum_i^t \log p_\theta (x_i|x_{<i}) } \right\}$$
 
-donde \\(\log p_\theta (x_i|x_{<i})\\) es la verosimilitud del token i-ésimo condicionado a los tokens precedentes \\(x_{<i}\\) según nuestro modelo. De manera intuitiva, se puede pensar en esto como una evaluación de la capacidad del modelo para predecir de manera uniforme entre el conjunto de tokens especificados en un corpus. Es importante destacar que el procedimiento de tokenización tiene un impacto directo en la perplejidad de un modelo, lo cual siempre debe tenerse en cuenta al comparar diferentes modelos.
+donde \\(\log p_\theta (x_i|x_{<i})\\) es el log-likelihood del token i-ésimo condicionado a los tokens precedentes \\(x_{<i}\\) según nuestro modelo. De manera intuitiva, se puede pensar en esto como una evaluación de la capacidad del modelo para predecir de manera uniforme entre el conjunto de tokens especificados en un corpus. Es importante destacar que el procedimiento de tokenización tiene un impacto directo en la perplejidad de un modelo, lo cual siempre debe tenerse en cuenta al comparar diferentes modelos.
 
 Esto también es equivalente a la exponenciación de la entropía cruzada entre los datos y las predicciones del modelo. Para obtener más intuición sobre la perplejidad y su relación con los Bits Por Carácter (BPC) y la compresión de datos, echa un vistazo a esta [fantástica publicación en el blog de "The Gradient"](https://thegradient.pub/understanding-evaluation-metrics-for-language-models/).
 
@@ -36,7 +36,7 @@ Si no estuviéramos limitados por el tamaño del contexto de un modelo, evaluar�
 
 Sin embargo, al trabajar con modelos aproximados, generalmente tenemos una restricción en la cantidad de tokens que el modelo puede procesar. La versión más grande de [GPT-2](model_doc/gpt2), por ejemplo, tiene una longitud fija de 1024 tokens, por lo que no podemos calcular \\(p_\theta(x_t|x_{<t})\\) directamente cuando \\(t\\) es mayor que 1024.
 
-En cambio, la secuencia se divide típicamente en subsecuencias iguales al tamaño máximo de entrada del modelo. Si el tamaño máximo de entrada, de un modelo es \\(k\\), entonces aproximamos la probabilidad de un token \\(x_t\\) condicionándonos solo en los \\(k-1\\) tokens que lo preceden en lugar de todo el contexto. Al evaluar la perplejidad del modelo en una secuencia, un enfoque tentador pero sub óptimo es dividir la secuencia en fragmentos independientes y sumar las verosimilitudes descompuestas de cada segmento de manera independiente.
+En cambio, la secuencia se divide típicamente en subsecuencias iguales al tamaño máximo de entrada del modelo. Si el tamaño máximo de entrada, de un modelo es \\(k\\), entonces aproximamos la probabilidad de un token \\(x_t\\) condicionándonos solo en los \\(k-1\\) tokens que lo preceden en lugar de todo el contexto. Al evaluar la perplejidad del modelo en una secuencia, un enfoque tentador pero sub óptimo es dividir la secuencia en fragmentos independientes y sumar los log-likelihood descompuestos de cada segmento de manera independiente.
 
 <img width="600" alt="Suboptimal PPL not taking advantage of full available context" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/ppl_chunked.gif"/>
 
@@ -71,7 +71,7 @@ test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
 encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
 ```
 
-Con 🤗 Transformers, simplemente podemos pasar los `input_ids` como las `labels` a nuestro modelo, y la media negativa de la verosimilitud para cada token se devuelve como la pérdida. Sin embargo, con nuestro enfoque de ventana deslizante, hay superposición en los tokens que pasamos al modelo en cada iteración. No queremos que la verosimilitud de los tokens que estamos tratando solo como contexto se incluya en nuestra pérdida, por lo que podemos establecer estos objetivos en `-100` para que se ignoren. El siguiente es un ejemplo de cómo podríamos hacer esto con un paso de `512`. Esto significa que el modelo tendrá al menos `512` tokens como contexto al calcular la verosimilitud condicional de cualquier token (siempre que haya `512` tokens precedentes disponibles para condicionar).
+Con 🤗 Transformers, simplemente podemos pasar los `input_ids` como las `labels` a nuestro modelo, y la media negativa del log-likelihood para cada token se devuelve como la pérdida. Sin embargo, con nuestro enfoque de ventana deslizante, hay superposición en los tokens que pasamos al modelo en cada iteración. No queremos que el log-likelihood de los tokens que estamos tratando solo como contexto se incluya en nuestra pérdida, por lo que podemos establecer estos objetivos en `-100` para que se ignoren. El siguiente es un ejemplo de cómo podríamos hacer esto con un paso de `512`. Esto significa que el modelo tendrá al menos `512` tokens como contexto al calcular el log-likelihood condicional de cualquier token (siempre que haya `512` tokens precedentes disponibles para condicionar).
 
 ```python
 import torch
