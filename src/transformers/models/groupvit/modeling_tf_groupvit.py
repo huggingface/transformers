@@ -733,9 +733,8 @@ class TFGroupViTStage(tf.keras.layers.Layer):
                 with tf.name_scope(layer.name):
                     layer.build(None)
         if getattr(self, "group_projector", None) is not None:
-            for layer in self.group_projector:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            self.group_projector[0].build([None, None, self.config.hidden_size])
+            self.group_projector[1].build(None)
 
     @property
     def with_group_token(self):
