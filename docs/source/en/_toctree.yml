@@ -60,7 +60,7 @@
     - local: tasks/image_classification
       title: Image classification
     - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+      title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
     - local: tasks/object_detection
@@ -133,6 +133,8 @@
 - sections:
   - local: performance
     title: Overview
+  - local: quantization
+    title: Quantization
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
@@ -378,6 +380,8 @@
         title: LUKE
       - local: model_doc/m2m_100
         title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -614,6 +618,8 @@
         title: Pop2Piano
       - local: model_doc/seamless_m4t
         title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -628,6 +634,8 @@
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -749,6 +757,10 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
