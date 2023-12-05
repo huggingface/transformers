@@ -128,6 +128,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlavaVisionAttention"]
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         # important: this ported version of Llava isn't meant for training from scratch - only
@@ -224,7 +225,10 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+
+        use_flash_attention_2 = getattr(config, "_flash_attn_2_enabled", False)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config, use_flash_attention_2=use_flash_attention_2)
+        
         self.post_init()
 
     def get_input_embeddings(self):

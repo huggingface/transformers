@@ -59,6 +59,7 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = LlavaConfig(text_config=text_config)
+    config.pad_token_id = 32001
 
     with torch.device("meta"):
         model = LlavaForVisionText2Text(config)
@@ -84,7 +85,10 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
         dim=0,
     )
-    model.language_model.lm_head.weight.data = model.language_model.model.embed_tokens.weight.data.T
+    model.language_model.lm_head.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
 
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
