@@ -25,7 +25,7 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip ninja "pydantic<2"
 RUN python3 -m pip uninstall -y apex torch torchvision torchaudio
 RUN python3 -m pip install torch==$PYTORCH torchvision==$TORCH_VISION torchaudio==$TORCH_AUDIO --index-url https://download.pytorch.org/whl/rocm$ROCM --no-cache-dir
 
-# Pre-build **latest** DeepSpeed, so it's be ready for testing (to avoid timeout)
+# Pre-build DeepSpeed, so it's be ready for testing (to avoid timeout)
 RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache-dir -v --disable-pip-version-check 2>&1
 
 ARG REF=main
