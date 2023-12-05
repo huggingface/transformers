@@ -529,6 +529,10 @@ class TrainingArguments:
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
+        dataloader_persistent_workers (`bool`, *optional*, defaults to `False`):
+            If True, the data loader will not shut down the worker processes after a dataset has been consumed once.
+            This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will
+            increase RAM usage. Will default to `False`.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
@@ -1135,6 +1139,12 @@ class TrainingArguments:
     )
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
+    )
+    dataloader_persistent_workers: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, the data loader will not shut down the worker processes after a dataset has been consumed once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will increase RAM usage."
+        },
     )
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
@@ -2643,6 +2653,7 @@ class TrainingArguments:
         drop_last: bool = False,
         num_workers: int = 0,
         pin_memory: bool = True,
+        persistent_workers: bool = False,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: Optional[int] = None,
@@ -2659,6 +2670,10 @@ class TrainingArguments:
                 the main process.
             pin_memory (`bool`, *optional*, defaults to `True`):
                 Whether you want to pin memory in data loaders or not. Will default to `True`.
+            persistent_workers (`bool`, *optional*, defaults to `False`):
+                If True, the data loader will not shut down the worker processes after a dataset has been consumed
+                once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training,
+                but will increase RAM usage. Will default to `False`.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2688,6 +2703,7 @@ class TrainingArguments:
         self.dataloader_drop_last = drop_last
         self.dataloader_num_workers = num_workers
         self.dataloader_pin_memory = pin_memory
+        self.dataloader_persistent_workers = persistent_workers
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed
