@@ -133,7 +133,6 @@ class TFConvNextV2Embeddings(tf.keras.layers.Layer):
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
-        self.config = config
 
     def call(self, pixel_values):
         if isinstance(pixel_values, dict):
@@ -153,17 +152,6 @@ class TFConvNextV2Embeddings(tf.keras.layers.Layer):
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "patch_embeddings", None) is not None:
-            with tf.name_scope(self.patch_embeddings.name):
-                self.patch_embeddings.build(self.config.num_channels)
-        if getattr(self, "layernorm", None) is not None:
-            with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
 
 
 class TFConvNextV2Layer(tf.keras.layers.Layer):
@@ -235,29 +223,6 @@ class TFConvNextV2Layer(tf.keras.layers.Layer):
         x = input + x
         return x
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dwconv", None) is not None:
-            with tf.name_scope(self.dwconv.name):
-                self.dwconv.build(self.dim)
-        if getattr(self, "layernorm", None) is not None:
-            with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, self.dim])
-        if getattr(self, "pwconv1", None) is not None:
-            with tf.name_scope(self.pwconv1.name):
-                self.pwconv1.build(self.dim)
-        if getattr(self, "grn", None) is not None:
-            with tf.name_scope(self.grn.name):
-                self.grn.build(None)
-        if getattr(self, "pwconv2", None) is not None:
-            with tf.name_scope(self.pwconv2.name):
-                self.pwconv2.build(4 * self.dim)
-        if getattr(self, "drop_path", None) is not None:
-            with tf.name_scope(self.drop_path.name):
-                self.drop_path.build(None)
-
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextStage with ConvNext->ConvNextV2
 class TFConvNextV2Stage(tf.keras.layers.Layer):
@@ -328,19 +293,6 @@ class TFConvNextV2Stage(tf.keras.layers.Layer):
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
-        if getattr(self, "downsampling_layer", None) is not None:
-            for layer in self.downsampling_layer:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 class TFConvNextV2Encoder(tf.keras.layers.Layer):
@@ -448,20 +400,6 @@ class TFConvNextV2MainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embeddings", None) is not None:
-            with tf.name_scope(self.embeddings.name):
-                self.embeddings.build(None)
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
-        if getattr(self, "layernorm", None) is not None:
-            with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, self.config.hidden_sizes[-1]])
 
 
 class TFConvNextV2PreTrainedModel(TFPreTrainedModel):
@@ -581,14 +519,6 @@ class TFConvNextV2Model(TFConvNextV2PreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convnextv2", None) is not None:
-            with tf.name_scope(self.convnextv2.name):
-                self.convnextv2.build(None)
-
 
 @add_start_docstrings(
     """
@@ -663,14 +593,3 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convnextv2", None) is not None:
-            with tf.name_scope(self.convnextv2.name):
-                self.convnextv2.build(None)
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
