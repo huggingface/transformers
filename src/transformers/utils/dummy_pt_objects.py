@@ -4638,7 +4638,7 @@ class LlamaPreTrainedModel(metaclass=DummyObject):
 LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class LlavaForCausalLM(metaclass=DummyObject):
+class LlavaForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

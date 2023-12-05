@@ -220,7 +220,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
-class LlavaForCausalLM(LlavaPreTrainedModel):
+class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -345,9 +345,9 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, LlavaForCausalLM
+        >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
-        >>> model = LlavaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> model = LlavaForConditionalGeneration.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
         >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"

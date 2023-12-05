@@ -263,7 +263,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertForMaskedLM"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("layoutlm", "LayoutLMForMaskedLM"),
-        ("llava", "LlavaForCausalLM"),
+        ("llava", "LlavaForConditionalGeneration"),
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
         ("lxmert", "LxmertForPreTraining"),
@@ -582,6 +582,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+        ("llava", "LlavaForConditionalGeneration"),
     ]
 )
 

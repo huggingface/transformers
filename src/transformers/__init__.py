@@ -2167,7 +2167,7 @@ else:
     _import_structure["models.llava"].extend(
         [
             "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LlavaForCausalLM",
+            "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
             "LlavaProcessor",
         ]
@@ -6165,7 +6165,7 @@ if TYPE_CHECKING:
         from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LlavaForCausalLM,
+            LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
             LlavaProcessor,
         )

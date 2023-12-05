@@ -18,7 +18,7 @@ import unittest
 
 import requests
 
-from transformers import AutoProcessor, LlavaConfig, LlavaForCausalLM, is_torch_available, is_vision_available
+from transformers import AutoProcessor, LlavaConfig, LlavaForConditionalGeneration, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_torch,
     torch_device,
@@ -135,9 +135,9 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size-1) + 1
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
-        input_ids[:,1] = config.image_token_index
+        input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -147,16 +147,17 @@ class LlavaVisionText2TextModelTester:
 
 
 @require_torch
-class LlavaForCausalLMModelTest(ModelTesterMixin, unittest.TestCase):
+class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (LlavaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-to-text": LlavaForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
-    test_resize_embeddings = True 
+    test_resize_embeddings = True
     test_head_masking = False
 
     def setUp(self):
@@ -183,7 +184,7 @@ class LlavaForCausalLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class LlavaForCausalLMIntegrationTest(unittest.TestCase):
+class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("ArthurZ/llava-1.5-7b")
 
@@ -220,7 +221,7 @@ class LlavaForCausalLMIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForCausalLM.from_pretrained("ArthurZ/llava-1.5-7b")
+        model = LlavaForConditionalGeneration.from_pretrained("ArthurZ/llava-1.5-7b")
         EXPECTED_OUTPUTS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]])  # fmt: skip
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
@@ -238,7 +239,7 @@ class LlavaForCausalLMIntegrationTest(unittest.TestCase):
 
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForCausalLM.from_pretrained("ArthurZ/llava-1.5-7b")
+        model = LlavaForConditionalGeneration.from_pretrained("ArthurZ/llava-1.5-7b")
         EXPECTED_OUTPUTS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]])  # fmt: skip
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [

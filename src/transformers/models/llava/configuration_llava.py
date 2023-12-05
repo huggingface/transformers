@@ -27,7 +27,7 @@ LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LlavaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LlavaForCausalLM`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Llava-9B.
 
@@ -53,18 +53,18 @@ class LlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Llava model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~LlavaForCausalLM`]
+            `inputs_ids` passed when calling [`~LlavaForConditionalGeneration`]
 
     Example:
 
     ```python
-    >>> from transformers import LlavaForCausalLM, LlavaConfig
+    >>> from transformers import LlavaForConditionalGeneration, LlavaConfig
 
     >>> # Initializing a Llava llava-9b style configuration
     >>> configuration = LlavaConfig()
 
     >>> # Initializing a model from the llava-9b style configuration
-    >>> model = LlavaForCausalLM(configuration)
+    >>> model = LlavaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
