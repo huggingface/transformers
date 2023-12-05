@@ -81,17 +81,6 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         hidden_state = self.normalization(hidden_state, training=training)
         hidden_state = self.activation(hidden_state)
         return hidden_state
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(
-            self.in_channels)
-        if getattr(self, "normalization", None) is not None:
-            with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
 
 
 class TFResNetEmbeddings(tf.keras.layers.Layer):
@@ -123,16 +112,6 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
         hidden_state = tf.pad(hidden_state, [[0, 0], [1, 1], [1, 1], [0, 0]])
         hidden_state = self.pooler(hidden_state)
         return hidden_state
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embedder", None) is not None:
-            with tf.name_scope(self.embedder.name):
-                self.embedder.build(None)
-        if getattr(self, "pooler", None) is not None:
-            with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
 
 
 class TFResNetShortCut(tf.keras.layers.Layer):
@@ -155,16 +134,6 @@ class TFResNetShortCut(tf.keras.layers.Layer):
         hidden_state = self.convolution(hidden_state)
         hidden_state = self.normalization(hidden_state, training=training)
         return hidden_state
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convolution", None) is not None:
-            with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.in_channels)
-        if getattr(self, "normalization", None) is not None:
-            with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
 
 
 class TFResNetBasicLayer(tf.keras.layers.Layer):
@@ -194,19 +163,6 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "shortcut", None) is not None:
-            with tf.name_scope(self.shortcut.name):
-                self.shortcut.build(None)
-        if getattr(self, "conv1", None) is not None:
-            with tf.name_scope(self.conv1.name):
-                self.conv1.build(None)  # TODO Matt might be wrong
-        if getattr(self, "conv2", None) is not None:
-            with tf.name_scope(self.conv2.name):
-                self.conv2.build(None)  # TODO Matt might be wrong
 
 
 class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
@@ -248,22 +204,6 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "shortcut", None) is not None:
-            with tf.name_scope(self.shortcut.name):
-                self.shortcut.build(None)
-        if getattr(self, "conv0", None) is not None:
-            with tf.name_scope(self.conv0.name):
-                self.conv0.build(None)  # TODO Matt might be wrong
-        if getattr(self, "conv1", None) is not None:
-            with tf.name_scope(self.conv1.name):
-                self.conv1.build(None)  # TODO Matt might be wrong
-        if getattr(self, "conv2", None) is not None:
-            with tf.name_scope(self.conv2.name):
-                self.conv2.build(None)  # TODO Matt might be wrong
 
 
 class TFResNetStage(tf.keras.layers.Layer):
@@ -332,14 +272,6 @@ class TFResNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
         return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "stages", None) is not None:
-            for layer in self.stages:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 class TFResNetPreTrainedModel(TFPreTrainedModel):
@@ -440,16 +372,6 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=hidden_states,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embedder", None) is not None:
-            with tf.name_scope(self.embedder.name):
-                self.embedder.build(None)
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
 
 
 @add_start_docstrings(
@@ -489,13 +411,6 @@ class TFResNetModel(TFResNetPreTrainedModel):
             training=training,
         )
         return resnet_outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "resnet", None) is not None:
-            with tf.name_scope(self.resnet.name):
-                self.resnet.build(None)
 
 
 @add_start_docstrings(
@@ -560,13 +475,3 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             return (loss,) + output if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "resnet", None) is not None:
-            with tf.name_scope(self.resnet.name):
-                self.resnet.build(None)
-        if getattr(self, "classifier_layer", None) is not None:
-            with tf.name_scope(self.classifier_layer.name):
-                self.classifier_layer.build(None)  # TODO Matt might be wrong

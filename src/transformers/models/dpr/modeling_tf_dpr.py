@@ -598,13 +598,6 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         return TFDPRContextEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "ctx_encoder", None) is not None:
-            with tf.name_scope(self.ctx_encoder.name):
-                self.ctx_encoder.build(None)
 
 
 @add_start_docstrings(
@@ -685,13 +678,6 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         return TFDPRQuestionEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "question_encoder", None) is not None:
-            with tf.name_scope(self.question_encoder.name):
-                self.question_encoder.build(None)
 
 
 @add_start_docstrings(
@@ -766,10 +752,3 @@ class TFDPRReader(TFDPRPretrainedReader):
             return_dict=return_dict,
             training=training,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "span_predictor", None) is not None:
-            with tf.name_scope(self.span_predictor.name):
-                self.span_predictor.build(None)

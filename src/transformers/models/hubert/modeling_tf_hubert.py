@@ -468,13 +468,6 @@ class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(None)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
@@ -499,16 +492,6 @@ class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.out_conv_dim])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2GroupNormConvLayer with Wav2Vec2->Hubert
@@ -533,16 +516,6 @@ class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build(None)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2PositionalConvEmbedding with Wav2Vec2->Hubert
@@ -564,13 +537,6 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(None)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
@@ -635,23 +601,12 @@ class TFHubertFeatureProjection(tf.keras.layers.Layer):
             name="projection",
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.feat_proj_dropout)
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "projection", None) is not None:
-            with tf.name_scope(self.projection.name):
-                self.projection.build(self.config.conv_dim[-1])
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build(None)  # TODO Matt might be wrong
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFHubert
@@ -806,22 +761,6 @@ class TFHubertAttention(tf.keras.layers.Layer):
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "k_proj", None) is not None:
-            with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
-        if getattr(self, "q_proj", None) is not None:
-            with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
-        if getattr(self, "v_proj", None) is not None:
-            with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
-        if getattr(self, "out_proj", None) is not None:
-            with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2FeedForward with Wav2Vec2->Hubert
@@ -846,7 +785,6 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
             name="output_dense",
         )
         self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
-        self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.intermediate_dense(hidden_states)
@@ -856,16 +794,6 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
         hidden_states = self.output_dense(hidden_states)
         hidden_states = self.output_dropout(hidden_states, training=training)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "intermediate_dense", None) is not None:
-            with tf.name_scope(self.intermediate_dense.name):
-                self.intermediate_dense.build(self.config.hidden_size)
-        if getattr(self, "output_dense", None) is not None:
-            with tf.name_scope(self.output_dense.name):
-                self.output_dense.build(self.config.intermediate_size)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayer with Wav2Vec2->Hubert
@@ -885,7 +813,6 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
-        self.config = config
 
     def call(
         self,
@@ -911,22 +838,6 @@ class TFHubertEncoderLayer(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "feed_forward", None) is not None:
-            with tf.name_scope(self.feed_forward.name):
-                self.feed_forward.build(None)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayerStableLayerNorm with Wav2Vec2->Hubert
@@ -946,7 +857,6 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
-        self.config = config
 
     def call(
         self,
@@ -970,22 +880,6 @@ class TFHubertEncoderLayerStableLayerNorm(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "feed_forward", None) is not None:
-            with tf.name_scope(self.feed_forward.name):
-                self.feed_forward.build(None)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2Encoder with Wav2Vec2->Hubert
@@ -1052,20 +946,6 @@ class TFHubertEncoder(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "pos_conv_embed", None) is not None:
-            with tf.name_scope(self.pos_conv_embed.name):
-                self.pos_conv_embed.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "layer", None) is not None:
-            for layer in self.layer:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderStableLayerNorm with Wav2Vec2->Hubert
@@ -1134,20 +1014,6 @@ class TFHubertEncoderStableLayerNorm(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "pos_conv_embed", None) is not None:
-            with tf.name_scope(self.pos_conv_embed.name):
-                self.pos_conv_embed.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "layer", None) is not None:
-            for layer in self.layer:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 @keras_serializable
@@ -1165,22 +1031,12 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
         else:
             self.encoder = TFHubertEncoder(config, name="encoder")
 
-    def build(self, input_shape=None):
+    def build(self, input_shape: tf.TensorShape):
         self.masked_spec_embed = self.add_weight(
             shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
         )
 
-        
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "feature_extractor", None) is not None:
-            with tf.name_scope(self.feature_extractor.name):
-                self.feature_extractor.build(None)
-        if getattr(self, "feature_projection", None) is not None:
-            with tf.name_scope(self.feature_projection.name):
-                self.feature_projection.build(None)
-
+        super().build(input_shape)
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
@@ -1488,13 +1344,6 @@ class TFHubertModel(TFHubertPreTrainedModel):
         )
 
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "hubert", None) is not None:
-            with tf.name_scope(self.hubert.name):
-                self.hubert.build(None)
 
 
 @add_start_docstrings(
@@ -1651,13 +1500,3 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "hubert", None) is not None:
-            with tf.name_scope(self.hubert.name):
-                self.hubert.build(None)
-        if getattr(self, "lm_head", None) is not None:
-            with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.output_hidden_size)

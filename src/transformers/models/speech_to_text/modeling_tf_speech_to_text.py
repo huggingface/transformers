@@ -165,14 +165,6 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
             hidden_states = conv(hidden_states)
             hidden_states = glu(hidden_states, axis=2)  # GLU over the Channel dimension
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv_layers", None) is not None:
-            for layer in self.conv_layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
@@ -386,22 +378,6 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "k_proj", None) is not None:
-            with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
-        if getattr(self, "q_proj", None) is not None:
-            with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
-        if getattr(self, "v_proj", None) is not None:
-            with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
-        if getattr(self, "out_proj", None) is not None:
-            with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
 
 
 class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
@@ -418,7 +394,6 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        self.config = config
 
     def call(
         self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
@@ -458,25 +433,6 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
         hidden_states = residual + hidden_states
 
         return hidden_states, self_attn_weights
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "self_attn", None) is not None:
-            with tf.name_scope(self.self_attn.name):
-                self.self_attn.build(None)
-        if getattr(self, "self_attn_layer_norm", None) is not None:
-            with tf.name_scope(self.self_attn_layer_norm.name):
-                self.self_attn_layer_norm.build([None, None, self.embed_dim])
-        if getattr(self, "fc1", None) is not None:
-            with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
-        if getattr(self, "fc2", None) is not None:
-            with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.encoder_ffn_dim)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
@@ -507,7 +463,6 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-        self.config = config
 
     def call(
         self,
@@ -590,31 +545,6 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
             cross_attn_weights,
             present_key_value,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "self_attn", None) is not None:
-            with tf.name_scope(self.self_attn.name):
-                self.self_attn.build(None)
-        if getattr(self, "self_attn_layer_norm", None) is not None:
-            with tf.name_scope(self.self_attn_layer_norm.name):
-                self.self_attn_layer_norm.build([None, None, self.embed_dim])
-        if getattr(self, "encoder_attn", None) is not None:
-            with tf.name_scope(self.encoder_attn.name):
-                self.encoder_attn.build(None)
-        if getattr(self, "encoder_attn_layer_norm", None) is not None:
-            with tf.name_scope(self.encoder_attn_layer_norm.name):
-                self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
-        if getattr(self, "fc1", None) is not None:
-            with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
-        if getattr(self, "fc2", None) is not None:
-            with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.decoder_ffn_dim)
-        if getattr(self, "final_layer_norm", None) is not None:
-            with tf.name_scope(self.final_layer_norm.name):
-                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
@@ -939,23 +869,6 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(None)
-        if getattr(self, "embed_positions", None) is not None:
-            with tf.name_scope(self.embed_positions.name):
-                self.embed_positions.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.d_model])
-        if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 @keras_serializable
@@ -1178,23 +1091,6 @@ class TFSpeech2TextDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
                 cross_attentions=all_cross_attns,
             )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embed_tokens", None) is not None:
-            with tf.name_scope(self.embed_tokens.name):
-                self.embed_tokens.build(None)
-        if getattr(self, "embed_positions", None) is not None:
-            with tf.name_scope(self.embed_positions.name):
-                self.embed_positions.build(None)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.config.d_model])
-        if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 @keras_serializable
@@ -1300,16 +1196,6 @@ class TFSpeech2TextMainLayer(tf.keras.layers.Layer):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
-        if getattr(self, "decoder", None) is not None:
-            with tf.name_scope(self.decoder.name):
-                self.decoder.build(None)
 
 
 @add_start_docstrings(
@@ -1392,13 +1278,6 @@ class TFSpeech2TextModel(TFSpeech2TextPreTrainedModel):
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "model", None) is not None:
-            with tf.name_scope(self.model.name):
-                self.model.build(None)
 
 
 @add_start_docstrings(
@@ -1412,7 +1291,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
         self.lm_head = tf.keras.layers.Dense(self.config.vocab_size, use_bias=False, name="lm_head")
         # TODO (Joao): investigate why Speech2Text has numerical issues in XLA generate
         self.supports_xla_generation = False
-        self.config = config
 
     def get_encoder(self):
         return self.model.encoder
@@ -1582,13 +1460,3 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "model", None) is not None:
-            with tf.name_scope(self.model.name):
-                self.model.build(None)
-        if getattr(self, "lm_head", None) is not None:
-            with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.config.d_model)

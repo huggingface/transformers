@@ -88,7 +88,6 @@ class TFSegformerOverlapPatchEmbeddings(tf.keras.layers.Layer):
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm")
         self.num_channels = num_channels
-        self.hidden_size = hidden_size
 
     def call(self, pixel_values: tf.Tensor) -> Tuple[tf.Tensor, int, int]:
         embeddings = self.proj(self.padding(pixel_values))
@@ -100,17 +99,6 @@ class TFSegformerOverlapPatchEmbeddings(tf.keras.layers.Layer):
         embeddings = tf.reshape(embeddings, (-1, height * width, hidden_dim))
         embeddings = self.layer_norm(embeddings)
         return embeddings, height, width
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "proj", None) is not None:
-            with tf.name_scope(self.proj.name):
-                self.proj.build(
-            self.num_channels)
-        if getattr(self, "layer_norm", None) is not None:
-            with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build([None, None, self.hidden_size])
 
 
 class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
@@ -208,19 +196,6 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "query", None) is not None:
-            with tf.name_scope(self.query.name):
-                self.query.build(self.hidden_size)
-        if getattr(self, "key", None) is not None:
-            with tf.name_scope(self.key.name):
-                self.key.build(self.hidden_size)
-        if getattr(self, "value", None) is not None:
-            with tf.name_scope(self.value.name):
-                self.value.build(self.hidden_size)
 
 
 class TFSegformerSelfOutput(tf.keras.layers.Layer):
@@ -228,19 +203,11 @@ class TFSegformerSelfOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(hidden_size, name="dense")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.hidden_size = hidden_size
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.hidden_size)
 
 
 class TFSegformerAttention(tf.keras.layers.Layer):
@@ -270,16 +237,6 @@ class TFSegformerAttention(tf.keras.layers.Layer):
         attention_output = self.dense_output(self_outputs[0])
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "self", None) is not None:
-            with tf.name_scope(self.self.name):
-                self.self.build(None)
-        if getattr(self, "dense_output", None) is not None:
-            with tf.name_scope(self.dense_output.name):
-                self.dense_output.build(None)
 
 
 class TFSegformerDWConv(tf.keras.layers.Layer):
@@ -288,7 +245,6 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
         self.depthwise_convolution = tf.keras.layers.Conv2D(
             filters=dim, kernel_size=3, strides=1, padding="same", groups=dim, name="dwconv"
         )
-        self.dim = dim
 
     def call(self, hidden_states: tf.Tensor, height: int, width: int) -> tf.Tensor:
         batch_size = shape_list(hidden_states)[0]
@@ -301,13 +257,6 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
         num_channels = shape_list(hidden_states)[3]
         hidden_states = tf.reshape(hidden_states, (batch_size, new_height * new_width, num_channels))
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "depthwise_convolution", None) is not None:
-            with tf.name_scope(self.depthwise_convolution.name):
-                self.depthwise_convolution.build(self.dim)
 
 
 class TFSegformerMixFFN(tf.keras.layers.Layer):
@@ -329,8 +278,6 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = tf.keras.layers.Dense(out_features, name="dense2")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.hidden_features = hidden_features
-        self.in_features = in_features
 
     def call(self, hidden_states: tf.Tensor, height: int, width: int, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense1(hidden_states)
@@ -340,19 +287,6 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
         hidden_states = self.dense2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense1", None) is not None:
-            with tf.name_scope(self.dense1.name):
-                self.dense1.build(self.in_features)
-        if getattr(self, "depthwise_convolution", None) is not None:
-            with tf.name_scope(self.depthwise_convolution.name):
-                self.depthwise_convolution.build(None)
-        if getattr(self, "dense2", None) is not None:
-            with tf.name_scope(self.dense2.name):
-                self.dense2.build(self.hidden_features)
 
 
 class TFSegformerLayer(tf.keras.layers.Layer):
@@ -381,7 +315,6 @@ class TFSegformerLayer(tf.keras.layers.Layer):
         self.layer_norm_2 = tf.keras.layers.LayerNormalization(epsilon=1e-05, name="layer_norm_2")
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = TFSegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size, name="mlp")
-        self.hidden_size = hidden_size
 
     def call(
         self,
@@ -414,22 +347,6 @@ class TFSegformerLayer(tf.keras.layers.Layer):
         outputs = (layer_output,) + outputs
 
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "layer_norm_1", None) is not None:
-            with tf.name_scope(self.layer_norm_1.name):
-                self.layer_norm_1.build([None, None, self.hidden_size])
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "layer_norm_2", None) is not None:
-            with tf.name_scope(self.layer_norm_2.name):
-                self.layer_norm_2.build([None, None, self.hidden_size])
-        if getattr(self, "mlp", None) is not None:
-            with tf.name_scope(self.mlp.name):
-                self.mlp.build(None)
 
 
 class TFSegformerEncoder(tf.keras.layers.Layer):
@@ -533,14 +450,6 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "layer_norms", None) is not None:
-            for layer in self.layer_norms:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
 
 
 @keras_serializable
@@ -601,13 +510,6 @@ class TFSegformerMainLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
 
 
 class TFSegformerPreTrainedModel(TFPreTrainedModel):
@@ -704,13 +606,6 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
             training=training,
         )
         return outputs
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "segformer", None) is not None:
-            with tf.name_scope(self.segformer.name):
-                self.segformer.build(None)
 
 
 @add_start_docstrings(
@@ -729,7 +624,6 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
 
         # Classifier head
         self.classifier = tf.keras.layers.Dense(config.num_labels, name="classifier")
-        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(SEGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -775,16 +669,6 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
         return TFSequenceClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "segformer", None) is not None:
-            with tf.name_scope(self.segformer.name):
-                self.segformer.build(None)
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_sizes[-1])
 
 
 class TFSegformerMLP(tf.keras.layers.Layer):
@@ -804,13 +688,6 @@ class TFSegformerMLP(tf.keras.layers.Layer):
         hidden_states = tf.reshape(hidden_states, (-1, height * width, hidden_dim))
         hidden_states = self.proj(hidden_states)
         return hidden_states
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "proj", None) is not None:
-            with tf.name_scope(self.proj.name):
-                self.proj.build(self.input_dim)
 
 
 class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
@@ -866,19 +743,6 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         logits = self.classifier(hidden_states)
 
         return logits
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "linear_fuse", None) is not None:
-            with tf.name_scope(self.linear_fuse.name):
-                self.linear_fuse.build(self.config.decoder_hidden_size * self.config.num_encoder_blocks)
-        if getattr(self, "batch_norm", None) is not None:
-            with tf.name_scope(self.batch_norm.name):
-                self.batch_norm.build(None)
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.decoder_hidden_size)
 
 
 @add_start_docstrings(
@@ -990,13 +854,3 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "segformer", None) is not None:
-            with tf.name_scope(self.segformer.name):
-                self.segformer.build(None)
-        if getattr(self, "decode_head", None) is not None:
-            with tf.name_scope(self.decode_head.name):
-                self.decode_head.build(None)
