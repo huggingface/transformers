@@ -269,7 +269,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             outputs,
             [
                 {
-                    "generated_text": '<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava'
+                    "generated_text": "<image> \nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud?\nASSISTANT: Lava"
                 }
             ],
         )
