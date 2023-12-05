@@ -1424,6 +1424,9 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
         self.begin_suppress_tokens = list(begin_suppress_tokens)
         self.begin_index = begin_index
 
+    def set_begin_index(self, begin_index):
+        self.begin_index = begin_index
+
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[1] == self.begin_index:
@@ -1519,7 +1522,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(
-        self, generate_config, _detect_timestamp_from_logprob: Optional[bool] = None
+            self, generate_config, begin_index: Optional[int] = None, _detect_timestamp_from_logprob: Optional[bool] = None 
     ):  # support for the kwargs
         self.eos_token_id = generate_config.eos_token_id
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
@@ -1532,9 +1535,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             else getattr(generate_config, "_detect_timestamp_from_logprob", True)
         )
 
-        self.begin_index = (
-            len(generate_config.forced_decoder_ids) + 1 if generate_config.forced_decoder_ids is not None else 1
-        )
+        num_forced_ids = len(generate_config.forced_decoder_ids) if generate_config.forced_decoder_ids is not None else 0
+        self.begin_index = begin_index or (num_forced_ids + 1)
+            
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
         # TODO(Patrick, remove hardcoded setting)
         self.max_initial_timestamp_index = 50
@@ -1575,6 +1578,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
+            print("HF Sample begin", self.begin_index)
             scores[:, : self.timestamp_begin] = -float("inf")
 
             if self.max_initial_timestamp_index is not None:

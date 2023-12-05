@@ -18,6 +18,7 @@ import math
 from typing import Optional, Tuple, Union
 
 import numpy as np
+import copy
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -25,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.logits_process import WhisperTimeStampLogitsProcessor
+from ...generation.logits_process import WhisperTimeStampLogitsProcessor, SuppressTokensAtBeginLogitsProcessor
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1742,8 +1743,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         condition_on_prev_tokens: Optional[bool] = None,
         temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        compression_ratio_threshold: Optional[float] = 2.0,
+        compression_ratio_threshold: Optional[float] = 2.4,
         logprob_threshold: Optional[float] = -1.0,
+        # temperature: Union[float, Tuple[float, ...]] = 0.0,
+        # compression_ratio_threshold: Optional[float] = None,
+        # logprob_threshold: Optional[float] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
         return_token_timestamps: Optional[bool] = None,
@@ -1912,14 +1916,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 FutureWarning,
             )
 
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
-
-        if generation_config is None:
-            generation_config = self.generation_config
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
@@ -2011,10 +2015,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
             forced_decoder_ids = self.config.forced_decoder_ids
         elif (
-            hasattr(self.generation_config, "forced_decoder_ids")
-            and self.generation_config.forced_decoder_ids is not None
+            hasattr(generation_config, "forced_decoder_ids")
+            and generation_config.forced_decoder_ids is not None
         ):
-            forced_decoder_ids = self.generation_config.forced_decoder_ids
+            forced_decoder_ids = generation_config.forced_decoder_ids
         else:
             forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
 
@@ -2113,7 +2117,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None
                 else None
             )
-            if last_forced_decoder_ids == self.generation_config.no_timestamps_token_id:
+            if last_forced_decoder_ids == generation_config.no_timestamps_token_id:
                 # remove no_timestamp to be forcefully generated if we want to return timestamps
                 # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
                 forced_decoder_ids = forced_decoder_ids[:-1] if len(forced_decoder_ids) > 1 else None
@@ -2124,6 +2128,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             logits_processor = (
                 timestamp_processor if logits_processor is None else timestamp_processor + logits_processor
             )
+
+        if hasattr(generation_config, "begin_suppress_tokens") and generation_config.begin_suppress_tokens is not None:
+            begin_suppress_processor = [SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, 1)]
+            logits_processor = (
+                timestamp_processor if logits_processor is None else begin_suppress_processor + logits_processor
+            )
+            generation_config.begin_suppress_tokens = None
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
@@ -2149,7 +2160,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         condition_on_prev_tokens = (
             condition_on_prev_tokens
             if condition_on_prev_tokens is not None
-            else getattr(self.generation_config, "condition_on_prev_tokens", False)
+            else getattr(generation_config, "condition_on_prev_tokens", False)
         )
 
         # 6. Else we're in longform mode which is more complex. We need to chunk the audio input depending on when the model generated
@@ -2161,7 +2172,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             )
 
         # if input is longer than 30 seconds we default to long-form generation
-        timestamp_begin = self.generation_config.no_timestamps_token_id + 1
+        timestamp_begin = generation_config.no_timestamps_token_id + 1
         # input stride is mel frames per encoder output vector which is the product of all conv strides
         batch_size = input_features.shape[0]
 
@@ -2188,7 +2199,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         output_scores = logprob_threshold is not None
         return_dict_in_generate = return_dict_in_generate or output_scores
 
-        init_tokens = [self.generation_config.decoder_start_token_id]
+        init_tokens = [generation_config.decoder_start_token_id]
         if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
             i = 1
             while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
@@ -2248,21 +2259,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 cut_off_length = self.config.max_target_positions // 2 - 1
                 active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
                 prev_tokens = self._pad_to_max_length(
-                    active_segments, self.generation_config.pad_token_id, padding="left"
+                    active_segments, generation_config.pad_token_id, padding="left"
                 )
 
-                prev_start_of_text = self.generation_config.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
+                prev_start_of_text = generation_config.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
 
                 decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, prev_tokens[:, -cut_off_length:], decoder_input_ids], dim=-1)
-                timestamp_processor = [
-                    proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)
-                ][0]
-                timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
-
                 passed_max_length = kwargs.get("max_length", None)
                 passed_max_new_tokens = kwargs.get("max_new_tokens", None)
-                max_length_config = getattr(self.generation_config, "max_length", None)
-                max_new_tokens_config = getattr(self.generation_config, "max_new_tokens", None)
+                max_length_config = getattr(generation_config, "max_length", None)
+                max_new_tokens_config = getattr(generation_config, "max_new_tokens", None)
 
                 # Make sure we don't get larger than `max_length`
                 if passed_max_length is not None and passed_max_new_tokens is None:
@@ -2274,7 +2280,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     )
                 elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
                     kwargs["max_length"] = min(
-                        self.generation_config.max_length + cut_off_length + 1, self.config.max_target_positions
+                        generation_config.max_length + cut_off_length + 1, self.config.max_target_positions
                     )
                     logger.info(
                         f"Increase max_length from {max_length_config} to {kwargs['max_length']} since input is conditioned on previous segment."
@@ -2291,7 +2297,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 ):
                     kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
 
-            print("Init", decoder_input_ids[0, :6].tolist())
+            timestamp_processor = [
+                proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)
+            ][0]
+            timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
+            begin_suppress_processor = [
+                proc for proc in logits_processor if isinstance(proc, SuppressTokensAtBeginLogitsProcessor)
+            ][0]
+            begin_suppress_processor.set_begin_index(decoder_input_ids.shape[-1])
+
+            print("hf  in tokens", decoder_input_ids[0].tolist())
 
             # 6.6 Batch generate current chunk
             for temperature in temperatures:
@@ -2334,7 +2349,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 if condition_on_prev_tokens is not None:
                     # remove all previously passed decoder input ids except start token
-                    seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1] - 1:]
+                    seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
+                else:
+                    # cut BOS token
+                    seek_sequences = seek_sequences[:, 1:]
 
                 needs_fallback = False
                 if compression_ratio_threshold is not None:
@@ -2369,12 +2387,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
-                if is_not_final and seek_sequence[-1] == self.generation_config.eos_token_id:
+                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
 
+                print("hf  out tokens", seek_sequence.tolist())
+
                 # remove all padding tokens
-                if seek_sequence[-1] == self.generation_config.pad_token_id:
-                    num_paddings = (seek_sequence == self.generation_config.pad_token_id).sum()
+                if seek_sequence[-1] == generation_config.pad_token_id:
+                    num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
 
                 # TODO(Patrick: delete cut type)
@@ -2397,7 +2417,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
-        sequences = self._pad_to_max_length(current_segments, self.generation_config.pad_token_id, padding="right")
+        sequences = self._pad_to_max_length(current_segments, generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -2461,6 +2481,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         timestamp_tokens: torch.Tensor = seek_sequence.ge(timestamp_begin)
         single_timestamp_ending = timestamp_tokens[-2:].tolist() == [False, True]
         timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
+        timestamp_segment_indices.add_(1)
 
         # If whisper predicted a "end of segment" via a timestep token, let's go ever each
         # "end of segment" prediction and slice the decoding into segments accordingly
@@ -2474,7 +2495,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             last_slice = 0
             # Add each segment to list of all segments
             for current_slice in slices:
-                sliced_tokens = seek_sequence[last_slice + 1 : current_slice + 1]
+                sliced_tokens = seek_sequence[last_slice : current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
                 segments.append(
