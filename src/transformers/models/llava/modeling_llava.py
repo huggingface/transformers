@@ -249,7 +249,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     def tie_weights(self):
         return self.language_model.tie_weights()
 
-
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         # TODO make sur this works as expected
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
@@ -262,7 +261,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
     ):
         _, nb_text_tokens_per_images, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:,-1]==self.config.pad_token_id)
+        left_padding = not torch.sum(input_ids[:, -1] == self.config.pad_token_id)
         # 1. Create a mask to know where image tokens are
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
@@ -270,15 +269,17 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
 
         # 2. Compute the positions where text should be written
-        new_token_positions = torch.cumsum((image_token_mask * (nb_text_tokens_per_images-1) + 1), -1) -1
-        nb_image_pad = max_embed_dim -1 - new_token_positions[:,-1]
+        new_token_positions = torch.cumsum((image_token_mask * (nb_text_tokens_per_images - 1) + 1), -1) - 1
+        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
         if left_padding:
-            new_token_positions += nb_image_pad[:,None]   # offset for left padding
+            new_token_positions += nb_image_pad[:, None]  # offset for left padding
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
         # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device = inputs_embeds.device)
-        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=torch.long, device = inputs_embeds.device)
+        final_embedding = torch.zeros(
+            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+        )
+        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=torch.long, device=inputs_embeds.device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
@@ -288,9 +289,9 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
         if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) -1 >= nb_image_pad[:,None]
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
         else:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:,None] 
+            image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:, None]
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
