@@ -15,7 +15,7 @@
 from ..activations import ACT2FN
 from ..modeling_utils import PreTrainedModel
 from ..utils import is_auto_awq_available, is_torch_available
-from ..utils.quantization_config import AwqBackendPackingMethod, AWQLinearVersion
+from ..utils.quantization_config import AwqBackendPackingMethod, AwqConfig, AWQLinearVersion
 
 
 if is_torch_available():
@@ -168,11 +168,16 @@ def fuse_awq_modules(model, quantization_config):
     Args:
         model (`~PreTrainedModel`):
             The model to fuse - note this model should have been converted into AWQ format beforehand.
-        quantization_config (`~transformers.quantization_config.AWQConfig`):
+        quantization_config (`dict`):
             The quantization configuration to use.
     """
-    backend = quantization_config.backend
-    modules_to_fuse = get_modules_to_fuse(model, quantization_config)
+    # We need to convert it from dict in order to get an AwqConfig object
+    # otherwise the fields `backend` etc. will not be available
+    # https://github.com/huggingface/transformers/pull/27411#discussion_r1414044495
+    awq_config = AwqConfig.from_dict(quantization_config)
+    backend = awq_config.backend
+
+    modules_to_fuse = get_modules_to_fuse(model, awq_config)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
