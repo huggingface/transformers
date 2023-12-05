@@ -78,19 +78,19 @@ model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf",
 
 You can also use it with transformers `pipeline`:
 ```python
-from transformers import pipeline
-from PIL import Image    
-import request
+>>> from transformers import pipeline
+>>> from PIL import Image    
+>>> import request
 
-model_id = "llava-hf/bakLlava-v1-hf"
-pipe = pipeline("image-to-text", model=model_id)
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+>>> model_id = "llava-hf/bakLlava-v1-hf"
+>>> pipe = pipeline("image-to-text", model=model_id)
+>>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
 
-image = Image.open(requests.get(url, stream=True).raw)
-prompt = "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+>>> prompt = "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
 
-pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
->>> {"generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT: Lava"}
+>>> pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
+{"generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT: Lava"}
 ```
 
 [[autodoc]] LlavaConfig
