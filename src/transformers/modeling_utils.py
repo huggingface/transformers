@@ -2834,7 +2834,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and quantization_method_from_config is None
         ):
             raise ValueError(
-                "You cannot quantize a non-quantized model using transformers, please refer to the quantization documentation"
+                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
                 " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
             )
 
