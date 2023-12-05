@@ -650,38 +650,38 @@ class Trainer:
 
     def add_callback(self, callback):
         """
-        Add a callback to the current list of [`~transformer.TrainerCallback`].
+        Add a callback to the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will instantiate a member of that class.
         """
         self.callback_handler.add_callback(callback)
 
     def pop_callback(self, callback):
         """
-        Remove a callback from the current list of [`~transformer.TrainerCallback`] and returns it.
+        Remove a callback from the current list of [`~transformers.TrainerCallback`] and returns it.
 
         If the callback is not found, returns `None` (and no error is raised).
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will pop the first member of that class found in the list of callbacks.
 
         Returns:
-            [`~transformer.TrainerCallback`]: The callback removed, if found.
+            [`~transformers.TrainerCallback`]: The callback removed, if found.
         """
         return self.callback_handler.pop_callback(callback)
 
     def remove_callback(self, callback):
         """
-        Remove a callback from the current list of [`~transformer.TrainerCallback`].
+        Remove a callback from the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
@@ -793,6 +793,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -850,6 +851,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
@@ -881,6 +883,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
@@ -1111,7 +1114,7 @@ class Trainer:
                 optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
-                **self.args.lr_scheduler_kwargs,
+                scheduler_specific_kwargs=self.args.lr_scheduler_kwargs,
             )
             self._created_lr_scheduler = True
         return self.lr_scheduler
@@ -2831,7 +2834,7 @@ class Trainer:
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(
+                unwrap_model(self.model).to("cpu").save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=self.model.state_dict(),
@@ -2839,10 +2842,12 @@ class Trainer:
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict()
+                state_dict = self.model.state_dict().to("cpu")
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
+            self.model.to("cpu").save_pretrained(
+                output_dir, is_main_process=self.args.should_save, save_function=xm.save
+            )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
