@@ -76,6 +76,24 @@ To load a model using Flash Attention 2, we can pass the `use_flash_attention_2`
 model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", torch_dtype=torch.float16, use_flash_attention_2=True).to(device)
 ```
 
+You can also use it with transformers `pipeline`:
+```python
+from transformers import pipeline
+from PIL import Image    
+import request
+
+model_id = "llava-hf/bakLlava-v1-hf"
+pipe = pipeline("image-to-text", model=model_id)
+url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
+
+image = Image.open(requests.get(url, stream=True).raw)
+prompt = "<image>\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
+
+outputs = pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 200})
+print(outputs)
+>>> {"generated_text": "\nUSER: What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT: Lava"}
+```
+
 [[autodoc]] LlavaConfig
 
 ## LlavaProcessor
