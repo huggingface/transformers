@@ -733,8 +733,10 @@ class TFGroupViTStage(tf.keras.layers.Layer):
                 with tf.name_scope(layer.name):
                     layer.build(None)
         if getattr(self, "group_projector", None) is not None:
-            self.group_projector[0].build([None, None, self.config.hidden_size])
-            self.group_projector[1].build(None)
+            with tf.name_scope(self.group_projector[0].name):
+                self.group_projector[0].build([None, None, self.config.hidden_size])
+            with tf.name_scope(self.group_projector[1].name):
+                self.group_projector[1].build(None)
 
     @property
     def with_group_token(self):
@@ -1496,13 +1498,19 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             with tf.name_scope(self.vision_model.name):
                 self.vision_model.build(None)
         if getattr(self, "visual_projection", None) is not None:
-            for layer in self.visual_projection:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            with tf.name_scope(self.visual_projection[0].name):
+                self.visual_projection[0].build(self.vision_embed_dim)
+            with tf.name_scope(self.visual_projection[1].name):
+                self.visual_projection[1].build((None, self.projection_intermediate_dim))
+            with tf.name_scope(self.visual_projection[3].name):
+                self.visual_projection[3].build(self.projection_intermediate_dim)
         if getattr(self, "text_projection", None) is not None:
-            for layer in self.text_projection:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            with tf.name_scope(self.text_projection[0].name):
+                self.text_projection[0].build(self.text_embed_dim)
+            with tf.name_scope(self.text_projection[1].name):
+                self.text_projection[1].build((None, self.projection_intermediate_dim))
+            with tf.name_scope(self.text_projection[3].name):
+                self.text_projection[3].build(self.projection_intermediate_dim)
 
     @unpack_inputs
     def get_text_features(
