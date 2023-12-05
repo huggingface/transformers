@@ -177,6 +177,7 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
             self.distance_embedding = tf.keras.layers.Embedding(
                 2 * config.max_position_embeddings - 1, self.attention_head_size
             )
+        self.is_cross_attention = is_cross_attention
 
     def transpose_for_scores(self, x):
         new_x_shape = tf.concat(
@@ -274,12 +275,20 @@ class TFBlipTextSelfAttention(tf.keras.layers.Layer):
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
                 self.query.build(self.config.hidden_size)
-        if getattr(self, "key", None) is not None:
-            with tf.name_scope(self.key.name):
-                self.key.build(self.config.encoder_hidden_size)
-        if getattr(self, "value", None) is not None:
-            with tf.name_scope(self.value.name):
-                self.value.build(self.config.encoder_hidden_size)
+        if self.is_cross_attention:
+            if getattr(self, "key", None) is not None:
+                with tf.name_scope(self.key.name):
+                    self.key.build(self.config.encoder_hidden_size)
+            if getattr(self, "value", None) is not None:
+                with tf.name_scope(self.value.name):
+                    self.value.build(self.config.encoder_hidden_size)
+        else:
+            if getattr(self, "key", None) is not None:
+                with tf.name_scope(self.key.name):
+                    self.key.build(self.config.hidden_size)
+            if getattr(self, "value", None) is not None:
+                with tf.name_scope(self.value.name):
+                    self.value.build(self.config.hidden_size)
 
 
 class TFBlipTextSelfOutput(tf.keras.layers.Layer):
