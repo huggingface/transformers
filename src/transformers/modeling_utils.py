@@ -1236,8 +1236,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
         # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitely set by the user.
-        # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility.
-        if hasattr(config, "_attn_implementation") and config._attn_implementation_internal is not None:
+        # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
+        # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
+        if hasattr(config, "_attn_implementation_internal") and config._attn_implementation_internal is not None:
             if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
                     f'Both attn_implementation="{config._attn_implementation}" and `use_flash_attention_2=True` were used when loading the model, which are not compatible. We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
