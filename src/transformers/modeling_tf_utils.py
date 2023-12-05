@@ -35,7 +35,6 @@ import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
 from keras import backend as K
 from packaging.version import parse
-from tensorflow.python.util.keras_deps import get_call_context_function
 
 from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
@@ -1134,15 +1133,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         return "tf"
 
     def build(self, input_shape=None):
-        call_context = get_call_context_function()
-        if self.built or call_context().in_call:
-            self.built = True
-        else:
-            self.built = True
-            # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
-            # Setting it in build() allows users to override the shape when loading a non-pretrained model from config
-            self._set_save_spec(self.input_signature)
-            self(self.dummy_inputs, training=False)
+        pass  # This is just here to make sure we don't call the superclass build()
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
