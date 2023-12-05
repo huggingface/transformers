@@ -228,7 +228,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
 
         use_flash_attention_2 = getattr(config, "_flash_attn_2_enabled", False)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config, use_flash_attention_2=use_flash_attention_2)
-        
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -382,7 +382,7 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
                     image_features, inputs_embeds, input_ids, attention_mask, position_ids
                 )
                 if labels is None:
-                    labels = torch.full_like(input_ids, self.config.ignore_index)
+                    labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
             else:
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation with cache
@@ -414,19 +414,18 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
-            # if attention_mask is not None:
-            #     shift_attention_mask = attention_mask[..., 1:]
-            #     shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-            #     shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            # else:
-            #     shift_logits = logits[..., :-1, :].contiguous()
-            #     shift_labels = labels[..., 1:].contiguous()
-            # # Flatten the tokens
-            # loss_fct = CrossEntropyLoss()
-            # loss = loss_fct(
-            #     shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
-            # )
-            pass
+            if attention_mask is not None:
+                shift_attention_mask = attention_mask[..., 1:]
+                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+            else:
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
