@@ -2828,6 +2828,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
 
+        if (
+            quantization_method_from_args is not None
+            and quantization_method_from_args == QuantizationMethod.AWQ
+            and quantization_method_from_config is None
+        ):
+            raise ValueError(
+                "You cannot quantize a non-quantized model using transformers, please refer to the quantization documentation"
+                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
+            )
+
         if quantization_method_from_config is not None and quantization_method_from_args is not None:
             if quantization_method_from_config != quantization_method_from_args:
                 raise ValueError(
