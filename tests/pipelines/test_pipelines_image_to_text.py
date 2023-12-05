@@ -253,7 +253,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-    # @slow
+    @slow
     @require_torch
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
