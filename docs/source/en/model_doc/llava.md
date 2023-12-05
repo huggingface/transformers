@@ -81,7 +81,7 @@ You can also use it with transformers `pipeline`:
 ```python
 >>> from transformers import pipeline
 >>> from PIL import Image    
->>> import request
+>>> import requests
 
 >>> model_id = "llava-hf/bakLlava-v1-hf"
 >>> pipe = pipeline("image-to-text", model=model_id)
