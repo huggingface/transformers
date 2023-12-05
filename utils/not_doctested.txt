@@ -145,6 +145,7 @@ docs/source/en/model_doc/led.md
 docs/source/en/model_doc/levit.md
 docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
+docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/llama2.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
@@ -632,8 +633,10 @@ src/transformers/models/levit/convert_levit_timm_to_pytorch.py
 src/transformers/models/levit/modeling_levit.py
 src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
+src/transformers/models/llava/configuration_llava.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
+src/transformers/models/llava/modeling_llava.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
