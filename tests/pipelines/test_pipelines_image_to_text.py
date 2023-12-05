@@ -260,7 +260,9 @@ class ImageToTextPipelineTests(unittest.TestCase):
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/ai2d-demo.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        prompt = "<image>\nUSER:What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
+        prompt = (
+            "<image>\nUSER:What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
+        )
 
         outputs = pipe(image, prompt=prompt)
         self.assertEqual(outputs, [{"generated_text": "ash cloud"}])

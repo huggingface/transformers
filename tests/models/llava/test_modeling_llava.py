@@ -18,7 +18,13 @@ import unittest
 
 import requests
 
-from transformers import AutoProcessor, LlavaConfig, LlavaForConditionalGeneration, is_torch_available, is_vision_available
+from transformers import (
+    AutoProcessor,
+    LlavaConfig,
+    LlavaForConditionalGeneration,
+    is_torch_available,
+    is_vision_available,
+)
 from transformers.testing_utils import (
     require_torch,
     torch_device,
