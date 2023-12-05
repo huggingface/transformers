@@ -38,6 +38,7 @@ from transformers import (
     AutoTokenizer,
     IntervalStrategy,
     PretrainedConfig,
+    TrainerCallback,
     TrainingArguments,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
@@ -1539,6 +1540,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionRandomPreTrainedModel(config)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
+
+        class MockCudaOOMCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                # simulate OOM on the first step
+                if state.train_batch_size == 16:
+                    raise RuntimeError("CUDA out of memory.")
+
         args = RegressionTrainingArguments(
             tmp_dir,
             do_train=True,
@@ -1547,10 +1555,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=16,
             auto_find_batch_size=True,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
         trainer.train()
-        # assume that `auto_find_bs` set it to 8, and we were originally at 16
-        trainer.args.per_device_train_batch_size = 16
+        # After `auto_find_batch_size` is ran we should now be at 8
+        self.assertEqual(trainer._train_batch_size, 8)
+
+        # We can then make a new Trainer
+        trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 8 again
         self.assertEqual(trainer._train_batch_size, 8)
