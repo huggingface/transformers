@@ -94,6 +94,42 @@ def _traceable(cls):
     return _Function
 
 
+@torch.jit.script
+# copied from transformers.models.deberta.modeling_deberta._get_float_min_value
+def _get_float_min_value(
+    tensor,
+    f16_min=torch.tensor(torch.finfo(torch.float16).min),
+    f32_min=torch.tensor(torch.finfo(torch.float32).min),
+    f64_min=torch.tensor(torch.finfo(torch.float64).min),
+):
+    if tensor.dtype == torch.float16:
+        return f16_min
+    elif tensor.dtype == torch.float32:
+        return f32_min
+    else:
+        return f64_min
+
+
+# copied from transformers.models.deberta.modeling_deberta.get_min_for_tensor
+def get_min_for_tensor(tensor):
+    """
+    Returns the minimum value supported by the tensor's datatype
+    if the tensor is of float type. For other datatypes returns
+    the minimum value of the traced datatype.
+
+    Args:
+        tensor (`torch.tensor`): The tensor from which to infer the datatype.
+
+    Return:
+        `torch.LongTensor`: The minimum value possible for the input tensor datatye.
+    """
+    if tensor.dtype in [torch.float16, torch.float32, torch.float64]:
+        # Will not be baked in during tracing
+        return _get_float_min_value(tensor)
+    # Will be baked in during tracing
+    return torch.tensor(torch.finfo(tensor.dtype).min)
+
+
 @_traceable
 # Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
@@ -128,8 +164,8 @@ class XSoftmax(torch.autograd.Function):
     def forward(self, input, mask, dim):
         self.dim = dim
         rmask = ~(mask.to(torch.bool))
-
-        output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
+        ## Future reference: replace with masked tensor when the API goes stable
+        output = input.masked_fill(rmask, get_min_for_tensor(input))
         output = torch.softmax(output, self.dim)
         output.masked_fill_(rmask, 0)
         self.save_for_backward(output)
@@ -646,6 +682,37 @@ def get_token_type_ids_on_device(device_discriminator, using_ids: bool):
     return torch.zeros(input_shape, dtype=torch.long, device=device_discriminator.device)
 
 
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.scaled_size_sqrt
+def scaled_size_sqrt(query_layer, scale_factor: int):
+    return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+
+
+@torch.jit.script
+def build_rpos(query_layer, key_layer, relative_pos, bucket_size: int, max_position: int):
+    if key_layer.size(-2) != query_layer.size(-2):
+        r_pos = build_relative_position(key_layer, key_layer, bucket_size=bucket_size, max_position=max_position)
+        return r_pos.unsqueeze(0)
+    else:
+        return relative_pos
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.compute_attention_span
+def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+    return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
+
+@torch.jit.script
+# Copied from transformers.models.deberta.modeling_deberta.uneven_size_corrected
+def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
+    if query_layer.size(-2) != key_layer.size(-2):
+        pos_index = relative_pos[:, :, :, 0].unsqueeze(-1)
+        return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
+    else:
+        return p2c_att
+
+
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -751,7 +818,7 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        scale = scaled_size_sqrt(query_layer, scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
@@ -824,7 +891,7 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
+            scale = scaled_size_sqrt(pos_key_layer, scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -836,14 +903,10 @@ class DisentangledSelfAttention(nn.Module):
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
-            if key_layer.size(-2) != query_layer.size(-2):
-                r_pos = build_relative_position(
-                    key_layer, key_layer, bucket_size=self.position_buckets, max_position=self.max_relative_positions
-                )
-                r_pos = r_pos.unsqueeze(0)
-            else:
-                r_pos = relative_pos
+            scale = scaled_size_sqrt(pos_query_layer, scale_factor)
+            r_pos = build_rpos(
+                query_layer, key_layer, relative_pos, self.position_buckets, self.max_relative_positions
+            )
 
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             p2c_att = torch.bmm(key_layer, pos_query_layer.transpose(-1, -2))

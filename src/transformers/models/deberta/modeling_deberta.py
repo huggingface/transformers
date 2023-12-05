@@ -108,15 +108,15 @@ def _get_float_min_value(
     tensor,
     f16_min=torch.tensor(torch.finfo(torch.float16).min),
     f32_min=torch.tensor(torch.finfo(torch.float32).min),
-    f64_min=torch.tensor(torch.finfo(torch.float64).min)
-    ):
+    f64_min=torch.tensor(torch.finfo(torch.float64).min),
+):
     if tensor.dtype == torch.float16:
         return f16_min
     elif tensor.dtype == torch.float32:
         return f32_min
     else:
         return f64_min
-    
+
 
 def get_min_for_tensor(tensor):
     """
@@ -135,6 +135,7 @@ def get_min_for_tensor(tensor):
         return _get_float_min_value(tensor)
     # Will be baked in during tracing
     return torch.tensor(torch.finfo(tensor.dtype).min)
+
 
 @_traceable
 class XSoftmax(torch.autograd.Function):
@@ -611,7 +612,7 @@ def get_token_type_ids_on_device(device_discriminator, using_ids: bool):
 
 
 @torch.jit.script
-def scaled_size_sqrt(query_layer, scale_factor:int):
+def scaled_size_sqrt(query_layer, scale_factor: int):
     return torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
 
 
@@ -621,12 +622,12 @@ def build_rpos(query_layer, key_layer, relative_pos):
         return build_relative_position(key_layer, key_layer)
     else:
         return relative_pos
-    
+
+
 @torch.jit.script
-def compute_attention_span(query_layer, key_layer, max_relative_positions:int):
-    return torch.tensor(
-        min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions)
-    )
+def compute_attention_span(query_layer, key_layer, max_relative_positions: int):
+    return torch.tensor(min(max(query_layer.size(-2), key_layer.size(-2)), max_relative_positions))
+
 
 @torch.jit.script
 def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
@@ -635,6 +636,7 @@ def uneven_size_corrected(p2c_att, query_layer, key_layer, relative_pos):
         return torch.gather(p2c_att, dim=2, index=pos_dynamic_expand(pos_index, p2c_att, key_layer))
     else:
         return p2c_att
+
 
 class DisentangledSelfAttention(nn.Module):
     """
