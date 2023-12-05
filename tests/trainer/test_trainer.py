@@ -1565,7 +1565,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Check we are at 16 to start
         self.assertEqual(trainer._train_batch_size, 16)
         trainer.train(resume_from_checkpoint=True)
-        # We should be back to 8 again
+        # We should be back to 8 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, 8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
