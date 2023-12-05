@@ -145,8 +145,8 @@ docs/source/en/model_doc/led.md
 docs/source/en/model_doc/levit.md
 docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
-docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/llama2.md
+docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
@@ -295,7 +295,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
-docs/source/en/tasks/idefics.md  # causes other tests to fail
+docs/source/en/tasks/idefics.md
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -433,7 +433,7 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
-src/transformers/models/blip_2/modeling_blip_2.py  # causes other tests to fail
+src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
@@ -633,9 +633,9 @@ src/transformers/models/levit/convert_levit_timm_to_pytorch.py
 src/transformers/models/levit/modeling_levit.py
 src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
-src/transformers/models/llava/configuration_llava.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
+src/transformers/models/llava/configuration_llava.py
 src/transformers/models/llava/modeling_llava.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
