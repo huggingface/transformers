@@ -38,8 +38,9 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LlavaConfig"
 
 LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava/llava-v1.5-7b",
-    "llava/llava-v1.5-13b",
+    "llava-hf/llava-1.5-7b-hf",
+    "llava-hf/llava-1.5-13b-hf",
+    "llava-hf/bakLlava-v1-hf"
     # See all Llava models at https://huggingface.co/models?filter=llava
 ]
 
