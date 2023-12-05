@@ -100,7 +100,7 @@ jobs:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
             REF=main
-          push: false
+          push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
 
   # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
