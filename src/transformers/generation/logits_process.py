@@ -1596,6 +1596,30 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         return scores
 
 
+class WhisperNoSpeechDetection(LogitsProcessor):
+    r"""This processor can be used to detect silence when using Whisper."""
+
+    def __init__(self, no_speech_token: int, begin_index: int):
+        self.no_speech_token = no_speech_token
+        self.begin_index = begin_index
+        self._no_speech_prob = [0.0]
+
+    @property
+    def no_speech_prob(self):
+        return self._no_speech_prob
+
+    def set_begin_index(self, begin_index):
+        self.begin_index = begin_index
+
+    @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if input_ids.shape[1] == self.begin_index:
+            probs = scores.float().softmax(dim=-1)
+            self._no_speech_prob = probs[:, self.no_speech_token]
+
+        return scores
+
+
 class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     r"""Logits processor for classifier free guidance (CFG). The scores are split over the batch dimension,
     where the first half correspond to the conditional logits (predicted from the input prompt) and the second half

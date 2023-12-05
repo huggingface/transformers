@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.logits_process import WhisperTimeStampLogitsProcessor, SuppressTokensAtBeginLogitsProcessor
+from ...generation.logits_process import WhisperTimeStampLogitsProcessor, SuppressTokensAtBeginLogitsProcessor, WhisperNoSpeechDetection, SuppressTokensLogitsProcessor
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1745,6 +1745,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         temperature: Union[float, Tuple[float, ...]] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
         compression_ratio_threshold: Optional[float] = 2.4,
         logprob_threshold: Optional[float] = -1.0,
+        no_speech_threshold: Optional[float] = None,
         # temperature: Union[float, Tuple[float, ...]] = 0.0,
         # compression_ratio_threshold: Optional[float] = None,
         # logprob_threshold: Optional[float] = None,
@@ -2090,7 +2091,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             forced_decoder_ids = [
                 *text_prompt_ids,
                 generation_config.decoder_start_token_id,
-                *[token for _rank, token in non_prompt_forced_decoder_ids],
+                *[token for _, token in non_prompt_forced_decoder_ids],
             ]
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
@@ -2110,6 +2111,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if kwargs.get("num_frames") is not None:
                 generation_config.num_frames = kwargs.pop("num_frames")
 
+        begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
             last_forced_decoder_ids = (
@@ -2124,17 +2126,32 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # Make sure that if list is empty we set it to None
                 generation_config.forced_decoder_ids = forced_decoder_ids
 
-            timestamp_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
+            begin_index = begin_index + len(forced_decoder_ids) if forced_decoder_ids is not None else begin_index
+
+            timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
-                timestamp_processor if logits_processor is None else timestamp_processor + logits_processor
+                [timestamp_processor] if logits_processor is None else [timestamp_processor] + logits_processor
             )
 
-        if hasattr(generation_config, "begin_suppress_tokens") and generation_config.begin_suppress_tokens is not None:
-            begin_suppress_processor = [SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, 1)]
+        if generation_config.suppress_tokens is not None:
+            suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens)
             logits_processor = (
-                timestamp_processor if logits_processor is None else begin_suppress_processor + logits_processor
+                [suppress_tokens_processor] if logits_processor is None else [suppress_tokens_processor] + logits_processor
+            )
+            generation_config.suppress_tokens = None
+
+        if generation_config.begin_suppress_tokens is not None:
+            begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index=begin_index)
+            logits_processor = (
+                [begin_suppress_processor] if logits_processor is None else [begin_suppress_processor] + logits_processor
             )
             generation_config.begin_suppress_tokens = None
+
+        if no_speech_threshold is not None:
+            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index)
+            logits_processor = (
+                [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
+            )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
@@ -2262,7 +2279,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     active_segments, generation_config.pad_token_id, padding="left"
                 )
 
-                prev_start_of_text = generation_config.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
+                prev_start_of_text = suppress_tokens_processor.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
 
                 decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, prev_tokens[:, -cut_off_length:], decoder_input_ids], dim=-1)
                 passed_max_length = kwargs.get("max_length", None)
@@ -2297,20 +2314,21 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 ):
                     kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
 
-            timestamp_processor = [
-                proc for proc in logits_processor if isinstance(proc, WhisperTimeStampLogitsProcessor)
-            ][0]
             timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
-            begin_suppress_processor = [
-                proc for proc in logits_processor if isinstance(proc, SuppressTokensAtBeginLogitsProcessor)
-            ][0]
             begin_suppress_processor.set_begin_index(decoder_input_ids.shape[-1])
+
+            if no_speech_threshold is not None:
+                no_speech_detector.set_begin_index(decoder_input_ids.shape[-1])
 
             print("hf  in tokens", decoder_input_ids[0].tolist())
 
             # 6.6 Batch generate current chunk
+            should_skip = False
             for temperature in temperatures:
                 do_sample = temperature > 0.0
+
+                num_beams = kwargs.pop("num_beams", 1)
+                generation_config.num_beams = num_beams if not do_sample else 1
 
                 seek_outputs = super().generate(
                     segment_input,
@@ -2355,6 +2373,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     seek_sequences = seek_sequences[:, 1:]
 
                 needs_fallback = False
+
                 if compression_ratio_threshold is not None:
                     compression_ratio = [seek_sequence.shape[0] / torch.unique(seek_sequence).shape[0] for seek_sequence in seek_sequences]
 
@@ -2369,14 +2388,24 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         needs_fallback = True
 
                 if logprob_threshold is not None:
-                    scores = [s["scores"] for s in seek_outputs] if output_scores else None
-                    logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id)
+                    if "sequences_scores" in seek_outputs[0]:
+                        logprobs = [s["sequences_scores"] for s in seek_outputs]
+                    else:
+                        scores = [s["scores"] for s in seek_outputs]
+                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id)
 
                     # TODO(PVP) only works for batch size = 1 currently
                     if logprobs[0] < logprob_threshold:
                         print("fallback logprob")
                         print("current temp", temperature)
                         needs_fallback = True
+                
+                if no_speech_threshold is not None:
+                    # TODO(PVP) only works for batch size = 1 currently
+                    # Need to do before all other logit processors
+                    if no_speech_detector.no_speech_prob[0].cpu() > no_speech_threshold and logprobs[0] < logprob_threshold:
+                        needs_fallback = False
+                        should_skip = True
 
                 if not needs_fallback:
                     break
@@ -2384,6 +2413,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
                 prev_i = cur_to_prev_index_map[i]
+
+                if should_skip:
+                    seek[prev_i] += seek_num_frames[prev_i]
+                    print("Skipped!")
+                    continue
 
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
                 is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
@@ -2458,11 +2492,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         lengths = (tokens != eos_token_id).sum(-1)
 
-        avg_logprobs = torch.div(sum_logprobs, lengths)
+        avg_logprobs = torch.div(sum_logprobs, lengths + 1)
         return avg_logprobs
-
-
-        # print("hf tokens", seek_sequences)
 
     @staticmethod
     def _retrieve_segment(

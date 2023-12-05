@@ -1106,6 +1106,7 @@ class GenerationMixin:
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
+        
         return processors
 
     def _get_stopping_criteria(
