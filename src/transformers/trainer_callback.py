@@ -59,7 +59,7 @@ class TrainerState:
             Run an evaluation every X steps.
         save_steps (`int`, *optional*, defaults to 500):
             Save checkpoint every X updates steps.
-        training_batch_size (`int`, *optional*):
+        train_batch_size (`int`, *optional*):
             The batch size for the training dataloader. Only needed when
             `auto_find_batch_size` has been used.
         num_input_tokens_seen (`int`, *optional*, defaults to 0):
