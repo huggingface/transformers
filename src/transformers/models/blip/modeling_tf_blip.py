@@ -1696,7 +1696,7 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
                 self.vision_proj.build(self.config.vision_self.config.hidden_size)
         if getattr(self, "text_proj", None) is not None:
             with tf.name_scope(self.text_proj.name):
-                self.text_proj.build(self.config.text_self.config.hidden_size)
+                self.text_proj.build(self.config.text_config.hidden_size)
         if getattr(self, "itm_head", None) is not None:
             with tf.name_scope(self.itm_head.name):
-                self.itm_head.build(self.config.text_self.config.hidden_size)
+                self.itm_head.build(self.config.text_config.hidden_size)
