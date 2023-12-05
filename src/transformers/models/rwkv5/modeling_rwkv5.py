@@ -22,7 +22,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (

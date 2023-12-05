@@ -14,10 +14,9 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
-from transformers.testing_utils import get_tests_dir, require_torch
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 
 

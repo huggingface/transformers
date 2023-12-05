@@ -57,8 +57,8 @@ class TRIE:
     def __repr__(self):
         fr = self
         ret = []
-        while fr != None:
-            if fr.ch != None:
+        while fr is not None:
+            if fr.ch is not None:
                 ret.append(fr.ch)
             fr = fr.front
         return "<TRIE %s %s>" % (ret[::-1], self.values)
@@ -206,7 +206,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return tokens
 
     def decodeBytes(self, tokens):
-        return b"".join(map(lambda i: self.encoder[i], tokens))
+        return b"".join(lambda i: self.encoder[i], tokens)
 
     def _tokenize(self, text, **kwargs):
         """Tokenize a string."""
@@ -215,12 +215,12 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     def _decode_tokens(self, tokens):
         try:
             return self.decodeBytes(tokens).decode("utf-8")
-        except:
+        except Exception:
             return "\ufffd"  # bad utf-8
 
     def _decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> str:
@@ -460,7 +460,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         **kwargs,
@@ -495,7 +495,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
     def batch_decode(
         self,
-        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        sequences: Union[List[int], List[List[int]]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         **kwargs,
