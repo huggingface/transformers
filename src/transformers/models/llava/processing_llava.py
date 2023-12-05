@@ -16,104 +16,100 @@
 Processor class for Llava.
 """
 
-from typing import Callable, Optional, Union
 
-from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import AddedToken, BatchEncoding
-from ...utils import TensorType, is_torch_available
+from ...tokenization_utils_base import BatchEncoding
+import warnings
 
-
-if is_torch_available():
-    pass
-
-
+# Copied from transformers.models.clip.processing_clip.CLIPProcessor with CLIPTokenizer->LlamaTokenizer,CLIP->Llava,LlavaImageProcessor->CLIPImageProcessor
 class LlavaProcessor(ProcessorMixin):
     r"""
-    Constructs a Llava processor which wraps a LLama tokenizer and Llava image processor into a single processor.
+    Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See
-    the docstring of [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
+    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor (`CLIPImageProcessor`):
-            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
+        image_processor ([`CLIPImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`LlamaTokenizerFast`], *optional*):
+            The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False))
+
         super().__init__(image_processor, tokenizer)
 
-    def __call__(
-        self,
-        text=None,
-        images=None,
-        padding=False,
-        truncation=None,
-        transform: Callable = None,
-        max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-    ) -> BatchEncoding:
-        """This method takes batched or non-batched text made of text and images and converts them into text that
-        the model was trained on and prepares the image pixel values for the model to process.
+    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
-            text (`Union[List[TextInput], [List[List[TextInput]]]]`):
-                either a single prompt or a batched list of text - see the detailed description immediately after
-                the end of the arguments doc section.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            transform (`Callable`, *optional*):
-                A custom transform function that accepts a single image can be passed for training. For example,
-                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
-                set of transforms will be applied to the images
-            return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
-                The type of tensors to return. Can be one of:
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
+
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
-            directly passed to `model.generate`
+            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
-        Detailed explanation:
-
-        Each entry in `text` is either a text to be passed as is or an image that will be processed.
-
-        An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-        if images is not None:
-            pixel_values = self.image_processor(images, transform=transform, return_tensors=return_tensors)[
-                "pixel_values"
-            ]
-        else:
-            pixel_values = None
-        # Attention mask have to be created later on? Or not?
-        text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
-        )
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        if text is None and images is None:
+            raise ValueError("You have to specify either text or images. Both cannot be none.")
+
+        if text is not None:
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+
+        if images is not None:
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+
+        if text is not None and images is not None:
+            encoding["pixel_values"] = image_features.pixel_values
+            return encoding
+        elif text is not None:
+            return encoding
+        else:
+            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -134,3 +130,19 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
