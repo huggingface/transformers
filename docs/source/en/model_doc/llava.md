@@ -26,6 +26,8 @@ The abstract from the paper is the following:
 
 Tips:
 
+We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+
 We have benchmarked our implementation against the original [`BakLlava`](https://github.com/SkunkworksAI/BakLLaVA) implementation that is derived from the original implementation and our implementation leads to important speedups in all scenarios
 
 ### Multiple prompts and fixed number of images
@@ -66,7 +68,6 @@ Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-fe
 ```bash
 pip install -U flash-attn --no-build-isolation
 ```
-
 
 #### Usage
 
