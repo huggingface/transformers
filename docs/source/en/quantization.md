@@ -222,7 +222,7 @@ We also performed benchmarks with [`optimum-benchmark`](https://github.com/huggi
 </div>
 
 <div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput.png">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput_plot.png">
 </div>
 
 
