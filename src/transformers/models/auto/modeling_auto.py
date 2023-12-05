@@ -18,7 +18,12 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .auto_factory import (
+    _BaseAutoBackboneClass,
+    _BaseAutoModelClass,
+    _LazyAutoMapping,
+    auto_class_update,
+)
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
@@ -157,6 +162,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("opt", "OPTModel"),
         ("owlv2", "Owlv2Model"),
         ("owlvit", "OwlViTModel"),
+        ("patchtsmixer", "PatchTSMixerModel"),
         ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
         ("pegasus_x", "PegasusXModel"),
@@ -483,7 +489,10 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("convnextv2", "ConvNextV2ForImageClassification"),
         ("cvt", "CvtForImageClassification"),
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
-        ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
+        (
+            "deit",
+            ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher"),
+        ),
         ("dinat", "DinatForImageClassification"),
         ("dinov2", "Dinov2ForImageClassification"),
         (
@@ -496,7 +505,10 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("efficientnet", "EfficientNetForImageClassification"),
         ("focalnet", "FocalNetForImageClassification"),
         ("imagegpt", "ImageGPTForImageClassification"),
-        ("levit", ("LevitForImageClassification", "LevitForImageClassificationWithTeacher")),
+        (
+            "levit",
+            ("LevitForImageClassification", "LevitForImageClassificationWithTeacher"),
+        ),
         ("mobilenet_v1", "MobileNetV1ForImageClassification"),
         ("mobilenet_v2", "MobileNetV2ForImageClassification"),
         ("mobilevit", "MobileViTForImageClassification"),
@@ -1140,12 +1152,14 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
+        ("patchtsmixer", "PatchTSMixerForTimeSeriesClassification"),
         ("patchtst", "PatchTSTForClassification"),
     ]
 )
 
 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING_NAMES = OrderedDict(
     [
+        ("patchtsmixer", "PatchTSMixerForRegression"),
         ("patchtst", "PatchTSTForRegression"),
     ]
 )
@@ -1305,7 +1319,9 @@ class AutoModelForSeq2SeqLM(_BaseAutoModelClass):
 
 
 AutoModelForSeq2SeqLM = auto_class_update(
-    AutoModelForSeq2SeqLM, head_doc="sequence-to-sequence language modeling", checkpoint_for_example="t5-base"
+    AutoModelForSeq2SeqLM,
+    head_doc="sequence-to-sequence language modeling",
+    checkpoint_for_example="t5-base",
 )
 
 
