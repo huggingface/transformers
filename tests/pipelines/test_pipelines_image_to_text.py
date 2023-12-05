@@ -46,7 +46,7 @@ else:
             pass
 
 
-# @is_pipeline_test
+@is_pipeline_test
 @require_vision
 class ImageToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
@@ -253,7 +253,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-    # @slow
+    @slow
     @require_torch
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
