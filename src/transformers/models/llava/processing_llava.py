@@ -17,11 +17,13 @@ Processor class for Llava.
 """
 
 
-from ...processing_utils import ProcessorMixin
-from ...feature_extraction_utils import BatchFeature
 import warnings
 from typing import Callable, Optional, Union
+
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ProcessorMixin
 from ...utils import TensorType
+
 
 class LlavaProcessor(ProcessorMixin):
     r"""
@@ -60,14 +62,16 @@ class LlavaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self,text=None,
+    def __call__(
+        self,
+        text=None,
         images=None,
         padding=False,
         truncation=None,
         transform: Callable = None,
         max_length=None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH
-        )-> BatchFeature:
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -153,4 +157,3 @@ class LlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
