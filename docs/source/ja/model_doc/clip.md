@@ -85,7 +85,7 @@ CLIP を使い始めるのに役立つ公式 Hugging Face およびコミュニ�
 - [リモート センシング (衛星) 画像とキャプションを使用した CLIP の微調整](https://huggingface.co/blog/fine-tune-clip-rsicd)、[RSICD データセット] を使用して CLIP を微調整する方法に関するブログ投稿(https://github.com/201528014227051/RSICD_optimal) と、データ拡張によるパフォーマンスの変化の比較。
 - この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text) は、プレ- [COCO データセット](https://cocodataset.org/#home) を使用してトレーニングされたビジョンおよびテキスト エンコーダー。
 
-<PipelineTag パイプライン="image-to-text"/>
+<PipelineTag pipeline="image-to-text"/>
 
 - 画像キャプションのビーム検索による推論に事前トレーニング済み CLIP を使用する方法に関する [ノートブック](https://colab.research.google.com/drive/1tuoAC5F4sC7qid56Z0ap-stR3rwdk0ZV?usp=sharing)。 🌎
 

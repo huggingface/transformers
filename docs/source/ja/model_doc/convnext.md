@@ -44,7 +44,7 @@ alt="描画" width="600"/>
 
 ConvNeXT の使用を開始するのに役立つ公式 Hugging Face およびコミュニティ (🌎 で示される) リソースのリスト。
 
-<PipelineTag パイプライン="画像分類"/>
+<PipelineTag pipeline="image-classification"/>
 
 - [`ConvNextForImageClassification`] は、この [サンプル スクリプト](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) および [ノートブック](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb)。
 - 参照: [画像分類タスク ガイド](../tasks/image_classification)
