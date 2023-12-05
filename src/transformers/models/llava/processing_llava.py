@@ -110,8 +110,6 @@ class LlavaProcessor(ProcessorMixin):
         else:
             pixel_values = None
 
-        self.num_tokens_per_images = 576
-        # text = list(map(lambda k:k.replace("<image>", "<image>"*self.num_tokens_per_images), text))
         # Attention mask have to be created later on? Or not?
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length

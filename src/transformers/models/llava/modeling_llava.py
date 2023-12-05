@@ -277,8 +277,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
 
         # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(batch_size, max_embed_dim, embed_dim)
-        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=torch.long)
+        final_embedding = torch.zeros(batch_size, max_embed_dim, embed_dim, device = inputs_embeds.device)
+        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=torch.long, device = inputs_embeds.device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
