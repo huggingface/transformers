@@ -1148,9 +1148,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         modules = self._keep_in_fp32_modules
         modules = modules if modules is not None else []
-        fp32_modules_from_instance = getattr(self, "_keep_in_fp32_modules_in_instance", None)
-        if fp32_modules_from_instance is not None:
-            modules += fp32_modules_from_instance
+        extra_fp32_modules = getattr(self, "_extra_fp32_modules_in_instance", None)
+        if extra_fp32_modules is not None:
+            modules += extra_fp32_modules
 
         return modules
 
