@@ -164,6 +164,13 @@ class AwqTest(unittest.TestCase):
         output = self.quantized_model.generate(**input_ids, max_new_tokens=40)
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_raise_if_non_quantized(self):
+        model_id = "facebook/opt-125m"
+        quantization_config = AwqConfig(bits=4)
+
+        with self.assertRaises(ValueError):
+            _ = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+
     def test_quantized_model_bf16(self):
         """
         Simple test that checks if the quantized model is working properly with bf16
