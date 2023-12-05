@@ -4638,7 +4638,7 @@ class LlamaPreTrainedModel(metaclass=DummyObject):
 LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class LlavaForVisionText2Text(metaclass=DummyObject):
+class LlavaForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

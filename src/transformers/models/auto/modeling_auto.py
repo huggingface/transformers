@@ -263,7 +263,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertForMaskedLM"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("layoutlm", "LayoutLMForMaskedLM"),
-        ("llava", "LlavaForVisionText2Text"),
+        ("llava", "LlavaForCausalLM"),
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
         ("lxmert", "LxmertForPreTraining"),

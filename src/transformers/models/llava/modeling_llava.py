@@ -219,7 +219,7 @@ LLAVA_INPUTS_DOCSTRING = r"""
     """The LLAVA model which consists of a vision backbone and a language model.""",
     LLAVA_START_DOCSTRING,
 )
-class LlavaForVisionText2Text(LlavaPreTrainedModel):
+class LlavaForCausalLM(LlavaPreTrainedModel):
     def __init__(self, config: LlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
@@ -255,7 +255,6 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         return self.language_model.tie_weights()
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        # TODO make sur this works as expected
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.shape[-1]
@@ -333,18 +332,23 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, LlavaForVisionText2Text
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, LlavaForCausalLM
 
-        >>> model = LlavaForVisionText2Text.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = LlavaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
+        >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
 
-        >>> prompt = "Hey, what's the best tomato based dish?!"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
+        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+        
         >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, what's the best tomato based dish?!"
+        "There seems to be a stop sign"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
