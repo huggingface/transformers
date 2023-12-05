@@ -89,6 +89,8 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
         tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
         dim=0,
     )
+    model.config.vocab_size = model.confg.vocab_size + pad_shape
+    model.config.text_config.vocab_size = model.confg.text_config.vocab_size + pad_shape
 
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)
