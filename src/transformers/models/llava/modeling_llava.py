@@ -227,7 +227,9 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         self.multi_modal_projector = LlavaMultiModalProjector(config)
 
         use_flash_attention_2 = getattr(config, "_flash_attn_2_enabled", False)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config, use_flash_attention_2=use_flash_attention_2)
+        self.language_model = AutoModelForCausalLM.from_config(
+            config.text_config, use_flash_attention_2=use_flash_attention_2
+        )
 
         self.post_init()
 
