@@ -2071,6 +2071,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
             )
 
+        if getattr(self, "_awq_is_fused", False):
+            raise ValueError("You cannot save an AWQ model that uses fused modules!")
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -2726,17 +2729,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         quantization_method_from_args = None
+
         if quantization_config is not None:
             quantization_method_from_args = getattr(
                 quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
-
-            if quantization_method_from_args == QuantizationMethod.AWQ:
-                raise ValueError(
-                    "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models"
-                    " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
-                    " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
-                )
 
         if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
@@ -2830,21 +2827,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantization_method_from_config = config.quantization_config.get(
                 "quant_method", QuantizationMethod.BITS_AND_BYTES
             )
+
+        if (
+            quantization_method_from_args is not None
+            and quantization_method_from_args == QuantizationMethod.AWQ
+            and quantization_method_from_config is None
+        ):
+            raise ValueError(
+                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
+                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
+            )
+
         if quantization_method_from_config is not None and quantization_method_from_args is not None:
             if quantization_method_from_config != quantization_method_from_args:
                 raise ValueError(
                     f"The model is already quantized with {quantization_method_from_config}. "
                     f"You can't quantize it again with {quantization_method_from_args}"
                 )
-        if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+
+        if (
+            quantization_method_from_config in (QuantizationMethod.GPTQ, QuantizationMethod.AWQ)
+            and quantization_method_from_args is not None
+        ):
             loading_attr_dict = quantization_config.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 config.quantization_config[attr] = val
             quantization_method_from_args = None
             logger.warning(
-                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
-                "`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                " (e.g. use_exllama, exllama_config, use_cuda_fp16, max_input_length) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+                f"You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
+                f"`quantization_config` attribute and has already quantized weights. However, loading attributes"
+                f" (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
@@ -3372,7 +3384,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = quantizer.convert_model(model)
             model._is_quantized_training_enabled = True
         elif quantization_method_from_config == QuantizationMethod.AWQ:
-            from .integrations import get_keys_to_not_convert, replace_with_awq_linear
+            from .integrations import fuse_awq_modules, get_keys_to_not_convert, replace_with_awq_linear
 
             modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -3589,6 +3601,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Generation config file not found, using a generation config created from the model config."
                 )
                 pass
+
+        if (
+            quantization_config is not None
+            and quantization_config.quant_method == QuantizationMethod.AWQ
+            and quantization_config.do_fuse
+        ):
+            model = fuse_awq_modules(model, config.quantization_config)
+            model._awq_is_fused = True
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
