@@ -42,7 +42,7 @@ class LlavaVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=-200,
+        image_token_index=1,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="default",
@@ -136,7 +136,7 @@ class LlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
         attention_mask = input_ids.ne(1).to(torch_device)
-
+        input_ids[:,1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,

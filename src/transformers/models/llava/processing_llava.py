@@ -110,10 +110,10 @@ class LlavaProcessor(ProcessorMixin):
         else:
             pixel_values = None
 
-        batch_size, _ = pixel_values.shape
-        nb_image_tokens = sum([text.count(self.image_token) for text in text_inputs])
-        if nb_image_tokens != batch_size:
-            raise ValueError("The number of inputs images does not match the number of image tokens")
+        # batch_size, _ = pixel_values.shape
+        # nb_image_tokens = sum([text.count(self.image_token) for text in text_inputs])
+        # if nb_image_tokens != batch_size:
+        #     raise ValueError("The number of inputs images does not match the number of image tokens")
         
         # Attention mask have to be created later on? Or not?
         text_inputs = self.tokenizer(
