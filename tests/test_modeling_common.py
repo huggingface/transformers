@@ -26,6 +26,7 @@ import tempfile
 import warnings
 from collections import defaultdict
 from typing import Dict, List, Tuple
+from unittest.mock import patch
 
 import numpy as np
 from pytest import mark
@@ -283,20 +284,34 @@ class ModelTesterMixin:
     def test_keep_in_fp32_modules(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-            if model_class._keep_in_fp32_modules is None:
-                return
-
             model = model_class(config)
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
 
                 for name, param in model.named_parameters():
-                    if any(n in model_class._keep_in_fp32_modules for n in name.split(".")):
+                    if any(n in model._keep_in_fp32_full_modules for n in name.split(".")):
                         self.assertTrue(param.dtype == torch.float32)
                     else:
                         self.assertTrue(param.dtype == torch.float16, name)
+
+            # test `_keep_in_fp32_full_modules` will take `_extra_fp32_modules_in_instance` into account
+            if model._keep_in_fp32_modules is not None and len(model._keep_in_fp32_modules) > 0:
+                orig_fp32_modules = model._keep_in_fp32_modules
+                orig_fp32_full_modules = model._keep_in_fp32_full_modules
+
+                module = model._keep_in_fp32_modules[0]
+                if getattr(model, "_extra_fp32_modules_in_instance", None) is None:
+                    model._extra_fp32_modules_in_instance = []
+                model._extra_fp32_modules_in_instance.append(module)
+
+                # we can't test with `model = model_class.from_pretrained` as `_extra_fp32_modules_in_instance` is not
+                # defined in `model_class.__init__`.
+                with patch.object(model.__class__, "_keep_in_fp32_modules", orig_fp32_modules[:-1]):
+                    assert len(model._keep_in_fp32_modules) == len(orig_fp32_modules) - 1
+                    assert sorted(model._keep_in_fp32_full_modules) == sorted(orig_fp32_full_modules)
 
     def test_save_load_keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
