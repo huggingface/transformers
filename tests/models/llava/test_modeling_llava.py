@@ -199,13 +199,13 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf")
-        EXPECTED_OUTPUTS = torch.tensor([[1, 32000, 28705,    13, 11123, 28747,  1824,   460,   272,  1722,315,  1023,   347, 13831,   925,   684,   739,   315,  3251,   456,1633, 28804,    13,  4816,  8048, 12738, 28747,  1684, 13726,   456,1633, 28725,   736,   460,  2856,  1722,   624,  1023,   347, 13831,925,   684, 28723,  4205, 28725,   272, 20097]])  # fmt: skip
+        EXPECTED_OUTPUTS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747, 1684, 13726, 456,1633, 28725, 736, 460, 2856, 1722, 624, 1023, 347, 13831,925, 684, 28723, 4205, 28725, 272, 20097]])  # fmt: skip
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
         inputs = self.processor(prompt, raw_image, return_tensors="pt")
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705,    13, 11123, 28747,  1824,   460,   272,  1722,315,  1023,   347, 13831,   925,   684,   739,   315,  3251,   456,1633, 28804,    13,  4816,  8048, 12738, 28747]])  # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722,315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456,1633, 28804, 13, 4816, 8048, 12738, 28747]])  # fmt: skip
         torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         output = model.generate(**inputs, max_new_tokens=20)
@@ -217,7 +217,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf")
-        EXPECTED_OUTPUTS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901, 1932, 6493, 292, 445, 2058, 29892, 607, 5692, 304, 367, 263, 9307, 470, 23630, 23771, 964, 263, 3573, 310, 4094, 29892, 727, 526, 263, 2846, 2712, 304, 367, 274, 1300, 2738, 1048, 29889, 3824, 29892, 367, 9543, 310, 278, 4094, 10809, 322, 738, 7037, 447, 29920, 3163, 29892, 1316, 408, 1014, 1050, 3192, 23150, 470, 316, 1182, 275, 29889, 6440, 29892, 367, 3458, 1319, 310, 278, 14826, 5855, 29892, 408, 8327, 3620, 297, 14826, 508, 1207, 278, 9307, 470, 23630, 25110, 304, 6686, 373, 29889, 18008, 29892, 367, 274, 1300, 2738, 310, 278, 18830, 5177, 29892, 408, 727, 1795, 367, 8775, 19264, 470, 916, 7037, 447, 29920, 3163, 297, 278, 4038, 29889, 9208, 368, 29892, 367, 9543, 310, 738, 1887, 1072, 8250, 470, 1410, 10652, 1475, 363, 278, 671, 310, 278, 9307, 470, 23630, 29892, 408, 777, 10161, 1122, 505, 2702, 6865, 470, 25091, 297, 2058, 29889, 2,]])  # fmt: skip
+        EXPECTED_OUTPUTS = torch.tensor([[ 1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722, 315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456, 1633, 28804, 1824, 1023, 315, 2968, 395, 528, 13, 4816, 8048, 12738, 28747, 1684, 13726, 456, 1633, 28725, 2968, 264, 7555, 298, 11319, 272, 4672, 752, 790, 28724, 28725, 264, 8450, 5964, 302], [32001, 32001, 32001, 32001, 1, 32000, 28705, 13, 11123, 28747, 1824, 349, 456, 28804, 13, 4816, 8048, 12738, 28747, 6005, 18097, 10580, 356, 264, 2855, 28808, 13, 11123, 28747, 1015, 456, 28804, 32000, 264, 20097, 356, 264, 14411, 395, 989, 18097, 356, 378, 2, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001, 32001]])  # fmt: skip
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "<image>\nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT:",
@@ -228,11 +228,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]]) # fmt: skip
-        # torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
+        EXPECTED_INPUT_IDS = torch.tensor([[ 1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722, 315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456, 1633, 28804, 1824, 1023, 315, 2968, 395, 528, 13, 4816, 8048, 12738, 28747], [32001, 32001, 32001, 32001, 1, 32000, 28705, 13, 11123, 28747, 1824, 349, 456, 28804, 13, 4816, 8048, 12738, 28747, 6005, 18097, 10580, 356, 264, 2855, 28808, 13, 11123, 28747, 1015, 456, 28804, 32000]]) # fmt: skip
+        torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         output = model.generate(**inputs, max_new_tokens=20)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
 
-        # EXPECTED_DECODED_TEXT = """\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which appears to be a pier or dock extending into a body of water, there are a few things to be cautious about. First, be aware of the water depth and any potential hazards, such as submerged rocks or debris. Second, be mindful of the weather conditions, as sudden changes in weather can make the pier or dock unsafe to walk on. Third, be cautious of the surrounding environment, as there might be wildlife or other potential hazards in the area. Lastly, be aware of any local regulations or guidelines for the use of the pier or dock, as some areas may have specific rules or restrictions in place.""" # fmt: skip
-        # self.assertEqual(self.processor.decode(output[0][2:], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+        EXPECTED_DECODED_TEXT = ['<image> \nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera to capture the beautiful scenery, a comfortable pair of', '<image> \nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this?<image> a dock on a lake with two cats on it']# fmt: skip
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
