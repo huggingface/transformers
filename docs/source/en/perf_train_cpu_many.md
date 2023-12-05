@@ -26,7 +26,7 @@ Module `oneccl_bindings_for_pytorch` (`torch_ccl` before version 1.12)  implemen
 
 Check more detailed information for [oneccl_bind_pt](https://github.com/intel/torch-ccl).
 
-### Intel® oneCCL Bindings for PyTorch installation:
+### Intel® oneCCL Bindings for PyTorch installation
 
 Wheel files are available for the following Python versions:
 
@@ -69,9 +69,9 @@ torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os
 source $torch_ccl_path/env/setvars.sh
 ```
 
-#### Intel® Extension for PyTorch installation:
+#### Intel® Extension for PyTorch installation
 
-Intel Extension for PyTorch (IPEX) provides performance optimizations for CPU training with both Float32 and BFloat16, you could refer [single CPU section](./perf_train_cpu).
+Intel Extension for PyTorch (IPEX) provides performance optimizations for CPU training with both Float32 and BFloat16 (refer to the [single CPU section](./perf_train_cpu) to learn more).
 
 
 The following "Usage in Trainer" takes mpirun in Intel® MPI library as an example.
