@@ -226,7 +226,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         self.vision_tower = AutoModel.from_config(config.vision_config)
         self.vision_tower._no_split_modules = ["CLIPEncoderLayer"]
         self.multi_modal_projector = LlavaMultiModalProjector(config)
-
+        self.vocab_size = config.vocab_size
         use_flash_attention_2 = getattr(config, "_flash_attn_2_enabled", False)
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, use_flash_attention_2=use_flash_attention_2
@@ -260,6 +260,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         # update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.config.vocab_size = model_embeds.num_embeddings
+        self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
     def _merge_input_ids_with_image_features(
