@@ -38,7 +38,7 @@ class LlavaProcessor(ProcessorMixin):
     Args:
         image_processor (`CLIPImageProcessor`):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`, *optional*):
+        tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
     """
 
