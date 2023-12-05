@@ -2320,15 +2320,15 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     )
                 elif (
                     passed_max_new_tokens is not None
-                    and passed_max_new_tokens + cut_off_length + 2 > self.config.max_target_positions
+                    and passed_max_new_tokens + decoder_input_ids.shape[-1] > self.config.max_target_positions
                 ):
-                    kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
+                    kwargs["max_new_tokens"] = self.config.max_target_positions - decoder_input_ids.shape[-1]
                 elif (
                     passed_max_new_tokens is None
                     and max_new_tokens_config is not None
-                    and max_new_tokens_config + cut_off_length + 2 > self.config.max_target_positions
+                    and max_new_tokens_config + decoder_input_ids.shape[-1] > self.config.max_target_positions
                 ):
-                    kwargs["max_new_tokens"] = self.config.max_target_positions - cut_off_length - 2
+                    kwargs["max_new_tokens"] = self.config.max_target_positions - decoder_input_ids.shape[-1]
 
             timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
             begin_suppress_processor.set_begin_index(decoder_input_ids.shape[-1])
