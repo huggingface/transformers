@@ -253,7 +253,8 @@ class LlavaForVisionText2Text(LlavaPreTrainedModel):
         # TODO make sur this works as expected
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
-        self.config.text_config.vocab_size = new_num_tokens
+        self.config.text_config.vocab_size = model_embeds.shape[-1]
+        self.config.vocab_size = model_embeds.shape[-1]
         return model_embeds
 
     def _merge_input_ids_with_image_features(
