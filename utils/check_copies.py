@@ -441,7 +441,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
         base_path (`str`):
             The path to the base directory within which the search will be performed. It could be either
             `TRANSFORMERS_PATH` or `MODEL_TEST_PATH`.
-        buf (`dict`, *optional*):
+        buffer (`dict`, *optional*):
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
@@ -452,11 +452,11 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
         code_splits (`List[Tuple[str, int, int]]`):
             `code` splitted into blocks. See `split_code_into_blocks`.
     """
-    if buf is None:
-        buf = {}
+    if buffer is None:
+        buffer = {}
 
-    if (object_name, base_path) in buf:
-        lines, code, code_splits = buf[(object_name, base_path)]
+    if (object_name, base_path) in buffer:
+        lines, code, code_splits = buffer[(object_name, base_path)]
     else:
         code, (lines, target_start_index, target_end_index) = find_code_in_transformers(
             object_name, base_path=base_path, return_indices=True
@@ -469,7 +469,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
         code_splits = split_code_into_blocks(
             lines, target_start_index, target_end_index, len(indent) + 4, backtrace=True
         )
-        buf[(object_name, base_path)] = lines, code, code_splits
+        buffer[(object_name, base_path)] = lines, code, code_splits
 
     return lines, code, code_splits
 
