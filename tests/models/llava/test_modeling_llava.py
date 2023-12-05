@@ -140,6 +140,7 @@ class LlavaVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = input_ids.ne(1).to(torch_device)
+        # we are giving 3 images let's make sure we pass in 3 image tokens
         input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
