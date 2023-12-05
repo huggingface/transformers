@@ -1510,9 +1510,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:]
+                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
