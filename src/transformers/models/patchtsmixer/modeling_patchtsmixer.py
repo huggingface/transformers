@@ -2134,7 +2134,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return PatchTSMixerForRegressionOutput(
             loss=loss_val,
             prediction_outputs=y_hat,  # tensor [batch_size x num_targets]
-            last_hidden_state=model_output.last_hidden_state,  # x: [batch_size x nvars x num_patch x d_model]
+            last_hidden_state=model_output.last_hidden_state,  # [batch_size x nvars x num_patch x d_model]
             hidden_states=model_output.hidden_states,
         )
 
