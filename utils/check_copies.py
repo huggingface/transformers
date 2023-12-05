@@ -673,7 +673,7 @@ MODELS_NOT_IN_README = [
     "TimmBackbone",
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
-    "CLIPVisionModel"
+    "CLIPVisionModel",
 ]
 
 # Template for new entries to add in the main README when we have missing models.
