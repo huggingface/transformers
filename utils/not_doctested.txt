@@ -776,6 +776,7 @@ src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
 src/transformers/models/sam/processing_sam.py
 src/transformers/models/seamless_m4t/convert_fairseq2_to_hf.py
+src/transformers/models/seamless_m4t_v2/convert_fairseq2_to_hf.py
 src/transformers/models/segformer/configuration_segformer.py
 src/transformers/models/segformer/convert_segformer_original_to_pytorch.py
 src/transformers/models/sew/convert_sew_original_pytorch_checkpoint_to_pytorch.py

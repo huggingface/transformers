@@ -793,6 +793,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -850,6 +851,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
@@ -881,6 +883,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
@@ -2831,7 +2834,7 @@ class Trainer:
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(
+                unwrap_model(self.model).to("cpu").save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=self.model.state_dict(),
@@ -2839,10 +2842,12 @@ class Trainer:
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict()
+                state_dict = self.model.state_dict().to("cpu")
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
+            self.model.to("cpu").save_pretrained(
+                output_dir, is_main_process=self.args.should_save, save_function=xm.save
+            )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
