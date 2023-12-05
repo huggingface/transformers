@@ -17,13 +17,13 @@ import torch
 from huggingface_hub import hf_hub_download
 
 from transformers import (
+    AddedToken,
     AutoConfig,
     AutoTokenizer,
     CLIPImageProcessor,
     LlavaConfig,
     LlavaForConditionalGeneration,
     LlavaProcessor,
-    AddedToken
 )
 
 
@@ -55,9 +55,9 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special = True, normalized=False), special = True)
-    tokenizer.add_special_tokens({"pad_token":"<pad>"})
-    
+    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special=True)
+    tokenizer.add_special_tokens({"pad_token": "<pad>"})
+
     image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)
 
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)

@@ -273,4 +273,3 @@ class ImageToTextPipelineTests(unittest.TestCase):
                 }
             ],
         )
-

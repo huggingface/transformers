@@ -25,11 +25,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-    slow
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -214,6 +210,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_DECODED_TEXT = "'\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are several things one should be cautious about. First, the dock'"  # fmt: skip
         self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
+    @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf")
@@ -228,11 +225,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = self.processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
 
-        EXPECTED_INPUT_IDS = torch.tensor([[ 1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722, 315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456, 1633, 28804, 1824, 1023, 315, 2968, 395, 528, 13, 4816, 8048, 12738, 28747], [32001, 32001, 32001, 32001, 1, 32000, 28705, 13, 11123, 28747, 1824, 349, 456, 28804, 13, 4816, 8048, 12738, 28747, 6005, 18097, 10580, 356, 264, 2855, 28808, 13, 11123, 28747, 1015, 456, 28804, 32000]]) # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[ 1, 32000, 28705, 13, 11123, 28747, 1824, 460, 272, 1722, 315, 1023, 347, 13831, 925, 684, 739, 315, 3251, 456, 1633, 28804, 1824, 1023, 315, 2968, 395, 528, 13, 4816, 8048, 12738, 28747], [32001, 32001, 32001, 32001, 1, 32000, 28705, 13, 11123, 28747, 1824, 349, 456, 28804, 13, 4816, 8048, 12738, 28747, 6005, 18097, 10580, 356, 264, 2855, 28808, 13, 11123, 28747, 1015, 456, 28804, 32000]])  # fmt: skip
         torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         output = model.generate(**inputs, max_new_tokens=20)
         torch.testing.assert_close(output, EXPECTED_OUTPUTS)
 
-        EXPECTED_DECODED_TEXT = ['<image> \nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera to capture the beautiful scenery, a comfortable pair of', '<image> \nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this?<image> a dock on a lake with two cats on it']# fmt: skip
+        EXPECTED_DECODED_TEXT = ['<image> \nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera to capture the beautiful scenery, a comfortable pair of', '<image> \nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this?<image> a dock on a lake with two cats on it']  # fmt: skip
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
