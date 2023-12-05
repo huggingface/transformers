@@ -7,7 +7,7 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - run_amd_scheduled_ci_caller__*
 
 jobs:
   run_amd_ci:
