@@ -2105,7 +2105,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 scale=model_output.scale,
             )  # x: [batch_size x nvars x num_patch x d_model]
 
-        y_hat = self.head(model_output.last_hidden_state)  # tensor [batch_size x num_targets]
+        y_hat = self.head(model_output.last_hidden_state)  # [batch_size x num_targets]
 
         if future_values is not None and return_loss is True:
             if self.distribution_output:
