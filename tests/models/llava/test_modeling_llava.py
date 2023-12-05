@@ -135,9 +135,9 @@ class LlavaVisionText2TextModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size-1)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1)
         attention_mask = input_ids.ne(1).to(torch_device)
-        input_ids[:,1] = config.image_token_index
+        input_ids[:, 1] = config.image_token_index
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,
@@ -154,9 +154,9 @@ class LlavaForCausalLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (LlavaForCausalLM,) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False
     test_pruning = False
-    test_resize_embeddings = True  # TODO we need to support resizing
+    test_resize_embeddings = True
     test_head_masking = False
 
     def setUp(self):

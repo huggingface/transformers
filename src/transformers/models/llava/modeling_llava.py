@@ -40,7 +40,7 @@ _CONFIG_FOR_DOC = "LlavaConfig"
 LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "llava-hf/llava-1.5-7b-hf",
     "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf"
+    "llava-hf/bakLlava-v1-hf",
     # See all Llava models at https://huggingface.co/models?filter=llava
 ]
 
@@ -285,7 +285,9 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         final_embedding = torch.zeros(
             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
-        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device)
+        final_attention_mask = torch.zeros(
+            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
+        )
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
@@ -298,7 +300,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
         else:
             image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:, None]
-        
+
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
                 f"The input provided to the model are wrong. The number of image tokens is {torch.sum(image_token_mask)} while"
