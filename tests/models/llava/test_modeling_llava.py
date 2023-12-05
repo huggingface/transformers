@@ -153,8 +153,7 @@ class LlavaVisionText2TextModelTester:
 @require_torch
 class LlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as CLIP does not use input_ids, inputs_embeds,
-    attention_mask and seq_length.
+    Model tester for `LlavaForConditionalGeneration`.
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
