@@ -59,29 +59,38 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
     config = LlavaConfig(text_config=text_config)
+    config.pad_token_id = 32001
 
     with torch.device("meta"):
         model = LlavaForVisionText2Text(config)
+
+    # Pad to 64 for performance reasons
+    pad_shape = 64
 
     state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict.bin")
 
     state_dict = torch.load(state_dict_path, map_location="cpu")
     state_dict = convert_state_dict_to_hf(state_dict)
-
-    embed_tokens = state_dict["language_model.model.embed_tokens.weight"]
-    lm_head = state_dict["language_model.lm_head.weight"]
-
-    new_embed_tokens = torch.zeros((embed_tokens.shape[0] + 1, embed_tokens.shape[1]), dtype=embed_tokens.dtype)
-    new_embed_tokens.data[: config.text_config.vocab_size - 1, :] = embed_tokens
-
-    state_dict["language_model.model.embed_tokens.weight"] = new_embed_tokens
-
-    new_lm_head = torch.zeros((lm_head.shape[0] + 1, lm_head.shape[1]), dtype=lm_head.dtype)
-    new_lm_head.data[: config.text_config.vocab_size - 1, :] = lm_head
-
-    state_dict["language_model.lm_head.weight"] = new_lm_head
-
     model.load_state_dict(state_dict, strict=True, assign=True)
+
+    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
+    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
+    n = pre_expansion_embeddings.size()[0]
+    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+
+    # We add an image token so we resize the model
+    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
+    model.language_model.model.embed_tokens.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+    model.language_model.lm_head.weight.data[32000:] = torch.stack(
+        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[32000:].shape[0]))),
+        dim=0,
+    )
+    model.config.vocab_size = model.confg.vocab_size + pad_shape
+    model.config.text_config.vocab_size = model.confg.text_config.vocab_size + pad_shape
 
     model.push_to_hub(output_hub_path)
     processor.push_to_hub(output_hub_path)

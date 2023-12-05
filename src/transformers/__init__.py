@@ -248,7 +248,6 @@ _import_structure = {
         "CLIPTextConfig",
         "CLIPTokenizer",
         "CLIPVisionConfig",
-        "CLIPVisionConfig",
     ],
     "models.clipseg": [
         "CLIPSEG_PRETRAINED_CONFIG_ARCHIVE_MAP",
