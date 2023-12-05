@@ -16,7 +16,8 @@ RUN apt update && \
     rocrand-dev \
     rocthrust-dev \
     hipsparse-dev \
-    hipblas-dev && \
+    hipblas-dev \
+    rocblas-dev && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
