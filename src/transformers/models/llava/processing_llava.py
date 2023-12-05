@@ -44,16 +44,15 @@ class LlavaProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = "LlamaTokenizerFast"
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    def __init__(self, image_processor, tokenizer=None):
+    def __init__(self, image_processor, tokenizer):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
         tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False))
         super().__init__(image_processor, tokenizer)
-        self.current_processor = self.image_processor
 
     def __call__(
         self,

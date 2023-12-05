@@ -115,6 +115,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vitmatte", "VitMatteImageProcessor"),
         ("xclip", "CLIPImageProcessor"),
         ("yolos", "YolosImageProcessor"),
+        ("llava", "CLIPImageProcessor"),
     ]
 )
 

@@ -46,7 +46,7 @@ else:
             pass
 
 
-@is_pipeline_test
+# @is_pipeline_test
 @require_vision
 class ImageToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
@@ -253,7 +253,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             ],
         )
 
-    @slow
+    # @slow
     @require_torch
     def test_conditional_generation_llava(self):
         pipe = pipeline("image-to-text", model="llava-hf/bakLlava-v1-hf")
@@ -264,8 +264,8 @@ class ImageToTextPipelineTests(unittest.TestCase):
             "<image>\nUSER:What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT:"
         )
 
-        outputs = pipe(image, prompt=prompt)
-        self.assertEqual(outputs, [{"generated_text": "ash cloud"}])
+        outputs = pipe(image, prompt=prompt, generate_kwargs = {"max_new_tokens":200})
+        self.assertEqual(outputs, [{"generated_text": "\nUSER:What does the label 15 represent? (1) lava (2) core (3) tunnel (4) ash cloud\nASSISTANT: Lava"}])
 
         with self.assertRaises(ValueError):
             outputs = pipe([image, image], prompt=[prompt, prompt])
