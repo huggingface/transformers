@@ -131,14 +131,6 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
         hidden_state = self.dropout(hidden_state, training=training)
         return hidden_state
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convolution_embeddings", None) is not None:
-            with tf.name_scope(self.convolution_embeddings.name):
-                self.convolution_embeddings.build(None)
-
 
 class TFCvtConvEmbeddings(tf.keras.layers.Layer):
     """Image to Convolution Embeddings. This convolutional operation aims to model local spatial contexts."""
@@ -168,7 +160,6 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
         # Using the same default epsilon as PyTorch
         self.normalization = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="normalization")
         self.num_channels = num_channels
-        self.embed_dim = embed_dim
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         if isinstance(pixel_values, dict):
@@ -185,17 +176,6 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
         # "batch_size, (height*width), num_channels -> batch_size, height, width, num_channels"
         pixel_values = tf.reshape(pixel_values, shape=(batch_size, height, width, num_channels))
         return pixel_values
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "projection", None) is not None:
-            with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
-        if getattr(self, "normalization", None) is not None:
-            with tf.name_scope(self.normalization.name):
-                self.normalization.build([None, None, self.embed_dim])
 
 
 class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
@@ -216,23 +196,11 @@ class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
         )
         # Using the same default epsilon as PyTorch, TF uses (1 - pytorch momentum)
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
-        self.embed_dim = embed_dim
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = self.convolution(self.padding(hidden_state))
         hidden_state = self.normalization(hidden_state, training=training)
         return hidden_state
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convolution", None) is not None:
-            with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.embed_dim)
-        if getattr(self, "normalization", None) is not None:
-            with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
 
 
 class TFCvtSelfAttentionLinearProjection(tf.keras.layers.Layer):
@@ -270,14 +238,6 @@ class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
         hidden_state = self.convolution_projection(hidden_state, training=training)
         hidden_state = self.linear_projection(hidden_state)
         return hidden_state
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convolution_projection", None) is not None:
-            with tf.name_scope(self.convolution_projection.name):
-                self.convolution_projection.build(None)
 
 
 class TFCvtSelfAttention(tf.keras.layers.Layer):
@@ -400,29 +360,6 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
         context = tf.reshape(context, (batch_size, hidden_size, self.num_heads * head_dim))
         return context
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "convolution_projection_query", None) is not None:
-            with tf.name_scope(self.convolution_projection_query.name):
-                self.convolution_projection_query.build(None)
-        if getattr(self, "convolution_projection_key", None) is not None:
-            with tf.name_scope(self.convolution_projection_key.name):
-                self.convolution_projection_key.build(None)
-        if getattr(self, "convolution_projection_value", None) is not None:
-            with tf.name_scope(self.convolution_projection_value.name):
-                self.convolution_projection_value.build(None)
-        if getattr(self, "projection_query", None) is not None:
-            with tf.name_scope(self.projection_query.name):
-                self.projection_query.build(self.embed_dim)
-        if getattr(self, "projection_key", None) is not None:
-            with tf.name_scope(self.projection_key.name):
-                self.projection_key.build(self.embed_dim)
-        if getattr(self, "projection_value", None) is not None:
-            with tf.name_scope(self.projection_value.name):
-                self.projection_value.build(self.embed_dim)
-
 
 class TFCvtSelfOutput(tf.keras.layers.Layer):
     """Output of the Attention layer ."""
@@ -433,20 +370,11 @@ class TFCvtSelfOutput(tf.keras.layers.Layer):
             units=embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = tf.keras.layers.Dropout(drop_rate)
-        self.embed_dim = embed_dim
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = self.dense(inputs=hidden_state)
         hidden_state = self.dropout(inputs=hidden_state, training=training)
         return hidden_state
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.embed_dim)
 
 
 class TFCvtAttention(tf.keras.layers.Layer):
@@ -495,17 +423,6 @@ class TFCvtAttention(tf.keras.layers.Layer):
         attention_output = self.dense_output(self_output, training=training)
         return attention_output
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "dense_output", None) is not None:
-            with tf.name_scope(self.dense_output.name):
-                self.dense_output.build(None)
-
 
 class TFCvtIntermediate(tf.keras.layers.Layer):
     """Intermediate dense layer. Second chunk of the convolutional transformer block."""
@@ -518,19 +435,10 @@ class TFCvtIntermediate(tf.keras.layers.Layer):
             activation="gelu",
             name="dense",
         )
-        self.embed_dim = embed_dim
 
     def call(self, hidden_state: tf.Tensor) -> tf.Tensor:
         hidden_state = self.dense(hidden_state)
         return hidden_state
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(self.embed_dim)
 
 
 class TFCvtOutput(tf.keras.layers.Layer):
@@ -544,22 +452,12 @@ class TFCvtOutput(tf.keras.layers.Layer):
             units=embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = tf.keras.layers.Dropout(drop_rate)
-        self.mlp_ratio = config.mlp_ratio
-        self.embed_dim = embed_dim
 
     def call(self, hidden_state: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = self.dense(inputs=hidden_state)
         hidden_state = self.dropout(inputs=hidden_state, training=training)
         hidden_state = hidden_state + input_tensor
         return hidden_state
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
-                self.dense.build(int(self.embed_dim * self.mlp_ratio))
 
 
 class TFCvtLayer(tf.keras.layers.Layer):
@@ -616,7 +514,6 @@ class TFCvtLayer(tf.keras.layers.Layer):
         # Using the same default epsilon as PyTorch
         self.layernorm_before = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_before")
         self.layernorm_after = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_after")
-        self.embed_dim = embed_dim
 
     def call(self, hidden_state: tf.Tensor, height: int, width: int, training: bool = False) -> tf.Tensor:
         # in Cvt, layernorm is applied before self-attention
@@ -634,29 +531,6 @@ class TFCvtLayer(tf.keras.layers.Layer):
         layer_output = self.dense_output(layer_output, hidden_state)
         layer_output = self.drop_path(layer_output, training=training)
         return layer_output
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
-                self.attention.build(None)
-        if getattr(self, "intermediate", None) is not None:
-            with tf.name_scope(self.intermediate.name):
-                self.intermediate.build(None)
-        if getattr(self, "dense_output", None) is not None:
-            with tf.name_scope(self.dense_output.name):
-                self.dense_output.build(None)
-        if getattr(self, "drop_path", None) is not None:
-            with tf.name_scope(self.drop_path.name):
-                self.drop_path.build(None)
-        if getattr(self, "layernorm_before", None) is not None:
-            with tf.name_scope(self.layernorm_before.name):
-                self.layernorm_before.build([None, None, self.embed_dim])
-        if getattr(self, "layernorm_after", None) is not None:
-            with tf.name_scope(self.layernorm_after.name):
-                self.layernorm_after.build([None, None, self.embed_dim])
 
 
 class TFCvtStage(tf.keras.layers.Layer):
@@ -742,18 +616,6 @@ class TFCvtStage(tf.keras.layers.Layer):
         hidden_state = tf.reshape(hidden_state, shape=(batch_size, height, width, num_channels))
         return hidden_state, cls_token
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "embedding", None) is not None:
-            with tf.name_scope(self.embedding.name):
-                self.embedding.build(None)
-        if getattr(self, "layers", None) is not None:
-            for layer in self.layers:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
-
 
 class TFCvtEncoder(tf.keras.layers.Layer):
     """
@@ -806,15 +668,6 @@ class TFCvtEncoder(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "stages", None) is not None:
-            for layer in self.stages:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
-
 
 @keras_serializable
 class TFCvtMainLayer(tf.keras.layers.Layer):
@@ -855,14 +708,6 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
             cls_token_value=encoder_outputs.cls_token_value,
             hidden_states=encoder_outputs.hidden_states,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
-                self.encoder.build(None)
 
 
 class TFCvtPreTrainedModel(TFPreTrainedModel):
@@ -983,14 +828,6 @@ class TFCvtModel(TFCvtPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "cvt", None) is not None:
-            with tf.name_scope(self.cvt.name):
-                self.cvt.build(None)
-
 
 @add_start_docstrings(
     """
@@ -1016,7 +853,6 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
             bias_initializer="zeros",
             name="classifier",
         )
-        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TFCVT_INPUTS_DOCSTRING)
@@ -1086,17 +922,3 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
             return ((loss,) + output) if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "cvt", None) is not None:
-            with tf.name_scope(self.cvt.name):
-                self.cvt.build(None)
-        if getattr(self, "layernorm", None) is not None:
-            with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, self.config.embed_dim[-1]])
-        if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
