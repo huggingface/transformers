@@ -20,8 +20,9 @@ Processor class for Llava.
 from ...processing_utils import ProcessorMixin
 from ...feature_extraction_utils import BatchFeature
 import warnings
+from typing import Callable, Optional, Union
+from ...utils import TensorType
 
-# Copied from transformers.models.clip.processing_clip.CLIPProcessor with CLIPTokenizer->LlamaTokenizer,CLIP->Llava,LlavaImageProcessor->CLIPImageProcessor,BatchEncoding->BatchFeature
 class LlavaProcessor(ProcessorMixin):
     r"""
     Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
@@ -40,6 +41,7 @@ class LlavaProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.__init__
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         feature_extractor = None
         if "feature_extractor" in kwargs:
@@ -58,7 +60,14 @@ class LlavaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(self,text=None,
+        images=None,
+        padding=False,
+        truncation=None,
+        transform: Callable = None,
+        max_length=None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH
+        )-> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -75,7 +84,23 @@ class LlavaProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
+            transform (`Callable`, *optional*):
+                A custom transform function that accepts a single image can be passed for training. For example,
+                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
+                set of transforms will be applied to the images
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -93,24 +118,20 @@ class LlavaProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-
-        if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be none.")
-
-        if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
+            pixel_values = self.image_processor(images, transform=transform, return_tensors=return_tensors)[
+                "pixel_values"
+            ]
         else:
-            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
+            pixel_values = None
+        # Attention mask have to be created later on? Or not?
+        text_inputs = self.tokenizer(
+            text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+        )
 
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -118,6 +139,7 @@ class LlavaProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
@@ -126,23 +148,9 @@ class LlavaProcessor(ProcessorMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
+    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.model_input_names
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    @property
-    def feature_extractor_class(self):
-        warnings.warn(
-            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
-            FutureWarning,
-        )
-        return self.image_processor_class
-
-    @property
-    def feature_extractor(self):
-        warnings.warn(
-            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
-            FutureWarning,
-        )
-        return self.image_processor
