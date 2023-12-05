@@ -420,10 +420,10 @@ jobs:
       check_runner_status,
       check_runners,
       setup,
-      run_tests_single_gpu,
-      run_tests_multi_gpu,
-      run_examples_gpu,
-      run_pipelines_torch_gpu,
+      # run_tests_single_gpu,
+      # run_tests_multi_gpu,
+      # run_examples_gpu,
+      # run_pipelines_torch_gpu,
       run_tests_torch_deepspeed_gpu
     ]
     steps:
@@ -469,10 +469,10 @@ jobs:
       check_runner_status,
       check_runners,
       setup,
-      run_tests_single_gpu,
-      run_tests_multi_gpu,
-      run_examples_gpu,
-      run_pipelines_torch_gpu,
+      # run_tests_single_gpu,
+      # run_tests_multi_gpu,
+      # run_examples_gpu,
+      # run_pipelines_torch_gpu,
       run_tests_torch_deepspeed_gpu,
       run_extract_warnings
     ]
