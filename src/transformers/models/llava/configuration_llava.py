@@ -43,7 +43,7 @@ class LlavaConfig(PretrainedConfig):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to -200):
+        image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
