@@ -431,7 +431,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buf: dict = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: dict = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -560,7 +560,7 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
         diff_index += 1
 
 
-def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None) -> Optional[List[Tuple[str, int]]]:
+def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = None) -> Optional[List[Tuple[str, int]]]:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -569,7 +569,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
             The name of the file to check.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the copies when they don't match.
-        buf (`dict`, *optional*):
+        buffer (`dict`, *optional*):
             The buffer used to store the previous results in order to speed up the process.
 
     Returns:
@@ -597,7 +597,7 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buf: dict = None)
         indent, object_name, replace_pattern = search.groups()
 
         # Find the file lines, the object's code, and its blocks
-        target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(object_name, base_path, buf=buf)
+        target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(object_name, base_path, buffer=buffer)
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -761,7 +761,7 @@ def check_copies(overwrite: bool = False, file: str = None):
         file (`bool`, *optional*):
             The path to a specific file to check and/or fix.
     """
-    buf = {}
+    buffer = {}
 
     if file is None:
         all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
@@ -772,7 +772,7 @@ def check_copies(overwrite: bool = False, file: str = None):
 
     diffs = []
     for filename in all_files:
-        new_diffs = is_copy_consistent(filename, overwrite, buf)
+        new_diffs = is_copy_consistent(filename, overwrite, buffer)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
