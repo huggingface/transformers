@@ -78,6 +78,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
         self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.n_state = n_state
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -159,10 +160,10 @@ class TFAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_attn", None) is not None:
             with tf.name_scope(self.c_attn.name):
-                self.c_attn.build(n_state * 3)
+                self.c_attn.build(self.n_state * 3)
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(n_state)
+                self.c_proj.build(self.n_state)
 
 
 class TFMLP(tf.keras.layers.Layer):
@@ -173,7 +174,8 @@ class TFMLP(tf.keras.layers.Layer):
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation("gelu")
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
-        self.nx = None  # TODO Matt: Set value
+        self.nx = nx
+        self.n_state = n_state
 
     def call(self, x, training=False):
         h = self.act(self.c_fc(x))
@@ -187,7 +189,7 @@ class TFMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_fc", None) is not None:
             with tf.name_scope(self.c_fc.name):
-                self.c_fc.build(n_state)
+                self.c_fc.build(self.n_state)
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
                 self.c_proj.build(self.nx)
