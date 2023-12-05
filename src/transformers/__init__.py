@@ -503,6 +503,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -549,6 +550,10 @@ _import_structure = {
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
         "SeamlessM4TProcessor",
+    ],
+    "models.seamless_m4t_v2": [
+        "SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SeamlessM4Tv2Config",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -1182,6 +1187,8 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -2520,6 +2527,17 @@ else:
             "OwlViTVisionModel",
         ]
     )
+    _import_structure["models.patchtst"].extend(
+        [
+            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSTForClassification",
+            "PatchTSTForPrediction",
+            "PatchTSTForPretraining",
+            "PatchTSTForRegression",
+            "PatchTSTModel",
+            "PatchTSTPreTrainedModel",
+        ]
+    )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
     )
@@ -2774,6 +2792,17 @@ else:
             "SeamlessM4TPreTrainedModel",
             "SeamlessM4TTextToUnitForConditionalGeneration",
             "SeamlessM4TTextToUnitModel",
+        ]
+    )
+    _import_structure["models.seamless_m4t_v2"].extend(
+        [
+            "SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4Tv2ForSpeechToSpeech",
+            "SeamlessM4Tv2ForSpeechToText",
+            "SeamlessM4Tv2ForTextToSpeech",
+            "SeamlessM4Tv2ForTextToText",
+            "SeamlessM4Tv2Model",
+            "SeamlessM4Tv2PreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -4745,6 +4774,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -4794,6 +4824,10 @@ if TYPE_CHECKING:
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
         SeamlessM4TProcessor,
+    )
+    from .models.seamless_m4t_v2 import (
+        SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SeamlessM4Tv2Config,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
@@ -5356,6 +5390,8 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -6456,6 +6492,15 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
+        from .models.patchtst import (
+            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSTForClassification,
+            PatchTSTForPrediction,
+            PatchTSTForPretraining,
+            PatchTSTForRegression,
+            PatchTSTModel,
+            PatchTSTPreTrainedModel,
+        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -6673,6 +6718,15 @@ if TYPE_CHECKING:
             SeamlessM4TPreTrainedModel,
             SeamlessM4TTextToUnitForConditionalGeneration,
             SeamlessM4TTextToUnitModel,
+        )
+        from .models.seamless_m4t_v2 import (
+            SEAMLESS_M4T_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4Tv2ForSpeechToSpeech,
+            SeamlessM4Tv2ForSpeechToText,
+            SeamlessM4Tv2ForTextToSpeech,
+            SeamlessM4Tv2ForTextToText,
+            SeamlessM4Tv2Model,
+            SeamlessM4Tv2PreTrainedModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
