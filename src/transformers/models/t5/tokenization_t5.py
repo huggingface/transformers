@@ -183,7 +183,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self._added_tokens_decoder = {}
         for i in range(len(extra_tokens)):
             self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
-                f"<extra_id_{i}>", single_word=True, lstrip=True, rstrip=True, special=True
+                f"<extra_id_{i}>", single_word=False, lstrip=True, rstrip=True, special=True, normalized=False
             )
 
         if legacy is None:
