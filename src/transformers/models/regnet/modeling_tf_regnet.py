@@ -77,6 +77,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.identity
         self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, hidden_state):
         hidden_state = self.convolution(self.padding(hidden_state))
@@ -93,7 +94,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
                 self.convolution.build(self.in_channels)
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFRegNetEmbeddings(tf.keras.layers.Layer):
@@ -149,6 +150,7 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.normalization(self.convolution(inputs), training=training)
@@ -162,7 +164,7 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
                 self.convolution.build(self.in_channels)
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFRegNetSELayer(tf.keras.layers.Layer):
@@ -177,6 +179,8 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
             tf.keras.layers.Conv2D(filters=reduced_channels, kernel_size=1, activation="relu", name="attention.0"),
             tf.keras.layers.Conv2D(filters=in_channels, kernel_size=1, activation="sigmoid", name="attention.2"),
         ]
+        self.in_channels = in_channels
+        self.reduced_channels = reduced_channels
 
     def call(self, hidden_state):
         # [batch_size, h, w, num_channels] -> [batch_size, 1, 1, num_channels]
@@ -192,11 +196,12 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "pooler", None) is not None:
             with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
+                self.pooler.build((None, None, None, None))
         if getattr(self, "attention", None) is not None:
-            for layer in self.attention:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            with tf.name_scope(self.attention[0].name):
+                self.attention[0].build(self.in_channels)
+            with tf.name_scope(self.attention[1].name):
+                self.attention[1].build(self.reduced_channels)
 
 
 class TFRegNetXLayer(tf.keras.layers.Layer):
@@ -361,6 +366,14 @@ class TFRegNetEncoder(tf.keras.layers.Layer):
 
         return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for stage in self.stages:
+            with tf.name_scope(stage.name):
+                stage.build(None)
+
 
 @keras_serializable
 class TFRegNetMainLayer(tf.keras.layers.Layer):
@@ -424,7 +437,7 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "pooler", None) is not None:
             with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
+                self.pooler.build((None, None, None, None))
 
 
 class TFRegNetPreTrainedModel(TFPreTrainedModel):
@@ -589,6 +602,5 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             with tf.name_scope(self.regnet.name):
                 self.regnet.build(None)
         if getattr(self, "classifier", None) is not None:
-            for layer in self.classifier:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+            with tf.name_scope(self.classifier[1].name):
+                self.classifier[1].build(self.config.hidden_sizes[-1])
