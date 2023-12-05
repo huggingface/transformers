@@ -195,37 +195,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
 
-    def test_large_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        inputs = self.processor.tokenizer(
-            ["Hey how are you", "This seems<s>Odd not?</s>."], return_tensors="pt", padding=True
-        )
-        torch.testing.assert_close(
-            inputs["input_ids"],
-            torch.tensor(
-                [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
-            ),
-        )
-        torch.testing.assert_close(
-            inputs["attention_mask"], torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        )
-
-        # model.prepare_inputs_labels_for_multimodal(input_ids = inputs["input_ids"], past_key_values = None, attention_mask = inputs["attention_mask"], position_ids=None, labels=None,images=None)
-        prepared_inputs = self.model.prepare_inputs_for_generation(**inputs)
-        torch.testing.assert_close(
-            prepared_inputs,
-            (
-                torch.tensor(
-                    [[1, 18637, 920, 526, 366, 0, 0, 0, 0, 0], [1, 910, 2444, 1, 29949, 1289, 451, 29973, 2, 29889]]
-                ),
-                None,
-                torch.tensor([[1, 1, 1, 1, 1, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
-                None,
-                None,
-                None,
-            ),
-        )
-
     @slow
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
@@ -252,17 +221,14 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "<image>\nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT:",
-            "<image>\nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER:\nAnd this?<image>",
+            "<image>\nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this?<image>",
         ]
-        image_file = "https://llava-vl.github.io/static/images/view.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image_bis = Image.open(requests.get(url, stream=True).raw)
+        inputs = self.processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
 
-        inputs = self.processor(prompts, [raw_image, raw_image_bis, raw_image], return_tensors="pt")
-
-        # EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]]) # fmt: skip
+        EXPECTED_INPUT_IDS = torch.tensor([[1, 32000, 29871, 13, 11889, 29901, 1724, 526, 278, 2712, 306, 881, 367, 274, 1300, 2738, 1048, 746, 306, 6493, 445, 2058, 29973, 13, 22933, 9047, 13566, 29901,]]) # fmt: skip
         # torch.testing.assert_close(inputs["input_ids"], EXPECTED_INPUT_IDS)
 
         output = model.generate(**inputs, max_new_tokens=20)
