@@ -18,6 +18,8 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
+Llava is an open-source chatbot trained by fine-tuning LlamA/Vicuna on GPT-generated multimodal instruction-following data. It is an auto-regressive language model, based on the transformer architecture. In other words, it is an multi-modal version of LLMs fine-tuned for chat / instructions.
+
 The Llava model was proposed in [Improved Baselines with Visual Instruction Tuning](https://arxiv.org/pdf/2310.03744) by Haotian Liu, Chunyuan Li, Yuheng Li and Yong Jae Lee.
 
 The abstract from the paper is the following:
@@ -25,6 +27,8 @@ The abstract from the paper is the following:
 *Large multimodal models (LMM) have recently shown encouraging progress with visual instruction tuning. In this note, we show that the fully-connected vision-language cross-modal connector in LLaVA is surprisingly powerful and data-efficient. With simple modifications to LLaVA, namely, using CLIP-ViT-L-336px with an MLP projection and adding academic-task-oriented VQA data with simple response formatting prompts, we establish stronger baselines that achieve state-of-the-art across 11 benchmarks. Our final 13B checkpoint uses merely 1.2M publicly available data, and finishes full training in ∼1 day on a single 8-A100 node. We hope this can make state-of-the-art LMM research more accessible. Code and model will be publicly available*
 
 Tips:
+
+We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
 
 We have benchmarked our implementation against the original [`BakLlava`](https://github.com/SkunkworksAI/BakLLaVA) implementation that is derived from the original implementation and our implementation leads to important speedups in all scenarios
 
@@ -50,31 +54,14 @@ We have benchmarked our implementation against the original [`BakLlava`](https:/
 | original       | 8          | 1                    | 4.24           |
 | transformers   | 8          | 1                    | 1.98           |
 
-This model was contributed by [ybelkada](https://huggingface.co/ybelkada).
+This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ) and [ybelkada](https://huggingface.co/ybelkada).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main/llava).
 
 ### Using Flash Attention 2
 
-Flash Attention 2 is an even faster, optimized version of the previous optimization.
+Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
 
-#### Installation 
-
-First, check whether your hardware is compatible with Flash Attention 2. The latest list of compatible hardware can be found in the [official documentation](https://github.com/Dao-AILab/flash-attention#installation-and-features). If your hardware is not compatible with Flash Attention 2, you can still benefit from attention kernel optimisations through Better Transformer support covered [above](https://huggingface.co/docs/transformers/main/en/model_doc/bark#using-better-transformer).
-
-Next, [install](https://github.com/Dao-AILab/flash-attention#installation-and-features) the latest version of Flash Attention 2:
-
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-
-#### Usage
-
-To load a model using Flash Attention 2, we can pass the `use_flash_attention_2` flag to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
-
-```python
-model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", torch_dtype=torch.float16, use_flash_attention_2=True).to(device)
-```
+## LlavaConfig
 
 [[autodoc]] LlavaConfig
 
