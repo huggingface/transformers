@@ -39,7 +39,7 @@ CodeGen は、[The Pile](https://pile.eleuther.ai/)、BigQuery、BigPython で�
     * `nl`: パイルで事前トレーニング済み
     * `multi`: `nl` で初期化され、複数のプログラミング言語データでさらに事前トレーニングされます。
     * `mono`: `multi` で初期化され、Python データでさらに事前トレーニングされます。
-* たとえば、「Salesforce/codegen-350M-mono」は、Pile、複数のプログラミング言語、および Python で順次事前トレーニングされた 3 億 5,000 万のパラメーターのチェックポイントを提供します。
+* たとえば、`Salesforce/codegen-350M-mono` は、Pile、複数のプログラミング言語、および Python で順次事前トレーニングされた 3 億 5,000 万のパラメーターのチェックポイントを提供します。
 
 ## Usage example
 
