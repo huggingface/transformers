@@ -20,10 +20,7 @@ import unittest
 
 from transformers import SegGPTConfig
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
     require_vision,
     slow,
     torch_device,
@@ -31,7 +28,7 @@ from transformers.testing_utils import (
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -46,14 +43,14 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import SegGPTImageProcessor
 
 
 class SegGPTModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -62,14 +59,15 @@ class SegGPTModelTester:
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        type_sequence_label_size=10,
         initializer_range=0.02,
-        scope=None,
-        encoder_stride=2,
+        mlp_ratio=2.0,
+        merge_index=0,
+        encoder_output_indicies=[1],
+        pretrain_img_size=10,
+        decoder_hidden_size=10,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -81,29 +79,34 @@ class SegGPTModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.scope = scope
-        self.encoder_stride = encoder_stride
+        self.mlp_ratio = mlp_ratio
+        self.merge_index = merge_index
+        self.encoder_output_indicies = encoder_output_indicies
+        self.pretrain_img_size = pretrain_img_size
+        self.decoder_hidden_size = decoder_hidden_size
 
-        # in SegGPT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in SegGPT, the seq length equals the number of patches (we don't use the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
+        prompt_pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size // 2, self.image_size]
+        )
+        prompt_masks = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = floats_tensor([self.batch_size, self.num_channels, self.image_size // 2, self.image_size])
 
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, prompt_pixel_values, prompt_masks, labels
 
     def get_config(self):
         return SegGPTConfig(
@@ -113,30 +116,39 @@ class SegGPTModelTester:
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
+            mlp_ratio=self.mlp_ratio,
+            merge_index=self.merge_index,
+            encoder_output_indicies=self.encoder_output_indicies,
+            pretrain_img_size=self.pretrain_img_size,
+            decoder_hidden_size=self.decoder_hidden_size,
         )
 
-    def create_and_check_model(self, config, pixel_values, labels):
+    def create_and_check_model(self, config, pixel_values, prompt_pixel_values, prompt_masks, labels):
         model = SegGPTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        result = model(pixel_values, prompt_pixel_values, prompt_masks)
+        self.parent.assertEqual(
+            result.pred_masks.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
             pixel_values,
+            prompt_pixel_values,
+            prompt_masks,
             labels,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "prompt_pixel_values": prompt_pixel_values,
+            "prompt_masks": prompt_masks,
+        }
         return config, inputs_dict
 
 
@@ -153,10 +165,14 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torchscript = False
+    pipeline_model_mapping = (
+        {"feature-extraction": SegGPTModel, "mask-generation": SegGPTModel} if is_torch_available() else {}
+    )
 
     def setUp(self):
         self.model_tester = SegGPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SegGPTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SegGPTConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -171,8 +187,6 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -183,20 +197,47 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
+            expected_arg_names = ["pixel_values", "prompt_pixel_values", "prompt_masks"]
+            self.assertListEqual(arg_names[:3], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            patch_height = patch_width = config.image_size // config.patch_size
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-3:]),
+                [patch_height, patch_width, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     @slow
     def test_model_from_pretrained(self):
@@ -207,8 +248,11 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").convert("RGB")
     return image
+
+
+"./tests/fixtures/tests_samples/COCO/000000039769.png"
 
 
 @require_torch
@@ -216,50 +260,80 @@ def prepare_img():
 class SegGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/seggpt-base-patch16-224") if is_vision_available() else None
+        return (
+            SegGPTImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
+        )
 
     @slow
-    def test_inference_interpolate_pos_encoding(self):
+    def test_inference(self):
         # SegGPT models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = SegGPTModel.from_pretrained("facebook/dino-seggpts8").to(torch_device)
+        model = SegGPTModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
 
-        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-seggpts8", size=480)
+        image_processor = SegGPTImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large", size=480)
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
+        inputs = image_processor(images=image, prompt_images=image, prompt_masks=image, return_tensors="pt")
 
+        # Verify pixel values
+        expected_pixel_values = torch.tensor(
+            [
+                [[0.2967, 0.3652, 0.3138], [0.2624, 0.2796, 0.4679]],
+                [[-1.5980, -1.6155, -1.7031], [-1.6155, -1.6331, -1.5630]],
+                [[-0.7761, -0.5844, -0.6367], [-0.8633, -0.9678, -0.5321]],
+            ]
+        )
+
+        expected_prompt_pixel_values = torch.tensor(
+            [
+                [[0.2967, 0.3652, 0.3138], [0.2624, 0.2796, 0.4679]],
+                [[-1.5980, -1.6155, -1.7031], [-1.6155, -1.6331, -1.5630]],
+                [[-0.7761, -0.5844, -0.6367], [-0.8633, -0.9678, -0.5321]],
+            ]
+        )
+
+        expected_prompt_masks = torch.tensor(
+            [
+                [[0.2796, 0.3823, 0.3138], [0.2453, 0.2624, 0.4851]],
+                [[-1.5980, -1.6155, -1.7031], [-1.6506, -1.6856, -1.5280]],
+                [[-0.8284, -0.5321, -0.6715], [-0.8110, -0.9678, -0.4798]],
+            ]
+        )
+
+        self.assertTrue(torch.allclose(inputs.pixel_values[0, :, :2, :3], expected_pixel_values, atol=1e-4))
+        self.assertTrue(
+            torch.allclose(inputs.prompt_pixel_values[0, :, :2, :3], expected_prompt_pixel_values, atol=1e-4)
+        )
+        self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :2, :3], expected_prompt_masks, atol=1e-4))
+
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
+            outputs = model(**inputs)
 
         # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
-        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+        expected_shape = torch.Size((1, 3, 896, 448))
+        self.assertEqual(outputs.pred_masks.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
+            [
+                [[0.2796, 0.3823, 0.3138], [0.2453, 0.2624, 0.4851]],
+                [[-1.5980, -1.6155, -1.7031], [-1.6506, -1.6856, -1.5280]],
+                [[-0.8284, -0.5321, -0.6715], [-0.8110, -0.9678, -0.4798]],
+            ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :2, :3], expected_slice, atol=1e-4))
 
-    @slow
-    @require_accelerate
-    @require_torch_accelerator
-    @require_torch_fp16
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = SegGPTModel.from_pretrained("facebook/dino-seggpts8", torch_dtype=torch.float16, device_map="auto")
-        image_processor = self.default_image_processor
+        expected_post_process = torch.tensor(
+            [
+                [[162.2683, 162.2683, 161.4149], [162.2683, 162.2683, 161.4149]],
+                [[21.2490, 21.2490, 21.4580], [21.2490, 21.2490, 21.4580]],
+                [[69.7492, 69.7492, 69.3204], [69.7492, 69.7492, 69.3204]],
+            ]
+        ).to(torch_device)
 
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
+        result = image_processor.post_process_masks(outputs.pred_masks, (image.size[::-1]))[0]
 
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)
+        self.assertTrue(torch.allclose(result[0, :, :2, :3], expected_post_process, atol=1e-4))

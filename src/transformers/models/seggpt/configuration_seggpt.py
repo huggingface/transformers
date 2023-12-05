@@ -49,15 +49,11 @@ class SegGPTConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -70,14 +66,22 @@ class SegGPTConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        mlp_ratio (`<fill_type>`, *optional*, defaults to 4.0): <fill_docstring>
-        drop_path_rate (`<fill_type>`, *optional*, defaults to 0.1): <fill_docstring>
-        pretrain_img_size (`<fill_type>`, *optional*, defaults to 224): <fill_docstring>
-        decoder_hidden_size (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        use_rel_pos (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
-        merge_index (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        encoder_output_indicies (`<fill_type>`, *optional*, defaults to `[5, 11, 17, 23]`): <fill_docstring>
-        beta (`<fill_type>`, *optional*, defaults to 0.01): <fill_docstring>
+        mlp_ratio (`float`, *optional*, defaults to 4.0):
+            The ratio of mlp hidden dim to embedding dim.
+        drop_path_rate (`float`, *optional*, defaults to 0.1):
+            The drop path rate for the dropout layers.
+        pretrain_img_size (`int`, *optional*, defaults to 224):
+            The pretrained size of the absolute position embeddings.
+        decoder_hidden_size (`int`, *optional*, defaults to 64):
+            Hidden size for decoder.
+        use_rel_pos (`bool`, *optional*, defaults to `True`):
+            Whether to use relative position encoding in the Attention
+        merge_index (`int`, *optional*, defaults to 2):
+            The index of the encoder layer to merge the embeddings.
+        encoder_output_indicies (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
+            The indices of the encoder layers which we store as features for the decoder.
+        beta (`float`, *optional*, defaults to 0.01):
+            Regularization factor for SegGPTLoss (smooth-l1 loss).
 
     Example:
 
@@ -101,13 +105,11 @@ class SegGPTConfig(PretrainedConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        image_size=(896, 448),
+        image_size=[896, 448],
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
@@ -126,10 +128,8 @@ class SegGPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
@@ -147,6 +147,7 @@ class SegGPTConfig(PretrainedConfig):
             )
         self.merge_index = merge_index
         self.encoder_output_indicies = encoder_output_indicies
+        self.beta = beta
 
 
 class SegGPTOnnxConfig(OnnxConfig):

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -32,7 +32,11 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torch_available, logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -40,16 +44,16 @@ logger = logging.get_logger(__name__)
 
 class SegGPTImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ViT image processor.
+    Constructs a SegGPT image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
             size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
+        size (`dict`, *optional*, defaults to `{"height": 448, "width": 448}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -61,10 +65,10 @@ class SegGPTImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
@@ -174,7 +178,7 @@ class SegGPTImageProcessor(BaseImageProcessor):
                 Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
                 resizing.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BICUBIC`. Only has
                 an effect if `do_resize` is set to `True`.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
@@ -304,7 +308,7 @@ class SegGPTImageProcessor(BaseImageProcessor):
                 Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
                 resizing.
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
+                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BICUBIC`. Only has
                 an effect if `do_resize` is set to `True`. Doesn't apply to prompt mask as it is resized using nearest.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
@@ -382,3 +386,40 @@ class SegGPTImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images, "prompt_pixel_values": prompt_images, "prompt_masks": prompt_masks}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_masks(self, outputs, target_sizes: Optional[List[Tuple]] = None) -> List[Dict[str, TensorType]]:
+        """
+        Converts the output of [`SegGPTImageSegmentationOutput`] into segmentation maps. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`SegGPTImageSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+        Returns:
+            `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
+            in the batch as predicted by the model.
+        """
+        masks = outputs.pred_masks  # B x C x 2*H x W
+        # Take predicted mask as input and prompt are concatenated in the H dimension
+        masks = masks[:, :, masks.shape[2] // 2 :, :]  # B x C x H x W
+        # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
+        masks = (masks.permute(0, 2, 3, 1) * torch.tensor(self.image_std) + torch.tensor(self.image_mean)).permute(
+            0, 3, 1, 2
+        )  # B x C x H x W
+
+        results = []
+
+        for idx, mask in enumerate(masks):
+            if target_sizes is not None:
+                mask = torch.nn.functional.interpolate(
+                    mask.unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="nearest",
+                )[0]
+
+            results.append({"mask": mask})
+
+        return results

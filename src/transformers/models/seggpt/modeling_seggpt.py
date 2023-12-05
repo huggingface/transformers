@@ -260,7 +260,7 @@ class SegGPTAttention(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
 
-        input_size = (config.image_size[0] // config.patch_size, config.image_size[1] // config.patch_size)
+        input_size = (image_size[0] // config.patch_size, image_size[1] // config.patch_size)
         head_dim = config.hidden_size // config.num_attention_heads
 
         self.num_attention_heads = config.num_attention_heads
@@ -375,13 +375,23 @@ class SegGPTAttention(nn.Module):
 
         attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
 
+        if output_attentions:
+            # this operation is a bit awkward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(batch_size, self.num_attention_heads, height * width, -1)
+            attn_weights = attn_weights_reshaped.view(batch_size * self.num_attention_heads, height * width, -1)
+        else:
+            attn_weights_reshaped = None
+
         attn_output = (attn_weights @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
 
         attn_output = self.proj(attn_output)
 
         if output_attentions:
-            outputs = (attn_output, attn_weights)
+            outputs = (attn_output, attn_weights_reshaped)
         else:
             outputs = (attn_output, None)
 
@@ -881,7 +891,8 @@ class SegGPTModel(SegGPTPreTrainedModel):
                 output = output + (encoder_outputs[1],)
 
             if output_attentions:
-                output = output + (encoder_outputs[2],)
+                idx = 2 if output_hidden_states else 1
+                output = output + (encoder_outputs[idx],)
 
             if loss is not None:
                 output = output + (loss,)
