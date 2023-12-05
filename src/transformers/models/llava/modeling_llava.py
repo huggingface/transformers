@@ -230,7 +230,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, use_flash_attention_2=use_flash_attention_2
         )
-
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
     def get_input_embeddings(self):
@@ -257,16 +257,16 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         # update vocab size
-        self.config.text_config.vocab_size = model_embeds.shape[-1]
-        self.config.vocab_size = model_embeds.shape[-1]
+        self.config.text_config.vocab_size = model_embeds.num_embeddings
+        self.config.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
-        _, nb_text_tokens_per_images, embed_dim = image_features.shape
+        nb_images, nb_text_tokens_per_images, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == self.config.pad_token_id)
+        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where image tokens are
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
@@ -284,7 +284,7 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
         final_embedding = torch.zeros(
             batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
         )
-        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=torch.long, device=inputs_embeds.device)
+        final_attention_mask = torch.zeros(batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
@@ -297,6 +297,13 @@ class LlavaForCausalLM(LlavaPreTrainedModel):
             image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
         else:
             image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:, None]
+        
+        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
+            raise ValueError(
+                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(image_token_mask)} while"
+                f" the number of image given to the model is {nb_images}. This prevents correct indexing and breaks batch generation."
+            )
+
         final_embedding[image_to_overwrite] = image_features.reshape(-1, 4096)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
