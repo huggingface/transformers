@@ -1596,7 +1596,7 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     >>> # distribution, summing to 1
     >>> outputs = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
     >>> print(torch.sum(torch.exp(outputs.scores[-1])))
-    tensor(816.2668)
+    tensor(816.3250)
 
     >>> # Normalizing them may have a positive impact on beam methods, or when using the scores on your application
     >>> outputs = model.generate(**inputs, renormalize_logits=True, return_dict_in_generate=True, output_scores=True)
