@@ -638,7 +638,6 @@ append_call_sample_docstring(
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutput,
     _CONFIG_FOR_DOC,
-    revision="refs/pr/4",
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
@@ -729,6 +728,5 @@ append_call_sample_docstring(
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,
-    revision="refs/pr/4",
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
