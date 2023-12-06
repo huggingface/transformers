@@ -224,8 +224,8 @@ class BeamSearchScorer(BeamScorer):
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
     ) -> Dict[str, torch.Tensor]:
-        # add up to the length which the next_scores is calculated on
-        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1
+        # add up to the length which the next_scores is calculated on (including decoder prompt)
+        cur_len = input_ids.shape[-1] + 1
         batch_size = len(self._beam_hyps) // self.num_beam_groups
 
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
@@ -283,7 +283,7 @@ class BeamSearchScorer(BeamScorer):
                         input_ids[batch_beam_idx].clone(),
                         next_score.item(),
                         beam_indices=beam_index,
-                        generated_len=cur_len,
+                        generated_len=cur_len - decoder_prompt_len,
                     )
                 else:
                     # add next predicted token since it is not eos_token
@@ -557,8 +557,8 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                 indicating to which beam the next tokens shall be added.
         """
 
-        # add up to the length which the next_scores is calculated on
-        cur_len = input_ids.shape[-1] - decoder_prompt_len + 1
+        # add up to the length which the next_scores is calculated on (including decoder prompt)
+        cur_len = input_ids.shape[-1] + 1
         batch_size = len(self._beam_hyps)
         if not (batch_size == (input_ids.shape[0] // self.group_size)):
             if self.num_beam_groups > 1:
@@ -618,7 +618,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                             input_ids[batch_beam_idx].clone(),
                             next_score.item(),
                             beam_indices=beam_index,
-                            generated_len=cur_len,
+                            generated_len=cur_len - decoder_prompt_len,
                         )
                 else:
                     # add next predicted token since it is not eos_token
@@ -984,7 +984,7 @@ class BeamHypotheses:
         #  when `length_penalty` is positive. See the discussion below for more details.
         # https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
         elif self.early_stopping is False:
-            highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
+            highest_attainable_score = best_sum_logprobs / (cur_len - decoder_prompt_len) ** self.length_penalty
             ret = self.worst_score >= highest_attainable_score
             return ret
         # `"never"`: compute the best possible score, depending on the signal of `length_penalty`
@@ -1000,6 +1000,6 @@ class BeamHypotheses:
                 )
             # the opposite logic applies here (max `highest_attainable_score` from `cur_len`)
             else:
-                highest_attainable_score = best_sum_logprobs / cur_len**self.length_penalty
+                highest_attainable_score = best_sum_logprobs / (cur_len - decoder_prompt_len) ** self.length_penalty
             ret = self.worst_score >= highest_attainable_score
             return ret
