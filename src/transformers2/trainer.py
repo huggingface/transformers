@@ -2833,10 +2833,11 @@ class Trainer:
                 else:
                     torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(
-                output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
-            )
-
+            torch.save(self.model.state_dict(), f'{output_dir}/my_custom_model.pth')
+            print(state_dict)
+            # self.model.save_pretrained(
+            #     output_dir, state_dict=state_dict, safe_serialization=self.args.save_safetensors
+            # )
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
