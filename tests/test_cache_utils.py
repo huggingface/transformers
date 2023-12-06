@@ -16,7 +16,7 @@
 import unittest
 
 from transformers import set_seed
-from transformers.testing_utils import is_torch_available, require_torch, require_torch_gpu, slow
+from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch, require_torch_gpu, slow
 
 
 if is_torch_available():
@@ -109,7 +109,6 @@ class CacheTest(unittest.TestCase):
 @require_torch_gpu
 @slow
 class CacheIntegrationTest(unittest.TestCase):
-
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
         model = AutoModelForCausalLM.from_pretrained(
@@ -145,11 +144,9 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
-        inputs = tokenizer(
-            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"],
-            padding=True,
-            return_tensors="pt"
-        ).to(model.device)
+        inputs = tokenizer(["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"], padding=True, return_tensors="pt").to(
+            model.device
+        )
 
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
@@ -164,26 +161,29 @@ class CacheIntegrationTest(unittest.TestCase):
 
         inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
         gen_out = model.generate(
-            **inputs, do_sample=False, max_new_tokens=20, num_beams=2, num_return_sequences=2,
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_beams=2,
+            num_return_sequences=2,
         )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = [
-            'The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good',
-            'The best color is the one that suits you.\nThe best color is the one that suits you. The'
+            "The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good",
+            "The best color is the one that suits you.\nThe best color is the one that suits you. The",
         ]
         self.assertListEqual(decoded, expected_text)
 
-    # def test_sink_cache(self):
-    #     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-    #     model = AutoModelForCausalLM.from_pretrained(
-    #         "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-    #     )
+    @require_auto_gptq
+    def test_sink_cache_hard(self):
+        tokenizer = AutoTokenizer.from_pretrained("TheBloke/LLaMa-7B-GPTQ")
+        model = AutoModelForCausalLM.from_pretrained("TheBloke/LLaMa-7B-GPTQ", device_map="auto")
 
-    #     inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
+        inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
 
-    #     # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
-    #     # without the SinkCache, the last few tokens are gibberish.
-    #     cache = SinkCache(window_length=252, num_sink_tokens=4)
-    #     gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=300, past_key_values=cache)
-    #     decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-    #     breakpoint()
+        # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
+        # without a DynamicCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
+        cache = SinkCache(window_length=508, num_sink_tokens=4)
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))

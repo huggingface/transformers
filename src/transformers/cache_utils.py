@@ -34,6 +34,10 @@ class Cache:
         """
         raise NotImplementedError("Make sure to implement `update` in a subclass.")
 
+    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
+
 
 class DynamicCache(Cache):
     """
@@ -46,6 +50,7 @@ class DynamicCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -95,6 +100,11 @@ class DynamicCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self.seen_tokens += key_states.shape[-2]
+
+        # Update the cache
         if len(self.key_cache) <= layer_idx:
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
@@ -158,6 +168,7 @@ class SinkCache(Cache):
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
+        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     @staticmethod
     def _rotate_half(x):
@@ -233,6 +244,10 @@ class SinkCache(Cache):
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
         using_rope = cos is not None and sin is not None
 
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self.seen_tokens += key_states.shape[-2]
+
         # [bsz, num_heads, seq_len, head_dim]
         if len(self.key_cache) <= layer_idx:
             # Empty cache
@@ -246,6 +261,17 @@ class SinkCache(Cache):
 
         else:
             # Shifting cache
+
+            # # Incompatibility checks
+            # if key_states.shape[-2] > 1:
+            #     raise ValueError(
+            #         "Got past key values for more than one token at the shifting cache stage. `SinkCache` is not yet "
+            #         "compatible with techniques that generate more than one token at a time, like assisted "
+            #         "generation. Please open a GH issue if you see this issue with generation techniques that only "
+            #         "generate one token at a time!"
+            #     )
+
+            # Slice the tokens to keep
             keys_to_keep = self.key_cache[layer_idx][
                 :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
             ]
