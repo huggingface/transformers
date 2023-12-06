@@ -90,6 +90,7 @@ class VitDetModelTester:
     def get_config(self):
         return VitDetConfig(
             image_size=self.image_size,
+            pretrain_image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,

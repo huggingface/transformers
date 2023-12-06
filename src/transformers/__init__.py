@@ -186,16 +186,28 @@ _import_structure = {
         "WordpieceTokenizer",
     ],
     "models.bert_generation": ["BertGenerationConfig"],
-    "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
+    "models.bert_japanese": [
+        "BertJapaneseTokenizer",
+        "CharacterTokenizer",
+        "MecabTokenizer",
+    ],
     "models.bertweet": ["BertweetTokenizer"],
     "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig"],
     "models.bigbird_pegasus": [
         "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BigBirdPegasusConfig",
     ],
-    "models.biogpt": ["BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BioGptConfig", "BioGptTokenizer"],
+    "models.biogpt": [
+        "BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BioGptConfig",
+        "BioGptTokenizer",
+    ],
     "models.bit": ["BIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BitConfig"],
-    "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
+    "models.blenderbot": [
+        "BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BlenderbotConfig",
+        "BlenderbotTokenizer",
+    ],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
@@ -223,10 +235,18 @@ _import_structure = {
         "BridgeTowerTextConfig",
         "BridgeTowerVisionConfig",
     ],
-    "models.bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig", "BrosProcessor"],
+    "models.bros": [
+        "BROS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BrosConfig",
+        "BrosProcessor",
+    ],
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
-    "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.canine": [
+        "CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CanineConfig",
+        "CanineTokenizer",
+    ],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -266,14 +286,36 @@ _import_structure = {
         "ClvpTokenizer",
     ],
     "models.code_llama": [],
-    "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
-    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
-    "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.codegen": [
+        "CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CodeGenConfig",
+        "CodeGenTokenizer",
+    ],
+    "models.conditional_detr": [
+        "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConditionalDetrConfig",
+    ],
+    "models.convbert": [
+        "CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConvBertConfig",
+        "ConvBertTokenizer",
+    ],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
-    "models.convnextv2": ["CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextV2Config"],
+    "models.convnextv2": [
+        "CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConvNextV2Config",
+    ],
     "models.cpm": [],
-    "models.cpmant": ["CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CpmAntConfig", "CpmAntTokenizer"],
-    "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
+    "models.cpmant": [
+        "CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CpmAntConfig",
+        "CpmAntTokenizer",
+    ],
+    "models.ctrl": [
+        "CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CTRLConfig",
+        "CTRLTokenizer",
+    ],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -282,10 +324,23 @@ _import_structure = {
         "Data2VecTextConfig",
         "Data2VecVisionConfig",
     ],
-    "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
-    "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
-    "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
-    "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
+    "models.deberta": [
+        "DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DebertaConfig",
+        "DebertaTokenizer",
+    ],
+    "models.deberta_v2": [
+        "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DebertaV2Config",
+    ],
+    "models.decision_transformer": [
+        "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DecisionTransformerConfig",
+    ],
+    "models.deformable_detr": [
+        "DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DeformableDetrConfig",
+    ],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.deprecated": [],
     "models.deprecated.bort": [],
@@ -296,7 +351,10 @@ _import_structure = {
         "MCTCTProcessor",
     ],
     "models.deprecated.mmbt": ["MMBTConfig"],
-    "models.deprecated.open_llama": ["OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenLlamaConfig"],
+    "models.deprecated.open_llama": [
+        "OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OpenLlamaConfig",
+    ],
     "models.deprecated.retribert": [
         "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "RetriBertConfig",
@@ -319,9 +377,17 @@ _import_structure = {
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
     "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
-    "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
+    "models.distilbert": [
+        "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DistilBertConfig",
+        "DistilBertTokenizer",
+    ],
     "models.dit": [],
-    "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
+    "models.donut": [
+        "DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "DonutProcessor",
+        "DonutSwinConfig",
+    ],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DPRConfig",
@@ -331,9 +397,19 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
-    "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
-    "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
-    "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
+    "models.efficientformer": [
+        "EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "EfficientFormerConfig",
+    ],
+    "models.efficientnet": [
+        "EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "EfficientNetConfig",
+    ],
+    "models.electra": [
+        "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ElectraConfig",
+        "ElectraTokenizer",
+    ],
     "models.encodec": [
         "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "EncodecConfig",
@@ -347,7 +423,11 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
-    "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
+    "models.flaubert": [
+        "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FlaubertConfig",
+        "FlaubertTokenizer",
+    ],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FlavaConfig",
@@ -358,16 +438,39 @@ _import_structure = {
     ],
     "models.fnet": ["FNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FNetConfig"],
     "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
-    "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
-    "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.fsmt": [
+        "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FSMTConfig",
+        "FSMTTokenizer",
+    ],
+    "models.funnel": [
+        "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FunnelConfig",
+        "FunnelTokenizer",
+    ],
     "models.fuyu": ["FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP", "FuyuConfig"],
-    "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
+    "models.git": [
+        "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GitConfig",
+        "GitProcessor",
+        "GitVisionConfig",
+    ],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
-    "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
-    "models.gpt_bigcode": ["GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTBigCodeConfig"],
+    "models.gpt2": [
+        "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPT2Config",
+        "GPT2Tokenizer",
+    ],
+    "models.gpt_bigcode": [
+        "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPTBigCodeConfig",
+    ],
     "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.gpt_neox": ["GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXConfig"],
-    "models.gpt_neox_japanese": ["GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoXJapaneseConfig"],
+    "models.gpt_neox_japanese": [
+        "GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GPTNeoXJapaneseConfig",
+    ],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTJConfig"],
     "models.gptsan_japanese": [
@@ -375,7 +478,10 @@ _import_structure = {
         "GPTSanJapaneseConfig",
         "GPTSanJapaneseTokenizer",
     ],
-    "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.graphormer": [
+        "GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "GraphormerConfig",
+    ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -410,7 +516,11 @@ _import_structure = {
         "Kosmos2Config",
         "Kosmos2Processor",
     ],
-    "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
+    "models.layoutlm": [
+        "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LayoutLMConfig",
+        "LayoutLMTokenizer",
+    ],
     "models.layoutlmv2": [
         "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMv2Config",
@@ -432,10 +542,22 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
+    "models.longformer": [
+        "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LongformerConfig",
+        "LongformerTokenizer",
+    ],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
-    "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
-    "models.lxmert": ["LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LxmertConfig", "LxmertTokenizer"],
+    "models.luke": [
+        "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LukeConfig",
+        "LukeTokenizer",
+    ],
+    "models.lxmert": [
+        "LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LxmertConfig",
+        "LxmertTokenizer",
+    ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
@@ -449,21 +571,50 @@ _import_structure = {
         "MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Mask2FormerConfig",
     ],
-    "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig", "MaskFormerSwinConfig"],
+    "models.maskformer": [
+        "MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MaskFormerConfig",
+        "MaskFormerSwinConfig",
+    ],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mega": ["MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegaConfig"],
-    "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
+    "models.megatron_bert": [
+        "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MegatronBertConfig",
+    ],
     "models.megatron_gpt2": [],
-    "models.mgp_str": ["MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP", "MgpstrConfig", "MgpstrProcessor", "MgpstrTokenizer"],
+    "models.mgp_str": [
+        "MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MgpstrConfig",
+        "MgpstrProcessor",
+        "MgpstrTokenizer",
+    ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
     "models.mluke": [],
-    "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
-    "models.mobilenet_v1": ["MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV1Config"],
-    "models.mobilenet_v2": ["MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileNetV2Config"],
+    "models.mobilebert": [
+        "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileBertConfig",
+        "MobileBertTokenizer",
+    ],
+    "models.mobilenet_v1": [
+        "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileNetV1Config",
+    ],
+    "models.mobilenet_v2": [
+        "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileNetV2Config",
+    ],
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
-    "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
-    "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mobilevitv2": [
+        "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MobileViTV2Config",
+    ],
+    "models.mpnet": [
+        "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MPNetConfig",
+        "MPNetTokenizer",
+    ],
     "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
@@ -482,8 +633,16 @@ _import_structure = {
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
     ],
-    "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
-    "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
+    "models.oneformer": [
+        "ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OneFormerConfig",
+        "OneFormerProcessor",
+    ],
+    "models.openai": [
+        "OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OpenAIGPTConfig",
+        "OpenAIGPTTokenizer",
+    ],
     "models.opt": ["OPTConfig"],
     "models.owlv2": [
         "OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -499,10 +658,22 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.patchtsmixer": [
+        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PatchTSMixerConfig",
+    ],
     "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
-    "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
+    "models.pegasus": [
+        "PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PegasusConfig",
+        "PegasusTokenizer",
+    ],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
-    "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
+    "models.perceiver": [
+        "PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PerceiverConfig",
+        "PerceiverTokenizer",
+    ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
     "models.phobert": ["PhobertTokenizer"],
@@ -514,24 +685,50 @@ _import_structure = {
         "Pix2StructVisionConfig",
     ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
-    "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
+    "models.poolformer": [
+        "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PoolFormerConfig",
+    ],
     "models.pop2piano": [
         "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Pop2PianoConfig",
     ],
-    "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
+    "models.prophetnet": [
+        "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ProphetNetConfig",
+        "ProphetNetTokenizer",
+    ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
-    "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
+    "models.realm": [
+        "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RealmConfig",
+        "RealmTokenizer",
+    ],
     "models.reformer": ["REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "ReformerConfig"],
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
-    "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
-    "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
-    "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
-    "models.roformer": ["ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoFormerConfig", "RoFormerTokenizer"],
+    "models.roberta": [
+        "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RobertaConfig",
+        "RobertaTokenizer",
+    ],
+    "models.roberta_prelayernorm": [
+        "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RobertaPreLayerNormConfig",
+    ],
+    "models.roc_bert": [
+        "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RoCBertConfig",
+        "RoCBertTokenizer",
+    ],
+    "models.roformer": [
+        "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "RoFormerConfig",
+        "RoFormerTokenizer",
+    ],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -575,21 +772,45 @@ _import_structure = {
         "SpeechT5HifiGanConfig",
         "SpeechT5Processor",
     ],
-    "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
-    "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
-    "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
+    "models.splinter": [
+        "SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SplinterConfig",
+        "SplinterTokenizer",
+    ],
+    "models.squeezebert": [
+        "SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SqueezeBertConfig",
+        "SqueezeBertTokenizer",
+    ],
+    "models.swiftformer": [
+        "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SwiftFormerConfig",
+    ],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
-    "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
+    "models.switch_transformers": [
+        "SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SwitchTransformersConfig",
+    ],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
-    "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
-    "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
+    "models.table_transformer": [
+        "TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TableTransformerConfig",
+    ],
+    "models.tapas": [
+        "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TapasConfig",
+        "TapasTokenizer",
+    ],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
     ],
-    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
+    "models.timesformer": [
+        "TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "TimesformerConfig",
+    ],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -631,10 +852,19 @@ _import_structure = {
         "ViltProcessor",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
-    "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
-    "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
+    "models.vision_text_dual_encoder": [
+        "VisionTextDualEncoderConfig",
+        "VisionTextDualEncoderProcessor",
+    ],
+    "models.visual_bert": [
+        "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VisualBertConfig",
+    ],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
-    "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
+    "models.vit_hybrid": [
+        "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ViTHybridConfig",
+    ],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
@@ -682,9 +912,18 @@ _import_structure = {
     ],
     "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
-    "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
-    "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
-    "models.xlm_roberta_xl": ["XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaXLConfig"],
+    "models.xlm_prophetnet": [
+        "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XLMProphetNetConfig",
+    ],
+    "models.xlm_roberta": [
+        "XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XLMRobertaConfig",
+    ],
+    "models.xlm_roberta_xl": [
+        "XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XLMRobertaXLConfig",
+    ],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
     "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
@@ -760,7 +999,13 @@ _import_structure = {
         "TrainerControl",
         "TrainerState",
     ],
-    "trainer_utils": ["EvalPrediction", "IntervalStrategy", "SchedulerType", "enable_full_determinism", "set_seed"],
+    "trainer_utils": [
+        "EvalPrediction",
+        "IntervalStrategy",
+        "SchedulerType",
+        "enable_full_determinism",
+        "set_seed",
+    ],
     "training_args": ["TrainingArguments"],
     "training_args_seq2seq": ["Seq2SeqTrainingArguments"],
     "training_args_tf": ["TFTrainingArguments"],
@@ -885,7 +1130,11 @@ else:
     _import_structure["models.deprecated.retribert"].append("RetriBertTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
-        ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]
+        [
+            "DPRContextEncoderTokenizerFast",
+            "DPRQuestionEncoderTokenizerFast",
+            "DPRReaderTokenizerFast",
+        ]
     )
     _import_structure["models.electra"].append("ElectraTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
@@ -939,7 +1188,10 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_sentencepiece_and_tokenizers_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
+    _import_structure["convert_slow_tokenizer"] = [
+        "SLOW_TO_FAST_CONVERTERS",
+        "convert_slow_tokenizer",
+    ]
 
 # Tensorflow-text-specific objects
 try:
@@ -1657,10 +1909,19 @@ else:
     )
     _import_structure["models.deprecated.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
     _import_structure["models.deprecated.open_llama"].extend(
-        ["OpenLlamaForCausalLM", "OpenLlamaForSequenceClassification", "OpenLlamaModel", "OpenLlamaPreTrainedModel"]
+        [
+            "OpenLlamaForCausalLM",
+            "OpenLlamaForSequenceClassification",
+            "OpenLlamaModel",
+            "OpenLlamaPreTrainedModel",
+        ]
     )
     _import_structure["models.deprecated.retribert"].extend(
-        ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
+        [
+            "RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RetriBertModel",
+            "RetriBertPreTrainedModel",
+        ]
     )
     _import_structure["models.deprecated.trajectory_transformer"].extend(
         [
@@ -2165,7 +2426,12 @@ else:
         ]
     )
     _import_structure["models.llama"].extend(
-        ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
+        [
+            "LlamaForCausalLM",
+            "LlamaForSequenceClassification",
+            "LlamaModel",
+            "LlamaPreTrainedModel",
+        ]
     )
     _import_structure["models.longformer"].extend(
         [
@@ -2298,7 +2564,12 @@ else:
         ]
     )
     _import_structure["models.mistral"].extend(
-        ["MistralForCausalLM", "MistralForSequenceClassification", "MistralModel", "MistralPreTrainedModel"]
+        [
+            "MistralForCausalLM",
+            "MistralForSequenceClassification",
+            "MistralModel",
+            "MistralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -2515,6 +2786,17 @@ else:
             "OwlViTVisionModel",
         ]
     )
+    _import_structure["models.patchtsmixer"].extend(
+        [
+            "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSMixerForPrediction",
+            "PatchTSMixerForPretraining",
+            "PatchTSMixerForRegression",
+            "PatchTSMixerForTimeSeriesClassification",
+            "PatchTSMixerModel",
+            "PatchTSMixerPreTrainedModel",
+        ]
+    )
     _import_structure["models.patchtst"].extend(
         [
             "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2527,7 +2809,12 @@ else:
         ]
     )
     _import_structure["models.pegasus"].extend(
-        ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
+        [
+            "PegasusForCausalLM",
+            "PegasusForConditionalGeneration",
+            "PegasusModel",
+            "PegasusPreTrainedModel",
+        ]
     )
     _import_structure["models.pegasus_x"].extend(
         [
@@ -2553,7 +2840,12 @@ else:
         ]
     )
     _import_structure["models.persimmon"].extend(
-        ["PersimmonForCausalLM", "PersimmonForSequenceClassification", "PersimmonModel", "PersimmonPreTrainedModel"]
+        [
+            "PersimmonForCausalLM",
+            "PersimmonForSequenceClassification",
+            "PersimmonModel",
+            "PersimmonPreTrainedModel",
+        ]
     )
     _import_structure["models.phi"].extend(
         [
@@ -2635,7 +2927,12 @@ else:
         ]
     )
     _import_structure["models.rag"].extend(
-        ["RagModel", "RagPreTrainedModel", "RagSequenceForGeneration", "RagTokenForGeneration"]
+        [
+            "RagModel",
+            "RagPreTrainedModel",
+            "RagSequenceForGeneration",
+            "RagTokenForGeneration",
+        ]
     )
     _import_structure["models.realm"].extend(
         [
@@ -2961,7 +3258,11 @@ else:
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
     _import_structure["models.trocr"].extend(
-        ["TROCR_PRETRAINED_MODEL_ARCHIVE_LIST", "TrOCRForCausalLM", "TrOCRPreTrainedModel"]
+        [
+            "TROCR_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TrOCRForCausalLM",
+            "TrOCRPreTrainedModel",
+        ]
     )
     _import_structure["models.tvlt"].extend(
         [
@@ -3298,7 +3599,11 @@ else:
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
     ]
-    _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward", "prune_layer"]
+    _import_structure["pytorch_utils"] = [
+        "Conv1D",
+        "apply_chunking_to_forward",
+        "prune_layer",
+    ]
     _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
@@ -3411,7 +3716,12 @@ else:
         ]
     )
     _import_structure["models.bart"].extend(
-        ["TFBartForConditionalGeneration", "TFBartForSequenceClassification", "TFBartModel", "TFBartPretrainedModel"]
+        [
+            "TFBartForConditionalGeneration",
+            "TFBartForSequenceClassification",
+            "TFBartModel",
+            "TFBartPretrainedModel",
+        ]
     )
     _import_structure["models.bert"].extend(
         [
@@ -3431,10 +3741,18 @@ else:
         ]
     )
     _import_structure["models.blenderbot"].extend(
-        ["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel", "TFBlenderbotPreTrainedModel"]
+        [
+            "TFBlenderbotForConditionalGeneration",
+            "TFBlenderbotModel",
+            "TFBlenderbotPreTrainedModel",
+        ]
     )
     _import_structure["models.blenderbot_small"].extend(
-        ["TFBlenderbotSmallForConditionalGeneration", "TFBlenderbotSmallModel", "TFBlenderbotSmallPreTrainedModel"]
+        [
+            "TFBlenderbotSmallForConditionalGeneration",
+            "TFBlenderbotSmallModel",
+            "TFBlenderbotSmallPreTrainedModel",
+        ]
     )
     _import_structure["models.blip"].extend(
         [
@@ -3795,7 +4113,11 @@ else:
         ]
     )
     _import_structure["models.pegasus"].extend(
-        ["TFPegasusForConditionalGeneration", "TFPegasusModel", "TFPegasusPreTrainedModel"]
+        [
+            "TFPegasusForConditionalGeneration",
+            "TFPegasusModel",
+            "TFPegasusPreTrainedModel",
+        ]
     )
     _import_structure["models.rag"].extend(
         [
@@ -4010,7 +4332,12 @@ else:
             "TFXLNetPreTrainedModel",
         ]
     )
-    _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
+    _import_structure["optimization_tf"] = [
+        "AdamWeightDecay",
+        "GradientAccumulator",
+        "WarmUp",
+        "create_optimizer",
+    ]
     _import_structure["tf_utils"] = []
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
@@ -4025,7 +4352,9 @@ try:
     ):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
-    from .utils import dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects
+    from .utils import (
+        dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects,
+    )
 
     _import_structure["utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects"] = [
         name
@@ -4164,7 +4493,11 @@ else:
         ]
     )
     _import_structure["models.blenderbot"].extend(
-        ["FlaxBlenderbotForConditionalGeneration", "FlaxBlenderbotModel", "FlaxBlenderbotPreTrainedModel"]
+        [
+            "FlaxBlenderbotForConditionalGeneration",
+            "FlaxBlenderbotModel",
+            "FlaxBlenderbotPreTrainedModel",
+        ]
     )
     _import_structure["models.blenderbot_small"].extend(
         [
@@ -4222,7 +4555,11 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.longt5"].extend(
-        ["FlaxLongT5ForConditionalGeneration", "FlaxLongT5Model", "FlaxLongT5PreTrainedModel"]
+        [
+            "FlaxLongT5ForConditionalGeneration",
+            "FlaxLongT5Model",
+            "FlaxLongT5PreTrainedModel",
+        ]
     )
     _import_structure["models.marian"].extend(
         [
@@ -4256,10 +4593,18 @@ else:
         ]
     )
     _import_structure["models.regnet"].extend(
-        ["FlaxRegNetForImageClassification", "FlaxRegNetModel", "FlaxRegNetPreTrainedModel"]
+        [
+            "FlaxRegNetForImageClassification",
+            "FlaxRegNetModel",
+            "FlaxRegNetPreTrainedModel",
+        ]
     )
     _import_structure["models.resnet"].extend(
-        ["FlaxResNetForImageClassification", "FlaxResNetModel", "FlaxResNetPreTrainedModel"]
+        [
+            "FlaxResNetForImageClassification",
+            "FlaxResNetModel",
+            "FlaxResNetPreTrainedModel",
+        ]
     )
     _import_structure["models.roberta"].extend(
         [
@@ -4298,13 +4643,23 @@ else:
     )
     _import_structure["models.speech_encoder_decoder"].append("FlaxSpeechEncoderDecoderModel")
     _import_structure["models.t5"].extend(
-        ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
+        [
+            "FlaxT5EncoderModel",
+            "FlaxT5ForConditionalGeneration",
+            "FlaxT5Model",
+            "FlaxT5PreTrainedModel",
+        ]
     )
     _import_structure["models.vision_encoder_decoder"].append("FlaxVisionEncoderDecoderModel")
     _import_structure["models.vision_text_dual_encoder"].extend(["FlaxVisionTextDualEncoderModel"])
     _import_structure["models.vit"].extend(["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"])
     _import_structure["models.wav2vec2"].extend(
-        ["FlaxWav2Vec2ForCTC", "FlaxWav2Vec2ForPreTraining", "FlaxWav2Vec2Model", "FlaxWav2Vec2PreTrainedModel"]
+        [
+            "FlaxWav2Vec2ForCTC",
+            "FlaxWav2Vec2ForPreTraining",
+            "FlaxWav2Vec2Model",
+            "FlaxWav2Vec2PreTrainedModel",
+        ]
     )
     _import_structure["models.whisper"].extend(
         [
@@ -4465,13 +4820,28 @@ if TYPE_CHECKING:
         WordpieceTokenizer,
     )
     from .models.bert_generation import BertGenerationConfig
-    from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+    from .models.bert_japanese import (
+        BertJapaneseTokenizer,
+        CharacterTokenizer,
+        MecabTokenizer,
+    )
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
-    from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig
-    from .models.biogpt import BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, BioGptConfig, BioGptTokenizer
+    from .models.bigbird_pegasus import (
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BigBirdPegasusConfig,
+    )
+    from .models.biogpt import (
+        BIOGPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BioGptConfig,
+        BioGptTokenizer,
+    )
     from .models.bit import BIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BitConfig
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
+    from .models.blenderbot import (
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BlenderbotConfig,
+        BlenderbotTokenizer,
+    )
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BlenderbotSmallConfig,
@@ -4499,10 +4869,21 @@ if TYPE_CHECKING:
         BridgeTowerTextConfig,
         BridgeTowerVisionConfig,
     )
-    from .models.bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig, BrosProcessor
+    from .models.bros import (
+        BROS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BrosConfig,
+        BrosProcessor,
+    )
     from .models.byt5 import ByT5Tokenizer
-    from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-    from .models.canine import CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP, CanineConfig, CanineTokenizer
+    from .models.camembert import (
+        CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CamembertConfig,
+    )
+    from .models.canine import (
+        CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CanineConfig,
+        CanineTokenizer,
+    )
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -4541,13 +4922,35 @@ if TYPE_CHECKING:
         ClvpProcessor,
         ClvpTokenizer,
     )
-    from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
-    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
-    from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.codegen import (
+        CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CodeGenConfig,
+        CodeGenTokenizer,
+    )
+    from .models.conditional_detr import (
+        CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConditionalDetrConfig,
+    )
+    from .models.convbert import (
+        CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConvBertConfig,
+        ConvBertTokenizer,
+    )
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
-    from .models.convnextv2 import CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextV2Config
-    from .models.cpmant import CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP, CpmAntConfig, CpmAntTokenizer
-    from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+    from .models.convnextv2 import (
+        CONVNEXTV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConvNextV2Config,
+    )
+    from .models.cpmant import (
+        CPMANT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CpmAntConfig,
+        CpmAntTokenizer,
+    )
+    from .models.ctrl import (
+        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CTRLConfig,
+        CTRLTokenizer,
+    )
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
     from .models.data2vec import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4556,13 +4959,23 @@ if TYPE_CHECKING:
         Data2VecTextConfig,
         Data2VecVisionConfig,
     )
-    from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
-    from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.deberta import (
+        DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DebertaConfig,
+        DebertaTokenizer,
+    )
+    from .models.deberta_v2 import (
+        DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DebertaV2Config,
+    )
     from .models.decision_transformer import (
         DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
     )
-    from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
+    from .models.deformable_detr import (
+        DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DeformableDetrConfig,
+    )
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.deprecated.mctct import (
         MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4571,7 +4984,10 @@ if TYPE_CHECKING:
         MCTCTProcessor,
     )
     from .models.deprecated.mmbt import MMBTConfig
-    from .models.deprecated.open_llama import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenLlamaConfig
+    from .models.deprecated.open_llama import (
+        OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OpenLlamaConfig,
+    )
     from .models.deprecated.retribert import (
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RetriBertConfig,
@@ -4593,8 +5009,16 @@ if TYPE_CHECKING:
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
     from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
-    from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
-    from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
+    from .models.distilbert import (
+        DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DistilBertConfig,
+        DistilBertTokenizer,
+    )
+    from .models.donut import (
+        DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DonutProcessor,
+        DonutSwinConfig,
+    )
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPRConfig,
@@ -4604,9 +5028,19 @@ if TYPE_CHECKING:
         DPRReaderTokenizer,
     )
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
-    from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
-    from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
-    from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
+    from .models.efficientformer import (
+        EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EfficientFormerConfig,
+    )
+    from .models.efficientnet import (
+        EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EfficientNetConfig,
+    )
+    from .models.electra import (
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ElectraConfig,
+        ElectraTokenizer,
+    )
     from .models.encodec import (
         ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
         EncodecConfig,
@@ -4617,7 +5051,11 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+    from .models.flaubert import (
+        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FlaubertConfig,
+        FlaubertTokenizer,
+    )
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -4628,23 +5066,49 @@ if TYPE_CHECKING:
     )
     from .models.fnet import FNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FNetConfig
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
-    from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
-    from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.fsmt import (
+        FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FSMTConfig,
+        FSMTTokenizer,
+    )
+    from .models.funnel import (
+        FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FunnelConfig,
+        FunnelTokenizer,
+    )
     from .models.fuyu import FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP, FuyuConfig
-    from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
+    from .models.git import (
+        GIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GitConfig,
+        GitProcessor,
+        GitVisionConfig,
+    )
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
-    from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
-    from .models.gpt_bigcode import GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTBigCodeConfig
+    from .models.gpt2 import (
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPT2Config,
+        GPT2Tokenizer,
+    )
+    from .models.gpt_bigcode import (
+        GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPTBigCodeConfig,
+    )
     from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.gpt_neox import GPT_NEOX_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXConfig
-    from .models.gpt_neox_japanese import GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoXJapaneseConfig
+    from .models.gpt_neox_japanese import (
+        GPT_NEOX_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GPTNeoXJapaneseConfig,
+    )
     from .models.gptj import GPTJ_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTJConfig
     from .models.gptsan_japanese import (
         GPTSAN_JAPANESE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTSanJapaneseConfig,
         GPTSanJapaneseTokenizer,
     )
-    from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.graphormer import (
+        GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        GraphormerConfig,
+    )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -4679,7 +5143,11 @@ if TYPE_CHECKING:
         Kosmos2Config,
         Kosmos2Processor,
     )
-    from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+    from .models.layoutlm import (
+        LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LayoutLMConfig,
+        LayoutLMTokenizer,
+    )
     from .models.layoutlmv2 import (
         LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMv2Config,
@@ -4701,10 +5169,22 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
+    from .models.longformer import (
+        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LongformerConfig,
+        LongformerTokenizer,
+    )
     from .models.longt5 import LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP, LongT5Config
-    from .models.luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig, LukeTokenizer
-    from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
+    from .models.luke import (
+        LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LukeConfig,
+        LukeTokenizer,
+    )
+    from .models.lxmert import (
+        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LxmertConfig,
+        LxmertTokenizer,
+    )
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
     from .models.markuplm import (
@@ -4714,19 +5194,54 @@ if TYPE_CHECKING:
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
-    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
-    from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig, MaskFormerSwinConfig
+    from .models.mask2former import (
+        MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Mask2FormerConfig,
+    )
+    from .models.maskformer import (
+        MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MaskFormerConfig,
+        MaskFormerSwinConfig,
+    )
     from .models.mbart import MBartConfig
     from .models.mega import MEGA_PRETRAINED_CONFIG_ARCHIVE_MAP, MegaConfig
-    from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
-    from .models.mgp_str import MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP, MgpstrConfig, MgpstrProcessor, MgpstrTokenizer
+    from .models.megatron_bert import (
+        MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MegatronBertConfig,
+    )
+    from .models.mgp_str import (
+        MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MgpstrConfig,
+        MgpstrProcessor,
+        MgpstrTokenizer,
+    )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
-    from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
-    from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
-    from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
-    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
-    from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
-    from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mobilebert import (
+        MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileBertConfig,
+        MobileBertTokenizer,
+    )
+    from .models.mobilenet_v1 import (
+        MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV1Config,
+    )
+    from .models.mobilenet_v2 import (
+        MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV2Config,
+    )
+    from .models.mobilevit import (
+        MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileViTConfig,
+    )
+    from .models.mobilevitv2 import (
+        MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileViTV2Config,
+    )
+    from .models.mpnet import (
+        MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MPNetConfig,
+        MPNetTokenizer,
+    )
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
@@ -4740,9 +5255,20 @@ if TYPE_CHECKING:
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nougat import NougatProcessor
-    from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
-    from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
-    from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+    from .models.nystromformer import (
+        NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        NystromformerConfig,
+    )
+    from .models.oneformer import (
+        ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OneFormerConfig,
+        OneFormerProcessor,
+    )
+    from .models.openai import (
+        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OpenAIGPTConfig,
+        OpenAIGPTTokenizer,
+    )
     from .models.opt import OPTConfig
     from .models.owlv2 import (
         OWLV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4758,11 +5284,29 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtsmixer import (
+        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PatchTSMixerConfig,
+    )
     from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
-    from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
-    from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
-    from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
-    from .models.persimmon import PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP, PersimmonConfig
+    from .models.pegasus import (
+        PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PegasusConfig,
+        PegasusTokenizer,
+    )
+    from .models.pegasus_x import (
+        PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PegasusXConfig,
+    )
+    from .models.perceiver import (
+        PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PerceiverConfig,
+        PerceiverTokenizer,
+    )
+    from .models.persimmon import (
+        PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PersimmonConfig,
+    )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -4773,27 +5317,50 @@ if TYPE_CHECKING:
         Pix2StructVisionConfig,
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
-    from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .models.poolformer import (
+        POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PoolFormerConfig,
+    )
     from .models.pop2piano import (
         POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Pop2PianoConfig,
     )
-    from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+    from .models.prophetnet import (
+        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ProphetNetConfig,
+        ProphetNetTokenizer,
+    )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
-    from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
+    from .models.realm import (
+        REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RealmConfig,
+        RealmTokenizer,
+    )
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
-    from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.roberta import (
+        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RobertaConfig,
+        RobertaTokenizer,
+    )
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RobertaPreLayerNormConfig,
     )
-    from .models.roc_bert import ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RoCBertConfig, RoCBertTokenizer
-    from .models.roformer import ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, RoFormerConfig, RoFormerTokenizer
+    from .models.roc_bert import (
+        ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RoCBertConfig,
+        RoCBertTokenizer,
+    )
+    from .models.roformer import (
+        ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        RoFormerConfig,
+        RoFormerTokenizer,
+    )
     from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4813,7 +5380,10 @@ if TYPE_CHECKING:
         SEAMLESS_M4T_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SeamlessM4Tv2Config,
     )
-    from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
+    from .models.segformer import (
+        SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SegformerConfig,
+    )
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -4837,32 +5407,71 @@ if TYPE_CHECKING:
         SpeechT5HifiGanConfig,
         SpeechT5Processor,
     )
-    from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
-    from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
-    from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
+    from .models.splinter import (
+        SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SplinterConfig,
+        SplinterTokenizer,
+    )
+    from .models.squeezebert import (
+        SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SqueezeBertConfig,
+        SqueezeBertTokenizer,
+    )
+    from .models.swiftformer import (
+        SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SwiftFormerConfig,
+    )
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
-    from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
+    from .models.switch_transformers import (
+        SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SwitchTransformersConfig,
+    )
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
-    from .models.table_transformer import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TableTransformerConfig
-    from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
+    from .models.table_transformer import (
+        TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TableTransformerConfig,
+    )
+    from .models.tapas import (
+        TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TapasConfig,
+        TapasTokenizer,
+    )
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
-    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
+    from .models.timesformer import (
+        TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TimesformerConfig,
+    )
     from .models.timm_backbone import TimmBackboneConfig
-    from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
-    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
+    from .models.trocr import (
+        TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TrOCRConfig,
+        TrOCRProcessor,
+    )
+    from .models.tvlt import (
+        TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TvltConfig,
+        TvltFeatureExtractor,
+        TvltProcessor,
+    )
     from .models.tvp import (
         TVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TvpConfig,
         TvpProcessor,
     )
     from .models.umt5 import UMT5Config
-    from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
-    from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
+    from .models.unispeech import (
+        UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UniSpeechConfig,
+    )
+    from .models.unispeech_sat import (
+        UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        UniSpeechSatConfig,
+    )
     from .models.univnet import (
         UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         UnivNetConfig,
@@ -4878,10 +5487,19 @@ if TYPE_CHECKING:
         ViltProcessor,
     )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
-    from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
-    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
+    from .models.vision_text_dual_encoder import (
+        VisionTextDualEncoderConfig,
+        VisionTextDualEncoderProcessor,
+    )
+    from .models.visual_bert import (
+        VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VisualBertConfig,
+    )
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
-    from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
+    from .models.vit_hybrid import (
+        VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ViTHybridConfig,
+    )
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
@@ -4900,7 +5518,10 @@ if TYPE_CHECKING:
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
-    from .models.wav2vec2_conformer import WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2ConformerConfig
+    from .models.wav2vec2_conformer import (
+        WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2ConformerConfig,
+    )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
@@ -4920,9 +5541,18 @@ if TYPE_CHECKING:
     )
     from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
-    from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
-    from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
-    from .models.xlm_roberta_xl import XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaXLConfig
+    from .models.xlm_prophetnet import (
+        XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLMProphetNetConfig,
+    )
+    from .models.xlm_roberta import (
+        XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLMRobertaConfig,
+    )
+    from .models.xlm_roberta_xl import (
+        XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLMRobertaXLConfig,
+    )
     from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
     from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
@@ -5004,7 +5634,13 @@ if TYPE_CHECKING:
         TrainerControl,
         TrainerState,
     )
-    from .trainer_utils import EvalPrediction, IntervalStrategy, SchedulerType, enable_full_determinism, set_seed
+    from .trainer_utils import (
+        EvalPrediction,
+        IntervalStrategy,
+        SchedulerType,
+        enable_full_determinism,
+        set_seed,
+    )
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
@@ -5120,7 +5756,11 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import DebertaV2TokenizerFast
         from .models.deprecated.retribert import RetriBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
-        from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
+        from .models.dpr import (
+            DPRContextEncoderTokenizerFast,
+            DPRQuestionEncoderTokenizerFast,
+            DPRReaderTokenizerFast,
+        )
         from .models.electra import ElectraTokenizerFast
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
@@ -5168,7 +5808,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummies_sentencepiece_and_tokenizers_objects import *
     else:
-        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+        from .convert_slow_tokenizer import (
+            SLOW_TO_FAST_CONVERTERS,
+            convert_slow_tokenizer,
+        )
 
     try:
         if not is_tensorflow_text_available():
@@ -5198,11 +5841,20 @@ if TYPE_CHECKING:
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
         from .models.bridgetower import BridgeTowerImageProcessor
-        from .models.chinese_clip import ChineseCLIPFeatureExtractor, ChineseCLIPImageProcessor
+        from .models.chinese_clip import (
+            ChineseCLIPFeatureExtractor,
+            ChineseCLIPImageProcessor,
+        )
         from .models.clip import CLIPFeatureExtractor, CLIPImageProcessor
-        from .models.conditional_detr import ConditionalDetrFeatureExtractor, ConditionalDetrImageProcessor
+        from .models.conditional_detr import (
+            ConditionalDetrFeatureExtractor,
+            ConditionalDetrImageProcessor,
+        )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
+        from .models.deformable_detr import (
+            DeformableDetrFeatureExtractor,
+            DeformableDetrImageProcessor,
+        )
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deta import DetaImageProcessor
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
@@ -5210,18 +5862,37 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientformer import EfficientFormerImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
-        from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
+        from .models.flava import (
+            FlavaFeatureExtractor,
+            FlavaImageProcessor,
+            FlavaProcessor,
+        )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
-        from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
-        from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
+        from .models.layoutlmv2 import (
+            LayoutLMv2FeatureExtractor,
+            LayoutLMv2ImageProcessor,
+        )
+        from .models.layoutlmv3 import (
+            LayoutLMv3FeatureExtractor,
+            LayoutLMv3ImageProcessor,
+        )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
         from .models.mask2former import Mask2FormerImageProcessor
-        from .models.maskformer import MaskFormerFeatureExtractor, MaskFormerImageProcessor
-        from .models.mobilenet_v1 import MobileNetV1FeatureExtractor, MobileNetV1ImageProcessor
-        from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
+        from .models.maskformer import (
+            MaskFormerFeatureExtractor,
+            MaskFormerImageProcessor,
+        )
+        from .models.mobilenet_v1 import (
+            MobileNetV1FeatureExtractor,
+            MobileNetV1ImageProcessor,
+        )
+        from .models.mobilenet_v2 import (
+            MobileNetV2FeatureExtractor,
+            MobileNetV2ImageProcessor,
+        )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
@@ -5229,7 +5900,10 @@ if TYPE_CHECKING:
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
-        from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
+        from .models.poolformer import (
+            PoolFormerFeatureExtractor,
+            PoolFormerImageProcessor,
+        )
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
@@ -5767,7 +6441,11 @@ if TYPE_CHECKING:
             MCTCTModel,
             MCTCTPreTrainedModel,
         )
-        from .models.deprecated.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
+        from .models.deprecated.mmbt import (
+            MMBTForClassification,
+            MMBTModel,
+            ModalEmbeddings,
+        )
         from .models.deprecated.open_llama import (
             OpenLlamaForCausalLM,
             OpenLlamaForSequenceClassification,
@@ -5836,7 +6514,11 @@ if TYPE_CHECKING:
             DistilBertModel,
             DistilBertPreTrainedModel,
         )
-        from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
+        from .models.donut import (
+            DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DonutSwinModel,
+            DonutSwinPreTrainedModel,
+        )
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -5972,7 +6654,11 @@ if TYPE_CHECKING:
             FocalNetModel,
             FocalNetPreTrainedModel,
         )
-        from .models.fsmt import FSMTForConditionalGeneration, FSMTModel, PretrainedFSMTModel
+        from .models.fsmt import (
+            FSMTForConditionalGeneration,
+            FSMTModel,
+            PretrainedFSMTModel,
+        )
         from .models.funnel import (
             FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
             FunnelBaseModel,
@@ -6182,7 +6868,12 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -6470,6 +7161,15 @@ if TYPE_CHECKING:
             OwlViTTextModel,
             OwlViTVisionModel,
         )
+        from .models.patchtsmixer import (
+            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSMixerForPrediction,
+            PatchTSMixerForPretraining,
+            PatchTSMixerForRegression,
+            PatchTSMixerForTimeSeriesClassification,
+            PatchTSMixerModel,
+            PatchTSMixerPreTrainedModel,
+        )
         from .models.patchtst import (
             PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTForClassification,
@@ -6573,7 +7273,12 @@ if TYPE_CHECKING:
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,
         )
-        from .models.rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
+        from .models.rag import (
+            RagModel,
+            RagPreTrainedModel,
+            RagSequenceForGeneration,
+            RagTokenForGeneration,
+        )
         from .models.realm import (
             REALM_PRETRAINED_MODEL_ARCHIVE_LIST,
             RealmEmbedder,
@@ -6736,7 +7441,10 @@ if TYPE_CHECKING:
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
-        from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
+        from .models.speech_to_text_2 import (
+            Speech2Text2ForCausalLM,
+            Speech2Text2PreTrainedModel,
+        )
         from .models.speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
             SpeechT5ForSpeechToSpeech,
@@ -6839,7 +7547,11 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
-        from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
+        from .models.trocr import (
+            TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TrOCRForCausalLM,
+            TrOCRPreTrainedModel,
+        )
         from .models.tvlt import (
             TVLT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TvltForAudioVisualClassification,
@@ -6880,7 +7592,10 @@ if TYPE_CHECKING:
             UniSpeechSatPreTrainedModel,
         )
         from .models.univnet import UNIVNET_PRETRAINED_MODEL_ARCHIVE_LIST, UnivNetModel
-        from .models.upernet import UperNetForSemanticSegmentation, UperNetPreTrainedModel
+        from .models.upernet import (
+            UperNetForSemanticSegmentation,
+            UperNetPreTrainedModel,
+        )
         from .models.videomae import (
             VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VideoMAEForPreTraining,
@@ -7005,7 +7720,12 @@ if TYPE_CHECKING:
             XCLIPTextModel,
             XCLIPVisionModel,
         )
-        from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
+        from .models.xglm import (
+            XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XGLMForCausalLM,
+            XGLMModel,
+            XGLMPreTrainedModel,
+        )
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
@@ -7142,7 +7862,12 @@ if TYPE_CHECKING:
             tf_top_k_top_p_filtering,
         )
         from .keras_callbacks import KerasMetricCallback, PushToHubCallback
-        from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+        from .modeling_tf_utils import (
+            TFPreTrainedModel,
+            TFSequenceSummary,
+            TFSharedEmbeddings,
+            shape_list,
+        )
 
         # TensorFlow model imports
         from .models.albert import (
@@ -7273,7 +7998,11 @@ if TYPE_CHECKING:
             TFConvBertModel,
             TFConvBertPreTrainedModel,
         )
-        from .models.convnext import TFConvNextForImageClassification, TFConvNextModel, TFConvNextPreTrainedModel
+        from .models.convnext import (
+            TFConvNextForImageClassification,
+            TFConvNextModel,
+            TFConvNextPreTrainedModel,
+        )
         from .models.convnextv2 import (
             TFConvNextV2ForImageClassification,
             TFConvNextV2Model,
@@ -7452,7 +8181,11 @@ if TYPE_CHECKING:
             TFLayoutLMv3Model,
             TFLayoutLMv3PreTrainedModel,
         )
-        from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
+        from .models.led import (
+            TFLEDForConditionalGeneration,
+            TFLEDModel,
+            TFLEDPreTrainedModel,
+        )
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLongformerForMaskedLM,
@@ -7472,8 +8205,16 @@ if TYPE_CHECKING:
             TFLxmertPreTrainedModel,
             TFLxmertVisualFeatureEncoder,
         )
-        from .models.marian import TFMarianModel, TFMarianMTModel, TFMarianPreTrainedModel
-        from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
+        from .models.marian import (
+            TFMarianModel,
+            TFMarianMTModel,
+            TFMarianPreTrainedModel,
+        )
+        from .models.mbart import (
+            TFMBartForConditionalGeneration,
+            TFMBartModel,
+            TFMBartPreTrainedModel,
+        )
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
@@ -7505,7 +8246,11 @@ if TYPE_CHECKING:
             TFMPNetModel,
             TFMPNetPreTrainedModel,
         )
-        from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+        from .models.mt5 import (
+            TFMT5EncoderModel,
+            TFMT5ForConditionalGeneration,
+            TFMT5Model,
+        )
         from .models.openai import (
             TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFOpenAIGPTDoubleHeadsModel,
@@ -7516,8 +8261,17 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.opt import TFOPTForCausalLM, TFOPTModel, TFOPTPreTrainedModel
-        from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel, TFPegasusPreTrainedModel
-        from .models.rag import TFRagModel, TFRagPreTrainedModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
+        from .models.pegasus import (
+            TFPegasusForConditionalGeneration,
+            TFPegasusModel,
+            TFPegasusPreTrainedModel,
+        )
+        from .models.rag import (
+            TFRagModel,
+            TFRagPreTrainedModel,
+            TFRagSequenceForGeneration,
+            TFRagTokenForGeneration,
+        )
         from .models.regnet import (
             TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRegNetForImageClassification,
@@ -7621,8 +8375,16 @@ if TYPE_CHECKING:
         )
         from .models.vision_encoder_decoder import TFVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import TFVisionTextDualEncoderModel
-        from .models.vit import TFViTForImageClassification, TFViTModel, TFViTPreTrainedModel
-        from .models.vit_mae import TFViTMAEForPreTraining, TFViTMAEModel, TFViTMAEPreTrainedModel
+        from .models.vit import (
+            TFViTForImageClassification,
+            TFViTModel,
+            TFViTPreTrainedModel,
+        )
+        from .models.vit_mae import (
+            TFViTMAEForPreTraining,
+            TFViTMAEModel,
+            TFViTMAEPreTrainedModel,
+        )
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFWav2Vec2ForCTC,
@@ -7677,7 +8439,12 @@ if TYPE_CHECKING:
         )
 
         # Optimization
-        from .optimization_tf import AdamWeightDecay, GradientAccumulator, WarmUp, create_optimizer
+        from .optimization_tf import (
+            AdamWeightDecay,
+            GradientAccumulator,
+            WarmUp,
+            create_optimizer,
+        )
 
         # Trainer
         from .trainer_tf import TFTrainer
@@ -7694,7 +8461,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects import *
     else:
-        from .models.pop2piano import Pop2PianoFeatureExtractor, Pop2PianoProcessor, Pop2PianoTokenizer
+        from .models.pop2piano import (
+            Pop2PianoFeatureExtractor,
+            Pop2PianoProcessor,
+            Pop2PianoTokenizer,
+        )
 
     try:
         if not is_flax_available():
@@ -7810,7 +8581,11 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
         )
-        from .models.bloom import FlaxBloomForCausalLM, FlaxBloomModel, FlaxBloomPreTrainedModel
+        from .models.bloom import (
+            FlaxBloomForCausalLM,
+            FlaxBloomModel,
+            FlaxBloomPreTrainedModel,
+        )
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
@@ -7841,11 +8616,31 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
-        from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
-        from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
-        from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
-        from .models.longt5 import FlaxLongT5ForConditionalGeneration, FlaxLongT5Model, FlaxLongT5PreTrainedModel
-        from .models.marian import FlaxMarianModel, FlaxMarianMTModel, FlaxMarianPreTrainedModel
+        from .models.gpt2 import (
+            FlaxGPT2LMHeadModel,
+            FlaxGPT2Model,
+            FlaxGPT2PreTrainedModel,
+        )
+        from .models.gpt_neo import (
+            FlaxGPTNeoForCausalLM,
+            FlaxGPTNeoModel,
+            FlaxGPTNeoPreTrainedModel,
+        )
+        from .models.gptj import (
+            FlaxGPTJForCausalLM,
+            FlaxGPTJModel,
+            FlaxGPTJPreTrainedModel,
+        )
+        from .models.longt5 import (
+            FlaxLongT5ForConditionalGeneration,
+            FlaxLongT5Model,
+            FlaxLongT5PreTrainedModel,
+        )
+        from .models.marian import (
+            FlaxMarianModel,
+            FlaxMarianMTModel,
+            FlaxMarianPreTrainedModel,
+        )
         from .models.mbart import (
             FlaxMBartForConditionalGeneration,
             FlaxMBartForQuestionAnswering,
@@ -7853,11 +8648,27 @@ if TYPE_CHECKING:
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
         )
-        from .models.mt5 import FlaxMT5EncoderModel, FlaxMT5ForConditionalGeneration, FlaxMT5Model
+        from .models.mt5 import (
+            FlaxMT5EncoderModel,
+            FlaxMT5ForConditionalGeneration,
+            FlaxMT5Model,
+        )
         from .models.opt import FlaxOPTForCausalLM, FlaxOPTModel, FlaxOPTPreTrainedModel
-        from .models.pegasus import FlaxPegasusForConditionalGeneration, FlaxPegasusModel, FlaxPegasusPreTrainedModel
-        from .models.regnet import FlaxRegNetForImageClassification, FlaxRegNetModel, FlaxRegNetPreTrainedModel
-        from .models.resnet import FlaxResNetForImageClassification, FlaxResNetModel, FlaxResNetPreTrainedModel
+        from .models.pegasus import (
+            FlaxPegasusForConditionalGeneration,
+            FlaxPegasusModel,
+            FlaxPegasusPreTrainedModel,
+        )
+        from .models.regnet import (
+            FlaxRegNetForImageClassification,
+            FlaxRegNetModel,
+            FlaxRegNetPreTrainedModel,
+        )
+        from .models.resnet import (
+            FlaxResNetForImageClassification,
+            FlaxResNetModel,
+            FlaxResNetPreTrainedModel,
+        )
         from .models.roberta import (
             FlaxRobertaForCausalLM,
             FlaxRobertaForMaskedLM,
@@ -7888,10 +8699,19 @@ if TYPE_CHECKING:
             FlaxRoFormerPreTrainedModel,
         )
         from .models.speech_encoder_decoder import FlaxSpeechEncoderDecoderModel
-        from .models.t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+        from .models.t5 import (
+            FlaxT5EncoderModel,
+            FlaxT5ForConditionalGeneration,
+            FlaxT5Model,
+            FlaxT5PreTrainedModel,
+        )
         from .models.vision_encoder_decoder import FlaxVisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import FlaxVisionTextDualEncoderModel
-        from .models.vit import FlaxViTForImageClassification, FlaxViTModel, FlaxViTPreTrainedModel
+        from .models.vit import (
+            FlaxViTForImageClassification,
+            FlaxViTModel,
+            FlaxViTPreTrainedModel,
+        )
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,
@@ -7904,7 +8724,11 @@ if TYPE_CHECKING:
             FlaxWhisperModel,
             FlaxWhisperPreTrainedModel,
         )
-        from .models.xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
+        from .models.xglm import (
+            FlaxXGLMForCausalLM,
+            FlaxXGLMModel,
+            FlaxXGLMPreTrainedModel,
+        )
         from .models.xlm_roberta import (
             FLAX_XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaxXLMRobertaForCausalLM,
