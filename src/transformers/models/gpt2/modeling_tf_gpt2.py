@@ -91,6 +91,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
         self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
         self.pruned_heads = set()
+        self.embed_dim = n_state
 
     def prune_heads(self, heads):
         pass
@@ -206,15 +207,19 @@ class TFAttention(tf.keras.layers.Layer):
         if self.built:
             return
         self.built = True
+        if self.is_cross_attention:
+            c_attn_shape = 2 * self.embed_dim
+        else:
+            c_attn_shape = 3 * self.embed_dim
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(None)
+                self.c_proj.build(self.embed_dim)
         if getattr(self, "c_attn", None) is not None:
             with tf.name_scope(self.c_attn.name):
-                self.c_attn.build(None)
+                self.c_attn.build(c_attn_shape)
         if getattr(self, "q_attn", None) is not None:
             with tf.name_scope(self.q_attn.name):
-                self.q_attn.build(None)
+                self.q_attn.build(self.embed_dim)
 
 
 class TFMLP(tf.keras.layers.Layer):
@@ -225,6 +230,8 @@ class TFMLP(tf.keras.layers.Layer):
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation(config.activation_function)
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.intermediate_size = n_state
+        self.embed_dim = nx
 
     def call(self, x, training=False):
         h = self.act(self.c_fc(x))
@@ -238,10 +245,10 @@ class TFMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_fc", None) is not None:
             with tf.name_scope(self.c_fc.name):
-                self.c_fc.build(None)
+                self.c_fc.build(self.intermediate_size)
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(None)
+                self.c_proj.build(self.embed_dim)
 
 
 class TFBlock(tf.keras.layers.Layer):
