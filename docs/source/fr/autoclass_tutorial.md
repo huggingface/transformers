@@ -16,17 +16,17 @@ rendered properly in your Markdown viewer.
 
 # Chargement d'instances pré-entraînées avec une AutoClass
 
-Avec autant d'architectures Transformer différentes, il peut être difficile d'en créer une pour votre point de contrôle. Dans l'idée de créer une librairie facile, simple et flexible à utiliser, 🤗 Transformers fournit une `AutoClass` qui infère et charge automatiquement l'architecture correcte à partir d'un point de contrôle donné. La fonction `from_pretrained()` vous permet de charger rapidement un modèle pré-entraîné pour n'importe quelle architecture afin que vous n'ayez pas à consacrer du temps et des ressources à l'entraînement d'un modèle à partir de zéro. Produire un tel code indépendant du point de contrôle signifie que si votre code fonctionne pour un point de contrôle, il fonctionnera avec un autre point de contrôle - tant qu'il a été entraîné pour une tâche similaire - même si l'architecture est différente.
+Avec autant d'architectures Transformer différentes, il peut être difficile d'en créer une pour votre ensemble de poids (aussi appelés "weights" ou "checkpoint" en anglais). Dans l'idée de créer une librairie facile, simple et flexible à utiliser, 🤗 Transformers fournit une `AutoClass` qui infère et charge automatiquement l'architecture correcte à partir d'un ensemble de poids donné. La fonction `from_pretrained()` vous permet de charger rapidement un modèle pré-entraîné pour n'importe quelle architecture afin que vous n'ayez pas à consacrer du temps et des ressources à l'entraînement d'un modèle à partir de zéro. Produire un tel code indépendant d'un ensemble de poids signifie que si votre code fonctionne pour un ensemble de poids, il fonctionnera avec un autre ensemble - tant qu'il a été entraîné pour une tâche similaire - même si l'architecture est différente.
 
 <Tip>
 
-Rappel, l'architecture fait référence au squelette du modèle et les points de contrôle sont les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/bert-base-uncased) est une architecture, tandis que `bert-base-uncased` est un point de contrôle. Le terme modèle est général et peut signifier soit architecture soit point de contrôle.
+Rappel, l'architecture fait référence au squelette du modèle et l'ensemble de poids contient les poids pour une architecture donnée. Par exemple, [BERT](https://huggingface.co/bert-base-uncased) est une architecture, tandis que `bert-base-uncased` est un ensemble de poids. Le terme modèle est général et peut signifier soit architecture soit ensemble de poids.
 
 </Tip>
 
-Dans ce tutoriel, vous apprenez à:
+Dans ce tutoriel, vous apprendrez à:
 
-  * Charger tokenizer pré-entraîné.
+  * Charger un tokenizer pré-entraîné.
   * Charger un processeur d'image pré-entraîné.
   * Charger un extracteur de caractéristiques pré-entraîné.
   * Charger un processeur pré-entraîné.
@@ -66,7 +66,7 @@ Pour les tâches de vision, un processeur d'image traite l'image pour la formate
 
 ## AutoFeatureExtractor
 
-Pour les tâches audio, un extracteur de caractéristiques traite le signal audio pour le formater correctement.
+Pour les tâches audio, un extracteur de caractéristiques (aussi appelés "features" en anglais) traite le signal audio pour le formater correctement.
 
 Chargez un extracteur de caractéristiques avec [`AutoFeatureExtractor.from_pretrained`]:
 
@@ -102,7 +102,7 @@ Enfin, les classes `AutoModelFor` vous permettent de charger un modèle pré-ent
 >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Réutilisez facilement le même point de contrôle pour charger une architecture pour une tâche différente :
+Réutilisez facilement le même ensemble de poids pour charger une architecture pour une tâche différente :
 
 ```py
 >>> from transformers import AutoModelForTokenClassification
@@ -129,7 +129,7 @@ Enfin, les classes `TFAutoModelFor` vous permettent de charger un modèle pré-e
 >>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
 ```
 
-Réutilisez facilement le même point de contrôle pour charger une architecture pour une tâche différente :
+Réutilisez facilement le même ensemble de poids pour charger une architecture pour une tâche différente :
 
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
