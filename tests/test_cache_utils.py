@@ -15,13 +15,14 @@
 
 import unittest
 
-from transformers.testing_utils import is_torch_available, require_torch
+from transformers import set_seed
+from transformers.testing_utils import is_torch_available, require_torch, require_torch_gpu, slow
 
 
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, LlamaForCausalLM
+    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, LlamaForCausalLM, SinkCache
 
 
 @require_torch
@@ -103,3 +104,86 @@ class CacheTest(unittest.TestCase):
                         new_cache[layer_idx][key_value_idx], legacy_cache_reordered[layer_idx][key_value_idx]
                     )
                 )
+
+
+@require_torch_gpu
+@slow
+class CacheIntegrationTest(unittest.TestCase):
+
+    def test_dynamic_cache_hard(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+        )
+        inputs = tokenizer(["Here's everything I know about cats. Cats"], return_tensors="pt").to(model.device)
+
+        # DynamicCache and the legacy cache format should be equivalent
+        set_seed(0)
+        gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
+        set_seed(0)
+        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache())
+        self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
+
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = (
+            "Here's everything I know about cats. Cats are mysterious creatures. They can't talk, and they don't like "
+            "to be held. They don't play fetch, and they don't like to be hugged. But they do like to be petted.\n"
+            "Cats are also very independent. They don't like to be told what to do, and they don't like to be told "
+            "what to eat. They are also very territorial. They don't like to share their food or their toys.\nCats "
+            "are also very curious. They like to explore, and they like to play. They are also very fast. They can "
+            "run very fast, and they can jump very high.\nCats are also very smart. They can learn tricks, and they "
+            "can solve problems. They are also very playful. They like to play with toys, and they like to play with "
+            "other cats.\nCats are also very affectionate. They like to be petted, and they like to be held. They "
+            "also like to be scratched.\nCats are also very clean. They like to groom themselves, and they like to "
+            "clean their litter box.\nCats are also very independent. They don't"
+        )
+        self.assertEqual(decoded[0], expected_text)
+
+    def test_dynamic_cache_batched(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+        )
+        inputs = tokenizer(
+            ["A sequence: 1, 2, 3, 4, 5", "A sequence: A, B, C"],
+            padding=True,
+            return_tensors="pt"
+        ).to(model.device)
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
+        self.assertListEqual(decoded, expected_text)
+
+    def test_dynamic_cache_beam_search(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+        )
+
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
+        gen_out = model.generate(
+            **inputs, do_sample=False, max_new_tokens=20, num_beams=2, num_return_sequences=2,
+        )
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            'The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good',
+            'The best color is the one that suits you.\nThe best color is the one that suits you. The'
+        ]
+        self.assertListEqual(decoded, expected_text)
+
+    # def test_sink_cache(self):
+    #     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+    #     model = AutoModelForCausalLM.from_pretrained(
+    #         "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+    #     )
+
+    #     inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
+
+    #     # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
+    #     # without the SinkCache, the last few tokens are gibberish.
+    #     cache = SinkCache(window_length=252, num_sink_tokens=4)
+    #     gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=300, past_key_values=cache)
+    #     decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+    #     breakpoint()
