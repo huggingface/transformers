@@ -118,7 +118,7 @@ def create_rename_keys(config):
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
 
-    # TODO Swinv2 et al don't require activation postprocessing (readout projections + resize blocks)
+    # note: non-Transformer backbones like Swinv2, LeViT et al don't require activation postprocessing (readout projections + resize blocks)
 
     # refinenet (tricky here)
     mapping = {1:3, 2:2, 3:1, 4:0}
@@ -184,7 +184,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
+def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, verify_logits, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -224,55 +224,60 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     image = prepare_img()
     processor(image, return_tensors="pt")
 
-    # TODO remove torchvision, just use image processor
-    import requests
-    from PIL import Image
-    from torchvision import transforms
+    if verify_logits:
+        from torchvision import transforms
 
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
 
-    transforms = transforms.Compose(
-        [
-            transforms.Resize((image_size, image_size)),
-            transforms.ToTensor(),
-        ]
-    )
-    pixel_values = transforms(image).unsqueeze(0)
-
-    # forward pass
-    with torch.no_grad():
-        outputs = model(pixel_values)
-
-    predicted_depth = outputs.predicted_depth
-
-    print("Shape of predicted depth:", predicted_depth.shape)
-    print("First values of predicted depth:", predicted_depth[0, :3, :3])
-
-    # assert logits
-    # TODO there's still a small difference with the original logits
-    if model_name == "dpt-swinv2-base-384":
-        # OK, checked
-        expected_shape = torch.Size([1, 384, 384])
-        expected_slice = torch.tensor(
-            [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]],
+        transforms = transforms.Compose(
+            [
+                transforms.Resize((image_size, image_size)),
+                transforms.ToTensor(),
+            ]
         )
-    elif model_name == "dpt-swinv2-tiny-256":
-        # OK, checked
-        expected_shape = torch.Size([1, 256, 256])
-        expected_slice = torch.tensor(
-            [[978.9163, 976.5215, 978.5349], [974.1859, 971.7249, 975.8046], [971.3419, 970.3118, 971.6830]],
-        )
-    elif model_name == "dpt-swinv2-large-384":
-        # OK, checked
-        expected_shape = torch.Size([1, 384, 384])
-        expected_slice = torch.tensor(
-            [[1203.7206, 1200.1495, 1197.8234], [1196.2484, 1183.5033, 1186.4640], [1178.8131, 1182.3260, 1174.3975]],
-        )
+        pixel_values = transforms(image).unsqueeze(0)
 
-    assert predicted_depth.shape == torch.Size(expected_shape)
-    assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
-    print("Looks ok!")
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values)
+
+        predicted_depth = outputs.predicted_depth
+
+        print("Shape of predicted depth:", predicted_depth.shape)
+        print("First values of predicted depth:", predicted_depth[0, :3, :3])
+
+        # assert logits
+        if model_name == "dpt-swinv2-base-384":
+            # OK, checked
+            expected_shape = torch.Size([1, 384, 384])
+            expected_slice = torch.tensor(
+                [
+                    [1998.5575, 1997.3887, 2009.2981],
+                    [1952.8607, 1979.6488, 2001.0854],
+                    [1953.7697, 1961.7711, 1968.8904],
+                ],
+            )
+        elif model_name == "dpt-swinv2-tiny-256":
+            # OK, checked
+            expected_shape = torch.Size([1, 256, 256])
+            expected_slice = torch.tensor(
+                [[978.9163, 976.5215, 978.5349], [974.1859, 971.7249, 975.8046], [971.3419, 970.3118, 971.6830]],
+            )
+        elif model_name == "dpt-swinv2-large-384":
+            # OK, checked
+            expected_shape = torch.Size([1, 384, 384])
+            expected_slice = torch.tensor(
+                [
+                    [1203.7206, 1200.1495, 1197.8234],
+                    [1196.2484, 1183.5033, 1186.4640],
+                    [1178.8131, 1182.3260, 1174.3975],
+                ],
+            )
+
+        assert predicted_depth.shape == torch.Size(expected_shape)
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
+        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -303,10 +308,15 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
+        "--verify_logits",
+        action="store_true",
+        help="Whether to verify logits after conversion.",
+    )
+    parser.add_argument(
         "--push_to_hub",
         action="store_true",
         help="Whether to push the model to the hub after conversion.",
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub)
