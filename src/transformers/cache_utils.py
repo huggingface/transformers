@@ -171,7 +171,7 @@ class SinkCache(Cache):
         rotated_key_states = (key_states * cos) + (self._rotate_half(key_states) * sin)
         return rotated_key_states
 
-    def get_rerotation_cos_sin(
+    def _get_rerotation_cos_sin(
         self, key_states: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         if key_states.shape[-2] not in self.cos_sin_cache:
@@ -255,10 +255,10 @@ class SinkCache(Cache):
                 rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(key_states, cos, sin)
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
-                        key_states[..., :partial_rotation_size],
-                        key_states[..., partial_rotation_size:],
+                        keys_to_keep[..., :partial_rotation_size],
+                        keys_to_keep[..., partial_rotation_size:],
                     )
-                keys_to_keep = self.apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
+                keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
                 if partial_rotation_size is not None:
                     keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
 
