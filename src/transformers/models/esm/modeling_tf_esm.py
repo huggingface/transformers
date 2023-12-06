@@ -1316,17 +1316,17 @@ class TFEsmLMHead(Layer):
     def build(self, input_shape=None):
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
-        self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
         if self.built:
             return
         self.built = True
+        self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
                 self.dense.build(self.config.hidden_size)
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.config.hidden_size])
-        if getattr(self, "decoder", None) is not None:
+        if getattr(self, "decoder", None) is not None and not self.config.tie_word_embeddings:
             with tf.name_scope(self.decoder.name):
                 self.decoder.build(self.config.hidden_size)
 
