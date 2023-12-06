@@ -119,10 +119,17 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
-        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
-        self.n_additional_single_gpu_failures = all_additional_failures["single"]
-        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        if len(additional_results) > 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            self.n_additional_single_gpu_failures = all_additional_failures["single"]
+            self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        else:
+            self.n_additional_single_gpu_failures = 0
+            self.n_additional_multi_gpu_failures = 0
+            self.n_additional_unknown_gpu_failures = 0
+
         self.n_additional_failures = (
             self.n_additional_single_gpu_failures
             + self.n_additional_multi_gpu_failures
@@ -902,6 +909,9 @@ if __name__ == "__main__":
         job_name_prefix = "Nightly CI"
     elif ci_event.startswith("Push CI (AMD) - "):
         flavor = ci_event.replace("Push CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
+    elif ci_event.startswith("Scheduled CI (AMD) - "):
+        flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
         job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
