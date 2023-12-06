@@ -3409,7 +3409,6 @@ class ModelTesterMixin:
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
 
-        # TODO: Implement a test for SDPA simply testing forward, not generate.
         if len(self.all_generative_model_classes) == 0:
             self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
 
