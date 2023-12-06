@@ -1524,7 +1524,7 @@ class AttentionMaskTester(unittest.TestCase):
             for bsz_idx, seq_idx in additional_mask:
                 mask_2d[bsz_idx, seq_idx] = 0
 
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
+        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len, dtype=torch.float32)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
 
@@ -1560,7 +1560,9 @@ class AttentionMaskTester(unittest.TestCase):
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
 
     def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(bsz, query_length=q_len, key_value_length=kv_len, device=torch_device)
+        mask_4d = mask_converter.to_causal_4d(
+            bsz, query_length=q_len, key_value_length=kv_len, device=torch_device, dtype=torch.float32
+        )
 
         if q_len == 1 and mask_converter.sliding_window is None:
             # no causal mask if q_len is 1

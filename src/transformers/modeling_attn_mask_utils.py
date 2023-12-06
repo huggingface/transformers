@@ -33,7 +33,7 @@ class AttentionMaskConverter:
     >>> from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 
     >>> converter = AttentionMaskConverter(True)
-    >>> converter.to_4d(torch.tensor([[0, 0, 0, 1, 1]]), 5, 5)
+    >>> converter.to_4d(torch.tensor([[0, 0, 0, 1, 1]]), 5, 5, dtype=torch.float32)
     tensor([[[[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
             [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
             [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
