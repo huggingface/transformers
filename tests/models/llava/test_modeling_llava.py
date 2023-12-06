@@ -242,6 +242,29 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_small_model_integration_test_llama_batched(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
+
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+
+        prompts = [
+            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ""
+        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
