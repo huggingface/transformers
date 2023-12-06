@@ -127,6 +127,12 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
 ```
 
+### Expected speedups
+Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `susnato/phi-1_dev` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/phi_1_speedup_plot.jpg">
+</div>
+
 
 ## PhiConfig
 
