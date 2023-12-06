@@ -1325,6 +1325,7 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._3",
         )
+        self.hid_dim = hid_dim
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1340,13 +1341,13 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(None)  # TODO Matt might be wrong
+                self.dense.build(self.hid_dim)
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
-                self.layer_norm.build(None)  # TODO Matt might be wrong
+                self.layer_norm.build([None, self.hid_dim * 2])
         if getattr(self, "dense_1", None) is not None:
             with tf.name_scope(self.dense_1.name):
-                self.dense_1.build(None)  # TODO Matt might be wrong
+                self.dense_1.build(self.hid_dim * 2)
 
 
 class TFLxmertVisualObjHead(tf.keras.layers.Layer):
@@ -1374,6 +1375,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
             )
             for key in self.visual_losses
         }
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -1390,8 +1392,9 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
             with tf.name_scope(self.transform.name):
                 self.transform.build(None)
         if getattr(self, "decoder_dict", None) is not None:
-            with tf.name_scope(self.decoder_dict.name):
-                self.decoder_dict.build(None)  # TODO Matt might be wrong
+            for layer in self.decoder_dict.values():
+                with tf.name_scope(layer.name):
+                    layer.build(self.config.hidden_size)
 
 
 @add_start_docstrings("""Lxmert Model with a `language modeling` head on top.""", LXMERT_START_DOCSTRING)
