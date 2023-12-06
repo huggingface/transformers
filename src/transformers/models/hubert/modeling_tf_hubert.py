@@ -565,13 +565,11 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         return hidden_states
 
     def build(self, input_shape=None):
-        self.conv.build(self.config.hidden_size)
         if self.built:
             return
         self.built = True
-        if getattr(self, "conv", None) is not None:
-            with tf.name_scope(self.conv.name):
-                self.conv.build(self.config.hidden_size)
+        with tf.name_scope(self.conv.name):
+            self.conv.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
@@ -611,6 +609,14 @@ class TFHubertFeatureEncoder(tf.keras.layers.Layer):
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for conv_layer in self.conv_layers:
+            with tf.name_scope(conv_layer.name):
+                conv_layer.build(None)
 
 
 class TFHubertFeatureExtractor(TFHubertFeatureEncoder):
