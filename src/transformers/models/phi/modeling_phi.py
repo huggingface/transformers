@@ -1086,18 +1086,17 @@ class PhiForCausalLM(PhiPreTrainedModel):
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
-                past_length = past_key_values.get_seq_length()
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
             else:
-                past_length = past_key_values[0][0].shape[2]
+                cache_length = past_length = past_key_values[0][0].shape[2]
 
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
+            # Discard tokens already processed in the cache
+            input_ids = input_ids[:, past_length:]
 
-            input_ids = input_ids[:, remove_prefix_length:]
+            # If the cache is smaller than the attention mask, let's discard the older values
+            if cache_length < past_length and attention_mask is not None:
+                attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
