@@ -188,7 +188,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
                 self.dwconv.build(self.dim)
         if getattr(self, "layernorm", None) is not None:
             with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, self.dim])
+                self.layernorm.build([None, None, None, self.dim])
         if getattr(self, "pwconv1", None) is not None:
             with tf.name_scope(self.pwconv1.name):
                 self.pwconv1.build(self.dim)
@@ -275,6 +275,9 @@ class TFConvNextStage(tf.keras.layers.Layer):
             )
             for j in range(depth)
         ]
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
 
     def call(self, hidden_states):
         for layer in self.downsampling_layer:
@@ -291,10 +294,11 @@ class TFConvNextStage(tf.keras.layers.Layer):
             for layer in self.layers:
                 with tf.name_scope(layer.name):
                     layer.build(None)
-        if getattr(self, "downsampling_layer", None) is not None:
-            for layer in self.downsampling_layer:
-                with tf.name_scope(layer.name):
-                    layer.build(None)
+        if self.in_channels != self.out_channels or self.stride > 1:
+            with tf.name_scope(self.downsampling_layer[0].name):
+                self.downsampling_layer[0].build([None, None, None, self.in_channels])
+            with tf.name_scope(self.downsampling_layer[1].name):
+                self.downsampling_layer[1].build(self.in_channels)
 
 
 class TFConvNextEncoder(tf.keras.layers.Layer):
@@ -335,6 +339,11 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+
+    def build(self, input_shape=None):
+        for stage in self.stages:
+            with tf.name_scope(stage.name):
+                stage.build(None)
 
 
 @keras_serializable
@@ -408,7 +417,7 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "layernorm", None) is not None:
             with tf.name_scope(self.layernorm.name):
-                self.layernorm.build([None, None, self.config.hidden_sizes[-1]])
+                self.layernorm.build([None, self.config.hidden_sizes[-1]])
 
 
 class TFConvNextPreTrainedModel(TFPreTrainedModel):
@@ -572,6 +581,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             bias_initializer="zeros",
             name="classifier",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
@@ -651,5 +661,6 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             with tf.name_scope(self.convnext.name):
                 self.convnext.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.config.hidden_sizes[-1])
