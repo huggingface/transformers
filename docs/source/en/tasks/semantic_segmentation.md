@@ -258,7 +258,7 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 
 #### Custom dataset
 
-You could also create and use your own dataset if prefer to train with the [run_semantic_segmentation.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py) script instead of a notebook instance. The script requires:
+You could also create and use your own dataset if you prefer to train with the [run_semantic_segmentation.py](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py) script instead of a notebook instance. The script requires:
 
 1. a [`~datasets.DatasetDict`] with two [`~datasets.Image`] columns, "image" and "label"
 
