@@ -31,9 +31,6 @@ from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_cogvlm import CogVLMConfig
 
-# TODO remove following dependencies
-from .util import FastRotaryEmbedding
-
 
 if TYPE_CHECKING:
     from transformers.utils import ModelOutput
@@ -344,16 +341,17 @@ def attention_fn(
         return context_layer, attention_scores
 
 
+# source: https://github.com/THUDM/SwissArmyTransformer/blob/1b160fcf42989c1ffcb964587f51241618f39f5b/tests/test_triton_rotary_embedding.py#L25.
 class CogVLMRotaryEmbedding(torch.nn.Module):
-    def __init__(self, dim, base=10000, precision=torch.half, learnable=False, device=torch.device('cpu')):
+    def __init__(self, dim, base=10000, precision=torch.half, learnable=False, device=torch.device("cpu")):
         super().__init__()
-        inv_freq = 1. / (base ** (torch.arange(0, dim, 2, device=device).float() / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, device=device).float() / dim))
         self.learnable = learnable
         if learnable:
             self.inv_freq = torch.nn.Parameter(inv_freq)
             self.max_seq_len_cached = None
         else:
-            self.register_buffer('inv_freq', inv_freq)
+            self.register_buffer("inv_freq", inv_freq)
             self.max_seq_len_cached = None
             self.cos_cached = None
             self.sin_cached = None
@@ -365,7 +363,7 @@ class CogVLMRotaryEmbedding(torch.nn.Module):
         if self.max_seq_len_cached is None or (seq_len > self.max_seq_len_cached):
             self.max_seq_len_cached = None if self.learnable else seq_len
             t = torch.arange(seq_len, device=x.device, dtype=torch.float32)
-            freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             # Different from paper, but it uses a different permutation in order to obtain the same calculation
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
             if self.precision == torch.bfloat16:
@@ -392,7 +390,6 @@ class CogVLMVisionExpertAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
 
         self.rotary_emb = CogVLMRotaryEmbedding(dim=self.head_dim)
-        # self.rotary_emb = FastRotaryEmbedding(dim=self.head_dim, pos_idx_in_fp32=False)
         self.vision_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
         self.vision_expert_dense = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.language_expert_query_key_value = nn.Linear(self.hidden_size, self.hidden_size * 3, bias=False)
@@ -435,9 +432,6 @@ class CogVLMVisionExpertAttention(nn.Module):
 
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb_index_bhs(query_states, key_states, cos, sin, position_ids)
-        # query_states, key_states = self.rotary_emb(
-        #     query_states, key_states, position_ids=position_ids, max_seqlen=position_ids.max() + 1
-        # )
 
         if past_key_value is not None:
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -469,20 +463,22 @@ class CogVLMVisionExpertAttention(nn.Module):
             if output_attentions
             else (attn_output, None, past_key_value)
         )
-    
+
 
 def rotate_half(x):
-    x1, x2 = x[..., :x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
-    return torch.cat((-x2, x1), dim=x.ndim-1)  # dim=-1 triggers a bug in earlier torch versions
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=x.ndim - 1)  # dim=-1 triggers a bug in earlier torch versions
 
 
-def apply_rotary_pos_emb_index_bhs(q, k, cos, sin, position_id):
+def apply_rotary_pos_emb_index_bhs(queries, keys, cos, sin, position_id):
     # batch_size, num_head, seq_len, hidden_size
-    cos, sin = nn.functional.embedding(position_id, cos.squeeze(1)).unsqueeze(1), \
-               nn.functional.embedding(position_id, sin.squeeze(1)).unsqueeze(1)
-    q = (q * cos) + (rotate_half(q) * sin)
-    k = (k * cos) + (rotate_half(k) * sin)
-    return q, k
+    cos, sin = (
+        nn.functional.embedding(position_id, cos.squeeze(1)).unsqueeze(1),
+        nn.functional.embedding(position_id, sin.squeeze(1)).unsqueeze(1),
+    )
+    queries = (queries * cos) + (rotate_half(queries) * sin)
+    keys = (keys * cos) + (rotate_half(keys) * sin)
+    return queries, keys
 
 
 class CogVLMDecoderLayer(nn.Module):
