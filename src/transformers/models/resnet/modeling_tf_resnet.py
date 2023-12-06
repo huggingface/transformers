@@ -68,6 +68,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
         self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # Pad to match that done in the PyTorch Conv2D model
@@ -91,7 +92,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
                 self.conv.build(self.in_channels)
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFResNetEmbeddings(tf.keras.layers.Layer):
@@ -150,6 +151,7 @@ class TFResNetShortCut(tf.keras.layers.Layer):
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
@@ -166,7 +168,7 @@ class TFResNetShortCut(tf.keras.layers.Layer):
                 self.convolution.build(self.in_channels)
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFResNetBasicLayer(tf.keras.layers.Layer):
@@ -293,6 +295,15 @@ class TFResNetStage(tf.keras.layers.Layer):
         for layer in self.stage_layers:
             hidden_state = layer(hidden_state, training=training)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "stage_layers", None) is not None:
+            for layer in self.stage_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFResNetEncoder(tf.keras.layers.Layer):
@@ -523,6 +534,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             if config.num_labels > 0
             else tf.keras.layers.Activation("linear", name="classifier.1")
         )
+        self.config = config
 
     def classifier(self, x: tf.Tensor) -> tf.Tensor:
         x = tf.keras.layers.Flatten()(x)
@@ -577,4 +589,4 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
                 self.resnet.build(None)
         if getattr(self, "classifier_layer", None) is not None:
             with tf.name_scope(self.classifier_layer.name):
-                self.classifier_layer.build(None)  # TODO Matt might be wrong
+                self.classifier_layer.build(self.config.hidden_sizes[-1])
