@@ -270,13 +270,14 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
-        nb_images, nb_text_tokens_per_images, embed_dim = image_features.shape
+        nb_images, image_hidden_dim, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
         # 1. Create a mask to know where image tokens are
         image_token_mask = input_ids == self.config.image_token_index
         num_image_tokens = torch.sum(image_token_mask, dim=-1)
-        max_embed_dim = (num_image_tokens.max() * (nb_text_tokens_per_images - 1)) + sequence_length
+        # Compute the maximum embed dimension
+        max_embed_dim = (num_image_tokens.max() * (image_hidden_dim - 1)) + sequence_length
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
 
         # 2. Compute the positions where text should be written
@@ -284,7 +285,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         # `image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
         # `torch.cumsum` computes how each image token shifts subsequent text token positions.
         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((image_token_mask * (nb_text_tokens_per_images - 1) + 1), -1) - 1
+        new_token_positions = torch.cumsum((image_token_mask * (image_hidden_dim - 1) + 1), -1) - 1
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
@@ -316,9 +317,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 f" the number of image given to the model is {nb_images}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[image_to_overwrite] = image_features.reshape(-1, embed_dim)
+        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim)
         final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_(final_attention_mask == 0, 1)
+        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
         return final_embedding, final_attention_mask, position_ids
 
     @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
@@ -413,13 +414,21 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 # In case input_ids.shape[1] == 1 & pixel_values==None & past_key_values != None, we are in the case of
                 # generation with cache
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
-                    target_seqlen = past_key_values[-1][-1].shape[-2] + 1
+                    # Retrieve the first layer to inspect the logits and mask out the hidden states
+                    # that are set to 0
+                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, 0]
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value == 0)
+                    # Get the target length
+                    target_seqlen = first_layer_past_key_value.shape[-1] + 1
 
                     extended_attention_mask = torch.ones(
                         (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
                         dtype=attention_mask.dtype,
                         device=attention_mask.device,
                     )
+
+                    # Zero-out the places where we don't need to attend
+                    extended_attention_mask[batch_index, non_attended_tokens] = 0
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
