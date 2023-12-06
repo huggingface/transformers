@@ -692,10 +692,6 @@ class Pop2PianoPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Pop2PianoBlock"]
     _keep_in_fp32_modules = ["wo"]
 
-    def __init__(self, config):
-        super().__init__(config)
-        self._keep_in_fp32_modules = self.__class__._keep_in_fp32_modules
-
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization

@@ -283,10 +283,6 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     ]
     _keep_in_fp32_modules = []
 
-    def __init__(self, config):
-        super().__init__(config)
-        self._keep_in_fp32_modules = self.__class__._keep_in_fp32_modules
-
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip
     def _init_weights(self, module):
         """Initialize the weights"""
