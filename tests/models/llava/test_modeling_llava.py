@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch Llava model. """
 
 import unittest
+import gc
 
 import requests
 
@@ -191,6 +192,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("llava-hf/bakLlava-v1-hf")
 
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
@@ -211,10 +216,32 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
-            self.processor.decode(output[0], skip_special_tokens=True),
         )
 
     @slow
+    @require_bitsandbytes
+    def test_small_model_integration_test_llama(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
+
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
+        image_file = "https://llava-vl.github.io/static/images/view.jpg"
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+
+        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
+        EXPECTED_DECODED_TEXT = "USER:  \nWhat are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of wildlife, such as birds or fish, and avoid disturbing their natural habitats. Lastly, be aware of any local regulations or guidelines for the use of the pier, as some areas may be restricted or prohibited for certain activities."  # fmt: skip
+
+        self.assertEqual(
+            processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @slow
+    @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
@@ -232,6 +259,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=20)
+
+        import pdb; pdb.set_trace()
 
         EXPECTED_DECODED_TEXT = ['\nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera, Park rules may apply, Per person, Sunrise over', '\nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this? a dock on a lake with two cats on it (Photo credit: Jocelyn R.']  # fmt: skip
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
