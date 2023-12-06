@@ -134,6 +134,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
         else:
             self.activation = None
         self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, features: tf.Tensor, training: bool = False) -> tf.Tensor:
         padded_features = self.padding(features)
@@ -152,8 +153,9 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
             with tf.name_scope(self.convolution.name):
                 self.convolution.build(self.in_channels)
         if getattr(self, "normalization", None) is not None:
-            with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+            if hasattr(self.normalization, "name"):
+                with tf.name_scope(self.normalization.name):
+                    self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFMobileViTInvertedResidual(tf.keras.layers.Layer):
@@ -248,6 +250,15 @@ class TFMobileViTMobileNetLayer(tf.keras.layers.Layer):
         for layer_module in self.layers:
             features = layer_module(features, training=training)
         return features
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer_module in self.layers:
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
 
 
 class TFMobileViTSelfAttention(tf.keras.layers.Layer):
@@ -472,6 +483,15 @@ class TFMobileViTTransformer(tf.keras.layers.Layer):
         for layer_module in self.layers:
             hidden_states = layer_module(hidden_states, training=training)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer_module in self.layers:
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
 
 
 class TFMobileViTLayer(tf.keras.layers.Layer):
@@ -767,6 +787,15 @@ class TFMobileViTEncoder(tf.keras.layers.Layer):
 
         return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer_module in self.layers:
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
+
 
 @keras_serializable
 class TFMobileViTMainLayer(tf.keras.layers.Layer):
@@ -880,7 +909,7 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "pooler", None) is not None:
             with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
+                self.pooler.build([None, None, None, None])
         if getattr(self, "conv_1x1_exp", None) is not None:
             with tf.name_scope(self.conv_1x1_exp.name):
                 self.conv_1x1_exp.build(None)
@@ -1013,6 +1042,7 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
         self.classifier = (
             tf.keras.layers.Dense(config.num_labels, name="classifier") if config.num_labels > 0 else tf.identity
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
@@ -1061,8 +1091,9 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
             with tf.name_scope(self.mobilevit.name):
                 self.mobilevit.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.config.neck_hidden_sizes[-1])
 
 
 class TFMobileViTASPPPooling(tf.keras.layers.Layer):
@@ -1095,7 +1126,7 @@ class TFMobileViTASPPPooling(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "global_pool", None) is not None:
             with tf.name_scope(self.global_pool.name):
-                self.global_pool.build(None)
+                self.global_pool.build([None, None, None, None])
         if getattr(self, "conv_1x1", None) is not None:
             with tf.name_scope(self.conv_1x1.name):
                 self.conv_1x1.build(None)
@@ -1178,6 +1209,10 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
         if getattr(self, "project", None) is not None:
             with tf.name_scope(self.project.name):
                 self.project.build(None)
+        if getattr(self, "convs", None) is not None:
+            for conv in self.convs:
+                with tf.name_scope(conv.name):
+                    conv.build(None)
 
 
 class TFMobileViTDeepLabV3(tf.keras.layers.Layer):

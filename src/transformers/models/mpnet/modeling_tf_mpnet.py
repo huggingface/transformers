@@ -424,17 +424,15 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("relative_attention_bias"):
             self.relative_attention_bias = self.add_weight(
                 name="embeddings",
                 shape=[self.relative_attention_num_buckets, self.n_heads],
                 initializer=get_initializer(self.initializer_range),
             )
-
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
                 with tf.name_scope(layer.name):
