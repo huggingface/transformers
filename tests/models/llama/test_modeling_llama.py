@@ -413,7 +413,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         output_native = tokenizer.batch_decode(output_native)
 
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, use_flash_attention_2=True
+            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)

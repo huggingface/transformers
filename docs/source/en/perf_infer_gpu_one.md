@@ -55,7 +55,7 @@ Before you begin, make sure you have FlashAttention-2 installed. For NVIDIA GPUs
 
 FlashAttention-2 is also supported on AMD GPUs, with the current support limited to **Instinct MI210 and Instinct MI250**. We strongly suggest to use the following [Dockerfile](https://github.com/huggingface/optimum-amd/tree/main/docker/transformers-pytorch-amd-gpu-flash/Dockerfile) to use FlashAttention-2 on AMD GPUs.
 
-To enable FlashAttention-2, add the `use_flash_attention_2` parameter to [`~AutoModelForCausalLM.from_pretrained`]:
+To enable FlashAttention-2, pass the argument `attn_implementation="flash_attention_2"` to [`~AutoModelForCausalLM.from_pretrained`]:
 
 ```python
 import torch
@@ -67,13 +67,15 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     torch_dtype=torch.bfloat16, 
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 ```
 
 <Tip>
 
 FlashAttention-2 can only be used when the model's dtype is `fp16` or `bf16`. Make sure to cast your model to the appropriate dtype and load them on a supported device before using FlashAttention-2.
+
+Note that `use_flash_attention_2=True` can also be used to enable Flash Attention 2, but is deprecated in favor of `attn_implementation="flash_attention_2"`.
   
 </Tip>
 
@@ -90,14 +92,14 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_8bit=True,
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 
 # load in 4bit
 model = AutoModelForCausalLM.from_pretrained(
     model_id, 
     load_in_4bit=True,
-    use_flash_attention_2=True,
+    attn_implementation="flash_attention_2",
 )
 ```
 

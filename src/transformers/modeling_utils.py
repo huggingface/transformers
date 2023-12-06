@@ -1186,8 +1186,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Args:
             torch_dtype (`torch.dtype`, *optional*):
                 Override the default `torch.dtype` and load the model under this dtype.
-            use_flash_attention_2 (`bool`, *optional*):
-                Whether to load the model with Flash Attention 2 modules.
         """
         torch_dtype = kwargs.pop("torch_dtype", None)
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
@@ -1198,6 +1196,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
+        config._attn_implementation = kwargs.pop("attn_implementation", None)
         config = cls._autoset_attn_implementation(
             config, use_flash_attention_2=use_flash_attention_2, check_device_map=False
         )
@@ -1223,7 +1222,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _autoset_attn_implementation(
         cls,
         config,
-        use_flash_attention_2: Optional[bool] = None,
+        use_flash_attention_2: bool = False,
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
@@ -1231,7 +1230,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
             1. An implementation specified in `config._attn_implementation` (due for example to the argument attn_implementation="sdpa" in from_pretrained).
-            2. If use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
+            2. DEPRECATED: if use_flash_attention_2 is set to `True` and `flash_attn` is available, flash attention. (`LlamaFlashAttention` for example)
             3. SDPA implementation, if available and supported by the model type. (`LlamaSdpaAttention` for example)
             4. The default model's implementation otherwise (`LlamaAttention` for example) .
         """
@@ -1245,11 +1244,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
-            hard_check_only = not use_flash_attention_2
+            hard_check_only = True
         else:
             hard_check_only = False
 
         if use_flash_attention_2:
+            logger.warning_once(
+                'The model was loaded with use_flash_attention_2=True, which is deprecated and may be removed in a future release. Please use `attn_implementation="flash_attention_2"` instead.'
+            )
+            config._attn_implementation = "flash_attention_2"
+
+        if config._attn_implementation == "flash_attention_2":
             cls._check_and_enable_flash_attn_2(
                 config,
                 torch_dtype=torch_dtype,
@@ -1258,7 +1263,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 check_device_map=check_device_map,
             )
         elif cls._supports_sdpa:
-            # use_flash_attention_2 takes priority over SDPA.
+            # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
         elif not hard_check_only:
             config._attn_implementation = "eager"

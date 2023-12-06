@@ -2846,7 +2846,7 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
                 ).to(torch_device)
 
                 for _, module in model.named_modules():
@@ -2870,12 +2870,12 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model.to(torch_device)
 
@@ -2965,12 +2965,12 @@ class ModelTesterMixin:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model.to(torch_device)
 
@@ -3055,9 +3055,9 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
-                ).to(torch_device)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
 
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.bfloat16]:
@@ -3073,7 +3073,10 @@ class ModelTesterMixin:
                 )
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 out_fa = model.generate(
@@ -3096,9 +3099,9 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
-                ).to(torch_device)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
 
                 dummy_input = inputs_dict[model.main_input_name]
                 if dummy_input.dtype in [torch.float32, torch.bfloat16]:
@@ -3114,7 +3117,10 @@ class ModelTesterMixin:
                 )
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 out_fa = model.generate(
@@ -3499,7 +3505,7 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    use_flash_attention_2=True,
+                    attn_implementation="flash_attention_2",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -3538,7 +3544,7 @@ class ModelTesterMixin:
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    use_flash_attention_2=True,
+                    attn_implementation="flash_attention_2",
                     low_cpu_mem_usage=True,
                     load_in_4bit=True,
                 )
@@ -3623,7 +3629,7 @@ class ModelTesterMixin:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             # TODO: to change it in the future with other relevant auto classes
             fa2_model = AutoModelForCausalLM.from_config(
-                config, use_flash_attention_2=True, torch_dtype=torch.bfloat16
+                config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16
             ).to(torch_device)
 
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
