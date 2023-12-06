@@ -279,14 +279,11 @@ class BeamSearchScorer(BeamScorer):
                     else:
                         beam_index = None
 
-                    # add up to the length which the next_scores is calculated on
-                    generated_len = input_ids[batch_beam_idx].shape[-1] + 1 - decoder_prompt_len
-
                     self._beam_hyps[batch_group_idx].add(
                         input_ids[batch_beam_idx].clone(),
                         next_score.item(),
                         beam_indices=beam_index,
-                        generated_len=generated_len,
+                        generated_len=cur_len,
                     )
                 else:
                     # add next predicted token since it is not eos_token
@@ -617,14 +614,11 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                         else:
                             beam_index = None
 
-                        # add up to the length which the next_scores is calculated on
-                        generated_len = input_ids[batch_beam_idx].shape[-1] + 1 - decoder_prompt_len
-
                         beam_hyp.add(
                             input_ids[batch_beam_idx].clone(),
                             next_score.item(),
                             beam_indices=beam_index,
-                            generated_len=generated_len,
+                            generated_len=cur_len,
                         )
                 else:
                     # add next predicted token since it is not eos_token
@@ -961,6 +955,7 @@ class BeamHypotheses:
         """
         if generated_len is not None:
             score = sum_logprobs / (generated_len**self.length_penalty)
+        # This 'else' case exists for retrocompatibility
         else:
             score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
 
