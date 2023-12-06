@@ -66,7 +66,7 @@ class AttentionMaskConverter:
         batch_size: int,
         query_length: int,
         key_value_length: int,
-        dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype,
         device: Union[torch.device, "str"] = "cpu",
     ) -> torch.Tensor:
         """
@@ -98,8 +98,8 @@ class AttentionMaskConverter:
         self,
         attention_mask_2d: torch.Tensor,
         query_length: int,
+        dtype: torch.dtype,
         key_value_length: Optional[int] = None,
-        dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
