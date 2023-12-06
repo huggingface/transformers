@@ -41,7 +41,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import CogVLMForCausalLM, CogVLMModel, CogVLMVisionConfig
+    from transformers import CogVLMForCausalLM, CogVLMModel
     from transformers.models.cogvlm.modeling_cogvlm import COGVLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
