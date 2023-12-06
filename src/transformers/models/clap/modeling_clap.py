@@ -89,9 +89,19 @@ def window_partition(hidden_states, window_size):
     return windows
 
 
+# Adapted from https://github.com/LAION-AI/CLAP/blob/6ad05a971ba0622f6acee8c41993e0d02bbed639/src/open_clip/htsat.py#L263
 def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
+    Args:
+        windows (`torch.FloatTensor` of shape `(num_windows * batch_size, window_size, window_size, num_channels)`):
+            Input windows
+        window_size (`int`):
+            Window size
+        height (`int`):
+            Height of the resized audio
+        width (`int`):
+            Width of the resized audio
     """
     num_channels = windows.shape[-1]
     windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
