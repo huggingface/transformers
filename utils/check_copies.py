@@ -140,23 +140,21 @@ def _should_continue(line: str, indent: str) -> bool:
 def _sanity_check_splits(splits_1, splits_2, is_class):
     """Check the two (inner) block structures of the corresponding code block given by `split_code_into_blocks` match.
 
-    For the case of `class`, a consecutive sequence of blocks which names (e.g. inner class/func/method) is considered
-    as `a single block with name` in this check, because we want to allow new inner blocks in one of the 2 classes.
-    However, it must be one of the following 3 cases:
+    For the case of `class`, they must be of one of the following 3 cases:
 
         - a single block without name:
 
             class foo:
                 a = 1
 
-        - a consecutive sequence of blocks with name
+        - a consecutive sequence of (1 or more) blocks with name
 
             class foo:
 
                 def f(x):
                     return x
 
-        - a block without name, followed by a consecutive sequence of blocks with name
+        - a block without name, followed by a consecutive sequence of (1 or more) blocks with name
 
             class foo:
                 a = 1
@@ -167,9 +165,12 @@ def _sanity_check_splits(splits_1, splits_2, is_class):
                 def g(x):
                     return None
 
-    For the case of `function or method`, we don't **merge** a consecutive sequence of blocks which names:
-    the 2 code blocks must contain exactly the same structure. However, we don't require that structure to match a
-    pre-defined structure.
+    The 2 code snippets that give `splits_1` and `splits_2` have to be in the same case to pass this check, but the
+    number of blocks with name in the consecutive sequence is not taken into account.
+
+    For the case of `function or method`, we don't require it to be in one of the above 3 cases. However, the structure
+    of`splits_1` and `splits_2` have to match exactly. In particular, the number of blocks with name in a consecutive
+    sequence is taken into account.
     """
     block_names_1 = []
     block_names_2 = []
