@@ -24,7 +24,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...generation.logits_process import WhisperTimeStampLogitsProcessor
@@ -2815,7 +2815,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         loss = None
 
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
+            loss_fct = CrossEntropyLoss() if self.config.num_labels > 1 else MSELoss()
             # move labels to correct device to enable PP
             labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
