@@ -441,6 +441,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -454,7 +455,8 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(None)
+                self.dense.build(self.config.hidden_size)
+
 
 
 class TFConvBertOutput(tf.keras.layers.Layer):
@@ -493,7 +495,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(None)
+                self.dense.build(self.config.intermediate_size)
 
 
 class TFConvBertLayer(tf.keras.layers.Layer):
