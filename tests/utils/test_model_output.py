@@ -146,6 +146,14 @@ class ModelOutputTester(unittest.TestCase):
         unflattened_x = pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
         self.assertEqual(x, unflattened_x)
 
+        from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
+
+        if is_torch_greater_or_equal_than_2_2:
+            self.assertEqual(
+                pytree.treespec_dumps(actual_tree_spec),
+                '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": ["tests.utils.test_model_output.ModelOutputTest", ["a", "c"]], "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
+            )
+
 
 class ModelOutputTestNoDataclass(ModelOutput):
     """Invalid test subclass of ModelOutput where @dataclass decorator is not used"""

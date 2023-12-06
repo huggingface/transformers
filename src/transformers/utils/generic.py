@@ -22,11 +22,12 @@ from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ContextManager, Iterable, List, Tuple
+from typing import Any, ContextManager, Dict, Iterable, List, Tuple, Type
 
 import numpy as np
+from packaging import version
 
-from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import get_torch_version, is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
 if is_flax_available():
@@ -306,11 +307,21 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            torch_pytree_register_pytree_node(
-                cls,
-                _model_output_flatten,
-                _model_output_unflatten,
-            )
+            if version.parse(get_torch_version()) >= version.parse("2.2"):
+                _torch_pytree.register_pytree_node(
+                    cls,
+                    _model_output_flatten,
+                    _model_output_unflatten,
+                    serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+                    from_dumpable_context=_model_output_from_dumpable_context,
+                    to_dumpable_context=_model_output_to_dumpable_context,
+                )
+            else:
+                _torch_pytree._register_pytree_node(
+                    cls,
+                    _model_output_flatten,
+                    _model_output_unflatten,
+                )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -438,15 +449,36 @@ if is_torch_available():
         output_type, keys = context
         return output_type(**dict(zip(keys, values)))
 
-    if hasattr(_torch_pytree, "register_pytree_node"):
-        torch_pytree_register_pytree_node = _torch_pytree.register_pytree_node
+    if version.parse(get_torch_version()) >= version.parse("2.2"):
+        SERIALIZED_CLASS_TO_PYTHON_CLASS: Dict[str, Type[Any]] = {}
+
+        def _model_output_to_dumpable_context(context: "_torch_pytree.Context") -> "_torch_pytree.DumpableContext":
+            python_class, keys = context
+            serialized_class = f"{python_class.__module__}.{python_class.__name__}"
+            SERIALIZED_CLASS_TO_PYTHON_CLASS[serialized_class] = python_class
+            return (serialized_class, keys)
+
+        def _model_output_from_dumpable_context(
+            dumpable_context: "_torch_pytree.DumpableContext"
+        ) -> "_torch_pytree.Context":
+            serialized_class, keys = dumpable_context
+            python_class = SERIALIZED_CLASS_TO_PYTHON_CLASS[serialized_class]
+            return (python_class, keys)
+
+        _torch_pytree.register_pytree_node(
+            ModelOutput,
+            _model_output_flatten,
+            _model_output_unflatten,
+            serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
+            from_dumpable_context=_model_output_from_dumpable_context,
+            to_dumpable_context=_model_output_to_dumpable_context,
+        )
     else:
-        torch_pytree_register_pytree_node = _torch_pytree._register_pytree_node
-    torch_pytree_register_pytree_node(
-        ModelOutput,
-        _model_output_flatten,
-        _model_output_unflatten,
-    )
+        _torch_pytree._register_pytree_node(
+            ModelOutput,
+            _model_output_flatten,
+            _model_output_unflatten,
+        )
 
 
 class ExplicitEnum(str, Enum):
