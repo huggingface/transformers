@@ -1419,7 +1419,6 @@ class DetaModel(DetaPreTrainedModel):
         for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(False)
 
-    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel.unfreeze_backbone
     def unfreeze_backbone(self):
         for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(True)
