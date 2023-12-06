@@ -1,11 +1,6 @@
 # coding=utf-8
 # Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -181,13 +176,6 @@ class FlaxMistralMLP(nn.Module):
     def __call__(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
-
-
-def flax_rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return jnp.concatenate((-x2, x1), axis=-1)
 
 
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
@@ -702,7 +690,7 @@ append_call_sample_docstring(
     _REAL_CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPast,
     _CONFIG_FOR_DOC,
-    # revision="refs/pr/95"
+    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
 )
 
 
@@ -805,7 +793,7 @@ append_call_sample_docstring(
     _REAL_CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
-    # revision="refs/pr/95",
+    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
 )
 
 
@@ -889,5 +877,5 @@ append_call_sample_docstring(
     _REAL_CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
-    # revision="refs/pr/95",
+    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
 )
