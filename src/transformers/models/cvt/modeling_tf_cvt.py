@@ -232,7 +232,7 @@ class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
                 self.convolution.build(self.embed_dim)
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
-                self.normalization.build(None)
+                self.normalization.build([None, None, None, self.embed_dim])
 
 
 class TFCvtSelfAttentionLinearProjection(tf.keras.layers.Layer):
@@ -538,14 +538,14 @@ class TFCvtOutput(tf.keras.layers.Layer):
     Output of the Convolutional Transformer Block (last chunk). It consists of a MLP and a residual connection.
     """
 
-    def __init__(self, config: CvtConfig, embed_dim: int, drop_rate: int, **kwargs):
+    def __init__(self, config: CvtConfig, embed_dim: int, mlp_ratio: int, drop_rate: int, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
             units=embed_dim, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = tf.keras.layers.Dropout(drop_rate)
         self.embed_dim = embed_dim
-        self.mlp_ratio = config.mlp_ratio
+        self.mlp_ratio = mlp_ratio
 
     def call(self, hidden_state: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = self.dense(inputs=hidden_state)
@@ -606,7 +606,7 @@ class TFCvtLayer(tf.keras.layers.Layer):
             name="attention",
         )
         self.intermediate = TFCvtIntermediate(config, embed_dim, mlp_ratio, name="intermediate")
-        self.dense_output = TFCvtOutput(config, embed_dim, drop_rate, name="output")
+        self.dense_output = TFCvtOutput(config, embed_dim, mlp_ratio, drop_rate, name="output")
         # Using `layers.Activation` instead of `tf.identity` to better control `training` behaviour.
         self.drop_path = (
             TFCvtDropPath(drop_path_rate, name="drop_path")
@@ -1098,5 +1098,6 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
             with tf.name_scope(self.layernorm.name):
                 self.layernorm.build([None, None, self.config.embed_dim[-1]])
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.config.embed_dim[-1])
