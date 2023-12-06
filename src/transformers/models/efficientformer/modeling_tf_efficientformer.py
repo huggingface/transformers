@@ -90,6 +90,7 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
             if apply_norm
             else tf.identity
         )
+        self.embed_dim = embed_dim
 
     def call(self, pixel_values: tf.Tensor, training: bool = False) -> tf.Tensor:
         tf.debugging.assert_shapes(
@@ -108,8 +109,9 @@ class TFEfficientFormerPatchEmbeddings(tf.keras.layers.Layer):
             with tf.name_scope(self.projection.name):
                 self.projection.build(self.num_channels)
         if getattr(self, "norm", None) is not None:
-            with tf.name_scope(self.norm.name):
-                self.norm.build(None)
+            if hasattr(self.norm, "name"):
+                with tf.name_scope(self.norm.name):
+                    self.norm.build([None, None, None, self.embed_dim])
 
 
 class TFEfficientFormerSelfAttention(tf.keras.layers.Layer):
@@ -264,13 +266,13 @@ class TFEfficientFormerConvStem(tf.keras.layers.Layer):
                 self.convolution1.build(self.config.num_channels)
         if getattr(self, "batchnorm_before", None) is not None:
             with tf.name_scope(self.batchnorm_before.name):
-                self.batchnorm_before.build(None)
+                self.batchnorm_before.build([None, None, None, self.out_channels // 2])
         if getattr(self, "convolution2", None) is not None:
             with tf.name_scope(self.convolution2.name):
                 self.convolution2.build(self.out_channels // 2)
         if getattr(self, "batchnorm_after", None) is not None:
             with tf.name_scope(self.batchnorm_after.name):
-                self.batchnorm_after.build(None)
+                self.batchnorm_after.build([None, None, None, self.out_channels])
         if getattr(self, "activation", None) is not None:
             with tf.name_scope(self.activation.name):
                 self.activation.build(None)
@@ -375,6 +377,7 @@ class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
         )
         self.hidden_features = hidden_features
         self.in_features = in_features
+        self.out_features = out_features
 
     def call(self, hidden_state: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = self.convolution1(hidden_state)
@@ -398,10 +401,10 @@ class TFEfficientFormerConvMlp(tf.keras.layers.Layer):
                 self.convolution2.build(self.hidden_features)
         if getattr(self, "batchnorm_before", None) is not None:
             with tf.name_scope(self.batchnorm_before.name):
-                self.batchnorm_before.build(None)
+                self.batchnorm_before.build([None, None, None, self.hidden_features])
         if getattr(self, "batchnorm_after", None) is not None:
             with tf.name_scope(self.batchnorm_after.name):
-                self.batchnorm_after.build(None)
+                self.batchnorm_after.build([None, None, None, self.out_features])
 
 
 # Copied from transformers.models.convnext.modeling_tf_convnext.TFConvNextDropPath with ConvNext->EfficientFormer
@@ -809,6 +812,9 @@ class TFEfficientFormerEncoder(tf.keras.layers.Layer):
         if getattr(self, "last_stage", None) is not None:
             with tf.name_scope(self.last_stage.name):
                 self.last_stage.build(None)
+        for layer in self.intermediate_stages:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
 
 @keras_serializable
@@ -999,6 +1005,7 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
             if config.num_labels > 0
             else tf.keras.layers.Activation("linear", name="classifier")
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(EFFICIENTFORMER_INPUTS_DOCSTRING)
@@ -1055,8 +1062,9 @@ class TFEfficientFormerForImageClassification(TFEfficientFormerPreTrainedModel, 
             with tf.name_scope(self.efficientformer.name):
                 self.efficientformer.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.config.hidden_sizes[-1])
 
 
 @dataclass
@@ -1178,8 +1186,10 @@ class TFEfficientFormerForImageClassificationWithTeacher(TFEfficientFormerPreTra
             with tf.name_scope(self.efficientformer.name):
                 self.efficientformer.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.config.hidden_sizes[-1])
         if getattr(self, "distillation_classifier", None) is not None:
-            with tf.name_scope(self.distillation_classifier.name):
-                self.distillation_classifier.build(None)
+            if hasattr(self.distillation_classifier, "name"):
+                with tf.name_scope(self.distillation_classifier.name):
+                    self.distillation_classifier.build(self.config.hidden_sizes[-1])
