@@ -258,6 +258,9 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.pruned_heads = set()
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.has_relative_attention_bias:
             with tf.name_scope("relative_attention_bias"):
                 self.relative_attention_bias = self.add_weight(
@@ -265,11 +268,6 @@ class TFT5Attention(tf.keras.layers.Layer):
                     shape=[self.relative_attention_num_buckets, self.n_heads],
                     initializer=self.relative_attention_bias_initializer,  # Add initializer
                 )
-
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "q", None) is not None:
             with tf.name_scope(self.q.name):
                 self.q.build(self.d_model)
@@ -688,6 +686,15 @@ class TFT5Block(tf.keras.layers.Layer):
         # Add attentions if we output them
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for layer_module in self.layer:
+            if hasattr(layer_module, "name"):
+                with tf.name_scope(layer_module.name):
+                    layer_module.build(None)
 
 
 ####################################################
