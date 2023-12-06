@@ -736,7 +736,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "pooler", None) is not None:
             with tf.name_scope(self.pooler.name):
-                self.pooler.build(None)
+                self.pooler.build(self.config.hidden_size)
 
 
 @dataclass
