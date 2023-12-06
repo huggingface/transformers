@@ -171,9 +171,9 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "conv_layers", None) is not None:
-            for layer in self.conv_layers:
+            for i, layer in enumerate(self.conv_layers):
                 with tf.name_scope(layer.name):
-                    layer.build(None)
+                    layer.build(self.in_channels if i == 0 else self.mid_channels // 2)
 
 
 class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
