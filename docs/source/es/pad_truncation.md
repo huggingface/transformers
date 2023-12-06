@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Padding and truncation
+# Relleno y truncamiento
 
-Batched inputs are often different lengths, so they can't be converted to fixed-size tensors. Padding and truncation are strategies for dealing with this problem, to create rectangular tensors from batches of varying lengths. Padding adds a special **padding token** to ensure shorter sequences will have the same length as either the longest sequence in a batch or the maximum length accepted by the model. Truncation works in the other direction by truncating long sequences.
+Las entradas agrupadas por lotes (batched) suelen tener longitudes diferentes, por lo que no se pueden convertir en tensores de tamaño fijo. El relleno (también conocido como "Padding") y el truncamiento (conocido como "Truncation") son estrategias para abordar este problema y crear tensores rectangulares a partir de lotes de longitudes variables. El Padding agrega un **padding token** especial para garantizar que las secuencias más cortas tengan la misma longitud que la secuencia más larga en un lote o la longitud máxima aceptada por el modelo. Truncation funciona en la otra dirección al truncar secuencias largas.
 
-In most cases, padding your batch to the length of the longest sequence and truncating to the maximum length a model can accept works pretty well. However, the API supports more strategies if you need them. The three arguments you need to are: `padding`, `truncation` and `max_length`.
+En la mayoría de los casos, es bastante eficaz rellenar su lote hasta la longitud de la secuencia más larga y truncar hasta la longitud máxima que un modelo puede aceptar. Sin embargo, la API admite más estrategias si las necesitas. Los tres argumentos que necesitas son: `padding`, `truncation` y `max_length`.
 
 The `padding` argument controls padding. It can be a boolean or a string:
 
