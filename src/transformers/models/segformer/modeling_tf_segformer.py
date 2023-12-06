@@ -551,7 +551,16 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "layer_norms", None) is not None:
-            for layer in self.layer_norms:
+            for layer, shape in zip(self.layer_norms, self.config.hidden_sizes):
+                with tf.name_scope(layer.name):
+                    layer.build([None, None, shape])
+        if getattr(self, "block", None) is not None:
+            for block in self.block:
+                for layer in block:
+                    with tf.name_scope(layer.name):
+                        layer.build(None)
+        if getattr(self, "embeddings", None) is not None:
+            for layer in self.embeddings:
                 with tf.name_scope(layer.name):
                     layer.build(None)
 
@@ -836,7 +845,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
         for i in range(config.num_encoder_blocks):
-            mlp = TFSegformerMLP(config, input_dim=config.hidden_sizes[i], name=f"linear_c.{i}")
+            mlp = TFSegformerMLP(config=config, input_dim=config.hidden_sizes[i], name=f"linear_c.{i}")
             mlps.append(mlp)
         self.mlps = mlps
 
@@ -893,10 +902,14 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
                 self.linear_fuse.build(self.config.decoder_hidden_size * self.config.num_encoder_blocks)
         if getattr(self, "batch_norm", None) is not None:
             with tf.name_scope(self.batch_norm.name):
-                self.batch_norm.build(None)
+                self.batch_norm.build([None, None, None, self.config.decoder_hidden_size])
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build(self.config.decoder_hidden_size)
+        if getattr(self, "mlps", None) is not None:
+            for layer in self.mlps:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @add_start_docstrings(
