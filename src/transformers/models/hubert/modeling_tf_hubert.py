@@ -568,8 +568,9 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         if self.built:
             return
         self.built = True
-        with tf.name_scope(self.conv.name):
-            self.conv.build(self.config.hidden_size)
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
