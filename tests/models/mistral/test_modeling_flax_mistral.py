@@ -17,19 +17,21 @@ import unittest
 
 import numpy as np
 
-from transformers import (MistralConfig, is_flax_available,
-                          is_tokenizers_available)
+from transformers import MistralConfig, is_flax_available, is_tokenizers_available
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
+
 if is_flax_available():
     import jax.numpy as jnp
 
     from transformers.models.mistral.modeling_flax_mistral import (
-        FlaxMistralForCausalLM, FlaxMistralForSequenceClassification,
-        FlaxMistralModel)
+        FlaxMistralForCausalLM,
+        FlaxMistralForSequenceClassification,
+        FlaxMistralModel,
+    )
 
 
 if is_tokenizers_available():
@@ -236,7 +238,7 @@ class FlaxMistralIntegrationTest(unittest.TestCase):
     def test_model_logits(self):
         input_ids = jnp.array([[1, 306, 4658, 278, 6593, 310, 2834, 338]])
         EXPECTED_MEAN = np.array([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        EXPECTED_SLICE = np.array([-5.8781,-5.8616,-0.1052,-4.7200,-5.8781,-5.8774,-5.8773,-5.8777,-5.8781,-5.8780,-5.8781,-5.8779,-1.0787,1.7583,-5.8779,-5.8780,-5.8783,-5.8778,-5.8776,-5.8781,-5.8784,-5.8778,-5.8778,-5.8777,-5.8779,-5.8778,-5.8776,-5.8780,-5.8779,-5.8781]) # fmt: skip
+        EXPECTED_SLICE = np.array([-5.8781,-5.8616,-0.1052,-4.7200,-5.8781,-5.8774,-5.8773,-5.8777,-5.8781,-5.8780,-5.8781,-5.8779,-1.0787,1.7583,-5.8779,-5.8780,-5.8783,-5.8778,-5.8776,-5.8781,-5.8784,-5.8778,-5.8778,-5.8777,-5.8779,-5.8778,-5.8776,-5.8780,-5.8779,-5.8781])  # fmt: skip
 
         flax_logits = self.model(input_ids).logits
         diff_mean = jnp.abs(flax_logits.mean(-1) - EXPECTED_MEAN).max()
