@@ -18,10 +18,12 @@ Processor class for Llava.
 
 
 import warnings
-from typing import Callable, Optional, Union
+from typing import Callable, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 
 
@@ -64,10 +66,10 @@ class LlavaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text=None,
-        images=None,
-        padding=False,
-        truncation=None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: ImageInput = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         transform: Callable = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
