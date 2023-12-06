@@ -118,13 +118,18 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         self.errors = errors  # how to handle errors in decoding
         self.cache = {}
         self.first_max_length = 0
-
-        # pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
             errors=errors,
-            # pad_token=pad_token,
             **kwargs,
         )
+    
+    @property
+    def eos_token_id(self) -> Optional[int]:
+        return 0
+    
+    @property
+    def eot_token_id(self) -> Optional[int]:
+        return 0
 
     @property
     def vocab_size(self):
@@ -206,7 +211,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return tokens
 
     def decodeBytes(self, tokens):
-        return b"".join(lambda i: self.encoder[i], tokens)
+        return b''.join(map(lambda i: self.encoder[i], tokens)) # noqa
 
     def _tokenize(self, text, **kwargs):
         """Tokenize a string."""
