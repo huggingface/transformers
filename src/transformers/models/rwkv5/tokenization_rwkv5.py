@@ -132,6 +132,10 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         return 0
 
     @property
+    def pad_token_id(self) -> Optional[int]:
+        return 0
+
+    @property
     def vocab_size(self):
         return len(self.encoder)
 
