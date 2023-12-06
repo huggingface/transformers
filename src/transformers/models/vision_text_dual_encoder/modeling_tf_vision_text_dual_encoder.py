@@ -223,19 +223,23 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.config = config
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         # Build in the build() method to make sure the names are right
         initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
 
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection.name):
                 self.visual_projection.build(self.vision_embed_dim)
         if getattr(self, "text_projection", None) is not None:
             with tf.name_scope(self.text_projection.name):
                 self.text_projection.build(self.text_embed_dim)
+        with tf.name_scope(self.vision_model.name):
+            self.vision_model.build(None)
+        with tf.name_scope(self.text_model.name):
+            self.text_model.build(None)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):

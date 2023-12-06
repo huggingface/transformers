@@ -384,7 +384,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             with tf.name_scope(layer.name):
                 layer.build([None, None, self.dim])
 
-
     def get_input_embeddings(self):
         return self.embeddings
 

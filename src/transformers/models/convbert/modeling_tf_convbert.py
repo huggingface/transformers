@@ -458,7 +458,6 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
                 self.dense.build(self.config.hidden_size)
 
 
-
 class TFConvBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
