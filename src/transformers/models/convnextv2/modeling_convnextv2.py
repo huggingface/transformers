@@ -249,6 +249,7 @@ class ConvNextV2Stage(nn.Module):
 class ConvNextV2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.stages = nn.ModuleList()
         drop_path_rates = [
             x.tolist() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths)).split(config.depths)
@@ -275,13 +276,13 @@ class ConvNextV2Encoder(nn.Module):
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
-        for i, layer_module in enumerate(self.stages):
-            if output_hidden_states:
+        for idx, layer_module in enumerate(self.stages):
+            if output_hidden_states and idx in self.config.out_indices:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             hidden_states = layer_module(hidden_states)
 
-        if output_hidden_states:
+        if output_hidden_states and len(self.stages) in self.config.out_indices:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
@@ -558,10 +559,9 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                hidden_state = self.hidden_states_norms[stage](hidden_state)
-                feature_maps += (hidden_state,)
+        for stage, hidden_state in zip(self.out_features, hidden_states):
+            hidden_state = self.hidden_states_norms[stage](hidden_state)
+            feature_maps += (hidden_state,)
 
         if not return_dict:
             output = (feature_maps,)
