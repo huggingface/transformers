@@ -53,10 +53,6 @@ class CogVLMVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported. layer_norm_eps (`float`, *optional*, defaults
@@ -144,6 +140,8 @@ class CogVLMConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        vision_config (`dict`, *optional*):
+            Dictionary of configuration options used to initialize [`CogVLMVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`LlamaModel`]
@@ -164,10 +162,7 @@ class CogVLMConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        pad_token_id (`int`, *optional*):
+        pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 1):
             Beginning of stream token id.
@@ -175,6 +170,9 @@ class CogVLMConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
 
     Example:
 

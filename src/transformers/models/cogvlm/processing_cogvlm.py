@@ -41,6 +41,10 @@ class CogVLMProcessor(ProcessorMixin):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['LlamaTokenizer`]. The tokenizer is a required input.
+        image_size (`int`):
+            The image size used by the model.
+        patch_size (`int`):
+            The patch size used by the model.
     """
 
     attributes = ["image_processor", "tokenizer"]
