@@ -1379,7 +1379,7 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size * 3)
+                self.dense.build(self.config.hidden_size)
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -1529,6 +1529,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             )
         else:
             self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
@@ -1636,7 +1637,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
                 self.dropout.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+                self.classifier.build(self.config.hidden_size)
 
 
 @add_start_docstrings(
