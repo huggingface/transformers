@@ -391,22 +391,22 @@ class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
                 self.self_attn.build(None)
         if getattr(self, "layer_norm1", None) is not None:
             with tf.name_scope(self.layer_norm1.name):
-                self.layer_norm1.build([None, None, self.hidden_size])
+                self.layer_norm1.build([None, None, None, self.hidden_size])
         if getattr(self, "cross_attn_token_to_image", None) is not None:
             with tf.name_scope(self.cross_attn_token_to_image.name):
                 self.cross_attn_token_to_image.build(None)
         if getattr(self, "layer_norm2", None) is not None:
             with tf.name_scope(self.layer_norm2.name):
-                self.layer_norm2.build([None, None, self.hidden_size])
+                self.layer_norm2.build([None, None, None, self.hidden_size])
         if getattr(self, "mlp", None) is not None:
             with tf.name_scope(self.mlp.name):
                 self.mlp.build(None)
         if getattr(self, "layer_norm3", None) is not None:
             with tf.name_scope(self.layer_norm3.name):
-                self.layer_norm3.build([None, None, self.hidden_size])
+                self.layer_norm3.build([None, None, None, self.hidden_size])
         if getattr(self, "layer_norm4", None) is not None:
             with tf.name_scope(self.layer_norm4.name):
-                self.layer_norm4.build([None, None, self.hidden_size])
+                self.layer_norm4.build([None, None, None, self.hidden_size])
         if getattr(self, "cross_attn_image_to_token", None) is not None:
             with tf.name_scope(self.cross_attn_image_to_token.name):
                 self.cross_attn_image_to_token.build(None)
@@ -487,7 +487,10 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
                 self.final_attn_token_to_image.build(None)
         if getattr(self, "layer_norm_final_attn", None) is not None:
             with tf.name_scope(self.layer_norm_final_attn.name):
-                self.layer_norm_final_attn.build([None, None, self.config.hidden_size])
+                self.layer_norm_final_attn.build([None, None, None, self.config.hidden_size])
+        for layer in self.layers:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
 
 class TFSamFeedForward(tf.keras.layers.Layer):
@@ -531,7 +534,7 @@ class TFSamFeedForward(tf.keras.layers.Layer):
         if getattr(self, "layers", None) is not None:
             for layer in self.layers:
                 with tf.name_scope(layer.name):
-                    layer.build(None)
+                    layer.build(self.hidden_dim)
 
 
 class TFSamMaskDecoder(tf.keras.layers.Layer):
@@ -578,14 +581,14 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         )
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         self.iou_token = self.add_weight(shape=(1, self.hidden_size), name="iou_token.weight", trainable=True)
         self.mask_tokens = self.add_weight(
             shape=(self.num_mask_tokens, self.hidden_size), name="mask_tokens.weight", trainable=True
         )
 
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)
@@ -744,6 +747,9 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
 
     def build(self, input_shape=None):
         # This class needs an explicit build method because it isn't called with the standard dummy inputs
+        if self.built:
+            return
+        self.built = True
         conv1_shape = [None, None, None, 1]
         conv2_shape = [None, None, None, self.mask_input_channels]
         conv3_shape = [None, None, None, self.mask_input_channels * 4]
@@ -759,25 +765,6 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
             self.layer_norm1.build(layer_norm1_shape)
         with tf.name_scope("layer_norm2"):
             self.layer_norm2.build(layer_norm2_shape)
-
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "conv1", None) is not None:
-            with tf.name_scope(self.conv1.name):
-                self.conv1.build(1)
-        if getattr(self, "conv2", None) is not None:
-            with tf.name_scope(self.conv2.name):
-                self.conv2.build(self.mask_input_channels)
-        if getattr(self, "conv3", None) is not None:
-            with tf.name_scope(self.conv3.name):
-                self.conv3.build(self.config.mask_input_channels)
-        if getattr(self, "layer_norm1", None) is not None:
-            with tf.name_scope(self.layer_norm1.name):
-                self.layer_norm1.build(None)
-        if getattr(self, "layer_norm2", None) is not None:
-            with tf.name_scope(self.layer_norm2.name):
-                self.layer_norm2.build(None)
 
 
 class TFSamPromptEncoder(tf.keras.layers.Layer):
@@ -1169,13 +1156,13 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "layer_norm1", None) is not None:
             with tf.name_scope(self.layer_norm1.name):
-                self.layer_norm1.build([None, None, self.config.hidden_size])
+                self.layer_norm1.build([None, None, None, self.config.hidden_size])
         if getattr(self, "attn", None) is not None:
             with tf.name_scope(self.attn.name):
                 self.attn.build(None)
         if getattr(self, "layer_norm2", None) is not None:
             with tf.name_scope(self.layer_norm2.name):
-                self.layer_norm2.build([None, None, self.config.hidden_size])
+                self.layer_norm2.build([None, None, None, self.config.hidden_size])
         if getattr(self, "mlp", None) is not None:
             with tf.name_scope(self.mlp.name):
                 self.mlp.build(None)
@@ -1251,6 +1238,9 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
         self.neck = TFSamVisionNeck(config, name="neck")
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.config.use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = self.add_weight(
@@ -1265,15 +1255,15 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
                 name="pos_embed",
             )
 
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "patch_embed", None) is not None:
             with tf.name_scope(self.patch_embed.name):
                 self.patch_embed.build(None)
         if getattr(self, "neck", None) is not None:
             with tf.name_scope(self.neck.name):
                 self.neck.build(None)
+        for layer in self.layers:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
     def get_input_embeddings(self):
         return self.patch_embed
