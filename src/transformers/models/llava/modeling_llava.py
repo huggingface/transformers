@@ -306,10 +306,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
-        else:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) <= nb_image_pad[:, None]
+        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
