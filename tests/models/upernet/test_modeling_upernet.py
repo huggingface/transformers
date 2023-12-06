@@ -205,13 +205,13 @@ class UperNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            expected_num_stages = self.model_tester.num_stages
-            self.assertEqual(len(hidden_states), expected_num_stages + 1)
+            expected_num_stages = len(self.model_tester.out_features)
+            self.assertEqual(len(hidden_states), expected_num_stages)
 
             # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
+                [self.model_tester.image_size // 8, self.model_tester.image_size // 8],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
