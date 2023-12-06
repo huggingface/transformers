@@ -482,6 +482,10 @@ class UMT5PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
 
+    def __init__(self, config):
+        super().__init__(config)
+        self._keep_in_fp32_modules = self.__class__._keep_in_fp32_modules
+
     @property
     def dummy_inputs(self):
         input_ids = torch.tensor(DUMMY_INPUTS)

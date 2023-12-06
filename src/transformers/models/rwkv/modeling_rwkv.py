@@ -409,6 +409,10 @@ class RwkvPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = ["time_decay", "time_first"]
     supports_gradient_checkpointing = True
 
+    def __init__(self, config):
+        super().__init__(config)
+        self._keep_in_fp32_modules = self.__class__._keep_in_fp32_modules
+
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, RwkvSelfAttention):
