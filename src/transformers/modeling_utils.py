@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import collections
+import copy
 import functools
 import gc
 import importlib.metadata
@@ -1157,7 +1158,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Overwrite the class attribute to make it an instance attribute, so models like
         # `InstructBlipForConditionalGeneration` can dynamically update it without modifying the class attribute
         # when a different component (e.g. language_model) is used.
-        self._keep_in_fp32_modules = self.__class__._keep_in_fp32_modules
+        self._keep_in_fp32_modules = copy(self.__class__._keep_in_fp32_modules)
 
     def post_init(self):
         """
