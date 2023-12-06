@@ -3445,7 +3445,8 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "summary", None) is not None:
-            self.summary.build(self.hidden_size)
+            with tf.name_scope("summary"):
+                self.summary.build(self.hidden_size)
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.keras.initializers.TruncatedNormal:
