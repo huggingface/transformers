@@ -644,7 +644,7 @@ class Swinv2Layer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
         super().__init__()
         self.input_resolution = input_resolution
-        window_size, shift_size = self._calc_window_shift(
+        window_size, shift_size = self._compute_window_shift(
             (config.window_size, config.window_size), (shift_size, shift_size)
         )
         self.window_size = window_size[0]
@@ -664,7 +664,7 @@ class Swinv2Layer(nn.Module):
         self.output = Swinv2Output(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
-    def _calc_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
@@ -878,15 +878,8 @@ class Swinv2Encoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, input_dimensions, layer_head_mask
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__, hidden_states, input_dimensions, layer_head_mask
                 )
             else:
                 layer_outputs = layer_module(
@@ -961,10 +954,6 @@ class Swinv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Swinv2Encoder):
-            module.gradient_checkpointing = value
 
 
 SWINV2_START_DOCSTRING = r"""

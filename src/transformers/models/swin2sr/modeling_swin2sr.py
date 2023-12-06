@@ -490,7 +490,7 @@ class Swin2SRLayer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
         super().__init__()
         self.input_resolution = input_resolution
-        window_size, shift_size = self._calc_window_shift(
+        window_size, shift_size = self._compute_window_shift(
             (config.window_size, config.window_size), (shift_size, shift_size)
         )
         self.window_size = window_size[0]
@@ -510,7 +510,7 @@ class Swin2SRLayer(nn.Module):
         self.output = Swin2SROutput(config, dim)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
-    def _calc_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+    def _compute_window_shift(self, target_window_size, target_shift_size) -> Tuple[Tuple[int, int], Tuple[int, int]]:
         window_size = [r if r <= w else w for r, w in zip(self.input_resolution, target_window_size)]
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
