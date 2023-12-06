@@ -84,7 +84,7 @@ class TFDebertaContextPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(None)
+                self.dense.build(self.config.pooler_hidden_size)
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -375,16 +375,15 @@ class TFDebertaEncoder(tf.keras.layers.Layer):
                 self.max_relative_positions = config.max_position_embeddings
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.relative_attention:
             self.rel_embeddings = self.add_weight(
                 name="rel_embeddings.weight",
                 shape=[self.max_relative_positions * 2, self.config.hidden_size],
                 initializer=get_initializer(self.config.initializer_range),
             )
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
                 with tf.name_scope(layer.name):
@@ -610,21 +609,21 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
                 )
 
         self.dropout = TFDebertaStableDropout(config.attention_probs_dropout_prob, name="dropout")
+        self.config = config
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         self.q_bias = self.add_weight(
             name="q_bias", shape=(self.all_head_size), initializer=tf.keras.initializers.Zeros()
         )
         self.v_bias = self.add_weight(
             name="v_bias", shape=(self.all_head_size), initializer=tf.keras.initializers.Zeros()
         )
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "in_proj", None) is not None:
             with tf.name_scope(self.in_proj.name):
-                self.in_proj.build(None)
+                self.in_proj.build(self.config.hidden_size)
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)

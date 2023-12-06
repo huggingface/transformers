@@ -84,7 +84,7 @@ class TFDebertaV2ContextPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(None)
+                self.dense.build(self.config.pooler_hidden_size)
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -439,16 +439,15 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
         self.conv = TFDebertaV2ConvLayer(config, name="conv") if getattr(config, "conv_kernel_size", 0) > 0 else None
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.relative_attention:
             self.rel_embeddings = self.add_weight(
                 name="rel_embeddings.weight",
                 shape=[self.pos_ebd_size, self.config.hidden_size],
                 initializer=get_initializer(self.config.initializer_range),
             )
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
                 self.conv.build(None)
@@ -708,6 +707,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                     )
         self.softmax = TFDebertaV2XSoftmax(axis=-1)
         self.dropout = TFDebertaV2StableDropout(config.attention_probs_dropout_prob, name="dropout")
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, attention_heads: int) -> tf.Tensor:
         tensor_shape = shape_list(tensor)
@@ -904,13 +904,13 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query_proj", None) is not None:
             with tf.name_scope(self.query_proj.name):
-                self.query_proj.build(None)
+                self.query_proj.build(self.config.hidden_size)
         if getattr(self, "key_proj", None) is not None:
             with tf.name_scope(self.key_proj.name):
-                self.key_proj.build(None)
+                self.key_proj.build(self.config.hidden_size)
         if getattr(self, "value_proj", None) is not None:
             with tf.name_scope(self.value_proj.name):
-                self.value_proj.build(None)
+                self.value_proj.build(self.config.hidden_size)
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -919,10 +919,10 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                 self.pos_dropout.build(None)
         if getattr(self, "pos_key_proj", None) is not None:
             with tf.name_scope(self.pos_key_proj.name):
-                self.pos_key_proj.build(None)
+                self.pos_key_proj.build(self.config.hidden_size)
         if getattr(self, "pos_query_proj", None) is not None:
             with tf.name_scope(self.pos_query_proj.name):
-                self.pos_query_proj.build(None)
+                self.pos_query_proj.build(self.config.hidden_size)
 
 
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaEmbeddings Deberta->DebertaV2
