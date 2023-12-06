@@ -836,6 +836,7 @@ class TFDeitDecoder(tf.keras.layers.Layer):
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
         )
         self.pixel_shuffle = TFDeitPixelShuffle(config.encoder_stride, name="1")
+        self.config = config
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = inputs
@@ -849,7 +850,7 @@ class TFDeitDecoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv2d", None) is not None:
             with tf.name_scope(self.conv2d.name):
-                self.conv2d.build(None)
+                self.conv2d.build(self.config.hidden_size)
         if getattr(self, "pixel_shuffle", None) is not None:
             with tf.name_scope(self.pixel_shuffle.name):
                 self.pixel_shuffle.build(None)
@@ -999,6 +1000,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
             if config.num_labels > 0
             else tf.keras.layers.Activation("linear", name="classifier")
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
@@ -1084,7 +1086,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
                 self.deit.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+                self.classifier.build(self.config.hidden_size)
 
 
 @add_start_docstrings(
@@ -1117,6 +1119,7 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             if config.num_labels > 0
             else tf.keras.layers.Activation("linear", name="distillation_classifier")
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
@@ -1175,7 +1178,7 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
                 self.deit.build(None)
         if getattr(self, "cls_classifier", None) is not None:
             with tf.name_scope(self.cls_classifier.name):
-                self.cls_classifier.build(None)
+                self.cls_classifier.build(self.config.hidden_size)
         if getattr(self, "distillation_classifier", None) is not None:
             with tf.name_scope(self.distillation_classifier.name):
-                self.distillation_classifier.build(None)
+                self.distillation_classifier.build(self.config.hidden_size)
