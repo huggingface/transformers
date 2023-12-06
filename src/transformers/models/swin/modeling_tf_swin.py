@@ -473,7 +473,7 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
                 self.reduction.build(4 * self.dim)
         if getattr(self, "norm", None) is not None:
             with tf.name_scope(self.norm.name):
-                self.norm.build(None)
+                self.norm.build([None, None, 4 * self.dim])
 
 
 class TFSwinDropPath(tf.keras.layers.Layer):
@@ -1404,6 +1404,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
         )
         self.pixel_shuffle = TFSwinPixelShuffle(config.encoder_stride, name="1")
+        self.config = config
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         hidden_states = x
@@ -1421,7 +1422,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv2d", None) is not None:
             with tf.name_scope(self.conv2d.name):
-                self.conv2d.build(None)
+                self.conv2d.build(self.config.hidden_size)
         if getattr(self, "pixel_shuffle", None) is not None:
             with tf.name_scope(self.pixel_shuffle.name):
                 self.pixel_shuffle.build(None)
@@ -1630,5 +1631,6 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             with tf.name_scope(self.swin.name):
                 self.swin.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
-                self.classifier.build(None)
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build(self.swin.num_features)
