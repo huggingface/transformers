@@ -44,30 +44,6 @@ For multiple turns conversation:
 "USER: <image>\n<prompt1>ASSISTANT: <answer1>USER: <prompt2>ASSISTANT: <answer2>USER: <prompt3>ASSISTANT:"
 ```
 
-We have benchmarked our implementation against the original [`BakLlava`](https://github.com/SkunkworksAI/BakLLaVA) implementation that is derived from the original implementation and our implementation leads to important speedups in all scenarios
-
-### Multiple prompts and fixed number of images
-
-| implementation | batch size | Nb images per prompt | total time (s) | Speedup |
-|----------------|------------|----------------------|----------------| ------- |
-| original       | 2          | 4                    | 4.73           |         |
-| transformers   | 2          | 4                    | 1.72           | *2.74x* |
-| original       | 4          | 4                    | 8.74           |         |
-| transformers   | 4          | 4                    | 3.63           | *2.41x* |
-| original       | 8          | 4                    | 17.65          |         |
-| transformers   | 8          | 4                    | 4.35           | *4.05x* |
-
-### Multiple prompts and single image
-
-| implementation | batch size | Nb images per prompt | total time (s) | Speedup |
-|----------------|------------|----------------------|----------------| ------- |
-| original       | 2          | 1                    | 1.35           |         |
-| transformers   | 2          | 1                    | 0.82           | *1.64x* |
-| original       | 4          | 1                    | 2.42           |         |
-| transformers   | 4          | 1                    | 1.01           | *2.41x* |
-| original       | 8          | 1                    | 4.24           |         |
-| transformers   | 8          | 1                    | 1.98           | *2.14x* |
-
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ) and [ybelkada](https://huggingface.co/ybelkada).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main/llava).
 
