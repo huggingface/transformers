@@ -642,6 +642,15 @@ class TFWav2Vec2FeatureEncoder(tf.keras.layers.Layer):
             hidden_states = conv_layer(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv_layers", None) is not None:
+            for conv_layer in self.conv_layers:
+                with tf.name_scope(conv_layer.name):
+                    conv_layer.build(input_shape)
+
 
 class TFWav2Vec2FeatureExtractor(TFWav2Vec2FeatureEncoder):
     def __init__(self, config, **kwargs):
