@@ -34,25 +34,25 @@ We have benchmarked our implementation against the original [`BakLlava`](https:/
 
 ### Multiple prompts and fixed number of images
 
-| implementation | batch size | Nb images per prompt | total time (s) |
-|----------------|------------|----------------------|----------------|
-| original       | 2          | 4                    | 4.73           |
-| transformers   | 2          | 4                    | 1.72           |
-| original       | 4          | 4                    | 8.74           |
-| transformers   | 4          | 4                    | 3.63           |
-| original       | 8          | 4                    | 17.65          |
-| transformers   | 8          | 4                    | 4.35           |
+| implementation | batch size | Nb images per prompt | total time (s) | Speedup |
+|----------------|------------|----------------------|----------------| ------- |
+| original       | 2          | 4                    | 4.73           |         |
+| transformers   | 2          | 4                    | 1.72           | *2.74x* |
+| original       | 4          | 4                    | 8.74           |         |
+| transformers   | 4          | 4                    | 3.63           | *2.41x* |
+| original       | 8          | 4                    | 17.65          |         |
+| transformers   | 8          | 4                    | 4.35           | *4.05x* |
 
 ### Multiple prompts and single image
 
-| implementation | batch size | Nb images per prompt | total time (s) |
-|----------------|------------|----------------------|----------------|
-| original       | 2          | 1                    | 1.35           |
-| transformers   | 2          | 1                    | 0.82           |
-| original       | 4          | 1                    | 2.42           |
-| transformers   | 4          | 1                    | 1.01           |
-| original       | 8          | 1                    | 4.24           |
-| transformers   | 8          | 1                    | 1.98           |
+| implementation | batch size | Nb images per prompt | total time (s) | Speedup |
+|----------------|------------|----------------------|----------------| ------- |
+| original       | 2          | 1                    | 1.35           |         |
+| transformers   | 2          | 1                    | 0.82           | *1.64x* |
+| original       | 4          | 1                    | 2.42           |         |
+| transformers   | 4          | 1                    | 1.01           | *2.41x* |
+| original       | 8          | 1                    | 4.24           |         |
+| transformers   | 8          | 1                    | 1.98           | *2.14x* |
 
 This model was contributed by [ArthurZ](https://huggingface.co/ArthurZ) and [ybelkada](https://huggingface.co/ybelkada).
 The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/main/llava).
