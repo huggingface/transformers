@@ -3440,7 +3440,7 @@ class ModelTesterMixin:
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
-                self.assertTrue(model_sdpa._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
                 model_eager = model_class.from_pretrained(
                     tmpdirname,
@@ -3449,7 +3449,7 @@ class ModelTesterMixin:
                     attn_implementation="eager",
                 ).to(torch_device)
 
-                self.assertTrue(model_eager._attn_implementation == "eager")
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
                     if "SdpaAttention" in submodule.__class__.__name__:
