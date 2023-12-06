@@ -13,6 +13,7 @@ RUN apt update && \
     git \
     # These are required to build deepspeed.
     python3-dev \
+    python-is-python3 \
     rocrand-dev \
     rocthrust-dev \
     hipsparse-dev \
@@ -35,7 +36,7 @@ WORKDIR /
 ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
-RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece]
+RUN python3 -m pip install --no-cache-dir ./transformers[accelerate,testing,sentencepiece,sklearn]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
