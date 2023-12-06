@@ -166,6 +166,8 @@ class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
 
         self.dense_0 = tf.keras.layers.Dense(dff, activation="relu", name="0")
         self.dense_2 = tf.keras.layers.Dense(d_model_size, name="2")
+        self.d_model_size = d_model_size
+        self.dff = dff
 
     def call(self, inputs, trainable=False):
         dense_0_output = self.dense_0(inputs)
@@ -179,10 +181,10 @@ class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense_0", None) is not None:
             with tf.name_scope(self.dense_0.name):
-                self.dense_0.build(None)
+                self.dense_0.build(self.d_model_size)
         if getattr(self, "dense_2", None) is not None:
             with tf.name_scope(self.dense_2.name):
-                self.dense_2.build(None)
+                self.dense_2.build(self.dff)
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
