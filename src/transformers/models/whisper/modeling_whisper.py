@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Whisper model."""
 
+import copy
 import math
 import warnings
 from typing import Optional, Tuple, Union
@@ -1933,7 +1934,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
         if generation_config is None:
-            generation_config = self.generation_config
+            generation_config = copy.deepcopy(self.generation_config)
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
