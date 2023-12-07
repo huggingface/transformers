@@ -2815,10 +2815,16 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         loss = None
 
         if labels is not None:
-            loss_fct = CrossEntropyLoss() if self.config.num_labels > 1 else MSELoss()
-            # move labels to correct device to enable PP
-            labels = labels.to(logits.device)
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            if self.config.num_labels > 1:
+                loss_fct = CrossEntropyLoss()
+                # move labels to correct device to enable PP
+                labels = labels.to(logits.device)
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            else:
+                loss_fct = MSELoss()
+                # move labels to correct device to enable PP
+                labels = labels.to(logits.device)
+                loss = loss_fct(logits.view(-1), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + encoder_outputs[1:]
