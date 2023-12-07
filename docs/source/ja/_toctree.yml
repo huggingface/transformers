@@ -284,6 +284,10 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -291,6 +295,8 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/cvt
+        title: CvT
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -317,6 +323,8 @@
         title: BROS
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
+      - local: model_doc/data2vec
+        title: Data2Vec
       title: マルチモーダルモデル
     - isExpanded: false
       sections:
