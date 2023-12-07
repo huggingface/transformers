@@ -20,13 +20,12 @@ Las entradas agrupadas por lotes (batched) suelen tener longitudes diferentes, p
 
 En la mayoría de los casos, es bastante eficaz rellenar su lote hasta la longitud de la secuencia más larga y truncar hasta la longitud máxima que un modelo puede aceptar. Sin embargo, la API admite más estrategias si las necesitas. Los tres argumentos que necesitas son: `padding`, `truncation` y `max_length`.
 
-The `padding` argument controls padding. It can be a boolean or a string:
+El argumento `padding` controla el relleno. Puede ser un booleano o una cadena:
 
-  - `True` or `'longest'`: pad to the longest sequence in the batch (no padding is applied if you only provide
-    a single sequence).
-  - `'max_length'`: pad to a length specified by the `max_length` argument or the maximum length accepted
-    by the model if no `max_length` is provided (`max_length=None`). Padding will still be applied if you only provide a single sequence.
-  - `False` or `'do_not_pad'`: no padding is applied. This is the default behavior.
+  - `True` o `'longest'`: rellena hasta la longitud de la secuencia más larga en el lote (no se aplica relleno si solo proporcionas una única secuencia).
+  - `'max_length'`: rellena hasta una longitud especificada por el argumento `max_length` o la longitud máxima aceptada
+    por el modelo si no se proporciona `max_length` (`max_length=None`). El Padding se aplicará incluso si solo proporcionas una única secuencia.
+  - `False` o `'do_not_pad'`: no se aplica relleno. Este es el comportamiento predeterminado.
 
 The `truncation` argument controls truncation. It can be a boolean or a string:
 
