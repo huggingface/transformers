@@ -29,7 +29,7 @@ Tips:
 - One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
 
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
-The original code can be found [here]([<INSERT LINK TO GITHUB REPO HERE>](https://github.com/baaivision/Painter/tree/main)).
+The original code can be found [here]([(https://github.com/baaivision/Painter/tree/main)).
 
 
 ## SegGptConfig
