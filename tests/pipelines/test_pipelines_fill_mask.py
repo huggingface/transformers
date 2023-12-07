@@ -215,16 +215,17 @@ class FillMaskPipelineTests(unittest.TestCase):
                 {"sequence": "My name is Te", "score": 0.000, "token": 2941, "token_str": " Te"},
             ],
         )
-
+        
+        dummy_str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100
         outputs = unmasker(
-            "My name is <mask>" + "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100,
+            "My name is <mask>" + dummy_str,
             tokenizer_kwargs={"truncation": True},
         )
         self.assertEqual(
             nested_simplify(outputs, decimals=6),
             [
-                {"sequence": "My name is grouped", "score": 2.2e-05, "token": 38015, "token_str": " grouped"},
-                {"sequence": "My name is accuser", "score": 2.1e-05, "token": 25506, "token_str": " accuser"},
+                {"sequence": f"My name is,{dummy_str}", "score": 0.281867, "token": 6, "token_str": " ,"},
+                {"sequence": f"My name is:,{dummy_str}", "score": 0.095432, "token": 46686, "token_str": " :,"},
             ],
         )
 
