@@ -215,7 +215,7 @@ def _prepare_4d_causal_attention_mask(
     # 4d mask is passed through the layers
     if attention_mask is not None:
         attention_mask = attn_mask_converter.to_4d(
-            attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
+            attention_mask, input_shape[-1], key_value_length=key_value_length, dtype=inputs_embeds.dtype
         )
     else:
         attention_mask = attn_mask_converter.to_causal_4d(
