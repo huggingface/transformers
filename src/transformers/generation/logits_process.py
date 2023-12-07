@@ -1078,8 +1078,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
                         f"This means that the constraint is unsatisfiable. Please check your implementation"
                         f"of `prefix_allowed_tokens_fn` "
                     )
-                else:
-                    mask[batch_id * self._num_beams + beam_id, self._prefix_allowed_tokens_fn(batch_id, sent)] = 0
+                mask[batch_id * self._num_beams + beam_id, prefix_allowed_tokens] = 0
 
         return scores + mask
 
