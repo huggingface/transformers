@@ -39,4 +39,4 @@ jobs:
            build-args: |
              REF=main
            push: true
-           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}-test
+           tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
