@@ -4554,6 +4554,7 @@ else:
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
+    _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
             "FlaxLongT5ForConditionalGeneration",
@@ -8630,6 +8631,11 @@ if TYPE_CHECKING:
             FlaxGPTJForCausalLM,
             FlaxGPTJModel,
             FlaxGPTJPreTrainedModel,
+        )
+        from .models.llama import (
+            FlaxLlamaForCausalLM,
+            FlaxLlamaModel,
+            FlaxLlamaPreTrainedModel,
         )
         from .models.longt5 import (
             FlaxLongT5ForConditionalGeneration,

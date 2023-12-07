@@ -38,7 +38,6 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->Phi
 class PhiModelTester:
     def __init__(
         self,
