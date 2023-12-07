@@ -274,6 +274,16 @@
         title: Blenderbot
       - local: model_doc/blenderbot-small
         title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/code_llama
@@ -302,6 +312,8 @@
         title: Audio Spectrogram Transformer
       - local: model_doc/bark
         title: Bark
+      - local: model_doc/clap
+        title: CLAP
       title: 音声モデル
     - isExpanded: false
       sections:
@@ -309,6 +321,16 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
       - local: model_doc/clipseg
