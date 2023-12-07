@@ -117,7 +117,7 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/bloomz-560m")
     >>> model = AutoModelForCausalLM.from_pretrained("bigscience/bloomz-560m")
 
-    >>> inputs = tokenizer(["A number:"], return_tensors="pt")
+    >>> inputs = tokenizer("A number:", return_tensors="pt")
     >>> gen_out = model.generate(**inputs)
     >>> print(tokenizer.batch_decode(gen_out, skip_special_tokens=True)[0])
     A number: one
@@ -1467,7 +1467,7 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] that removes all `nan` and `inf` values to avoid the generation method to fail. Note that using
     the logits processor should only be used if necessary since it can slow down the generation method.
 
-    This logits processor has no `generate` example, as there shouldn't a correct combination of flags that warrants
+    This logits processor has no `generate` example, as there shouldn't be a correct combination of flags that warrants
     its use.
     """
 
