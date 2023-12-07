@@ -26,7 +26,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "": "https://huggingface.co//resolve/main/config.json",
+    "THUDM/chatglm3-6b": "https://huggingface.co/THUDM/chatglm3-6b/resolve/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class ChatGlmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChatGlmModel`]. It is used to instantiate an ChatGLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ChatGLM-7B.
+    defaults will yield a similar configuration to that of the [ChatGLM-6B](https://huggingface.co/THUDM/chatglm3-6b/resolve/main/config.json).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -95,6 +95,8 @@ class ChatGlmConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        partial_rotary_factor (`float`, *optional*, default to 0.5):
+            Percentage of the query and keys which will have rotary embedding.
 
     ```python
     >>> from transformers import ChatGlmModel, ChatGlmConfig
@@ -134,6 +136,7 @@ class ChatGlmConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
+        partial_rotary_factor=-0.5,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -158,7 +161,7 @@ class ChatGlmConfig(PretrainedConfig):
         self._rope_scaling_validation()
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-
+        self.partial_rotary_factor = partial_rotary_factor
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
