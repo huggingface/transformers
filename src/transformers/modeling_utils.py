@@ -2155,7 +2155,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded, make module map
-            if any(hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload for module in model_to_save.modules):
+            if any(hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload for module in model_to_save.modules()):
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
