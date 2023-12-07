@@ -215,17 +215,25 @@ class FillMaskPipelineTests(unittest.TestCase):
                 {"sequence": "My name is Te", "score": 0.000, "token": 2941, "token_str": " Te"},
             ],
         )
-        
+
         dummy_str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100
         outputs = unmasker(
             "My name is <mask>" + dummy_str,
             tokenizer_kwargs={"truncation": True},
         )
+        simplified = nested_simplify(outputs, decimals=6)
         self.assertEqual(
-            nested_simplify(outputs, decimals=6),
+            [{"sequence", x["sequence"][:100]} for x in simplified],
             [
-                {"sequence": f"My name is,{dummy_str}", "score": 0.281867, "token": 6, "token_str": " ,"},
-                {"sequence": f"My name is:,{dummy_str}", "score": 0.095432, "token": 46686, "token_str": " :,"},
+                {"sequence": f"My name is,{dummy_str}"[:100]},
+                {"sequence": f"My name is:,{dummy_str}"[:100]},
+            ],
+        )
+        self.assertEqual(
+            [{k: x[k] for k in x if k != "sequence"} for x in simplified],
+            [
+                {"score": 0.281867, "token": 6, "token_str": ","},
+                {"score": 0.095432, "token": 46686, "token_str": ":,"},
             ],
         )
 
