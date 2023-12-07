@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPConfig"),
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
+        ("clip_vision_model", "CLIPVisionConfig"),
         ("clipseg", "CLIPSegConfig"),
         ("clvp", "ClvpConfig"),
         ("code_llama", "LlamaConfig"),
@@ -126,6 +127,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
+        ("llava", "LlavaConfig"),
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
@@ -348,6 +350,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("levit", "LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("lilt", "LILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("llama", "LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("llava", "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longformer", "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("longt5", "LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("luke", "LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -494,6 +497,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("chinese_clip", "Chinese-CLIP"),
         ("clap", "CLAP"),
         ("clip", "CLIP"),
+        ("clip_vision_model", "CLIPVisionModel"),
         ("clipseg", "CLIPSeg"),
         ("clvp", "CLVP"),
         ("code_llama", "CodeLlama"),
@@ -573,6 +577,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
+        ("llava", "Llava"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
@@ -740,6 +745,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("kosmos-2", "kosmos2"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
+        ("clip_vision_model", "clip"),
     ]
 )
 
