@@ -241,6 +241,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
 
 class ChatGlmMLP(nn.Module):
+    """
+    This class is quite unique as it splits the output hidden states from `dense_h_to_4h` into two chunks and multiplies the final
+    result with a swiglu activation function.
+    """
     def __init__(self, config):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=config.mlp_bias)
@@ -249,7 +253,10 @@ class ChatGlmMLP(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
+
+        chunked_hidden_states = torch.chunk(hidden_states, 2, dim=-1)
+        hidden_states = self.act(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
 
