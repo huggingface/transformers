@@ -67,8 +67,8 @@ class SummarizationPipelineTests(unittest.TestCase):
             # the embedding layer.
             if not (
                 isinstance(model, TFPreTrainedModel)
-                and get_gpu_count() > 0
                 and len(summarizer.model.trainable_weights) > 0
+                and "GPU" in summarizer.model.trainable_weights[0].device
             ):
                 with self.assertRaises(Exception):
                     outputs = summarizer("This " * 1000)
