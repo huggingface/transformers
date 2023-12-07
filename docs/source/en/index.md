@@ -1,4 +1,4 @@
-<!--Copyright 2020 The HuggingFace Team. All rights reserved.
+        <!--Copyright 2020 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -94,7 +94,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CLIPSeg](model_doc/clipseg)                       |       ✅        |         ❌         |      ❌      |
 |                          [CLVP](model_doc/clvp)                          |       ✅        |         ❌         |      ❌      |
 |                       [CodeGen](model_doc/codegen)                       |       ✅        |         ❌         |      ❌      |
-|                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ❌      |
+|                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
@@ -169,6 +169,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ❌      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ❌      |
+|                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
+|                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
 |                         [Llava](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
 |                        [LongT5](model_doc/longt5)                        |       ✅        |         ❌         |      ✅      |
