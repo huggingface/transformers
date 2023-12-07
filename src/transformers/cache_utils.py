@@ -261,17 +261,6 @@ class SinkCache(Cache):
 
         else:
             # Shifting cache
-
-            # # Incompatibility checks
-            # if key_states.shape[-2] > 1:
-            #     raise ValueError(
-            #         "Got past key values for more than one token at the shifting cache stage. `SinkCache` is not yet "
-            #         "compatible with techniques that generate more than one token at a time, like assisted "
-            #         "generation. Please open a GH issue if you see this issue with generation techniques that only "
-            #         "generate one token at a time!"
-            #     )
-
-            # Slice the tokens to keep
             keys_to_keep = self.key_cache[layer_idx][
                 :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
             ]
@@ -289,19 +278,15 @@ class SinkCache(Cache):
                     keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
-            self.key_cache[layer_idx] = torch.cat(
-                [self.key_cache[layer_idx][:, :, : self.num_sink_tokens], keys_to_keep, key_states], dim=-2
-            )
-            self.value_cache[layer_idx] = torch.cat(
-                [
-                    self.value_cache[layer_idx][:, :, : self.num_sink_tokens],
-                    self.value_cache[layer_idx][
-                        :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
-                    ],
-                    value_states,
-                ],
-                dim=-2,
-            )
+            sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
+            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
+
+            sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
+            values_to_keep = self.value_cache[layer_idx][
+                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
+            ]
+            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
+
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
