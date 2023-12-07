@@ -18,9 +18,9 @@
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
+from .auto_factory import (_BaseAutoModelClass, _LazyAutoMapping,
+                           auto_class_update)
 from .configuration_auto import CONFIG_MAPPING_NAMES
-
 
 logger = logging.get_logger(__name__)
 
@@ -43,6 +43,7 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
         ("gptj", "FlaxGPTJModel"),
+        ("llama", "FlaxLlamaModel"),
         ("longt5", "FlaxLongT5Model"),
         ("marian", "FlaxMarianModel"),
         ("mbart", "FlaxMBartModel"),
@@ -148,6 +149,7 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
         ("gptj", "FlaxGPTJForCausalLM"),
         ("mistral", "FlaxMistralForCausalLM"),
+        ("llama", "FlaxLlamaForCausalLM"),
         ("opt", "FlaxOPTForCausalLM"),
         ("roberta", "FlaxRobertaForCausalLM"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForCausalLM"),
