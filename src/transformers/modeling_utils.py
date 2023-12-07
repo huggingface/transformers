@@ -2158,11 +2158,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for name, module in model_to_save.named_modules():
                 if name == "":
                     continue
-                if hasattr(module, "_hf_hook") and module._hf_hook.offload:
-                    module_state_dict = module.state_dict()
+                # if hasattr(module, "_hf_hook") and module._hf_hook.offload:
+                module_state_dict = module.state_dict()
 
-                    for key in module_state_dict:
-                        module_map[name + f".{key}"] = module
+                for key in module_state_dict:
+                    module_map[name + f".{key}"] = module
 
             state_dict = model_to_save.state_dict()
 
