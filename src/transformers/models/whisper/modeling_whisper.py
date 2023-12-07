@@ -2291,8 +2291,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 prev_tokens = self._pad_to_max_length(
                     active_segments, generation_config.pad_token_id, padding="left"
                 )
-
-                prev_start_of_text = suppress_tokens_processor.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
+                prev_start_of_text = getattr(generation_config, "prev_bos_token_id", None) or suppress_tokens_processor.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
 
                 decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, prev_tokens[:, -cut_off_length:], decoder_input_ids], dim=-1)
                 passed_max_length = kwargs.get("max_length", None)
@@ -2327,11 +2326,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 ):
                     kwargs["max_new_tokens"] = self.config.max_target_positions - decoder_input_ids.shape[-1]
 
-            timestamp_processor.set_begin_index(decoder_input_ids.shape[-1])
-            begin_suppress_processor.set_begin_index(decoder_input_ids.shape[-1])
-
-            if no_speech_threshold is not None:
-                no_speech_detector.set_begin_index(decoder_input_ids.shape[-1])
+            for proc in logits_processor:
+                if hasattr(proc, "set_begin_index"):
+                    proc.set_begin_index(decoder_input_ids.shape[-1])
 
             print("hf  in tokens", decoder_input_ids[0].tolist())
 

@@ -1355,6 +1355,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generation_config._detect_timestamp_from_logprob = False
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0
+        model.generation_config.prev_bos_token_id = timestamp_begin - 3
 
         outputs = model.generate(long_input_features, logits_processor=logits_processor, condition_on_prev_tokens=condition_on_prev_tokens, return_segments=True)
 
@@ -1402,6 +1403,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generation_config._detect_timestamp_from_logprob = False
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0
+        model.generation_config.prev_bos_token_id = timestamp_begin - 3
 
         logits_processor = [
             DummyTimestampLogitProcessor(
