@@ -550,7 +550,7 @@ class ChatGlmFlashAttention2(ChatGlmAttention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__ with Llama->ChatGlm
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward with Llama->ChatGlm
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
@@ -610,7 +610,7 @@ class ChatGlmFlashAttention2(ChatGlmAttention):
 
         return attn_output
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__ with Llama->ChatGlm
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input with Llama->ChatGlm
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
