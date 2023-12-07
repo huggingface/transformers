@@ -458,8 +458,6 @@ class SegGPTLayer(nn.Module):
 
     def __init__(self, config: SegGPTConfig, drop_path_rate: float) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
         self.attention = SegGPTAttention(config)
         self.mlp = SegGPTMlp(config)
         self.drop_path = SegGPTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
