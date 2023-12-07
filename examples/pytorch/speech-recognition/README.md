@@ -100,7 +100,7 @@ of **0.35**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
 	--nproc_per_node 8 run_speech_recognition_ctc.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
@@ -147,7 +147,7 @@ However, the `--shuffle_buffer_size` argument controls how many examples we can 
 
 
 ```bash
-**python -m torch.distributed.launch \
+**torchrun \
 	--nproc_per_node 4 run_speech_recognition_ctc_streaming.py \
 	--dataset_name="common_voice" \
 	--model_name_or_path="facebook/wav2vec2-xls-r-300m" \
@@ -404,7 +404,7 @@ If training on a different language, you should be sure to change the `language`
 #### Multi GPU Whisper Training
 The following example shows how to fine-tune the [Whisper small](https://huggingface.co/openai/whisper-small) checkpoint on the Hindi subset of [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) using 2 GPU devices in half-precision:
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 2 run_speech_recognition_seq2seq.py \
 	--model_name_or_path="openai/whisper-small" \
 	--dataset_name="mozilla-foundation/common_voice_11_0" \
@@ -572,7 +572,7 @@ cross-entropy loss of **0.405** and word error rate of **0.0728**.
 The following command shows how to fine-tune [XLSR-Wav2Vec2](https://huggingface.co/transformers/main/model_doc/xlsr_wav2vec2.html) on [Common Voice](https://huggingface.co/datasets/common_voice) using 8 GPUs in half-precision.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
  	--nproc_per_node 8 run_speech_recognition_seq2seq.py \
 	--dataset_name="librispeech_asr" \
 	--model_name_or_path="./" \

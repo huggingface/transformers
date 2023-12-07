@@ -1503,7 +1503,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
     >>> #Displaying timestamps
     >>> generated_ids = model.generate(inputs=input_features, return_timestamps=True)
-    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    >>> transcription = processor.batch_decode(generated_ids, decode_with_timestamps=True)[0]
     >>> print("Transcription:", transcription)
     Transcription: <|startoftranscript|><|0.00|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all, and can<|6.44|><|6.44|> discover in it but little of rocky Ithaca.<|9.44|><|endoftext|>
 
