@@ -635,7 +635,7 @@ class Message:
         if "prev_ci_results" in self.prev_ci_artifacts and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]:
             prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
 
-        all_failure_lines = dict()
+        all_failure_lines = {}
         for job, job_result in sorted_dict:
             if len(job_result["failures"]):
                 devices = sorted(job_result["failures"].keys(), reverse=True)
@@ -644,7 +644,7 @@ class Message:
                     failures = job_result["failures"][device]
                     prev_error_lines = {}
                     if job in prev_model_results and device in prev_model_results[job]["failures"]:
-                        prev_error_lines = set(error["line"] for error in prev_model_results[job]["failures"][device])
+                        prev_error_lines = {error["line"] for error in prev_model_results[job]["failures"][device]}
 
                     url = None
                     if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
