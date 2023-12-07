@@ -43,7 +43,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -1249,7 +1248,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         # The shared/tied weights expect to be in the model base namespace
         # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
         # the current one.
-        with tf.name_scope(self.shared.load_weight_prefix + '/' + self.shared.name + '/'):
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
             self.shared.build(None)
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
