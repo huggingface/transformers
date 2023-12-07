@@ -65,7 +65,15 @@ if is_torch_fx_available():
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "THUDM/ChatGLM3"
 _CONFIG_FOR_DOC = "ChatGlmConfig"
+
+CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "THUDM/chatglm3-6b",
+    "THUDM/chatglm3-6b-32k",
+    "THUDM/chatglm3-6b-base",
+    # See all ChatGLM models at https://huggingface.co/models?filter=chatglm
+]
 
 
 def _get_unpad_data(attention_mask):
