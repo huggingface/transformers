@@ -1623,6 +1623,111 @@ class AttentionMaskTester(unittest.TestCase):
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
 
+    @require_torch
+    @slow
+    def test_unmask_unattended_left_padding(self):
+        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
+
+        expanded_mask = torch.Tensor(
+            [
+                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        reference_output = torch.Tensor(
+            [
+                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
+
+        self.assertTrue(torch.equal(result, reference_output))
+
+        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+        min_inf = torch.finfo(torch.float32).min
+        reference_output = torch.Tensor(
+            [
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0],
+                        [min_inf, min_inf, 0, min_inf, min_inf],
+                        [min_inf, min_inf, 0, 0, min_inf],
+                        [min_inf, min_inf, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, min_inf, min_inf, min_inf, min_inf],
+                        [0, 0, min_inf, min_inf, min_inf],
+                        [0, 0, 0, min_inf, min_inf],
+                        [0, 0, 0, 0, min_inf],
+                        [0, 0, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [min_inf, 0, min_inf, min_inf, min_inf],
+                        [min_inf, 0, 0, min_inf, min_inf],
+                        [min_inf, 0, 0, 0, min_inf],
+                        [min_inf, 0, 0, 0, 0],
+                    ]
+                ],
+            ]
+        )
+
+        self.assertTrue(torch.equal(reference_output, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_right_padding(self):
+        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_random_mask(self):
+        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
 
 @require_torch_sdpa
 class TestAttentionImplementation(unittest.TestCase):
