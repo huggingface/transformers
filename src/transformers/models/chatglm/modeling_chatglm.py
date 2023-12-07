@@ -30,8 +30,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_attention_mask,
     _prepare_4d_causal_attention_mask,
 )
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
@@ -67,37 +65,6 @@ CHATGLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "THUDM/chatglm3-6b-base",
     # See all ChatGLM models at https://huggingface.co/models?filter=chatglm
 ]
-
-
-def _get_unpad_data(attention_mask):
-    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-    max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
-    return (
-        indices,
-        cu_seqlens,
-        max_seqlen_in_batch,
-    )
-
-
-# Copied from transformers.models.llama.modeling_llama._expand_mask with llama->chatglm
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    warnings.warn(
-        "Calling `transformers.models.chatglm.modeling_chatglm._prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils._prepare_4d_attention_mask"
-    )
-    return _prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
-
-
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    warnings.warn(
-        "Calling `transformers.models.chatglm.modeling_chatglm._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.chatglm.modeling_chatglm.AttentionMaskConverter._make_causal_mask"
-    )
-    return AttentionMaskConverter._make_causal_mask(
-        input_ids_shape=input_ids_shape, dtype=dtype, device=device, past_key_values_length=past_key_values_length
-    )
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->ChatGlm
@@ -205,6 +172,7 @@ class ChatGlmDynamicNTKScalingRotaryEmbedding(ChatGlmRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
+# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -212,6 +180,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -245,6 +214,7 @@ class ChatGlmMLP(nn.Module):
     This class is quite unique as it splits the output hidden states from `dense_h_to_4h` into two chunks and multiplies the final
     result with a swiglu activation function.
     """
+
     def __init__(self, config):
         super().__init__()
         self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size * 2, bias=config.mlp_bias)
@@ -256,11 +226,12 @@ class ChatGlmMLP(nn.Module):
 
         chunked_hidden_states = torch.chunk(hidden_states, 2, dim=-1)
         hidden_states = self.act(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        
+
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -310,6 +281,7 @@ class ChatGlmRotaryEmbedding(nn.Module):
         )
 
 
+# TODO: refactor this
 class ChatGlmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()

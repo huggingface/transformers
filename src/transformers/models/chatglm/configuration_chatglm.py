@@ -125,7 +125,7 @@ class ChatGlmConfig(PretrainedConfig):
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
