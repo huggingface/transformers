@@ -7203,14 +7203,14 @@ class SegformerPreTrainedModel(metaclass=DummyObject):
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SegGPTModel(metaclass=DummyObject):
+class SegGptModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class SegGPTPreTrainedModel(metaclass=DummyObject):
+class SegGptPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

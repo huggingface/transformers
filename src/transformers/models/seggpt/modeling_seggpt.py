@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SegGPT model."""
+""" PyTorch SegGpt model."""
 
 
 import collections.abc
@@ -37,13 +37,13 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_seggpt import SegGPTConfig
+from .configuration_seggpt import SegGptConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "SegGPTConfig"
+_CONFIG_FOR_DOC = "SegGptConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "EduardoPacheco/seggpt-vit-large"
@@ -52,7 +52,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "EduardoPacheco/seggpt-vit-large",
-    # See all SegGPT models at https://huggingface.co/models?filter=seggpt
+    # See all SegGpt models at https://huggingface.co/models?filter=seggpt
 ]
 
 
@@ -82,9 +82,9 @@ def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) 
 
 
 @dataclass
-class SegGPTEncoderOutput(BaseModelOutput):
+class SegGptEncoderOutput(BaseModelOutput):
     """
-    Output type of [`SegGPTEncoderOutput`].
+    Output type of [`SegGptEncoderOutput`].
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -104,9 +104,9 @@ class SegGPTEncoderOutput(BaseModelOutput):
 
 
 @dataclass
-class SegGPTImageSegmentationOutput(ModelOutput):
+class SegGptImageSegmentationOutput(ModelOutput):
     """
-    Output type of [`SegGPTImageSegmentationOutput`].
+    Output type of [`SegGptImageSegmentationOutput`].
 
     Args:
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -128,12 +128,12 @@ class SegGPTImageSegmentationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
 
 
-class SegGPTEmbeddings(nn.Module):
+class SegGptEmbeddings(nn.Module):
     """
     Construct the embeddings from patch, position embeddings for input and prompt.
     """
 
-    def __init__(self, config: SegGPTConfig) -> None:
+    def __init__(self, config: SegGptConfig) -> None:
         super().__init__()
 
         self.mask_token = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
@@ -143,7 +143,7 @@ class SegGPTEmbeddings(nn.Module):
         self.type_token_semantic = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
         self.type_token_instance = nn.Parameter(torch.zeros(1, 1, 1, config.hidden_size))
 
-        self.patch_embeddings = SegGPTPatchEmbeddings(config)
+        self.patch_embeddings = SegGptPatchEmbeddings(config)
 
         num_positions = (config.pretrain_img_size // config.patch_size) ** 2 + 1
         self.position_embeddings = nn.Parameter(torch.randn(1, num_positions, config.hidden_size))
@@ -214,8 +214,8 @@ class SegGPTEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGPT
-class SegGPTPatchEmbeddings(nn.Module):
+# Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SegGpt
+class SegGptPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -251,7 +251,7 @@ class SegGPTPatchEmbeddings(nn.Module):
 
 
 # Modified from transformers.models.sam.modeling_sam.SamVisionAttention
-class SegGPTAttention(nn.Module):
+class SegGptAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config):
@@ -398,7 +398,7 @@ class SegGPTAttention(nn.Module):
         return outputs
 
 
-class SegGPTMlp(nn.Module):
+class SegGptMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
         out_features = config.hidden_size
@@ -438,8 +438,8 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->SegGPT
-class SegGPTDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->SegGpt
+class SegGptDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -453,14 +453,14 @@ class SegGPTDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class SegGPTLayer(nn.Module):
+class SegGptLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: SegGPTConfig, drop_path_rate: float) -> None:
+    def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
         super().__init__()
-        self.attention = SegGPTAttention(config)
-        self.mlp = SegGPTMlp(config)
-        self.drop_path = SegGPTDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.attention = SegGptAttention(config)
+        self.mlp = SegGptMlp(config)
+        self.drop_path = SegGptDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -470,7 +470,7 @@ class SegGPTLayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in SegGPT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in SegGpt, layernorm is applied before self-attention
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
@@ -491,12 +491,12 @@ class SegGPTLayer(nn.Module):
         return outputs
 
 
-class SegGPTEncoder(nn.Module):
-    def __init__(self, config: SegGPTConfig) -> None:
+class SegGptEncoder(nn.Module):
+    def __init__(self, config: SegGptConfig) -> None:
         super().__init__()
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layers = nn.ModuleList([SegGPTLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([SegGptLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -506,7 +506,7 @@ class SegGPTEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, SegGPTEncoderOutput]:
+    ) -> Union[tuple, SegGptEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         intermediate_features = []
@@ -546,7 +546,7 @@ class SegGPTEncoder(nn.Module):
                 for v in [hidden_states, all_hidden_states, all_self_attentions, intermediate_features]
                 if v is not None
             )
-        return SegGPTEncoderOutput(
+        return SegGptEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
@@ -554,8 +554,8 @@ class SegGPTEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->SegGPT
-class SegGPTLayerNorm(nn.Module):
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->SegGpt
+class SegGptLayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -585,7 +585,7 @@ class SegGPTLayerNorm(nn.Module):
         return x
 
 
-class SegGPTDecoderHead(nn.Module):
+class SegGptDecoderHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -594,7 +594,7 @@ class SegGPTDecoderHead(nn.Module):
             kernel_size=3,
             padding=1,
         )
-        self.layernorm = SegGPTLayerNorm(
+        self.layernorm = SegGptLayerNorm(
             normalized_shape=config.decoder_hidden_size, eps=config.layer_norm_eps, data_format="channels_first"
         )
         self.act_fct = ACT2FN[config.hidden_act]
@@ -609,7 +609,7 @@ class SegGPTDecoderHead(nn.Module):
         return hidden_states
 
 
-class SegGPTDecoder(nn.Module):
+class SegGptDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder_embed = nn.Linear(
@@ -617,7 +617,7 @@ class SegGPTDecoder(nn.Module):
             config.patch_size**2 * config.decoder_hidden_size,
             bias=True,
         )
-        self.decoder_pred = SegGPTDecoderHead(config)
+        self.decoder_pred = SegGptDecoderHead(config)
         self.patch_size = config.patch_size
         self.decoder_hidden_size = config.decoder_hidden_size
         self.config = config
@@ -642,17 +642,17 @@ class SegGPTDecoder(nn.Module):
         return hidden_states
 
 
-class SegGPTPreTrainedModel(PreTrainedModel):
+class SegGptPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = SegGPTConfig
+    config_class = SegGptConfig
     base_model_prefix = "seggpt"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["SegGPTEmbeddings", "SegGPTLayer"]
+    _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -668,7 +668,7 @@ class SegGPTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, SegGPTAttention):
+        elif isinstance(module, SegGptAttention):
             module.rel_pos_h.data = nn.init.trunc_normal_(
                 module.rel_pos_h.data.to(torch.float32),
                 mean=0.0,
@@ -681,7 +681,7 @@ class SegGPTPreTrainedModel(PreTrainedModel):
                 std=std,
             ).to(module.rel_pos_w.dtype)
 
-        elif isinstance(module, SegGPTEmbeddings):
+        elif isinstance(module, SegGptEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
@@ -701,7 +701,7 @@ SEGGPT_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`SegGPTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`SegGptConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -709,15 +709,15 @@ SEGGPT_START_DOCSTRING = r"""
 SEGGPT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`SegGPTImageProcessor.__call__`]
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`]
             for details.
 
         prompt_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Prompt pixel values. Prompt pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`SegGPTImageProcessor.__call__`] for details.
+            [`SegGptImageProcessor.__call__`] for details.
 
         prompt_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGPTImageProcessor.__call__`] for
+            Prompt mask. Prompt mask can be obtained using [`AutoImageProcessor`]. See [`SegGptImageProcessor.__call__`] for
             details.
 
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
@@ -739,22 +739,22 @@ SEGGPT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare SegGPT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare SegGpt Model transformer outputting raw hidden-states without any specific head on top.",
     SEGGPT_START_DOCSTRING,
 )
-class SegGPTModel(SegGPTPreTrainedModel):
-    def __init__(self, config: SegGPTConfig):
+class SegGptModel(SegGptPreTrainedModel):
+    def __init__(self, config: SegGptConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = SegGPTEmbeddings(config)
-        self.encoder = SegGPTEncoder(config)
-        self.decoder = SegGPTDecoder(config)
+        self.embeddings = SegGptEmbeddings(config)
+        self.encoder = SegGptEncoder(config)
+        self.decoder = SegGptDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> SegGPTPatchEmbeddings:
+    def get_input_embeddings(self) -> SegGptPatchEmbeddings:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
@@ -779,7 +779,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SegGPTImageSegmentationOutput,
+        output_type=SegGptImageSegmentationOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -795,7 +795,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGPTImageSegmentationOutput]:
+    ) -> Union[Tuple, SegGptImageSegmentationOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
             Ground truth mask for input images.
@@ -805,18 +805,18 @@ class SegGPTModel(SegGPTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import SegGPTImageProcessor, SegGPTModel
+        >>> from transformers import SegGptImageProcessor, SegGptModel
         >>> from PIL import Image
         >>> import requests
 
         >>> image_input_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_2.jpg"
         )
         >>> image_prompt_url = (
-            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1.jpg"
         )
         >>> mask_prompt_url = (
-            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
+            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1_target.png"
         )
 
         >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
@@ -824,8 +824,8 @@ class SegGPTModel(SegGPTPreTrainedModel):
         >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw)
 
         >>> checkpoint = "EduardoPacheco/seggpt-vit-large
-        >>> model = SegGPTModel.from_pretrained(checkpoint)
-        >>> image_processor = SegGPTImageProcessor.from_checkpoint(checkpoint)
+        >>> model = SegGptModel.from_pretrained(checkpoint)
+        >>> image_processor = SegGptImageProcessor.from_checkpoint(checkpoint)
 
         >>> inputs = image_processor(image_input, image_prompt, mask_prompt)
         >>> outputs = model(**inputs)
@@ -880,7 +880,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fn = SegGPTLoss(beta=self.config.beta)
+            loss_fn = SegGptLoss(beta=self.config.beta)
             loss = loss_fn(pixel_values, prompt_pixel_values, pred_masks, labels, bool_masked_pos)
 
         if not return_dict:
@@ -896,7 +896,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
                 output = output + (loss,)
             return output
 
-        return SegGPTImageSegmentationOutput(
+        return SegGptImageSegmentationOutput(
             pred_masks=pred_masks,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -904,7 +904,7 @@ class SegGPTModel(SegGPTPreTrainedModel):
         )
 
 
-class SegGPTLoss(nn.Module):
+class SegGptLoss(nn.Module):
     def __init__(self, beta: float = 0.01):
         super().__init__()
         self.beta = beta

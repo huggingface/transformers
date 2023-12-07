@@ -241,7 +241,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
-|                        [SegGPT](model_doc/seggpt)                        |       ✅        |         ❌         |      ❌      |
+|                        [SegGpt](model_doc/seggpt)                        |       ✅        |         ❌         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |

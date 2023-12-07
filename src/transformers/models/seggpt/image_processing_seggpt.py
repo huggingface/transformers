@@ -42,9 +42,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class SegGPTImageProcessor(BaseImageProcessor):
+class SegGptImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a SegGPT image processor.
+    Constructs a SegGpt image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -389,11 +389,11 @@ class SegGPTImageProcessor(BaseImageProcessor):
 
     def post_process_masks(self, outputs, target_sizes: Optional[List[Tuple]] = None) -> List[Dict[str, TensorType]]:
         """
-        Converts the output of [`SegGPTImageSegmentationOutput`] into segmentation maps. Only supports
+        Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
         PyTorch.
 
         Args:
-            outputs ([`SegGPTImageSegmentationOutput`]):
+            outputs ([`SegGptImageSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested

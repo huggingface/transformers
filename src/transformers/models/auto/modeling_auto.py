@@ -180,7 +180,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
         ("segformer", "SegformerModel"),
-        ("seggpt", "SegGPTModel"),
+        ("seggpt", "SegGptModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
         ("speech_to_text", "Speech2TextModel"),

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SegGPT model configuration"""
+""" SegGpt model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -27,15 +27,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/SegGPT": "https://huggingface.co/BAAI/SegGPT/resolve/main/config.json",
+    "BAAI/SegGpt": "https://huggingface.co/BAAI/SegGpt/resolve/main/config.json",
 }
 
 
-class SegGPTConfig(PretrainedConfig):
+class SegGptConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SegGPTModel`]. It is used to instantiate an SegGPT
+    This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate an SegGpt
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SegGPT
+    defaults will yield a similar configuration to that of the SegGpt
     [google/seggpt-base-patch16-224](https://huggingface.co/google/seggpt-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -81,18 +81,18 @@ class SegGPTConfig(PretrainedConfig):
         encoder_output_indicies (`List[int]`, *optional*, defaults to `[5, 11, 17, 23]`):
             The indices of the encoder layers which we store as features for the decoder.
         beta (`float`, *optional*, defaults to 0.01):
-            Regularization factor for SegGPTLoss (smooth-l1 loss).
+            Regularization factor for SegGptLoss (smooth-l1 loss).
 
     Example:
 
     ```python
-    >>> from transformers import SegGPTConfig, SegGPTModel
+    >>> from transformers import SegGptConfig, SegGptModel
 
-    >>> # Initializing a SegGPT seggpt-base-patch16-224 style configuration
-    >>> configuration = SegGPTConfig()
+    >>> # Initializing a SegGpt seggpt-base-patch16-224 style configuration
+    >>> configuration = SegGptConfig()
 
     >>> # Initializing a model (with random weights) from the seggpt-base-patch16-224 style configuration
-    >>> model = SegGPTModel(configuration)
+    >>> model = SegGptModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -150,7 +150,7 @@ class SegGPTConfig(PretrainedConfig):
         self.beta = beta
 
 
-class SegGPTOnnxConfig(OnnxConfig):
+class SegGptOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

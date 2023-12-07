@@ -17,7 +17,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGPTConfig", "SegGPTOnnxConfig"]
+    "configuration_seggpt": ["SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegGptConfig", "SegGptOnnxConfig"]
 }
 
 try:
@@ -28,8 +28,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_seggpt"] = [
         "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SegGPTModel",
-        "SegGPTPreTrainedModel",
+        "SegGptModel",
+        "SegGptPreTrainedModel",
     ]
 
 try:
@@ -38,10 +38,10 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_seggpt"] = ["SegGPTImageProcessor"]
+    _import_structure["image_processing_seggpt"] = ["SegGptImageProcessor"]
 
 if TYPE_CHECKING:
-    from .configuration_seggpt import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, SegGPTConfig, SegGPTOnnxConfig
+    from .configuration_seggpt import SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, SegGptConfig, SegGptOnnxConfig
 
     try:
         if not is_torch_available():
@@ -51,8 +51,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SegGPTModel,
-            SegGPTPreTrainedModel,
+            SegGptModel,
+            SegGptPreTrainedModel,
         )
 
     try:
@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_seggpt import SegGPTImageProcessor
+        from .image_processing_seggpt import SegGptImageProcessor
 
 else:
     import sys

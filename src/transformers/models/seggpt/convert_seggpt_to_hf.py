@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert SegGPT checkpoints"""
+"""Convert SegGpt checkpoints"""
 
 
 import argparse
@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SegGPTConfig, SegGPTImageProcessor, SegGPTModel
+from transformers import SegGptConfig, SegGptImageProcessor, SegGptModel
 from transformers.utils import logging
 
 
@@ -89,13 +89,13 @@ def rename_key(dct, old, new):
 # We will verify our results on spongebob images
 def prepare_input():
     image_input_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_2.jpg"
     )
     image_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1.jpg"
     )
     mask_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1_target.png"
     )
 
     image_input = Image.open(requests.get(image_input_url, stream=True).raw)
@@ -112,10 +112,10 @@ def convert_seggpt_checkpoint(args):
     push_to_hub = args.push_to_hub
 
     # Define default GroundingDINO configuation
-    config = SegGPTConfig()
+    config = SegGptConfig()
 
     # Load original checkpoint
-    checkpoint_url = "https://huggingface.co/BAAI/SegGPT/blob/main/seggpt_vit_large.pth"
+    checkpoint_url = "https://huggingface.co/BAAI/SegGpt/blob/main/seggpt_vit_large.pth"
     original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
 
     # # Rename keys
@@ -126,14 +126,14 @@ def convert_seggpt_checkpoint(args):
         rename_key(new_state_dict, src, dest)
 
     # Load HF model
-    model = SegGPTModel(config)
+    model = SegGptModel(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
     input_img, prompt_img, prompt_mask = prepare_input()
-    image_processor = SegGPTImageProcessor()
+    image_processor = SegGptImageProcessor()
     inputs = image_processor(images=input_img, prompt_images=prompt_img, prompt_masks=prompt_mask, return_tensors="pt")
 
     expected_prompt_pixel_values = torch.tensor(
@@ -199,7 +199,7 @@ if __name__ == "__main__":
         default="seggpt-vit-large",
         type=str,
         choices=["seggpt-vit-large"],
-        help="Name of the SegGPT model you'd like to convert.",
+        help="Name of the SegGpt model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

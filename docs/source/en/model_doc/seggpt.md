@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SegGPT
+# SegGpt
 
 ## Overview
 
-The SegGPT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The SegGpt model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -33,11 +33,11 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
-## SegGPTConfig
+## SegGptConfig
 
-[[autodoc]] SegGPTConfig
+[[autodoc]] SegGptConfig
 
-## SegGPTModel
+## SegGptModel
 
-[[autodoc]] SegGPTModel
+[[autodoc]] SegGptModel
     - forward

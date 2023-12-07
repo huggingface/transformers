@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch SegGPT model. """
+""" Testing suite for the PyTorch SegGpt model. """
 
 
 import inspect
 import unittest
 
-from transformers import SegGPTConfig
+from transformers import SegGptConfig
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -36,17 +36,17 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SegGPTModel
+    from transformers import SegGptModel
     from transformers.models.seggpt.modeling_seggpt import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import SegGPTImageProcessor
+    from transformers import SegGptImageProcessor
 
 
-class SegGPTModelTester:
+class SegGptModelTester:
     def __init__(
         self,
         parent,
@@ -89,7 +89,7 @@ class SegGPTModelTester:
         self.pretrain_img_size = pretrain_img_size
         self.decoder_hidden_size = decoder_hidden_size
 
-        # in SegGPT, the seq length equals the number of patches (we don't use the [CLS] token)
+        # in SegGpt, the seq length equals the number of patches (we don't use the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches
 
@@ -109,7 +109,7 @@ class SegGPTModelTester:
         return config, pixel_values, prompt_pixel_values, prompt_masks, labels
 
     def get_config(self):
-        return SegGPTConfig(
+        return SegGptConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -127,7 +127,7 @@ class SegGPTModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, prompt_pixel_values, prompt_masks, labels):
-        model = SegGPTModel(config=config)
+        model = SegGptModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, prompt_pixel_values, prompt_masks)
@@ -153,13 +153,13 @@ class SegGPTModelTester:
 
 
 @require_torch
-class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as SegGPT does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as SegGpt does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SegGPTModel,) if is_torch_available() else ()
+    all_model_classes = (SegGptModel,) if is_torch_available() else ()
     fx_compatible = False
 
     test_pruning = False
@@ -167,17 +167,17 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
     pipeline_model_mapping = (
-        {"feature-extraction": SegGPTModel, "mask-generation": SegGPTModel} if is_torch_available() else {}
+        {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
     )
 
     def setUp(self):
-        self.model_tester = SegGPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SegGPTConfig, has_text_modality=False)
+        self.model_tester = SegGptModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SegGptConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="SegGPT does not use inputs_embeds")
+    @unittest.skip(reason="SegGpt does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -242,7 +242,7 @@ class SegGPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SegGPTModel.from_pretrained(model_name)
+            model = SegGptModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -257,22 +257,22 @@ def prepare_img():
 
 @require_torch
 @require_vision
-class SegGPTModelIntegrationTest(unittest.TestCase):
+class SegGptModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            SegGPTImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
+            SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
         )
 
     @slow
     def test_inference(self):
-        # SegGPT models have an `interpolate_pos_encoding` argument in their forward method,
+        # SegGpt models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = SegGPTModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
 
-        image_processor = SegGPTImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large", size=480)
+        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large", size=480)
         image = prepare_img()
         inputs = image_processor(images=image, prompt_images=image, prompt_masks=image, return_tensors="pt")
 
