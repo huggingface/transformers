@@ -282,6 +282,7 @@ class ChatGlmAttention(nn.Module):
     def __init__(self, config: ChatGlmConfig):
         super().__init__()
         self.config = config
+        self.partial_rotary_factor = config.partial_rotary_factor
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -304,10 +305,11 @@ class ChatGlmAttention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
 
+    # Ignore copy
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = ChatGlmRotaryEmbedding(
-                self.head_dim,
+                int(self.partial_rotary_factor * self.head_dim),
                 max_position_embeddings=self.max_position_embeddings,
                 base=self.rope_theta,
             )
@@ -316,14 +318,14 @@ class ChatGlmAttention(nn.Module):
             scaling_factor = self.config.rope_scaling["factor"]
             if scaling_type == "linear":
                 self.rotary_emb = ChatGlmLinearScalingRotaryEmbedding(
-                    self.head_dim,
+                    int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
                 )
             elif scaling_type == "dynamic":
                 self.rotary_emb = ChatGlmDynamicNTKScalingRotaryEmbedding(
-                    self.head_dim,
+                    int(self.partial_rotary_factor * self.head_dim),
                     max_position_embeddings=self.max_position_embeddings,
                     scaling_factor=scaling_factor,
                     base=self.rope_theta,
@@ -331,6 +333,7 @@ class ChatGlmAttention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
+    
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
