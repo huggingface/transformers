@@ -47,7 +47,7 @@ _CONFIG_FOR_DOC = "SegGptConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "EduardoPacheco/seggpt-vit-large"
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+_EXPECTED_OUTPUT_SHAPE = [3, 896, 448]
 
 
 SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -809,27 +809,21 @@ class SegGptModel(SegGptPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> image_input_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_2.jpg"
-        )
-        >>> image_prompt_url = (
-            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1.jpg"
-        )
-        >>> mask_prompt_url = (
-            "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1_target.png"
-        )
+        >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+        >>> image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+        >>> mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
 
         >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
         >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
         >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw)
 
-        >>> checkpoint = "EduardoPacheco/seggpt-vit-large
+        >>> checkpoint = "EduardoPacheco/seggpt-vit-large"
         >>> model = SegGptModel.from_pretrained(checkpoint)
-        >>> image_processor = SegGptImageProcessor.from_checkpoint(checkpoint)
+        >>> image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 
-        >>> inputs = image_processor(image_input, image_prompt, mask_prompt)
+        >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> list(outputs.pred_masks)
+        >>> list(outputs.pred_masks.shape)
         [1, 3, 896, 448]
         ```
         """

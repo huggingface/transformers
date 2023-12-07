@@ -89,13 +89,13 @@ def rename_key(dct, old, new):
 # We will verify our results on spongebob images
 def prepare_input():
     image_input_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_2.jpg"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
     )
     image_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1.jpg"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
     )
     mask_prompt_url = (
-        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGpt/SegGpt_inference/examples/hmbb_1_target.png"
+        "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
     )
 
     image_input = Image.open(requests.get(image_input_url, stream=True).raw)
