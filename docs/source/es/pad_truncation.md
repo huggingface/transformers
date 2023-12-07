@@ -27,19 +27,18 @@ El argumento `padding` controla el relleno. Puede ser un booleano o una cadena:
     por el modelo si no se proporciona `max_length` (`max_length=None`). El Padding se aplicará incluso si solo proporcionas una única secuencia.
   - `False` o `'do_not_pad'`: no se aplica relleno. Este es el comportamiento predeterminado.
 
-The `truncation` argument controls truncation. It can be a boolean or a string:
+El argumento `truncation` controla el truncamiento. Puede ser un booleano o una cadena:
 
-  - `True` or `'longest_first'`: truncate to a maximum length specified by the `max_length` argument or
-    the maximum length accepted by the model if no `max_length` is provided (`max_length=None`). This will
-    truncate token by token, removing a token from the longest sequence in the pair until the proper length is
-    reached.
-  - `'only_second'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the second sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `'only_first'`: truncate to a maximum length specified by the `max_length` argument or the maximum
-    length accepted by the model if no `max_length` is provided (`max_length=None`). This will only truncate
-    the first sentence of a pair if a pair of sequences (or a batch of pairs of sequences) is provided.
-  - `False` or `'do_not_truncate'`: no truncation is applied. This is the default behavior.
+  - `True` o `'longest_first'`: trunca hasta una longitud máxima especificada por el argumento `max_length` o
+    la longitud máxima aceptada por el modelo si no se proporciona `max_length` (`max_length=None`). Esto
+    truncará token por token, eliminando un token de la secuencia más larga en el par hasta alcanzar la longitud adecuada.
+  - `'only_second'`: trunca hasta una longitud máxima especificada por el argumento `max_length` o la longitud máxima
+    aceptada por el modelo si no se proporciona `max_length` (`max_length=None`). Esto solo truncará
+    la segunda oración de un par si se proporciona un par de secuencias (o un lote de pares de secuencias).
+  - `'only_first'`: trunca hasta una longitud máxima especificada por el argumento `max_length` o la longitud máxima
+    aceptada por el modelo si no se proporciona `max_length` (`max_length=None`). Esto solo truncará
+    la primera oración de un par si se proporciona un par de secuencias (o un lote de pares de secuencias).
+  - `False` o `'do_not_truncate'`: no se aplica truncamiento. Este es el comportamiento predeterminado.
 
 The `max_length` argument controls the length of the padding and truncation. It can be an integer or `None`, in which case it will default to the maximum length the model can accept. If the model has no specific maximum input length, truncation or padding to `max_length` is deactivated.
 
