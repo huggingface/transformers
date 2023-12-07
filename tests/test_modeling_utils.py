@@ -21,9 +21,11 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import uuid
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+import requests
+from huggingface_hub import HfApi, HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -751,6 +753,46 @@ class ModelUtilsTest(TestCasePlus):
 
             self.assertTrue(torch.allclose(outputs1.logits.cpu(), outputs2.logits.cpu()))
 
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_from_pretrained_disk_offload_derived_to_base_model(self):
+        derived_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        device_map = {
+            "wte": 0,
+            "wpe": 0,
+            "h.0": "cpu",
+            "h.1": "cpu",
+            "h.2": "cpu",
+            "h.3": "disk",
+            "h.4": "disk",
+            "ln_f": 0,
+        }
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inputs = torch.tensor([[1, 2, 3]]).to(0)
+            derived_model.save_pretrained(tmp_dir, use_safetensors=True)
+            base_model = AutoModel.from_pretrained(tmp_dir)
+            outputs1 = base_model.to(0)(inputs)
+
+            # with disk offload
+            offload_folder = os.path.join(tmp_dir, "offload")
+            base_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir, device_map=device_map, offload_folder=offload_folder
+            )
+            outputs2 = base_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
+            # With state dict temp offload
+            new_model_with_offload = AutoModel.from_pretrained(
+                tmp_dir,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=True,
+            )
+            outputs2 = new_model_with_offload(inputs)
+            self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -823,14 +865,8 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_safetensors
     def test_use_safetensors(self):
-        # test nice error message if no safetensor files available
-        with self.assertRaises(OSError) as env_error:
-            AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
-
-        self.assertTrue(
-            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
-            in str(env_error.exception)
-        )
+        # Should not raise anymore
+        AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
 
         # test that error if only safetensors is available
         with self.assertRaises(OSError) as env_error:
@@ -1165,6 +1201,203 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.equal(p1, p2))
 
 
+@slow
+@require_torch
+class ModelOnTheFlyConversionTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.user = "huggingface-hub-ci"
+        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+
+        if cls.token is None:
+            raise ValueError("Cannot run tests as secret isn't setup.")
+
+        cls.api = HfApi(token=cls.token)
+
+    def setUp(self) -> None:
+        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+
+    def tearDown(self) -> None:
+        self.api.delete_repo(self.repo_name)
+
+    def test_safetensors_on_the_fly_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self.token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(
+            self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self.token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    @unittest.skip("Edge case, should work once the Space is updated`")
+    def test_safetensors_on_the_fly_wrong_user_opened_pr(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        # This should have opened a PR with the user's account
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+        # We now switch the repo visibility to public
+        self.api.update_repo_visibility(self.repo_name, private=False)
+
+        # We once again call from_pretrained, which should call the bot to open a PR
+        BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertBot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_specific_revision(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Push a model on a given revision
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, revision="new-branch")
+
+        # Try to convert the model on that revision should raise
+        with self.assertRaises(EnvironmentError):
+            BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
@@ -1196,7 +1429,7 @@ class ModelPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("test-model", use_auth_token=self._token)
+        model.push_to_hub("test-model", token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1207,7 +1440,7 @@ class ModelPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, use_auth_token=self._token)
+            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, token=self._token)
 
         new_model = BertModel.from_pretrained(f"{USER}/test-model")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1236,7 +1469,7 @@ The commit description supports markdown synthax see:
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        model.push_to_hub("valid_org/test-model-org", use_auth_token=self._token)
+        model.push_to_hub("valid_org/test-model-org", token=self._token)
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1247,9 +1480,7 @@ The commit description supports markdown synthax see:
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-org"
-            )
+            model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id="valid_org/test-model-org")
 
         new_model = BertModel.from_pretrained("valid_org/test-model-org")
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
@@ -1262,7 +1493,7 @@ The commit description supports markdown synthax see:
         config = CustomConfig(hidden_size=32)
         model = CustomModel(config)
 
-        model.push_to_hub("test-dynamic-model", use_auth_token=self._token)
+        model.push_to_hub("test-dynamic-model", token=self._token)
         # checks
         self.assertDictEqual(
             config.auto_map,
@@ -1299,6 +1530,9 @@ class AttentionMaskTester(unittest.TestCase):
         mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
+
+        # make sure there are no overflows
+        assert mask_4d.min() != float("-inf")
 
         context = mask_converter.sliding_window
         if mask_converter.is_causal and context is None:
@@ -1374,6 +1608,9 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_4d(mask_converter, q_len=1, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=3, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
         self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 2), (1, 3), (2, 0)])
+
+        # check that the mask does not overflow on causal masked tokens
+        self.check_to_4d(mask_converter, q_len=7, kv_len=7, additional_mask=[(0, 0), (1, 0), (1, 1)])
 
     def test_2d_to_4d(self):
         mask_converter = AttentionMaskConverter(is_causal=False)

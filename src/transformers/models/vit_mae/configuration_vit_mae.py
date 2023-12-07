@@ -93,6 +93,7 @@ class ViTMAEConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit_mae"
 
     def __init__(

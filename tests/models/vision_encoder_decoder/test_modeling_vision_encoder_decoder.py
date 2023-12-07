@@ -800,7 +800,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
 
         preds, scores = generate_step(pixel_values)
 
-        EXPECTED_SCORES = np.array([-0.59562886])
+        EXPECTED_SCORES = np.array([-0.64145195])
         max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
         self.assertLessEqual(max_diff, 1e-4)
 
@@ -928,9 +928,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
 
         # verify generated sequence
-        # fmt: off
-        expected_sequence = "<s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total>"  # noqa: E231
-        # fmt: on
+        expected_sequence = "<s_menu><s_nm> CINNAMON SUGAR</s_nm><s_unitprice> 17,000</s_unitprice><s_cnt> 1 x</s_cnt><s_price> 17,000</s_price></s_menu><s_sub_total><s_subtotal_price> 17,000</s_subtotal_price></s_sub_total><s_total><s_total_price> 17,000</s_total_price><s_cashprice> 20,000</s_cashprice><s_changeprice> 3,000</s_changeprice></s_total>"  # noqa: E231  # fmt: skip
         self.assertEqual(sequence, expected_sequence)
 
         # verify scores

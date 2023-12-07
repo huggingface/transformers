@@ -23,6 +23,7 @@ env:
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
   setup:
@@ -399,7 +400,7 @@ jobs:
 
   run_extract_warnings:
     name: Extract warnings in CI artifacts
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
       setup,
@@ -447,7 +448,7 @@ jobs:
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
     needs: [
       setup,
@@ -493,5 +494,5 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: test_failure_tables
-          path: test_failure_tables
+          name: prev_ci_results
+          path: prev_ci_results

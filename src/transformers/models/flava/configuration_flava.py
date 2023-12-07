@@ -218,6 +218,7 @@ class FlavaTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "flava_text_model"
 
     def __init__(

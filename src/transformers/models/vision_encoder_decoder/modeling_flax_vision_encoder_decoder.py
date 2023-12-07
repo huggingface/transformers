@@ -272,6 +272,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
     another one as decoder module when created with the :meth*~transformers.FlaxAutoModel.from_pretrained* class method
     for the encoder and :meth*~transformers.FlaxAutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"

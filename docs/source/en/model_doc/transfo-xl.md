@@ -16,6 +16,35 @@ rendered properly in your Markdown viewer.
 
 # Transformer XL
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code. This model was deprecated due to security issues linked to `pickle.load`.
+
+We recommend switching to more recent models for improved security.
+
+In case you would still like to use `TransfoXL` in your experiments, we recommend using the [Hub checkpoint](https://huggingface.co/transfo-xl-wt103) with a specific revision to ensure you are downloading safe files from the Hub.
+
+You will need to set the environment variable `TRUST_REMOTE_CODE` to `True` in order to allow the
+usage of `pickle.load()`:
+
+```python
+import os
+from transformers import TransfoXLTokenizer, TransfoXLLMHeadModel
+
+os.environ["TRUST_REMOTE_CODE"] = "True"
+
+checkpoint = 'transfo-xl-wt103'
+revision = '40a186da79458c9f9de846edfaea79c412137f97'
+
+tokenizer = TransfoXLTokenizer.from_pretrained(checkpoint, revision=revision)
+model = TransfoXLLMHeadModel.from_pretrained(checkpoint, revision=revision)
+```
+
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.35.0.
+You can do so by running the following command: `pip install -U transformers==4.35.0`.
+
+</Tip>
+
 <div class="flex flex-wrap space-x-1">
 <a href="https://huggingface.co/models?filter=transfo-xl">
 <img alt="Models" src="https://img.shields.io/badge/All_model_pages-transfo--xl-blueviolet">
@@ -79,13 +108,13 @@ TransformerXL does **not** work with *torch.nn.DataParallel* due to a bug in PyT
 
 ## TransfoXL specific outputs
 
-[[autodoc]] models.transfo_xl.modeling_transfo_xl.TransfoXLModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_transfo_xl.TransfoXLLMHeadModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLModelOutput
 
-[[autodoc]] models.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
+[[autodoc]] models.deprecated.transfo_xl.modeling_tf_transfo_xl.TFTransfoXLLMHeadModelOutput
 
 <frameworkcontent>
 <pt>

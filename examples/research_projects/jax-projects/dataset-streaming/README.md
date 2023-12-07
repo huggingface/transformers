@@ -23,7 +23,7 @@ JAX/Flax allows you to trace pure functions and compile them into efficient, fus
 Models written in JAX/Flax are **immutable** and updated in a purely functional
 way which enables simple and efficient model parallelism.
 
-All of the following examples make use of [dataset streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html), therefore allowing to train models on massive datasets\
+All of the following examples make use of [dataset streaming](https://huggingface.co/docs/datasets/master/dataset_streaming), therefore allowing to train models on massive datasets\
 without ever having to download the full dataset.
 
 ## Masked language modeling
