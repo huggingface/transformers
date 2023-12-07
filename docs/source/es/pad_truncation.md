@@ -45,25 +45,25 @@ El argumento `max_length` controla la longitud del Padding y el Truncation. Pued
 La siguiente tabla resume la forma recomendada de configurar el Padding y el Truncation. Si usas pares de secuencias de entrada en alguno de los siguientes ejemplos, puedes reemplazar `truncation=True` por una `ESTRATEGIA` seleccionada en
 `['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation='longest_first'` para controlar cómo se truncan ambas secuencias en el par, como se detalló anteriormente.
 
-| Truncation                           | Padding                           | Instruction                                                                                 |
-|--------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------|
-| no truncation                        | no padding                        | `tokenizer(batch_sentences)`                                                           |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True)` or                                          |
-|                                      |                                   | `tokenizer(batch_sentences, padding='longest')`                                        |
-|                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length')`                                     |
-|                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                      |
-|                                      | padding to a multiple of a value  | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)                        |
-| truncation to max model input length | no padding                        | `tokenizer(batch_sentences, truncation=True)` or                                       |
-|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY)`                                      |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True)` or                         |
-|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY)`                        |
-|                                      | padding to max model input length | `tokenizer(batch_sentences, padding='max_length', truncation=True)` or                 |
-|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY)`                |
-|                                      | padding to specific length        | Not possible                                                                                |
-| truncation to specific length        | no padding                        | `tokenizer(batch_sentences, truncation=True, max_length=42)` or                        |
-|                                      |                                   | `tokenizer(batch_sentences, truncation=STRATEGY, max_length=42)`                       |
-|                                      | padding to max sequence in batch  | `tokenizer(batch_sentences, padding=True, truncation=True, max_length=42)` or          |
-|                                      |                                   | `tokenizer(batch_sentences, padding=True, truncation=STRATEGY, max_length=42)`         |
-|                                      | padding to max model input length | Not possible                                                                                |
-|                                      | padding to specific length        | `tokenizer(batch_sentences, padding='max_length', truncation=True, max_length=42)` or  |
-|                                      |                                   | `tokenizer(batch_sentences, padding='max_length', truncation=STRATEGY, max_length=42)` |
+| Truncation                           | Padding                             | Instrucción                                                                                 |
+|-----------------------------------------|--------------------------------------|---------------------------------------------------------------------------------------------|
+| sin truncamiento                       | sin relleno                          | `tokenizer(batch_sentences)`                                                           |
+|                                         | relleno hasta la longitud máxima del lote | `tokenizer(batch_sentences, padding=True)` o                                          |
+|                                         |                                      | `tokenizer(batch_sentences, padding='longest')`                                        |
+|                                         | relleno hasta la longitud máxima del modelo | `tokenizer(batch_sentences, padding='max_length')`                                     |
+|                                         | relleno hasta una longitud específica | `tokenizer(batch_sentences, padding='max_length', max_length=42)`                      |
+|                                         | relleno hasta un múltiplo de un valor | `tokenizer(batch_sentences, padding=True, pad_to_multiple_of=8)`                        |
+| truncamiento hasta la longitud máxima del modelo | sin relleno                          | `tokenizer(batch_sentences, truncation=True)` o                                       |
+|                                         |                                      | `tokenizer(batch_sentences, truncation=ESTRATEGIA)`                                      |
+|                                         | relleno hasta la longitud máxima del lote | `tokenizer(batch_sentences, padding=True, truncation=True)` o                         |
+|                                         |                                      | `tokenizer(batch_sentences, padding=True, truncation=ESTRATEGIA)`                        |
+|                                         | relleno hasta la longitud máxima del modelo | `tokenizer(batch_sentences, padding='max_length', truncation=True)` o                 |
+|                                         |                                      | `tokenizer(batch_sentences, padding='max_length', truncation=ESTRATEGIA)`                |
+|                                         | relleno hasta una longitud específica | No es posible                                                                                |
+| truncamiento hasta una longitud específica | sin relleno                          | `tokenizer(batch_sentences, truncation=True, max_length=42)` o                        |
+|                                         |                                      | `tokenizer(batch_sentences, truncation=ESTRATEGIA, max_length=42)`                       |
+|                                         | relleno hasta la longitud máxima del lote | `tokenizer(batch_sentences, padding=True, truncation=True, max_length=42)` o          |
+|                                         |                                      | `tokenizer(batch_sentences, padding=True, truncation=ESTRATEGIA, max_length=42)`         |
+|                                         | relleno hasta la longitud máxima del modelo | No es posible                                                                                |
+|                                         | relleno hasta una longitud específica | `tokenizer(batch_sentences, padding='max_length', truncation=True, max_length=42)` o  |
+|                                         |                                      | `tokenizer(batch_sentences, padding='max_length', truncation=ESTRATEGIA, max_length=42)` |
