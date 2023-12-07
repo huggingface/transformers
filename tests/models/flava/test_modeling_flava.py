@@ -1362,7 +1362,7 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         inputs["mlm_labels"] = inputs["input_ids"].clone()
         inputs["mlm_labels"][:, :] = -100
         inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
-        inputs["itm_labels"] = torch.tensor([1, 0]) # first pair matches, second one doesn't
+        inputs["itm_labels"] = torch.tensor([1, 0])  # first pair matches, second one doesn't
         inputs = inputs.to(torch_device)
         # forward pass
         with torch.no_grad():
