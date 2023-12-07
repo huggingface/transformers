@@ -1361,7 +1361,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         segments = outputs["segments"][0]
 
-        for i, segment in enumerate(segments):
+        for _, segment in enumerate(segments):
             assert segment["start"] <= segment["end"], "start has to be smaller equal end"
             assert any(
                 s > timestamp_begin for s in segment["tokens"][1:]

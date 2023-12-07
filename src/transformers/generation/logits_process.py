@@ -1524,9 +1524,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     def __init__(
             self, generate_config, begin_index: Optional[int] = None, _detect_timestamp_from_logprob: Optional[bool] = None 
     ):  # support for the kwargs
-        self.eos_token_id = generate_config.eos_token_id
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
+        self.eos_token_id = generate_config.eos_token_id or generate_config.bos_token_id
 
         # this variable is mostly just used for testing
         self._detect_timestamp_from_logprob = (
@@ -1539,8 +1539,8 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         self.begin_index = begin_index or (num_forced_ids + 1)
             
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
-        # TODO(Patrick, remove hardcoded setting)
-        self.max_initial_timestamp_index = 50
+        # TODO(Patrick): Make sure that official models have max_initial_timestamp_index set to 50
+        # self.max_initial_timestamp_index = 50
 
     def set_begin_index(self, begin_index):
         self.begin_index = begin_index
@@ -1551,6 +1551,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         scores[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
+        no_timestamps = False
         for k in range(input_ids.shape[0]):
             sampled_tokens = input_ids[k, self.begin_index :]
             seq = list(sampled_tokens.tolist())
@@ -1561,6 +1562,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             if last_was_timestamp:
                 if penultimate_was_timestamp:  # has to be non-timestamp
                     scores[k, self.timestamp_begin :] = -float("inf")
+                    no_timestamps = True
                 else:  # cannot be normal text tokens
                     scores[k, : self.eos_token_id] = -float("inf")
 
@@ -1591,7 +1593,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
+                import ipdb; ipdb.set_trace()
                 scores[k, : self.timestamp_begin] = -float("inf")
+
+        if torch.isinf(scores).all():
+            import ipdb; ipdb.set_trace()
 
         return scores
 
