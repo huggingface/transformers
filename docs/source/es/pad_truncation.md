@@ -40,10 +40,10 @@ El argumento `truncation` controla el truncamiento. Puede ser un booleano o una 
     la primera oración de un par si se proporciona un par de secuencias (o un lote de pares de secuencias).
   - `False` o `'do_not_truncate'`: no se aplica truncamiento. Este es el comportamiento predeterminado.
 
-The `max_length` argument controls the length of the padding and truncation. It can be an integer or `None`, in which case it will default to the maximum length the model can accept. If the model has no specific maximum input length, truncation or padding to `max_length` is deactivated.
+El argumento `max_length` controla la longitud del Padding y el Truncation. Puede ser un número entero o `None`, en cuyo caso se establecerá automáticamente en la longitud máxima que el modelo puede aceptar. Si el modelo no tiene una longitud máxima de entrada específica, se desactiva el Truncation o el Padding hasta `max_length`.
 
-The following table summarizes the recommended way to setup padding and truncation. If you use pairs of input sequences in any of the following examples, you can replace `truncation=True` by a `STRATEGY` selected in
-`['only_first', 'only_second', 'longest_first']`, i.e. `truncation='only_second'` or `truncation='longest_first'` to control how both sequences in the pair are truncated as detailed before.
+La siguiente tabla resume la forma recomendada de configurar el Padding y el Truncation. Si usas pares de secuencias de entrada en alguno de los siguientes ejemplos, puedes reemplazar `truncation=True` por una `ESTRATEGIA` seleccionada en
+`['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation='longest_first'` para controlar cómo se truncan ambas secuencias en el par, como se detalló anteriormente.
 
 | Truncation                           | Padding                           | Instruction                                                                                 |
 |--------------------------------------|-----------------------------------|---------------------------------------------------------------------------------------------|
