@@ -353,8 +353,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
