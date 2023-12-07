@@ -2189,7 +2189,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # In the non-tensor case, fall back to the pointer of the object itself
                     ptrs[id(tensor)].append(name)
 
-            # These are all the pointers of shared tensors.
+            # These are all the pointers of shared tensors, excludijng disk offloaded tensors in the meta device
             shared_ptrs = {
                 ptr: names for ptr, names in ptrs.items() if len(names) > 1 and ptr[0] != torch.device("meta")
             }
@@ -2255,7 +2255,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
-            if module_map and any(hasattr(module_map[key], "_hf_hook") for key in shard):
+            if module_map and any(
+                module_map[key]._hf_hook.offload for key in shard if hasattr(module_map[key], "_hf_hook")
+            ):
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
@@ -2263,11 +2265,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
                     module = module_map[key]
-                    root = key[: key.rfind(".")]
+                    root = key[: key.rfind(".")]  # module without .weight or .bias
                     preforward = False
                     if (
-                        module_map
-                        and hasattr(module_map[key], "_hf_hook")
+                        hasattr(module_map[key], "_hf_hook")
                         and isinstance(module_map[key]._hf_hook, AlignDevicesHook)
                         and module_map[key]._hf_hook.offload
                     ):

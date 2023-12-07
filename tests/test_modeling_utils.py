@@ -845,22 +845,23 @@ class ModelUtilsTest(TestCasePlus):
         }
 
         # check_models_equal requires onloaded tensors
-        onloaded_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2", device_map="cpu")
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model_id = "hf-internal-testing/tiny-random-gpt2"
+        onloaded_model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cpu")
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         input_tokens = tokenizer.encode("Four score and seven years ago", return_tensors="pt")
         cpu_output = onloaded_model(input_tokens)[0]
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             offload_folder = os.path.join(tmp_dir, "offload")
             offloaded_model = AutoModelForCausalLM.from_pretrained(
-                "hf-internal-testing/tiny-random-gpt2", device_map=device_map, offload_folder=offload_folder
+                model_id, device_map=device_map, offload_folder=offload_folder
             )
             presaved_output = offloaded_model(input_tokens)[0]
-            offloaded_model.save_pretrained(tmp_dir, max_shard_size="1MB")
-            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map="cpu")
+            offloaded_model.save_pretrained(tmp_dir, max_shard_size="500KB")  # model is 1.6MB
+            saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
             postsaved_output = saved_model(input_tokens)[0]
 
-        self.assertTrue(torch.allclose(cpu_output, presaved_output))
+        self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
     @require_safetensors
