@@ -2381,20 +2381,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 else:
                     seek_sequences = seek_outputs
 
-                if condition_on_prev_tokens is not None:
-                    # remove all previously passed decoder input ids except start token
-                    seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
-                else:
-                    # cut BOS token
-                    seek_sequences = seek_sequences[:, 1:]
+                # remove all previously passed decoder input ids
+                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
 
                 needs_fallback = False
 
                 if compression_ratio_threshold is not None:
                     compression_ratio = [seek_sequence.shape[0] / torch.unique(seek_sequence).shape[0] for seek_sequence in seek_sequences]
-
-                    #if seek.item() > 420000:
-                    #    import ipdb; ipdb.set_trace()
 
                     # TODO(PVP) only works for batch size = 1 currently
                     if compression_ratio[0] > compression_ratio_threshold:
@@ -2563,7 +2556,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # otherwise, ignore the unfinished segment and seek to the last timestamp
                 # here we throw away all predictions after the last predicted "end of segment"
                 # since we are cutting right in the middle of an audio
-                last_timestamp_pos = seek_sequence[last_slice].item() - timestamp_begin
+                last_timestamp_pos = seek_sequence[last_slice - 1].item() - timestamp_begin
                 segment_offset = last_timestamp_pos * input_stride
                 cut_type = "cut"
         else:
