@@ -12,7 +12,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_feat/kv_cache_class
 
 env:
   HF_HOME: /mnt/cache
