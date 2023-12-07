@@ -650,12 +650,12 @@ class ChatGlmFlashAttention2(ChatGlmAttention):
         )
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->ChatGlm
+# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with Llama->ChatGlm, self_attn->self_attention
 class ChatGlmDecoderLayer(nn.Module):
     def __init__(self, config: ChatGlmConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
+        self.self_attention = (
             ChatGlmAttention(config=config)
             if not getattr(config, "_flash_attn_2_enabled", False)
             else ChatGlmFlashAttention2(config=config)
@@ -698,7 +698,7 @@ class ChatGlmDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attention_weights, present_key_value = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -718,7 +718,7 @@ class ChatGlmDecoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights,)
+            outputs += (self_attention_weights,)
 
         if use_cache:
             outputs += (present_key_value,)
