@@ -107,7 +107,7 @@ class MistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length))
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
