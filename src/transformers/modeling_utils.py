@@ -2155,14 +2155,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if model parameters are offloaded, make module map
-            for name, module in model_to_save.named_modules():
-                if name == "":
-                    continue
-                # if hasattr(module, "_hf_hook") and module._hf_hook.offload:
-                module_state_dict = module.state_dict()
+            if any(hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload for module in model.modules):
+                for name, module in model_to_save.named_modules():
+                    if name == "":
+                        continue
+                    module_state_dict = module.state_dict()
 
-                for key in module_state_dict:
-                    module_map[name + f".{key}"] = module
+                    for key in module_state_dict:
+                        module_map[name + f".{key}"] = module
 
             state_dict = model_to_save.state_dict()
 
@@ -2255,9 +2255,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
-            if module_map and any(
-                module_map[key]._hf_hook.offload for key in shard if (key in module_map and hasattr(module_map[key], "_hf_hook"))
-            ):
+            if module_map:
                 print ('shard saving begun')
                 original_values = {}
                 # init state_dict for this shard
@@ -2286,9 +2284,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 # transform shard's state dict back to single shard
                 shard, _ = shard_checkpoint(state_dict)  # will be ({name: tensor}, None)
-                del state_dict
                 name = list(shard.keys())[0]  # will have one name
                 shard = shard[name]
+                del state_dict
+                gc.collect()
 
             if safe_serialization:
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
