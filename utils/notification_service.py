@@ -740,7 +740,7 @@ class Message:
 
             client.chat_postMessage(
                 channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-                text=f"Results for new failures",
+                text="Results for new failures",
                 blocks=blocks,
                 thread_ts=self.thread_ts["ts"],
             )
