@@ -71,7 +71,8 @@ def patchify(self, tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
 def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
     batch_size = tensor.shape[0]
     patch_size = int((tensor.shape[-1] / 3) ** 0.5)
-    assert patch_height * patch_width == tensor.shape[1]
+    if patch_height * patch_width != tensor.shape[1]:
+        raise ValueError(f"Number of patches {tensor.shape[1]} does not match patch height and width.")
 
     tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
     tensor = torch.einsum("nhwpqc->nchpwq", tensor)
@@ -153,7 +154,6 @@ class SegGPTEmbeddings(nn.Module):
         patch_pos_embed = self.position_embeddings[:, 1:]
         num_patches = patch_pos_embed.shape[1]
         pretrain_patch_size = int(math.sqrt(num_patches))
-        assert pretrain_patch_size * pretrain_patch_size == num_patches
 
         if pretrain_patch_size != height or pretrain_patch_size != width:
             patch_pos_embed = F.interpolate(
