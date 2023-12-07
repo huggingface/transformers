@@ -542,6 +542,7 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "models.chatglm": ["CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChatGlmConfig"],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -2431,6 +2432,14 @@ else:
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.chatglm"].extend(
+        [
+            "ChatGlmForCausalLM",
+            "ChatGlmForSequenceClassification",
+            "ChatGlmModel",
+            "ChatGlmPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5170,6 +5179,7 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .models.chatglm import CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ChatGlmConfig
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -6874,6 +6884,12 @@ if TYPE_CHECKING:
             LlamaForSequenceClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.chatglm import (
+            ChatGlmForCausalLM,
+            ChatGlmForSequenceClassification,
+            ChatGlmModel,
+            ChatGlmPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

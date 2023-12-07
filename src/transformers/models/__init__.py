@@ -119,6 +119,7 @@ from . import (
     levit,
     lilt,
     llama,
+    chatglm,
     longformer,
     longt5,
     luke,

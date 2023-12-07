@@ -294,6 +294,8 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/chatglm
+        title: ChatGLM
       - local: model_doc/codegen
         title: CodeGen
       - local: model_doc/code_llama
