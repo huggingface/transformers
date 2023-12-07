@@ -290,33 +290,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import TFVisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> decoder_tokenizer = AutoTokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
-        >>> model = TFVisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> img = Image.open(requests.get(url, stream=True).raw)
-        >>> pixel_values = image_processor(images=img, return_tensors="tf").pixel_values  # Batch size 1
-
-        >>> output_ids = model.generate(
-        ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
-        ... ).sequences
-
-        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
-        >>> preds = [pred.strip() for pred in preds]
-
-        >>> assert preds == ["a cat laying on top of a couch next to another cat"]
-        ```"""
+    def tf_to_pt_weight_rename(self, tf_weight):
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
         # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
         # However, the name of that extra layer is the name of the MainLayer in the base model. We make the assumption
@@ -327,18 +301,11 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         # often safetensors now, we don't know if we're going to be crossloading until we sniff the weights file.
         # Therefore, we specify tf_to_pt_weight_rename anyway, and let the super method figure out if it needs it
         # or not.
-
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        encoder_model_type = config.encoder.model_type
-
-        def tf_to_pt_weight_rename(tf_weight):
-            if "encoder" in tf_weight and "decoder" not in tf_weight:
-                return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
-            else:
-                return tf_weight
-
-        kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        encoder_model_type = self.config.encoder.model_type
+        if "encoder" in tf_weight and "decoder" not in tf_weight:
+            return (re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight),)
+        else:
+            return (tf_weight,)
 
     @classmethod
     def from_encoder_decoder_pretrained(

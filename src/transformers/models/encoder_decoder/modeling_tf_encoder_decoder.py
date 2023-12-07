@@ -291,16 +291,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import TFEncoderDecoderModel
-
-        >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
-        ```"""
+    def tf_to_pt_weight_rename(self, tf_weight):
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
         # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
         # However, the name of that extra layer is the name of the MainLayer in the base model. We make the assumption
@@ -311,18 +302,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         # often safetensors now, we don't know if we're going to be crossloading until we sniff the weights file.
         # Therefore, we specify tf_to_pt_weight_rename anyway, and let the super method figure out if it needs it
         # or not.
-
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path)
-        encoder_model_type = config.encoder.model_type
-
-        def tf_to_pt_weight_rename(tf_weight):
-            if "encoder" in tf_weight and "decoder" not in tf_weight:
-                return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
-            else:
-                return tf_weight
-
-        kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        encoder_model_type = self.config.encoder.model_type
+        if "encoder" in tf_weight and "decoder" not in tf_weight:
+            return (re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight),)
+        else:
+            return (tf_weight,)
 
     @classmethod
     def from_encoder_decoder_pretrained(

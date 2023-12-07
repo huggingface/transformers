@@ -1003,3 +1003,9 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
                 self.lm_head.build(self.config.hidden_size)
+
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "lm_head.weight":
+            return tf_weight, "model.embed_tokens.weight"
+        else:
+            return (tf_weight,)
