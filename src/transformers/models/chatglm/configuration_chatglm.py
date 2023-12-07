@@ -34,7 +34,7 @@ class ChatGlmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChatGlmModel`]. It is used to instantiate an ChatGLM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [ChatGLM-6B](https://huggingface.co/THUDM/chatglm3-6b/resolve/main/config.json).
+    defaults will yield a similar configuration to that of the [THUDM/chatglm3-6b](https://huggingface.co/THUDM/chatglm3-6b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -78,7 +78,6 @@ class ChatGlmConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
-        pretraining_tp (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
@@ -130,7 +129,6 @@ class ChatGlmConfig(PretrainedConfig):
         pad_token_id=None,
         bos_token_id=1,
         eos_token_id=2,
-        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
