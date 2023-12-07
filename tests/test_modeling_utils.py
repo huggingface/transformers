@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    require_torch_sdpa,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -1621,3 +1622,31 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_causal(mask_converter, q_len=3, kv_len=7)
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
+
+
+@require_torch_sdpa
+class TestAttentionImplementation(unittest.TestCase):
+    def test_error_no_sdpa_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="sdpa")
+
+        self.assertTrue(
+            "does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention"
+            in str(cm.exception)
+        )
+
+        _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+    def test_error_no_flash_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_wrong_attn_implementation(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
+
+        self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
