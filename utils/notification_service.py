@@ -100,7 +100,13 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 class Message:
     def __init__(
-        self, title: str, ci_title: str, model_results: Dict, additional_results: Dict, selected_warnings: List = None, prev_ci_artifacts = None,
+        self,
+        title: str,
+        ci_title: str,
+        model_results: Dict,
+        additional_results: Dict,
+        selected_warnings: List = None,
+        prev_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
@@ -422,7 +428,6 @@ class Message:
             fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
-
             # if the last run produces artifact named `prev_ci_results`
             if (
                 "prev_ci_results" in self.prev_ci_artifacts
@@ -632,7 +637,10 @@ class Message:
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}
-        if "prev_ci_results" in self.prev_ci_artifacts and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]:
+        if (
+            "prev_ci_results" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+        ):
             prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
 
         all_failure_lines = {}
@@ -640,7 +648,6 @@ class Message:
             if len(job_result["failures"]):
                 devices = sorted(job_result["failures"].keys(), reverse=True)
                 for device in devices:
-
                     failures = job_result["failures"][device]
                     prev_error_lines = {}
                     if job in prev_model_results and device in prev_model_results[job]["failures"]:
@@ -651,7 +658,6 @@ class Message:
                         url = job_result["job_link"][device]
 
                     for idx, error in enumerate(failures):
-
                         if error["line"] in prev_error_lines:
                             continue
 
@@ -676,7 +682,9 @@ class Message:
         blocks = []
         if failure_text:
             if with_header:
-                blocks.append({"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}})
+                blocks.append(
+                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                )
             else:
                 failure_text = f"*New model failures*\n\n{failure_text}"
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
@@ -734,7 +742,6 @@ class Message:
 
         blocks = self.get_new_model_failure_blocks()
         if blocks:
-
             print("Sending the following reply")
             print(json.dumps({"blocks": blocks}))
 
@@ -1128,7 +1135,14 @@ if __name__ == "__main__":
             artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
         )
 
-    message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings, prev_ci_artifacts=prev_ci_artifacts)
+    message = Message(
+        title,
+        ci_title,
+        model_results,
+        additional_results,
+        selected_warnings=selected_warnings,
+        prev_ci_artifacts=prev_ci_artifacts,
+    )
 
     # send report only if there is any failure (for push CI)
     if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
