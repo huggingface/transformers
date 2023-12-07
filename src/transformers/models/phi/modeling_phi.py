@@ -602,14 +602,16 @@ class PhiFlashAttention2(PhiAttention):
         )
 
 
+PHI_ATTENTION_CLASSES = {
+    "eager": PhiAttention,
+    "flash_attention_2": PhiFlashAttention2,
+}
+
+
 class PhiDecoderLayer(nn.Module):
     def __init__(self, config: PhiConfig):
         super().__init__()
-        self.self_attn = (
-            PhiAttention(config=config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else PhiFlashAttention2(config=config)
-        )
+        self.self_attn = PHI_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = PhiMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -794,6 +796,7 @@ class PhiModel(PhiPreTrainedModel):
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.layers = nn.ModuleList([PhiDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -856,7 +859,7 @@ class PhiModel(PhiPreTrainedModel):
         inputs_embeds = self.embed_dropout(inputs_embeds)
 
         # Attention mask.
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
