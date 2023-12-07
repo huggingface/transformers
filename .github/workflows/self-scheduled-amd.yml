@@ -366,7 +366,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, amd-gpu, '${{ matrix.machine_type }}', '${{ inputs.gpu_flavor }}']
     needs: setup
     container:
-      image: echarlaix/amd-deepspeed-test # TODO: replace with huggingface/transformers-pytorch-deepspeed-amd-gpu
+      image: huggingface/transformers-pytorch-deepspeed-amd-gpu
       options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Update clone
@@ -383,6 +383,7 @@ jobs:
       - name: ROCM-INFO
         run: |
           rocminfo  | grep "Agent" -A 14
+
       - name: Show ROCR environment
         run: |
           echo "ROCR: $ROCR_VISIBLE_DEVICES"
