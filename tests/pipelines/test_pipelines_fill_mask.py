@@ -232,8 +232,8 @@ class FillMaskPipelineTests(unittest.TestCase):
         self.assertEqual(
             [{k: x[k] for k in x if k != "sequence"} for x in simplified],
             [
-                {"score": 0.281867, "token": 6, "token_str": ","},
-                {"score": 0.095432, "token": 46686, "token_str": ":,"},
+                {"score": 0.2819, "token": 6, "token_str": ","},
+                {"score": 0.0954, "token": 46686, "token_str": ":,"},
             ],
         )
 
