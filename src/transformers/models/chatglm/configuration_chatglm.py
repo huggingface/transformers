@@ -115,10 +115,11 @@ class ChatGlmConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
+        vocab_size=65024,
         hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
+        intermediate_size=13696,
+        multi_query_attention=True,
+        num_hidden_layers=28,
         num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
@@ -135,6 +136,9 @@ class ChatGlmConfig(PretrainedConfig):
         attention_bias=False,
         attention_dropout=0.0,
         partial_rotary_factor=0.5,
+        mlp_bias=False,
+        multi_query_group_num=2,
+        kv_channels=128,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -160,6 +164,10 @@ class ChatGlmConfig(PretrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.partial_rotary_factor = partial_rotary_factor
+        self.mlp_bias = mlp_bias
+        self.multi_query_attention = multi_query_attention
+        self.multi_query_group_num = multi_query_group_num
+        self.kv_channels = kv_channels
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
