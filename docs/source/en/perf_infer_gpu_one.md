@@ -142,46 +142,9 @@ FlashAttention is more memory efficient, meaning you can train on much larger se
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/llama-2-large-seqlen-padding.png">
 </div>
 
-## BetterTransformer
+## FlashAttention and memory-efficient attention through PyTorch's scaled_dot_product_attention 
 
-<Tip warning={true}>
-
-Part of BetterTransformer features are being upstreamed in Transformers, with native `torch.nn.scaled_dot_product_attention` default support. BetterTransformer still has a wider coverage than the Transformers SDPA integration, but you can expect more and more architectures to support natively SDPA in Transformers.
-
-</Tip>
-
-
-<Tip>
-
-Check out our benchmarks with BetterTransformer and scaled dot product attention in the [Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0](https://pytorch.org/blog/out-of-the-box-acceleration/) and learn more about the fastpath execution in the [BetterTransformer](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) blog post.
-
-</Tip>
-
-BetterTransformer accelerates inference with its fastpath (native PyTorch specialized implementation of Transformer functions) execution. The two optimizations in the fastpath execution are:
-
-1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
-2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
-
-BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernels like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
-
-Before you start, make sure you have 🤗 Optimum [installed](https://huggingface.co/docs/optimum/installation).
-
-Then you can enable BetterTransformer with the [`PreTrainedModel.to_bettertransformer`] method:
-
-```python
-model = model.to_bettertransformer()
-```
-
-You can return the original Transformers model with the [`~PreTrainedModel.reverse_bettertransformer`] method. You should use this before saving your model to use the canonical Transformers modeling:
-
-```py
-model = model.reverse_bettertransformer()
-model.save_pretrained("saved_model")
-```
-
-### FlashAttention and memory-efficient attention through PyTorch's scaled_dot_product_attention 
-
-PyTorch's `torch.nn.functional.scaled_dot_product_attention` (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers, and is used by default for `torch>=2.1.1` when an implementation is available.
+PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA) can also call FlashAttention and memory-efficient attention kernels under the hood. SDPA support is currently being added natively in Transformers, and is used by default for `torch>=2.1.1` when an implementation is available.
 
 For now, Transformers supports inference and training through SDPA for the following architectures:
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
@@ -220,6 +183,49 @@ RuntimeError: No available kernel. Aborting execution.
 
 # install PyTorch nightly
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
+```
+
+<Tip>
+
+As of Transformers 4.36, attention modules using `torch.nn.functional.scaled_dot_product_attention` do not support tracing through [`torch.jit.trace`](https://pytorch.org/docs/stable/generated/torch.jit.trace.html). Please load your model with the argument `attn_implementation="eager"` in [`~PreTrainedModel.from_pretrained`] in order to export to TorchScript through `torch.jit.trace`.
+
+</Tip>
+
+## BetterTransformer
+
+<Tip warning={true}>
+
+Part of BetterTransformer features are being upstreamed in Transformers, with native `torch.nn.scaled_dot_product_attention` default support. BetterTransformer still has a wider coverage than the Transformers SDPA integration, but you can expect more and more architectures to support natively SDPA in Transformers.
+
+</Tip>
+
+
+<Tip>
+
+Check out our benchmarks with BetterTransformer and scaled dot product attention in the [Out of the box acceleration and memory savings of 🤗 decoder models with PyTorch 2.0](https://pytorch.org/blog/out-of-the-box-acceleration/) and learn more about the fastpath execution in the [BetterTransformer](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) blog post.
+
+</Tip>
+
+BetterTransformer accelerates inference with its fastpath (native PyTorch specialized implementation of Transformer functions) execution. The two optimizations in the fastpath execution are:
+
+1. fusion, which combines multiple sequential operations into a single "kernel" to reduce the number of computation steps
+2. skipping the inherent sparsity of padding tokens to avoid unnecessary computation with nested tensors
+
+BetterTransformer also converts all attention operations to use the more memory-efficient [scaled dot product attention (SDPA)](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention), and it calls optimized kernels like [FlashAttention](https://huggingface.co/papers/2205.14135) under the hood.
+
+Before you start, make sure you have 🤗 Optimum [installed](https://huggingface.co/docs/optimum/installation).
+
+Then you can enable BetterTransformer with the [`PreTrainedModel.to_bettertransformer`] method:
+
+```python
+model = model.to_bettertransformer()
+```
+
+You can return the original Transformers model with the [`~PreTrainedModel.reverse_bettertransformer`] method. You should use this before saving your model to use the canonical Transformers modeling:
+
+```py
+model = model.reverse_bettertransformer()
+model.save_pretrained("saved_model")
 ```
 
 ## bitsandbytes
