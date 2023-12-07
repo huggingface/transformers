@@ -40,10 +40,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        CodeLlamaTokenizer,
         ChatGlmForCausalLM,
         ChatGlmForSequenceClassification,
         ChatGlmModel,
+        CodeLlamaTokenizer,
         LlamaTokenizer,
     )
 
@@ -276,7 +276,9 @@ class ChatGlmModelTester:
 
 @require_torch
 class ChatGlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (ChatGlmModel, ChatGlmForCausalLM, ChatGlmForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (ChatGlmModel, ChatGlmForCausalLM, ChatGlmForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (ChatGlmForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False

@@ -47,7 +47,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_chatglm import ChatGlmForCausalLM, ChatGlmForSequenceClassification, ChatGlmModel, ChatGlmPreTrainedModel
+        from .modeling_chatglm import (
+            ChatGlmForCausalLM,
+            ChatGlmForSequenceClassification,
+            ChatGlmModel,
+            ChatGlmPreTrainedModel,
+        )
 
 else:
     import sys

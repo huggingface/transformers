@@ -247,6 +247,7 @@ _import_structure = {
         "CanineConfig",
         "CanineTokenizer",
     ],
+    "models.chatglm": ["CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChatGlmConfig"],
     "models.chinese_clip": [
         "CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ChineseCLIPConfig",
@@ -542,7 +543,6 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.chatglm": ["CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ChatGlmConfig"],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -1698,6 +1698,14 @@ else:
             "load_tf_weights_in_canine",
         ]
     )
+    _import_structure["models.chatglm"].extend(
+        [
+            "ChatGlmForCausalLM",
+            "ChatGlmForSequenceClassification",
+            "ChatGlmModel",
+            "ChatGlmPreTrainedModel",
+        ]
+    )
     _import_structure["models.chinese_clip"].extend(
         [
             "CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2432,14 +2440,6 @@ else:
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
-        ]
-    )
-    _import_structure["models.chatglm"].extend(
-        [
-            "ChatGlmForCausalLM",
-            "ChatGlmForSequenceClassification",
-            "ChatGlmModel",
-            "ChatGlmPreTrainedModel",
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -4894,6 +4894,7 @@ if TYPE_CHECKING:
         CanineConfig,
         CanineTokenizer,
     )
+    from .models.chatglm import CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ChatGlmConfig
     from .models.chinese_clip import (
         CHINESE_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         ChineseCLIPConfig,
@@ -5179,7 +5180,6 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
-    from .models.chatglm import CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, ChatGlmConfig
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -6282,6 +6282,12 @@ if TYPE_CHECKING:
             CaninePreTrainedModel,
             load_tf_weights_in_canine,
         )
+        from .models.chatglm import (
+            ChatGlmForCausalLM,
+            ChatGlmForSequenceClassification,
+            ChatGlmModel,
+            ChatGlmPreTrainedModel,
+        )
         from .models.chinese_clip import (
             CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             ChineseCLIPModel,
@@ -6884,12 +6890,6 @@ if TYPE_CHECKING:
             LlamaForSequenceClassification,
             LlamaModel,
             LlamaPreTrainedModel,
-        )
-        from .models.chatglm import (
-            ChatGlmForCausalLM,
-            ChatGlmForSequenceClassification,
-            ChatGlmModel,
-            ChatGlmPreTrainedModel,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

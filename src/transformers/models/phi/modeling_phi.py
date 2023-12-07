@@ -247,6 +247,7 @@ class PhiAttention(nn.Module):
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
 
+    # Copied from transformers.models.chatglm.modeling_chatglm.ChatGlmAttention._init_rope with ChatGlm->Phi
     def _init_rope(self):
         if self.config.rope_scaling is None:
             self.rotary_emb = PhiRotaryEmbedding(

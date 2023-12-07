@@ -1787,6 +1787,34 @@ def load_tf_weights_in_canine(*args, **kwargs):
     requires_backends(load_tf_weights_in_canine, ["torch"])
 
 
+class ChatGlmForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ChatGlmForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ChatGlmModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ChatGlmPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 CHINESE_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

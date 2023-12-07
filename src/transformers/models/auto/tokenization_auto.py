@@ -99,6 +99,13 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
+            (
+                "chatglm",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("chinese_clip", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "clap",
@@ -198,13 +205,6 @@ else:
             ("lilt", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "llama",
-                (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "chatglm",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,

@@ -29,6 +29,7 @@ CHATGLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "": "https://huggingface.co//resolve/main/config.json",
 }
 
+
 class ChatGlmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChatGlmModel`]. It is used to instantiate an ChatGLM
@@ -77,6 +78,7 @@ class ChatGlmConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             End of stream token id.
+        pretraining_tp (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
