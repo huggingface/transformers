@@ -139,6 +139,7 @@ class FlaxMistralRMSNorm(nn.Module):
         hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
         return weight * hidden_states
 
+
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->Mistral
 class FlaxMistralRotaryEmbedding(nn.Module):
     config: MistralConfig
@@ -159,6 +160,7 @@ class FlaxMistralRotaryEmbedding(nn.Module):
         query = jnp.asarray(query, dtype=self.dtype)
 
         return key, query
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Mistral
 class FlaxMistralMLP(nn.Module):
@@ -183,9 +185,11 @@ class FlaxMistralMLP(nn.Module):
         hidden_states = self.down_proj(up_proj_states * gate_states)
         return hidden_states
 
+
 # Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos, dim):
@@ -195,6 +199,7 @@ def create_sinusoidal_positions(num_pos, dim):
     emb = np.concatenate((freqs, freqs), axis=-1)
     out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
     return jnp.array(out[:, :, :num_pos])
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.rotate_half
 def rotate_half(tensor):
