@@ -1334,7 +1334,7 @@ def create_new_model_like(
         model_type (`str`): The model type to duplicate (like "bert" or "gpt2")
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         add_copied_from (`bool`, *optional*, defaults to `True`):
-            Whether or not to add "Copied from" statements to all classes in the new model modeling files.
+            Whether or not to add "Copied from" statements to all classes in the new model modeling files and testing files.
         frameworks (`List[str]`, *optional*):
             If passed, will limit the duplicate to the frameworks specified.
         old_checkpoint (`str`, *optional*):
@@ -1442,7 +1442,7 @@ def create_new_model_like(
             old_model_patterns,
             new_model_patterns,
             dest_file=dest_file,
-            add_copied_from=False,
+            add_copied_from=add_copied_from and "modeling" in new_module_name,
             attrs_to_remove=["pipeline_model_mapping", "is_pipeline_test_to_skip"],
         )
         disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
