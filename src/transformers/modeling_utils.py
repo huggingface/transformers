@@ -2256,10 +2256,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map:
-                print ('shard saving begun')
+                print ('shard saving begun: ', shard_file)
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
+                print (state_dict)
                 # extract data for shard state dict
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
