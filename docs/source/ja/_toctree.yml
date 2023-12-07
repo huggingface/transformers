@@ -288,6 +288,10 @@
         title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -297,6 +301,8 @@
         title: BiT
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -327,6 +333,9 @@
         title: Data2Vec
       title: マルチモーダルモデル
     - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
       sections:
       - local: model_doc/autoformer
         title: Autoformer
