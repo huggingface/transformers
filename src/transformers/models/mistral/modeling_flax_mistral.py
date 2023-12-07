@@ -39,8 +39,8 @@ from .configuration_mistral import MistralConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MistralConfig"
-_CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
-_REAL_CHECKPOINT_FOR_DOC = "ksmcg/Mistral-tiny"
+_REAL_CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
+_CHECKPOINT_FOR_DOC = "ksmcg/Mistral-tiny"
 
 MISTRAL_START_DOCSTRING = r"""
 
@@ -139,7 +139,7 @@ class FlaxMistralRMSNorm(nn.Module):
         hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
         return weight * hidden_states
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->Mistral
 class FlaxMistralRotaryEmbedding(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
@@ -160,28 +160,34 @@ class FlaxMistralRotaryEmbedding(nn.Module):
 
         return key, query
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaMLP with Llama->Mistral
 class FlaxMistralMLP(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.hidden_size = self.config.hidden_size
-        self.intermediate_size = self.config.intermediate_size
-        self.gate_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
-        self.up_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
-        self.down_proj = nn.Dense(self.hidden_size, use_bias=False, dtype=self.dtype)
-        self.act_fn = ACT2FN[self.config.hidden_act]
+        embed_dim = self.config.hidden_size
+        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * embed_dim
 
-    def __call__(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
+        kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
+        self.act = ACT2FN[self.config.hidden_act]
 
+        self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
+        self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
+        self.up_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype, kernel_init=kernel_init)
 
+    def __call__(self, hidden_states):
+        up_proj_states = self.up_proj(hidden_states)
+        gate_states = self.act(self.gate_proj(hidden_states))
+
+        hidden_states = self.down_proj(up_proj_states * gate_states)
+        return hidden_states
+
+# Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos, dim):
     inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
     freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
@@ -190,7 +196,7 @@ def create_sinusoidal_positions(num_pos, dim):
     out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
     return jnp.array(out[:, :, :num_pos])
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.rotate_half
 def rotate_half(tensor):
     """Rotates half the hidden dims of the input."""
     rotate_half_tensor = jnp.concatenate(
@@ -687,10 +693,10 @@ class FlaxMistralModel(FlaxMistralPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMistralModel,
-    _REAL_CHECKPOINT_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPast,
     _CONFIG_FOR_DOC,
-    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
+    real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
 
@@ -790,10 +796,10 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMistralForCausalLM,
-    _REAL_CHECKPOINT_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
-    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
+    real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
 
 
@@ -874,8 +880,8 @@ class FlaxMistralForSequenceClassification(FlaxMistralPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxMistralForSequenceClassification,
-    _REAL_CHECKPOINT_FOR_DOC,
+    _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
-    # TODO: Implement real ckpt as in https://github.com/huggingface/transformers/pull/24587
+    real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
