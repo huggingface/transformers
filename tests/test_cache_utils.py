@@ -182,7 +182,7 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs = tokenizer(["Vaswani et al. (2017) introduced the Transformers"], return_tensors="pt").to(model.device)
 
         # Set up the SinkCache. Using a small window length to contain computational complexity. If this example is run
-        # without a DynamicCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
+        # without a SinkCache, the last few tokens are gibberish (ends in "of the of the of a of a of")
         cache = SinkCache(window_length=508, num_sink_tokens=4)
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=3000, past_key_values=cache)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
