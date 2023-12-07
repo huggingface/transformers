@@ -23,7 +23,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss, LayerNorm
+from torch.nn import CrossEntropyLoss, LayerNorm, MSELoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
