@@ -24,6 +24,7 @@ import pytest
 from transformers import AutoTokenizer, MistralConfig, is_torch_available
 from transformers.testing_utils import (
     backend_empty_cache,
+    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -33,7 +34,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -106,7 +107,7 @@ class MistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -491,6 +492,35 @@ class MistralIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @require_bitsandbytes
+    @slow
+    @require_flash_attn
+    def test_model_7b_long_prompt(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
+            load_in_4bit=True,
+            use_flash_attention_2=True,
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
         del model
         backend_empty_cache(torch_device)
         gc.collect()

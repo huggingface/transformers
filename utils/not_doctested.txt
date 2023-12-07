@@ -146,11 +146,13 @@ docs/source/en/model_doc/levit.md
 docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
 docs/source/en/model_doc/llama2.md
+docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
 docs/source/en/model_doc/lxmert.md
 docs/source/en/model_doc/m2m_100.md
+docs/source/en/model_doc/madlad-400.md
 docs/source/en/model_doc/marian.md
 docs/source/en/model_doc/mask2former.md
 docs/source/en/model_doc/maskformer.md
@@ -293,7 +295,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
-docs/source/en/tasks/idefics.md  # causes other tests to fail
+docs/source/en/tasks/idefics.md
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -431,7 +433,7 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
-src/transformers/models/blip_2/modeling_blip_2.py  # causes other tests to fail
+src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
@@ -633,6 +635,8 @@ src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
+src/transformers/models/llava/configuration_llava.py
+src/transformers/models/llava/modeling_llava.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
@@ -775,6 +779,7 @@ src/transformers/models/sam/modeling_sam.py
 src/transformers/models/sam/modeling_tf_sam.py
 src/transformers/models/sam/processing_sam.py
 src/transformers/models/seamless_m4t/convert_fairseq2_to_hf.py
+src/transformers/models/seamless_m4t_v2/convert_fairseq2_to_hf.py
 src/transformers/models/segformer/configuration_segformer.py
 src/transformers/models/segformer/convert_segformer_original_to_pytorch.py
 src/transformers/models/sew/convert_sew_original_pytorch_checkpoint_to_pytorch.py
