@@ -63,7 +63,7 @@ hello_world()
 
 ## Resources
 
-- [Causal language modeling task guide](../tasks/language_modeling)
+- [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 
 ## CodeGenConfig
 
