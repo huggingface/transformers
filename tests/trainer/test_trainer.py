@@ -101,6 +101,7 @@ if is_torch_available():
 
     import transformers.optimization
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
         GlueDataset,
@@ -1794,6 +1795,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
+
+    @slow
+    def test_trainer_eval_multiple(self):
+        MODEL_ID = "gpt2"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+        dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in dataset.examples:
+            example["labels"] = example["input_ids"]
+        training_args = TrainingArguments(
+            output_dir="./examples",
+            use_cpu=True,
+            per_device_eval_batch_size=1,
+        )
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            eval_dataset={
+                "data1": dataset,
+                "data2": dataset,
+            },
+        )
+        result = trainer.evaluate()
+        self.assertIn("eval_data1_loss", result)
+        self.assertIn("eval_data2_loss", result)
 
     @slow
     def test_trainer_eval_lm(self):
