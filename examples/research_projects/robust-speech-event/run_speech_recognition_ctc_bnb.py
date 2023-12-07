@@ -418,7 +418,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -443,7 +443,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
         if data_args.max_eval_samples is not None:
@@ -481,7 +481,7 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -532,11 +532,11 @@ def main():
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # adapt config
@@ -564,7 +564,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
     )
 
     # freeze encoder

@@ -56,7 +56,7 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 RUN python3 -m pip install --no-cache-dir einops
 
 # Add autoawq for quantization testing
-RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.6/autoawq-0.1.6+cu118-cp38-cp38-linux_x86_64.whl
+RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.7/autoawq-0.1.7+cu118-cp38-cp38-linux_x86_64.whl
 
 # For bettertransformer + gptq 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
@@ -66,6 +66,9 @@ RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
 RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+
+# For `nougat` tokenizer
+RUN python3 -m pip install --no-cache-dir python-Levenshtein
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

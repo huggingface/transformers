@@ -2537,5 +2537,5 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         if not return_dict:
             output = tuple(v for v in output.values() if v is not None)
             if loss is not None:
-                output = ((loss)) + output
+                output = (loss) + output
         return output

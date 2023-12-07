@@ -77,4 +77,6 @@
     title: Filosofía
   - local: bertology
     title: BERTología
+  - local: perplexity
+    title: Perplejidad de los modelos de longitud fija
   title: Guías conceptuales

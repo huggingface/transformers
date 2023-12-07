@@ -924,3 +924,9 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
+
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "lm_head.weight":
+            return tf_weight, "model.embed_tokens.weight"
+        else:
+            return (tf_weight,)

@@ -39,6 +39,7 @@ from transformers import (
     IntervalStrategy,
     PretrainedConfig,
     TrainingArguments,
+    get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
     logging,
 )
@@ -643,6 +644,33 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
+    def test_lr_scheduler_kwargs(self):
+        # test scheduler kwargs passed via TrainingArguments
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"power": 5.0, "lr_end": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="polynomial",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Checking that the correct args were passed
+        sched1 = trainer.lr_scheduler
+        sched2 = get_polynomial_decay_schedule_with_warmup(
+            trainer.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_steps, **extra_kwargs
+        )
+        self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
+        self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
+
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
@@ -672,7 +700,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             def log(self, logs):
                 # the LR is computed after metrics and does not exist for the first epoch
                 if hasattr(self.lr_scheduler, "_last_lr"):
-                    logs["learning_rate"] = self.lr_scheduler._last_lr
+                    logs["learning_rate"] = self.lr_scheduler._last_lr[0]
                 super().log(logs)
 
         train_dataset = RegressionDataset(length=64)
@@ -702,14 +730,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             if loss > best_loss:
                 bad_epochs += 1
                 if bad_epochs > patience:
-                    self.assertLess(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
+                    self.assertLess(logs[i + 1]["learning_rate"], log["learning_rate"])
                     just_decreased = True
                     bad_epochs = 0
             else:
                 best_loss = loss
                 bad_epochs = 0
             if not just_decreased:
-                self.assertEqual(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
+                self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
 
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
@@ -2201,9 +2229,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
         trainer.create_optimizer_and_scheduler(10)
-        # fmt: off
-        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']
-        # fmt: on
+        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']  # fmt: skip
         wd_params = [p for n, p in model.named_parameters() if n in wd_names]
         no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)

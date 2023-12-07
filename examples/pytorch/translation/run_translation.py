@@ -217,7 +217,7 @@ class DataTrainingArguments:
         },
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
@@ -374,8 +374,12 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
+        if extension == "jsonl":
+            builder_name = "json"  # the "json" builder reads both .json and .jsonl files
+        else:
+            builder_name = extension  # e.g. "parquet"
         raw_datasets = load_dataset(
-            extension,
+            builder_name,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
