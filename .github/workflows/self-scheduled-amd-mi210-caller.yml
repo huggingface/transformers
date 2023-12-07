@@ -7,7 +7,7 @@ on:
     types: [completed]
   push:
     branches:
-      - run_amd_scheduled_ci_caller*
+      - run_run_amd_scheduled_ci_caller_deepspeed_test
 
 jobs:
   run_amd_ci:
