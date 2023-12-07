@@ -221,7 +221,7 @@ class FillMaskPipelineTests(unittest.TestCase):
             "My name is <mask>" + dummy_str,
             tokenizer_kwargs={"truncation": True},
         )
-        simplified = nested_simplify(outputs, decimals=6)
+        simplified = nested_simplify(outputs, decimals=4)
         self.assertEqual(
             [{"sequence": x["sequence"][:100]} for x in simplified],
             [
