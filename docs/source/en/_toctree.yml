@@ -703,6 +703,8 @@
         title: LayoutXLM
       - local: model_doc/lilt
         title: LiLT
+      - local: model_doc/llava
+        title: Llava
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
@@ -757,6 +759,8 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
       - local: model_doc/patchtst
         title: PatchTST
       - local: model_doc/time_series_transformer
