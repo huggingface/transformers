@@ -2155,7 +2155,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if model parameters are offloaded, make module map
-            if hasattr(model_to_save, "_hf_hook") and isinstance(model_to_save._hf_hook, AlignDevicesHook):
+            if any(module._hf_hook.offload for module in model.modules() if hasattr(module, "_hf_hook")):
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -2258,6 +2258,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if module_map and any(
                 module_map[key]._hf_hook.offload for key in shard if hasattr(module_map[key], "_hf_hook")
             ):
+                print ('shard saving begun')
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
@@ -2285,6 +2286,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 # transform shard's state dict back to single shard
                 shard, _ = shard_checkpoint(state_dict)  # will be ({name: tensor}, None)
+                del state_dict
                 name = list(shard.keys())[0]  # will have one name
                 shard = shard[name]
 
