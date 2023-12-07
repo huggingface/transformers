@@ -1593,7 +1593,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             timestamp_logprob = logprobs[k, self.timestamp_begin :].logsumexp(dim=-1)
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
-                import ipdb; ipdb.set_trace()
                 scores[k, : self.timestamp_begin] = -float("inf")
 
         if torch.isinf(scores).all():

@@ -2379,7 +2379,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
 
                 needs_fallback = False
-
                 if compression_ratio_threshold is not None:
                     compression_ratio = [seek_sequence.shape[0] / torch.unique(seek_sequence).shape[0] for seek_sequence in seek_sequences]
 
@@ -2488,7 +2487,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         tokens = tokens[:, -scores.shape[1]:]
 
         def get_log_prob(logprob, token):
-            token_logprob = logprob.gather(-1, token) * (token[:, -1] != eos_token_id)
+            token_logprob = logprob.gather(-1, token)[:, 0] * (token[:, -1] != eos_token_id)
             return token_logprob
 
         sum_logprobs = sum(get_log_prob(logprobs[:, i], tokens[:, i: i+1]) for i in range(logprobs.shape[1]))
