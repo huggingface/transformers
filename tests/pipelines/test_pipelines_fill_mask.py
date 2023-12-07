@@ -223,7 +223,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         )
         simplified = nested_simplify(outputs, decimals=6)
         self.assertEqual(
-            [{"sequence", x["sequence"][:100]} for x in simplified],
+            [{"sequence": x["sequence"][:100]} for x in simplified],
             [
                 {"sequence": f"My name is,{dummy_str}"[:100]},
                 {"sequence": f"My name is:,{dummy_str}"[:100]},
