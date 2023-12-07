@@ -2256,7 +2256,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map and any(
-                module_map[key]._hf_hook.offload for key in shard if hasattr(module_map[key], "_hf_hook")
+                module_map[key]._hf_hook.offload for key in shard if (key in module_map and hasattr(module_map[key], "_hf_hook"))
             ):
                 print ('shard saving begun')
                 original_values = {}
