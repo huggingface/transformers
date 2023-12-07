@@ -824,16 +824,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
         hidden_states = inputs_embeds + embed_pos
@@ -1032,16 +1024,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
             positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
 
@@ -1262,9 +1246,11 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         if self.built:
             return
         self.built = True
-        if getattr(self, "shared", None) is not None:
-            with tf.name_scope(self.shared.name):
-                self.shared.build(None)
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + '/' + self.shared.name + '/'):
+            self.shared.build(None)
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
