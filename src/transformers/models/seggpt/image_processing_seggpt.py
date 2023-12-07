@@ -273,9 +273,9 @@ class SegGptImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: ImageInput,
-        prompt_images: ImageInput,
-        prompt_masks: ImageInput,
+        images: Optional[ImageInput] = None,
+        prompt_images: Optional[ImageInput] = None,
+        prompt_masks: Optional[ImageInput] = None,
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -339,52 +339,65 @@ class SegGptImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = self._preprocess_step(
-            images,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+        if all(v is None for v in [images, prompt_images, prompt_masks]):
+            raise ValueError("At least one of images, prompt_images, prompt_masks must be specified.")
 
-        prompt_images = self._preprocess_step(
-            prompt_images,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+        data = {}
 
-        prompt_masks = self._preprocess_step(
-            prompt_masks,
-            do_resize=do_resize,
-            size=size,
-            resample=PILImageResampling.NEAREST,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format,
-            input_data_format=input_data_format,
-            **kwargs,
-        )
+        if images is not None:
+            images = self._preprocess_step(
+                images,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
 
-        data = {"pixel_values": images, "prompt_pixel_values": prompt_images, "prompt_masks": prompt_masks}
+            data["pixel_values"] = images
+
+        if prompt_images is not None:
+            prompt_images = self._preprocess_step(
+                prompt_images,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
+
+            data["prompt_pixel_values"] = prompt_images
+
+        if prompt_masks is not None:
+            prompt_masks = self._preprocess_step(
+                prompt_masks,
+                do_resize=do_resize,
+                size=size,
+                resample=PILImageResampling.NEAREST,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
+
+            data["prompt_masks"] = prompt_masks
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_masks(
