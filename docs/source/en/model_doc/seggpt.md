@@ -18,24 +18,29 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The SegGpt model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The SegGpt model was proposed in [SegGPT: Segmenting Everything In Context](https://arxiv.org/abs/2304.03284) by Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang.
+SegGpt is an in-context generalist segmentation model meaning that given an input image, a prompt image and its mask one can obtain related masks in the input image. The model achieves remarkable one-shot results with 56.1 mIoU on COCO-20 and 85.6 mIoU on FSS-1000
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We present SegGPT, a generalist model for segmenting everything in context. We unify various segmentation tasks into a generalist in-context learning framework that accommodates different kinds of segmentation data by transforming them into the same format of images. The training of SegGPT is formulated as an in-context coloring problem with random color mapping for each data sample. The objective is to accomplish diverse tasks according to the context, rather than relying on specific colors. After training, SegGPT can perform arbitrary segmentation tasks in images or videos via in-context inference, such as object instance, stuff, part, contour, and text. SegGPT is evaluated on a broad range of tasks, including few-shot semantic segmentation, video object segmentation, semantic segmentation, and panoptic segmentation. Our results show strong capabilities in segmenting in-domain and out-of*
 
 Tips:
+- One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
+The original code can be found [here]([<INSERT LINK TO GITHUB REPO HERE>](https://github.com/baaivision/Painter/tree/main)).
 
 
 ## SegGptConfig
 
 [[autodoc]] SegGptConfig
+
+## SegGptImageProcessor
+
+[[autodoc]] SegGptImageProcessor
+    - preprocess
+    - post_process_masks
 
 ## SegGptModel
 

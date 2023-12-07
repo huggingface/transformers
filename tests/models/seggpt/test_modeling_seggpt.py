@@ -265,6 +265,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
         )
 
+    @slow
     def test_inference(self):
         # SegGpt models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
