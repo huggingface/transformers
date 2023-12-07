@@ -285,6 +285,7 @@ class FalconAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -446,7 +447,7 @@ class FalconAttention(nn.Module):
             present = None
 
         if alibi is None:
-            if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
+            if self._use_sdpa and not output_attentions:
                 attn_output = F.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
@@ -477,8 +478,8 @@ class FalconAttention(nn.Module):
                 return attn_output, present
 
         else:
-            if hasattr(F, "scaled_dot_product_attention") and not output_attentions and head_mask is None:
-                attn_output = torch.nn.functional.scaled_dot_product_attention(
+            if self._use_sdpa and not output_attentions and head_mask is None:
+                attn_output = F.scaled_dot_product_attention(
                     query_layer,
                     key_layer,
                     value_layer,
@@ -985,6 +986,7 @@ class FalconModel(FalconPreTrainedModel):
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -1079,7 +1081,7 @@ class FalconModel(FalconPreTrainedModel):
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif hasattr(F, "scaled_dot_product_attention") and not output_attentions:
+        elif self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
             if alibi is None:
