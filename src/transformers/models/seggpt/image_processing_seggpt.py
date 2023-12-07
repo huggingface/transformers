@@ -387,7 +387,9 @@ class SegGptImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images, "prompt_pixel_values": prompt_images, "prompt_masks": prompt_masks}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def post_process_masks(self, outputs, target_sizes: Optional[List[Tuple]] = None) -> List[Dict[str, TensorType]]:
+    def post_process_masks(
+        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+    ) -> List[Dict[str, TensorType]]:
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
         PyTorch.
@@ -396,7 +398,7 @@ class SegGptImageProcessor(BaseImageProcessor):
             outputs ([`SegGptImageSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple[int, int]]`, *optional*):
-                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                List of length (batch_size), where each list item (`Tuple[int, int]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
             `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
@@ -418,7 +420,7 @@ class SegGptImageProcessor(BaseImageProcessor):
                     mask.unsqueeze(0),
                     size=target_sizes[idx],
                     mode="nearest",
-                )[0]
+                )
 
             results.append({"mask": mask})
 

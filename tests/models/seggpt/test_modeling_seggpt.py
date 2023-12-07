@@ -18,6 +18,8 @@
 import inspect
 import unittest
 
+from datasets import load_dataset
+
 from transformers import SegGptConfig
 from transformers.testing_utils import (
     require_torch,
@@ -41,8 +43,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import SegGptImageProcessor
 
 
@@ -248,8 +248,9 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").convert("RGB")
-    return image
+    images = load_dataset("EduardoPacheco/seggpt-example-data")["train"]["image"]
+    images = [image.convert("RGB") for image in images]
+    return images
 
 
 "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -264,7 +265,6 @@ class SegGptModelIntegrationTest(unittest.TestCase):
             SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large") if is_vision_available() else None
         )
 
-    @slow
     def test_inference(self):
         # SegGpt models have an `interpolate_pos_encoding` argument in their forward method,
         # allowing to interpolate the pre-trained position embeddings in order to use
@@ -272,40 +272,42 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
 
-        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large", size=480)
-        image = prepare_img()
-        inputs = image_processor(images=image, prompt_images=image, prompt_masks=image, return_tensors="pt")
+        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large")
+        prompt_image, prompt_mask, input_image = prepare_img()
+        inputs = image_processor(
+            images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
+        )
 
         # Verify pixel values
-        expected_pixel_values = torch.tensor(
+        expected_prompt_pixel_values = torch.tensor(
             [
-                [[0.2967, 0.3652, 0.3138], [0.2624, 0.2796, 0.4679]],
-                [[-1.5980, -1.6155, -1.7031], [-1.6155, -1.6331, -1.5630]],
-                [[-0.7761, -0.5844, -0.6367], [-0.8633, -0.9678, -0.5321]],
+                [[-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965], [-0.6965, -0.6965, -0.6965]],
+                [[1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583], [1.6583, 1.6583, 1.6583]],
+                [[2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088], [2.3088, 2.3088, 2.3088]],
             ]
         )
 
-        expected_prompt_pixel_values = torch.tensor(
+        expected_pixel_values = torch.tensor(
             [
-                [[0.2967, 0.3652, 0.3138], [0.2624, 0.2796, 0.4679]],
-                [[-1.5980, -1.6155, -1.7031], [-1.6155, -1.6331, -1.5630]],
-                [[-0.7761, -0.5844, -0.6367], [-0.8633, -0.9678, -0.5321]],
+                [[1.6324, 1.6153, 1.5810], [1.6153, 1.5982, 1.5810], [1.5810, 1.5639, 1.5639]],
+                [[1.2731, 1.2556, 1.2206], [1.2556, 1.2381, 1.2031], [1.2206, 1.2031, 1.1681]],
+                [[1.6465, 1.6465, 1.6465], [1.6465, 1.6465, 1.6465], [1.6291, 1.6291, 1.6291]],
             ]
         )
 
         expected_prompt_masks = torch.tensor(
             [
-                [[0.2796, 0.3823, 0.3138], [0.2453, 0.2624, 0.4851]],
-                [[-1.5980, -1.6155, -1.7031], [-1.6506, -1.6856, -1.5280]],
-                [[-0.8284, -0.5321, -0.6715], [-0.8110, -0.9678, -0.4798]],
+                [[-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179], [-2.1179, -2.1179, -2.1179]],
+                [[-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357], [-2.0357, -2.0357, -2.0357]],
+                [[-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044], [-1.8044, -1.8044, -1.8044]],
             ]
         )
 
-        self.assertTrue(torch.allclose(inputs.pixel_values[0, :, :2, :3], expected_pixel_values, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, atol=1e-4))
         self.assertTrue(
-            torch.allclose(inputs.prompt_pixel_values[0, :, :2, :3], expected_prompt_pixel_values, atol=1e-4)
+            torch.allclose(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, atol=1e-4)
         )
-        self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :2, :3], expected_prompt_masks, atol=1e-4))
+        self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4))
 
         inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         # forward pass
@@ -318,22 +320,18 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[0.2796, 0.3823, 0.3138], [0.2453, 0.2624, 0.4851]],
-                [[-1.5980, -1.6155, -1.7031], [-1.6506, -1.6856, -1.5280]],
-                [[-0.8284, -0.5321, -0.6715], [-0.8110, -0.9678, -0.4798]],
+                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
+                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
+                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
             ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :2, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_slice, atol=1e-4))
 
-        expected_post_process = torch.tensor(
-            [
-                [[162.2683, 162.2683, 161.4149], [162.2683, 162.2683, 161.4149]],
-                [[21.2490, 21.2490, 21.4580], [21.2490, 21.2490, 21.4580]],
-                [[69.7492, 69.7492, 69.3204], [69.7492, 69.7492, 69.3204]],
-            ]
-        ).to(torch_device)
+        result = image_processor.post_process_masks(outputs, [input_image.size[::-1]])[0]["mask"]
 
-        result = image_processor.post_process_masks(outputs.pred_masks, (image.size[::-1]))[0]
-
-        self.assertTrue(torch.allclose(result[0, :, :2, :3], expected_post_process, atol=1e-4))
+        result_expected_shape = torch.Size((1, 3, 170, 297))
+        expected_area = 26654
+        area = (torch.clip(result * 255, 0, 255).mean(dim=1) > 0).sum().item()
+        self.assertEqual(result.shape, result_expected_shape)
+        self.assertEqual(area, expected_area)
