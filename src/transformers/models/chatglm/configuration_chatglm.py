@@ -94,7 +94,7 @@ class ChatGlmConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        partial_rotary_factor (`float`, *optional*, default to 0.5):
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             Percentage of the query and keys which will have rotary embedding.
 
     ```python
@@ -134,7 +134,7 @@ class ChatGlmConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        partial_rotary_factor=-0.5,
+        partial_rotary_factor=0.5,
         **kwargs,
     ):
         self.vocab_size = vocab_size
