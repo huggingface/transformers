@@ -227,7 +227,7 @@ sure all your batches have the same length.
 
 ## Streaming
 
-To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is currently supported by `run_mlm.py`, `run_clm.py` and `run_fim.py`.
+To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is supported by `run_mlm.py`, `run_clm.py` and `run_fim.py`. Make sure to adapt the other scripts to your use case by taking inspiration from them.
 
 ## Low Cpu Memory Usage
 

@@ -123,12 +123,6 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=None,
-        metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
-        },
-    )
     trust_remote_code: bool = field(
         default=False,
         metadata={
@@ -255,7 +249,7 @@ class DataTrainingArguments:
         default="<fim_suffix>",
         metadata={"help": ("Fill-in-Middle Suffix token. Defaults to '<fim_suffix>'.")},
     )
-    fim_pad_token: Optional[str] = field(
+    pad_token: Optional[str] = field(
         default="<fim_pad>",
         metadata={
             "help": (
@@ -514,17 +508,11 @@ def main():
     # Add the new FIM tokens to the tokenizer and resize model's vocab embeddings
     special_tokens = [data_args.fim_prefix_token, data_args.fim_middle_token, data_args.fim_suffix_token]
     if data_args.truncate_or_pad:
-        special_tokens.append(data_args.fim_pad_token)
+        special_tokens.append(data_args.pad_token)
 
     tokenizer.add_tokens(special_tokens)
     model.resize_token_embeddings(len(tokenizer))
     print("Added special tokens!")
-
-    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
-    # on a small vocab and want a smaller embedding size, remove this test.
-    embedding_size = model.get_input_embeddings().weight.shape[0]
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -605,7 +593,7 @@ def main():
 
     # If truncate_or_pad is on, also get pad token id
     if data_args.truncate_or_pad:
-        pad_tok_id = tokenizer.convert_tokens_to_ids(data_args.fim_pad_token)
+        pad_tok_id = tokenizer.convert_tokens_to_ids(data_args.pad_token)
 
     # The two functions below perform the FIM transformation on the data (either PSM or SPM or PSM+SPM)
     # Don't call fim_transform directly in .map()
