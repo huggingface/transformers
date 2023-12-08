@@ -1031,16 +1031,9 @@ class GenerationMixin:
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if self.config.is_encoder_decoder:
-                processors.append(
-                    EncoderNoRepeatNGramLogitsProcessor(
-                        generation_config.encoder_no_repeat_ngram_size, encoder_input_ids
-                    )
-                )
-            else:
-                raise ValueError(
-                    "It's impossible to use `encoder_no_repeat_ngram_size` with decoder-only architecture"
-                )
+            processors.append(
+                EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
+            )
         if generation_config.bad_words_ids is not None:
             processors.append(
                 NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
