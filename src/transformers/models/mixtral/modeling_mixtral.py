@@ -60,6 +60,13 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MixtralConfig"
 
 
+if is_stk_available():
+    import stk
+
+if is_megablocks_available():
+    import megablocks.ops as ops
+
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
