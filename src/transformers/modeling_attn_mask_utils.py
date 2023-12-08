@@ -33,7 +33,7 @@ class AttentionMaskConverter:
     >>> from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 
     >>> converter = AttentionMaskConverter(True)
-    >>> converter.to_4d(torch.tensor([[0, 0, 0, 1, 1]]), 5, 5)
+    >>> converter.to_4d(torch.tensor([[0, 0, 0, 1, 1]]), 5, key_value_length=5, dtype=torch.float32)
     tensor([[[[-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
             [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
             [-3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38, -3.4028e+38],
@@ -66,7 +66,7 @@ class AttentionMaskConverter:
         batch_size: int,
         query_length: int,
         key_value_length: int,
-        dtype: torch.dtype = torch.float32,
+        dtype: torch.dtype,
         device: Union[torch.device, "str"] = "cpu",
     ) -> torch.Tensor:
         """
@@ -98,8 +98,8 @@ class AttentionMaskConverter:
         self,
         attention_mask_2d: torch.Tensor,
         query_length: int,
+        dtype: torch.dtype,
         key_value_length: Optional[int] = None,
-        dtype: torch.dtype = torch.float32,
     ) -> torch.Tensor:
         """
         Converts 2D attention mask to 4D attention mask by expanding mask to (bsz, head_dim=1, query_length,
@@ -215,7 +215,7 @@ def _prepare_4d_causal_attention_mask(
     # 4d mask is passed through the layers
     if attention_mask is not None:
         attention_mask = attn_mask_converter.to_4d(
-            attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
+            attention_mask, input_shape[-1], key_value_length=key_value_length, dtype=inputs_embeds.dtype
         )
     else:
         attention_mask = attn_mask_converter.to_causal_4d(
