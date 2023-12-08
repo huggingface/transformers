@@ -61,7 +61,7 @@ Data2Vec の使用を開始するのに役立つ公式 Hugging Face およびコ
 - [テキスト分類タスクガイド](../tasks/sequence_classification)
 - [トークン分類タスクガイド](../tasks/token_classification)
 - [質問回答タスク ガイド](../tasks/question_answering)
-- [因果言語モデリング タスク ガイド](../tasks/ language_modeling)
+- [因果言語モデリング タスク ガイド](../tasks/language_modeling)
 - [マスク言語モデリング タスク ガイド](../tasks/masked_language_modeling)
 - [多肢選択タスク ガイド](../tasks/multiple_choice)
 

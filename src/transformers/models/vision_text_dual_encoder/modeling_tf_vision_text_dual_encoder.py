@@ -227,32 +227,24 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
         super().build(input_shape)
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def tf_to_pt_weight_rename(self, tf_weight):
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
         # (the main model stem is in the MainLayer class). If we remove that layer, then weight names sync up as normal.
         # However, the name of that extra layer is the name of the MainLayer in the base model.
-
-        if kwargs.get("from_pt", False):
-
-            def tf_to_pt_weight_rename(tf_weight):
-                if "vision_model" in tf_weight:
-                    if tf_weight.count("vision_model") == 1:
-                        return re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight)
-                    elif tf_weight.count("vision_model") == 2:
-                        return re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight)
-                    else:
-                        raise ValueError(
-                            f"Unexpected weight name {tf_weight}. Please file an issue on the"
-                            " Transformers repo to let us know about this error!"
-                        )
-                elif "text_model" in tf_weight:
-                    return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
-                else:
-                    return tf_weight
-
-            kwargs["tf_to_pt_weight_rename"] = tf_to_pt_weight_rename
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        if "vision_model" in tf_weight:
+            if tf_weight.count("vision_model") == 1:
+                return re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight)
+            elif tf_weight.count("vision_model") == 2:
+                return re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight)
+            else:
+                raise ValueError(
+                    f"Unexpected weight name {tf_weight}. Please file an issue on the"
+                    " Transformers repo to let us know about this error!"
+                )
+        elif "text_model" in tf_weight:
+            return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
+        else:
+            return (tf_weight,)
 
     @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING)
     def get_text_features(

@@ -39,7 +39,7 @@ ImageNet-22k、当社の CvT-W24 は、ImageNet-1k val set で 87.7\% という�
 
 - CvT モデルは通常の Vision Transformer ですが、畳み込みでトレーニングされています。 ImageNet-1K および CIFAR-100 で微調整すると、[オリジナル モデル (ViT)](vit) よりも優れたパフォーマンスを発揮します。
 - カスタム データの微調整だけでなく推論に関するデモ ノートブックも [ここ](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer) で確認できます ([`ViTFeatureExtractor を置き換えるだけで済みます) `] による [`AutoImageProcessor`] および [`ViTForImageClassification`] による [`CvtForImageClassification`])。
-- 利用可能なチェックポイントは、(1) [ImageNet-22k](http://www.image-net.org/) (1,400 万の画像と 22,000 のクラスのコレクション) でのみ事前トレーニングされている、(2) も問題ありません。 -ImageNet-22k で調整、または (3) [ImageNet-1k](http://www.image-net.org/challenges/LSVRC/2012/) (ILSVRC 2012 とも呼ばれるコレクション) でも微調整130万の
+- 利用可能なチェックポイントは、(1) [ImageNet-22k](http://www.image-net.org/) (1,400 万の画像と 22,000 のクラスのコレクション) でのみ事前トレーニングされている、(2) も問題ありません。 ImageNet-22k で調整、または (3) [ImageNet-1k](http://www.image-net.org/challenges/LSVRC/2012/) (ILSVRC 2012 とも呼ばれるコレクション) でも微調整130万の
   画像と 1,000 クラス)。
 
 ## Resources

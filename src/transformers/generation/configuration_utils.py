@@ -63,6 +63,14 @@ class GenerationConfig(PushToHubMixin):
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
+    <Tip>
+
+    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    description of the possible manipulations, as well as examples of their usage.
+
+    </Tip>
+
     Arg:
         > Parameters that control the length of the output
 
