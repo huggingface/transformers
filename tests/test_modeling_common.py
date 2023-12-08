@@ -3146,6 +3146,34 @@ class ModelTesterMixin:
         elif torch_dtype == "float32":
             torch_dtype = torch.float32
 
+        atols = {
+            ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-6,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", True, torch.float32): 1e-6,
+            ("cuda", True, torch.bfloat16): 1e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+        rtols = {
+            ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.bfloat16): 1e-2,
+            ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float32): 1e-4,
+            ("cuda", False, torch.bfloat16): 1e-2,
+            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", True, torch.float32): 1e-4,
+            ("cuda", True, torch.bfloat16): 3e-2,
+            ("cuda", True, torch.float16): 5e-3,
+        }
+
+        def get_mean_reldiff(failcase, x, ref, atol, rtol):
+            return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
@@ -3154,25 +3182,18 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = (
-                    model_class.from_pretrained(
-                        tmpdirname,
-                        torch_dtype=torch_dtype,
-                    )
-                    .to(torch_device)
-                    .eval()
-                )
+                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
-                model_eager = (
-                    model_class.from_pretrained(
-                        tmpdirname,
-                        torch_dtype=torch_dtype,
-                        attn_implementation="eager",
-                    )
-                    .to(torch_device)
-                    .eval()
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch_dtype,
+                    attn_implementation="eager",
                 )
+                model_eager = model_eager.eval().to(torch_device)
+
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
                 for name, submodule in model_eager.named_modules():
@@ -3201,31 +3222,21 @@ class ModelTesterMixin:
                             dummy_input = dummy_input[:batch_size]
                             if dummy_input.shape[0] != batch_size:
                                 if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
-                                    dummy_input = torch.cat(
-                                        (
-                                            dummy_input,
-                                            torch.rand(
-                                                batch_size - dummy_input.shape[0],
-                                                *dummy_input.shape[1:],
-                                                dtype=torch_dtype,
-                                                device=torch_device,
-                                            ),
-                                        ),
-                                        dim=0,
-                                    ).to(torch_device)
+                                    extension = torch.rand(
+                                        batch_size - dummy_input.shape[0],
+                                        *dummy_input.shape[1:],
+                                        dtype=torch_dtype,
+                                        device=torch_device,
+                                    )
+                                    dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
                                 else:
-                                    dummy_input = torch.cat(
-                                        (
-                                            dummy_input,
-                                            torch.randint(
-                                                high=5,
-                                                size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
-                                                dtype=dummy_input.dtype,
-                                                device=torch_device,
-                                            ),
-                                        ),
-                                        dim=0,
-                                    ).to(torch_device)
+                                    extension = torch.randint(
+                                        high=5,
+                                        size=(batch_size - dummy_input.shape[0], *dummy_input.shape[1:]),
+                                        dtype=dummy_input.dtype,
+                                        device=torch_device,
+                                    )
+                                    dummy_input = torch.cat((dummy_input, extension), dim=0).to(torch_device)
 
                             if not use_mask:
                                 dummy_attention_mask = None
@@ -3242,18 +3253,14 @@ class ModelTesterMixin:
 
                                 dummy_attention_mask = dummy_attention_mask[:batch_size]
                                 if dummy_attention_mask.shape[0] != batch_size:
-                                    dummy_attention_mask = torch.cat(
-                                        (
-                                            dummy_attention_mask,
-                                            torch.ones(
-                                                batch_size - dummy_attention_mask.shape[0],
-                                                *dummy_attention_mask.shape[1:],
-                                                dtype=dummy_attention_mask.dtype,
-                                                device=torch_device,
-                                            ),
-                                        ),
-                                        dim=0,
-                                    ).to(torch_device)
+                                    extension = torch.ones(
+                                        batch_size - dummy_attention_mask.shape[0],
+                                        *dummy_attention_mask.shape[1:],
+                                        dtype=dummy_attention_mask.dtype,
+                                        device=torch_device,
+                                    )
+                                    dummy_attention_mask = torch.cat((dummy_attention_mask, extension), dim=0)
+                                    dummy_attention_mask = dummy_attention_mask.to(torch_device)
 
                                 dummy_attention_mask[:] = 1
                                 if padding_side == "left":
@@ -3268,18 +3275,14 @@ class ModelTesterMixin:
                                 if is_encoder_decoder:
                                     decoder_input_ids = inputs_dict.get("decoder_input_ids", dummy_input)[:batch_size]
                                     if decoder_input_ids.shape[0] != batch_size:
-                                        decoder_input_ids = torch.cat(
-                                            (
-                                                decoder_input_ids,
-                                                torch.ones(
-                                                    batch_size - decoder_input_ids.shape[0],
-                                                    *decoder_input_ids.shape[1:],
-                                                    dtype=decoder_input_ids.dtype,
-                                                    device=torch_device,
-                                                ),
-                                            ),
-                                            dim=0,
-                                        ).to(torch_device)
+                                        extension = torch.ones(
+                                            batch_size - decoder_input_ids.shape[0],
+                                            *decoder_input_ids.shape[1:],
+                                            dtype=decoder_input_ids.dtype,
+                                            device=torch_device,
+                                        )
+                                        decoder_input_ids = torch.cat((decoder_input_ids, extension), dim=0)
+                                        decoder_input_ids = decoder_input_ids.to(torch_device)
 
                                     # TODO: never an `attention_mask` arg here?
                                     other_inputs = {
@@ -3317,40 +3320,12 @@ class ModelTesterMixin:
                                     else outputs_sdpa.decoder_hidden_states[-1]
                                 )
 
-                                if torch_device == "cpu":
-                                    if torch_dtype == torch.float32:
-                                        atol = 1e-6
-                                        rtol = 1e-4
-                                    elif torch_dtype == torch.bfloat16:
-                                        atol = 1e-2
-                                        rtol = 1e-2
-                                elif torch_device == "cuda":
-                                    if not enable_kernels:
-                                        if torch_dtype == torch.float32:
-                                            atol = 1e-6
-                                            rtol = 1e-4
-                                        elif torch_dtype == torch.bfloat16:
-                                            atol = 1e-2
-                                            rtol = 1e-2
-                                        elif torch_dtype == torch.float16:
-                                            atol = 1e-3
-                                            rtol = 1e-3
-                                    else:
-                                        if torch_dtype == torch.float32:
-                                            atol = 1e-6
-                                            rtol = 1e-4
-                                        elif torch_dtype == torch.bfloat16:
-                                            atol = 1e-2
-                                            rtol = 3e-2
-                                        elif torch_dtype == torch.float16:
-                                            atol = 5e-3
-                                            rtol = 5e-3
+                                if torch_device in ["cpu", "cuda"]:
+                                    atol = atols[torch_device, enable_kernels, torch_dtype]
+                                    rtol = rtols[torch_device, enable_kernels, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
-
-                                def get_mean_reldiff(failcase, x, ref, atol, rtol):
-                                    return f"{failcase}: mean reldiff: {((x - ref).abs() / (ref.abs() + 1e-12)).mean()}, torch atol = {atol}, torch rtol = {rtol}"
 
                                 # Masked tokens output slightly deviates - we don't mind that.
                                 if use_mask:

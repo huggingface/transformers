@@ -50,7 +50,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
-    require_torch_sdpa,
     require_usr_bin_time,
     slow,
     torch_device,
@@ -61,7 +60,13 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
+from transformers.utils.import_utils import (
+    is_flash_attn_2_available,
+    is_flax_available,
+    is_tf_available,
+    is_torch_sdpa_available,
+    is_torchdynamo_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -1729,7 +1734,6 @@ class AttentionMaskTester(unittest.TestCase):
         self.assertTrue(torch.equal(expanded_mask, result))
 
 
-@require_torch_sdpa
 class TestAttentionImplementation(unittest.TestCase):
     def test_error_no_sdpa_available(self):
         with self.assertRaises(ValueError) as cm:
@@ -1755,3 +1759,25 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
 
         self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
+
+    def test_not_available_flash(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_sdpa(self):
+        if is_torch_sdpa_available():
+            self.skipTest("This test requires torch<=2.0")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="sdpa"
+            )
+
+        self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
