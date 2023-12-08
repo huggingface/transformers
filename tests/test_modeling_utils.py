@@ -1728,7 +1728,7 @@ class AttentionMaskTester(unittest.TestCase):
         key_value_length = attention_mask.shape[-1] + past_key_values_length
 
         expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
         )
 
         result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
@@ -1777,7 +1777,7 @@ class AttentionMaskTester(unittest.TestCase):
         key_value_length = attention_mask.shape[-1] + past_key_values_length
 
         expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
         )
 
         result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
@@ -1794,7 +1794,7 @@ class AttentionMaskTester(unittest.TestCase):
         key_value_length = attention_mask.shape[-1] + past_key_values_length
 
         expanded_mask = attn_mask_converter.to_4d(
-            attention_mask, attention_mask.shape[-1], key_value_length, dtype=torch.float32
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
         )
 
         result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)

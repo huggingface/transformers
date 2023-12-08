@@ -360,7 +360,10 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
     if attention_mask is not None:
         expanded_4d_mask = attn_mask_converter.to_4d(
-            attention_mask, input_shape[-1], key_value_length, dtype=inputs_embeds.dtype
+            attention_mask,
+            input_shape[-1],
+            dtype=inputs_embeds.dtype,
+            key_value_length=key_value_length,
         )
 
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
