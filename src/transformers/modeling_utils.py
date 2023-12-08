@@ -339,11 +339,11 @@ def shard_checkpoint(
         else:
             storage_id = id_tensor_storage(weight)
 
-        # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        if storage_id in storage_id_to_block:
-            block_id = storage_id_to_block[storage_id]
-            sharded_state_dicts[block_id][key] = weight
-            continue
+        # # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        # if storage_id in storage_id_to_block:
+        #     block_id = storage_id_to_block[storage_id]
+        #     sharded_state_dicts[block_id][key] = weight
+        #     continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
         print (key, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
@@ -2261,6 +2261,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
+                print ('state_dict: ', state_dict)
                 # extract data for shard state dict
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
