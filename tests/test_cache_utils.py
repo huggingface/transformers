@@ -218,13 +218,12 @@ class CacheIntegrationTest(unittest.TestCase):
         # We went well beyond the cache length
         self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
 
-        # And it still produces a coherent english (the repetition is due to the prompt being repeated 3 times)
+        # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
         last_output = (
-            "<|assistant|>\nHawaii, the Aloha State post for a travel destination you've taken. Your post's and "
-            "must-see landmarks. Use a descriptive and engaging writing style, incorporating personal anecdotes and "
-            "recommendations for fellow travelers. Your post should be at least 800 words and include high-quality "
-            "images to enhance the reader's experience. Be sure to cover a variety of experiences, from cultural "
-            "immersion to outdoor adventures, and provide practical"
+            "<|assistant|>\nHawaii, the Aloha State, is a paradise on earth. From its stunning beaches to its lush "
+            "greenery, Hawaii is a destination that will leave you in awe. I recently had the privilege of visiting "
+            "this tropical paradise, and I'm excited to share my experiences with you.\n\nFirstly, let's talk about "
+            "the culture. Hawaii has a rich and unique culture that is deeply rooted in its history. One of the best"
         )
         self.assertTrue(decoded[0].endswith(last_output))

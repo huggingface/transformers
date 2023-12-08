@@ -42,6 +42,19 @@ class Cache:
         """Returns the maximum sequence length of the cached states, if there is any."""
         raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
 
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+        """Given the sequence length of the new inputs, returns the usable length of the cache."""
+        # Cache without size limit -> all cache is usable
+        # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
+        #   length, we will need to evict part of the cache (and thus not all cache is usable)
+        max_length = self.get_max_length()
+        previous_seq_length = self.get_seq_length(layer_idx)
+        if max_length is not None:
+            length_excess = previous_seq_length + new_seq_length - max_length
+            if length_excess > 0:
+                return max_length - length_excess
+        return previous_seq_length
+
 
 class DynamicCache(Cache):
     """
@@ -250,8 +263,8 @@ class SinkCache(Cache):
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
-        sin = cache_kwargs.get("sin")[: self.window_length]
-        cos = cache_kwargs.get("cos")[: self.window_length]
+        sin = cache_kwargs.get("sin")
+        cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
         using_rope = cos is not None and sin is not None
 
@@ -278,7 +291,9 @@ class SinkCache(Cache):
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
-                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(key_states, cos, sin)
+                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
+                    key_states, cos[: self.window_length], sin[: self.window_length]
+                )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
                         keys_to_keep[..., :partial_rotation_size],
