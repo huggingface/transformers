@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-変形可能 DETR モデルは、Xizhou Zhu、Weijie Su、Lewei Lu、Bin Li、Xiaogang Wang によって [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) で提案されました。 、ジフォンダイ。
+変形可能 DETR モデルは、Xizhou Zhu、Weijie Su、Lewei Lu、Bin Li、Xiaogang Wang, Jifeng Dai によって [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) で提案されました
 変形可能な DETR は、参照周囲の少数の主要なサンプリング ポイントのみに注目する新しい変形可能なアテンション モジュールを利用することにより、収束の遅さの問題と元の [DETR](detr) の制限された特徴の空間解像度を軽減します。
 
 論文の要約は次のとおりです。
@@ -35,16 +35,16 @@ alt="描画" width="600"/>
 ## Usage tips
 
 
- - TRaining Deformable DETR は、元の [DETR](detr) モデルをトレーニングすることと同等です。デモ ノートブックについては、以下の [resources](#resources) セクションを参照してください。
+ - トレーニング Deformable DETR は、元の [DETR](detr) モデルをトレーニングすることと同等です。デモ ノートブックについては、以下の [resources](#resources) セクションを参照してください。
 
 ## Resources
 
 Deformable DETR の使用を開始するのに役立つ公式 Hugging Face およびコミュニティ (🌎 で示される) リソースのリスト。
 
-<PipelineTag パイプライン="オブジェクト検出"/>
+<PipelineTag pipeline="object-detection"/>
 
 - [`DeformableDetrForObjectDetection`] のカスタム データセットでの推論と微調整に関するデモ ノートブックは、[こちら](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Deformable-DETR) にあります。
-- [Object detection task guide](../tasks/object_detection) も参照してください。
+- [物体検出タスクガイド](../tasks/object_detection) も参照してください。
 
 ここに含めるリソースの送信に興味がある場合は、お気軽にプル リクエストを開いてください。審査させていただきます。リソースは、既存のリソースを複製するのではなく、何か新しいものを示すことが理想的です。
 
