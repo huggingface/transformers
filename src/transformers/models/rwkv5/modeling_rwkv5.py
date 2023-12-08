@@ -413,6 +413,8 @@ class RwkvBlock(nn.Module):
         self.feed_forward = RwkvFeedForward(config, layer_id)
 
     def forward(self, hidden, state=None, use_cache=False, output_attentions=False, seq_mode=True):
+        if self.layer_id == 0:
+            hidden = self.pre_ln(hidden)
         attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
         hidden = hidden + attention
 
@@ -615,8 +617,6 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
         self.ln_out = nn.LayerNorm(config.hidden_size)
 
         self.layers_are_rescaled = False
-        self.pre_ln_flag = False
-
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -664,16 +664,6 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            if not self.pre_ln_flag:
-                normalized_weight = F.layer_norm(
-                    self.embeddings.weight,
-                    (self.config.hidden_size,),
-                    weight=self.blocks[0].pre_ln.weight,
-                    bias=self.blocks[0].pre_ln.bias,
-                )
-                self.embeddings.weight = nn.Parameter(normalized_weight)
-                self.pre_ln_flag = True
-
             inputs_embeds = self.embeddings(input_ids)
 
         if use_cache and state is None:
