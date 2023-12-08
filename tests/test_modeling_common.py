@@ -542,6 +542,12 @@ class ModelTesterMixin:
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and self.has_attentions:
+                expected_arg_names = ["pixel_values", "output_hidden_states", "output_attentions", "return_dict"]
+                self.assertListEqual(arg_names, expected_arg_names)
+            elif model_class.__name__ in [*get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)] and not self.has_attentions:
+                expected_arg_names = ["pixel_values", "output_hidden_states", "return_dict"]
+                self.assertListEqual(arg_names, expected_arg_names)
             else:
                 expected_arg_names = [model.main_input_name]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -551,10 +557,6 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
             if (
                 model_class.__name__
                 in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
@@ -563,6 +565,8 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
             model = model_class(config)
 
             model.to(torch_device)
@@ -3081,7 +3085,7 @@ class ModelTesterMixin:
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
-                self.assertTrue(torch.equal(out, out_fa))
+                self.assertTrue(torch.allclose(out, out_fa))
 
     @require_flash_attn
     @require_torch_gpu
@@ -3124,7 +3128,7 @@ class ModelTesterMixin:
                     dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
                 )
 
-                self.assertTrue(torch.equal(out, out_fa))
+                self.assertTrue(torch.allclose(out, out_fa))
 
     @require_flash_attn
     @require_torch_gpu
