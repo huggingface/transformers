@@ -612,6 +612,11 @@ class MixtralBlockSparseMoE(nn.Module):
             torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
 
+        if not USE_MEGABLOCKS:
+            self.register_buffer("split_w1", self.w1.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
+            self.register_buffer("split_w2", self.w2.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
+            self.register_buffer("split_w3", self.w3.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
+            
         # Calculate the number of bits needed to represent the expert indices
         # so that we can pass it to radix sort.
         self.sort_end_bit = max(int(np.ceil(np.log2(self.num_experts))), 1)
@@ -780,7 +785,6 @@ class MixtralBlockSparseMoE(nn.Module):
         gate_logits: (sequence_length, n_experts)
         """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        residuals = hidden_states
         hidden_states = hidden_states.view(batch_size * sequence_length, hidden_dim)
         # gate_logits: (batch * sequence_length, n_experts)
         gate_logits = self.gate(hidden_states)
@@ -801,35 +805,27 @@ class MixtralBlockSparseMoE(nn.Module):
                 selected_experts,
                 (batch_size, sequence_length, hidden_dim)
             )
+        else:
+            final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(hidden_states.device)
+            expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
+            
+            for expert in range(self.num_experts):
+                w1 = self.split_w1[expert]
+                w2 = self.split_w2[expert]
+                w3 = self.split_w3[expert]
+                idx, top_x = torch.where(expert_mask[expert])
+                if top_x.shape[0] == 0:
+                    continue
+                # list indexing is a lot faster in torch
+                top_x = top_x.tolist()
+                idx = idx.tolist()
+                current_state = hidden_states[None, top_x] 
+                current_hidden_states = F.silu(current_state @ w1.T) * (current_state @ w3.T)
+                current_hidden_states = current_hidden_states @ w2
+                final_hidden_states[top_x] += (routing_weights[top_x, idx, None] * current_hidden_states)[0]
 
-        # hidden_states = residuals
-        final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(residuals.device)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
-        
-        # num_experts * top 2, batch * seq, top2
-        # combining_weights = torch.einsum("bm,be->ebm", routing_weights, expert_mask.reshape(6,-1))
-        _w1 = self.w1.split(3584)
-        _w2 = self.w2.split(3584)
-        _w3 = self.w3.split(3584)
-        
-        for expert in range(self.num_experts):
-            w1 = _w1[expert]
-            w2 = _w2[expert]
-            w3 = _w3[expert]
-            idx, top_x = torch.where(expert_mask[expert])
-            if top_x.shape[0] == 0:
-                continue
-
-            # list indexing is a lot faster in torch
-            top_x = top_x.tolist()
-            idx = idx.tolist()
-            current_state = hidden_states[top_x] 
-            current_hidden_states = F.silu(current_state @ w1.T)[None,:,:] * (current_state @ w3.T)[None,:,:]
-            current_hidden_states = current_hidden_states @ w2
-            final_hidden_states[top_x] += (routing_weights[top_x, idx][:,None] * current_hidden_states)[0]
-
-        final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
-        return final_hidden_states
+            final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
+            return final_hidden_states
 
 
 class MixtralMoeExpert(nn.Module):
@@ -846,125 +842,7 @@ class MixtralMoeExpert(nn.Module):
         hidden_states = self.w3(hidden_states)
         return hidden_states
 
-
-class MixtralBlockSparseMoENaive(nn.Module):
-    r"""
-    Implementation of the NLLB-MoE sparse MLP module.
-    """
-
-    def __init__(self, config, ffn_dim: int):
-        super().__init__()
-        
-        self.hidden_dim = config.hidden_size
-        self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_local_experts
-        self.top_k = config.num_experts_per_tok
-
-        # gating
-        self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
-
-        # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
-        self.w1 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-        self.w2 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-        self.w3 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-
-        # Calculate the number of bits needed to represent the expert indices
-        # so that we can pass it to radix sort.
-        self.sort_end_bit = max(int(np.ceil(np.log2(self.num_experts))), 1)
-        self.blocking = 128
-        self.quantize_scatter_num_bits = -1
-
-        # Calculate the number of bits needed to represent the column indices
-        # in the intermediate sparse matrix.
-        max_column_index = (self.ffn_dim * self.num_experts) // self.blocking
-        self.transpose_sort_end_bit = max(
-            int(np.ceil(np.log2(max_column_index))), 1)
-
-        # self.experts = nn.ModuleDict()
-        # for idx in range(self.num_experts):
-        #     self.experts[f"expert_{idx}"] = expert_class(config, ffn_dim)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: (sequence_length, model_dim)
-        gate_logits: (sequence_length, n_experts)
-        """
-        # optional reshape
-        input_shape = x.shape
-        hidden_states = x.view(-1, input_shape[-1])
-
-        # gate_logits: (sequence_length, n_experts)
-        gate_logits = self.gate(hidden_states)
-        # all_probs: (sequence_length, n_experts) and upcast for softmax
-        all_probs = F.softmax(gate_logits, dim=1, dtype=torch.float)
-        # weights, selected_experts: (sequence_length, top-k)
-        weights, selected_experts = torch.topk(all_probs, self.top_k, dim=-1)
-        weights /= weights.sum(dim=-1, keepdim=True)
-        
-        # Native torch vs optimized with MegaBlocks
-        if USE_MEGABLOCKS:
-            weights = weights.flatten().to(hidden_states.dtype)
-            selected_experts = selected_experts.flatten()
-
-            return self.forward_megablocks(
-                hidden_states,
-                weights,
-                selected_experts,
-                input_shape
-            )
-
-        hidden_states = x
-        final_hidden_states = torch.zeros(input_shape).to(x.device)
-        # Naive pure pytorch
-        top_1_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts)
-        router_mask = weights.bool()
-        hidden_states = hidden_states.reshape((input_shape[0] * input_shape[1]), input_shape[-1])
-        
-        for idx, expert in enumerate(self.experts.values()):
-            token_indices = router_mask[:, idx]
-            combining_weights = router_probs[token_indices, idx]
-            expert_output = expert(masked_hidden_states[idx, token_indices])
-            if self.moe_token_dropout > 0:
-                if self.training:
-                    expert_output = self.token_dropout(expert_output)
-                else:
-                    expert_output *= 1 - self.moe_token_dropout
-            masked_hidden_states[idx, token_indices] = torch.einsum("b,be->be", combining_weights, expert_output)
-        hidden_states = masked_hidden_states.sum(dim=0).reshape(batch_size, sequence_length, hidden_dim)
-        
-        masked_hidden_states = torch.einsum("bm,be->ebm", hidden_states, router_mask)
-        # replace top_1_expert_index with min values
-        logits_except_top_1 = x.masked_fill(top_1_mask.bool(), float("-inf"))
-
-        for token_idx in range(input_shape[1]):
-            current_hidden_state = hidden_states[:, token_idx, :]
-            selected_top2_experts = selected_experts[token_idx]
-
-            for i, expert_idx in enumerate(selected_top2_experts):
-                expert_hidden_state = self._get_expert_hidden_state(current_hidden_state, expert_idx)
-                final_hidden_states[:, token_idx, :] += (expert_hidden_state.squeeze(1) * weights[token_idx, i])
-
-        return final_hidden_states
     
-
-    def _get_expert_hidden_state(self, hidden_state, expert_idx):
-        current_expert_in_proj_weight = self.w1[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].t().unsqueeze(0)
-        current_expert_out_proj_weight = self.w3[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].t().unsqueeze(0)
-        current_expert_gate_proj_weight = self.w2[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].unsqueeze(0)
-
-        projection_1 = torch.bmm(hidden_state.unsqueeze(0), current_expert_in_proj_weight)
-        projection_2 = torch.bmm(hidden_state.unsqueeze(0), current_expert_out_proj_weight)
-        hidden_state = F.silu(projection_1) * projection_2
-        hidden_state = hidden_state @ current_expert_gate_proj_weight
-        return hidden_state
-
-        
 class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig):
         super().__init__()
