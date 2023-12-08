@@ -796,11 +796,13 @@ class MixtralBlockSparseMoE(nn.Module):
         else:
             final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(hidden_states.device)
             expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
-            
+            _w1 = self.w1.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)
+            _w2 = self.w2.weight.view(self.num_experts, self.ffn_dim , self.hidden_dim)
+            _w3 = self.w3.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)
             for expert in range(self.num_experts):
-                w1 = self.w1.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)[self.num_experts]
-                w2 = self.w2.weight.view(self.num_experts, self.ffn_dim , self.hidden_dim)[self.num_experts]
-                w3 = self.w3.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)[self.num_experts]
+                w1 = _w1[expert]
+                w2 = _w2[expert]
+                w3 = _w3[expert]
                 idx, top_x = torch.where(expert_mask[expert])
                 if top_x.shape[0] == 0:
                     continue
