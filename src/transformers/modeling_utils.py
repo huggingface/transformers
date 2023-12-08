@@ -340,13 +340,13 @@ def shard_checkpoint(
             storage_id = id_tensor_storage(weight)
 
         # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        if storage_id in storage_id_to_block and weight.device != torch.device('meta'):
+        if storage_id in storage_id_to_block and weight.device != torch.device("meta"):
             block_id = storage_id_to_block[storage_id]
             sharded_state_dicts[block_id][key] = weight
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-        print (key, weight.device, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
+        print(key, weight.device, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
@@ -2156,7 +2156,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         if state_dict is None:
             # if any model parameters are offloaded, make module map
-            if any(hasattr(module, "_hf_hook") and isinstance(module._hf_hook, AlignDevicesHook) and module._hf_hook.offload for module in model_to_save.modules()):
+            if any(
+                hasattr(module, "_hf_hook")
+                and isinstance(module._hf_hook, AlignDevicesHook)
+                and module._hf_hook.offload
+                for module in model_to_save.modules()
+            ):
                 for name, module in model_to_save.named_modules():
                     if name == "":
                         continue
@@ -2257,11 +2262,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for shard_file, shard in shards.items():
             # remake shard with onloaded parameters if necessary
             if module_map:
-                print ('shard saving begun: ', shard_file)
+                print("shard saving begun: ", shard_file)
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
-                print ('state_dict: ', state_dict)
+                print("state_dict: ", state_dict)
                 # extract data for shard state dict
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
@@ -2285,7 +2290,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module._hf_hook.post_forward(module, torch.tensor([]))
 
                 # transform shard's state dict back to single shard
-                shard = {name: state_dict} # will be ({name: tensor}, None)
+                shard = {name: state_dict}  # will be ({name: tensor}, None)
                 name = list(shard.keys())[0]  # will have one name
                 shard = shard[name]
                 del state_dict
