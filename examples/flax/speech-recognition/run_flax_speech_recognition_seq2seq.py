@@ -640,7 +640,7 @@ def main():
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
-        len(vectorized_datasets["train"]),
+        total_train_steps,
         training_args.warmup_steps,
         training_args.learning_rate,
     )
