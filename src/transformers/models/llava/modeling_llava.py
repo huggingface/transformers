@@ -415,6 +415,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     # that are set to 0
                     first_layer_past_key_value = past_key_values[0][0][:, 0, :, 0]
                     batch_index, non_attended_tokens = torch.where(first_layer_past_key_value == 0)
+                    non_attended_tokens = non_attended_tokens - attention_mask.shape[1]
                     # Get the target length
                     target_seqlen = first_layer_past_key_value.shape[-1] + 1
 
