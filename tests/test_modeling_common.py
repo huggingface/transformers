@@ -777,115 +777,120 @@ class ModelTesterMixin:
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
         for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
+            for attn_implementation in ["eager", "sdpa"]:
+                if attn_implementation == "sdpa" and not model_class._supports_sdpa:
+                    continue
 
-            main_input_name = model_class.main_input_name
+                configs_no_init._attn_implementation = attn_implementation
+                model = model_class(config=configs_no_init)
+                model.to(torch_device)
+                model.eval()
+                inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    main_input = inputs[main_input_name]
-                    attention_mask = inputs["attention_mask"]
-                    decoder_input_ids = inputs["decoder_input_ids"]
-                    decoder_attention_mask = inputs["decoder_attention_mask"]
-                    model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
-                    traced_model = torch.jit.trace(
-                        model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
-                    )
-                elif "bbox" in inputs and "image" in inputs:  # LayoutLMv2 requires additional inputs
-                    input_ids = inputs["input_ids"]
-                    bbox = inputs["bbox"]
-                    image = inputs["image"].tensor
-                    model(input_ids, bbox, image)
-                    traced_model = torch.jit.trace(
-                        model, (input_ids, bbox, image), check_trace=False
-                    )  # when traced model is checked, an error is produced due to name mangling
-                elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
-                    input_ids = inputs["input_ids"]
-                    bbox = inputs["bbox"]
-                    model(input_ids, bbox)
-                    traced_model = torch.jit.trace(
-                        model, (input_ids, bbox), check_trace=False
-                    )  # when traced model is checked, an error is produced due to name mangling
-                else:
-                    main_input = inputs[main_input_name]
+                main_input_name = model_class.main_input_name
 
-                    if model.config._attn_implementation == "sdpa":
-                        trace_input = {main_input_name: main_input}
-
-                        if "attention_mask" in inputs:
-                            trace_input["attention_mask"] = inputs["attention_mask"]
-                        else:
-                            self.skipTest("testing SDPA without attention_mask is not supported")
-
-                        model(main_input, attention_mask=inputs["attention_mask"])
-                        # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
-                        traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
+                try:
+                    if model.config.is_encoder_decoder:
+                        model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                        main_input = inputs[main_input_name]
+                        attention_mask = inputs["attention_mask"]
+                        decoder_input_ids = inputs["decoder_input_ids"]
+                        decoder_attention_mask = inputs["decoder_attention_mask"]
+                        model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        traced_model = torch.jit.trace(
+                            model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        )
+                    elif "bbox" in inputs and "image" in inputs:  # LayoutLMv2 requires additional inputs
+                        input_ids = inputs["input_ids"]
+                        bbox = inputs["bbox"]
+                        image = inputs["image"].tensor
+                        model(input_ids, bbox, image)
+                        traced_model = torch.jit.trace(
+                            model, (input_ids, bbox, image), check_trace=False
+                        )  # when traced model is checked, an error is produced due to name mangling
+                    elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
+                        input_ids = inputs["input_ids"]
+                        bbox = inputs["bbox"]
+                        model(input_ids, bbox)
+                        traced_model = torch.jit.trace(
+                            model, (input_ids, bbox), check_trace=False
+                        )  # when traced model is checked, an error is produced due to name mangling
                     else:
-                        model(main_input)
-                        traced_model = torch.jit.trace(model, (main_input,))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
+                        main_input = inputs[main_input_name]
 
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+                        if model.config._attn_implementation == "sdpa":
+                            trace_input = {main_input_name: main_input}
 
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
+                            if "attention_mask" in inputs:
+                                trace_input["attention_mask"] = inputs["attention_mask"]
+                            else:
+                                self.skipTest("testing SDPA without attention_mask is not supported")
 
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
+                            model(main_input, attention_mask=inputs["attention_mask"])
+                            # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
+                            traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
+                        else:
+                            model(main_input)
+                            traced_model = torch.jit.trace(model, (main_input,))
+                except RuntimeError:
+                    self.fail("Couldn't trace module.")
 
-            model.to(torch_device)
-            model.eval()
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
 
-            loaded_model.to(torch_device)
-            loaded_model.eval()
+                    try:
+                        torch.jit.save(traced_model, pt_file_name)
+                    except Exception:
+                        self.fail("Couldn't save module.")
 
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
+                    try:
+                        loaded_model = torch.jit.load(pt_file_name)
+                    except Exception:
+                        self.fail("Couldn't load module.")
 
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+                model.to(torch_device)
+                model.eval()
 
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
+                loaded_model.to(torch_device)
+                loaded_model.eval()
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+                model_state_dict = model.state_dict()
+                loaded_model_state_dict = loaded_model.state_dict()
 
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
+                non_persistent_buffers = {}
+                for key in loaded_model_state_dict.keys():
+                    if key not in model_state_dict.keys():
+                        non_persistent_buffers[key] = loaded_model_state_dict[key]
 
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
+                loaded_model_state_dict = {
+                    key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                }
 
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                if layer_name in loaded_model_state_dict:
-                    p2 = loaded_model_state_dict[layer_name]
-                    if p1.data.ne(p2.data).sum() > 0:
-                        models_equal = False
+                self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
 
-            self.assertTrue(models_equal)
+                model_buffers = list(model.buffers())
+                for non_persistent_buffer in non_persistent_buffers.values():
+                    found_buffer = False
+                    for i, model_buffer in enumerate(model_buffers):
+                        if torch.equal(non_persistent_buffer, model_buffer):
+                            found_buffer = True
+                            break
 
-            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-            # (Even with this call, there are still memory leak by ~0.04MB)
-            self.clear_torch_jit_class_registry()
+                    self.assertTrue(found_buffer)
+                    model_buffers.pop(i)
+
+                models_equal = True
+                for layer_name, p1 in model_state_dict.items():
+                    if layer_name in loaded_model_state_dict:
+                        p2 = loaded_model_state_dict[layer_name]
+                        if p1.data.ne(p2.data).sum() > 0:
+                            models_equal = False
+
+                self.assertTrue(models_equal)
+
+                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+                # (Even with this call, there are still memory leak by ~0.04MB)
+                self.clear_torch_jit_class_registry()
 
     def test_torch_fx(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

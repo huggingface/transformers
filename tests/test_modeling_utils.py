@@ -1734,6 +1734,7 @@ class AttentionMaskTester(unittest.TestCase):
         self.assertTrue(torch.equal(expanded_mask, result))
 
 
+@require_torch
 class TestAttentionImplementation(unittest.TestCase):
     def test_error_no_sdpa_available(self):
         with self.assertRaises(ValueError) as cm:

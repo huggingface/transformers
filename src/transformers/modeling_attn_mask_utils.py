@@ -354,7 +354,9 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
                 # Reference: https://github.com/pytorch/pytorch/issues/108108
                 pass
     elif is_tracing:
-        raise ValueError('Attention using SDPA can not be traced with torch.jit.trace when no attention_mask is provided. To solve this issue, please either load your model with the argument `attn_implementation="eager"` or pass an attention_mask input when tracing the model.')
+        raise ValueError(
+            'Attention using SDPA can not be traced with torch.jit.trace when no attention_mask is provided. To solve this issue, please either load your model with the argument `attn_implementation="eager"` or pass an attention_mask input when tracing the model.'
+        )
 
     if attention_mask is not None:
         expanded_4d_mask = attn_mask_converter.to_4d(

@@ -185,12 +185,6 @@ RuntimeError: No available kernel. Aborting execution.
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
 ```
 
-<Tip>
-
-As of Transformers 4.36, attention modules using `torch.nn.functional.scaled_dot_product_attention` do not support tracing through [`torch.jit.trace`](https://pytorch.org/docs/stable/generated/torch.jit.trace.html). Please load your model with the argument `attn_implementation="eager"` in [`~PreTrainedModel.from_pretrained`] in order to export to TorchScript through `torch.jit.trace`.
-
-</Tip>
-
 ## BetterTransformer
 
 <Tip warning={true}>
