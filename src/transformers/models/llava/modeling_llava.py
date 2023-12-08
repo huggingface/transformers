@@ -31,6 +31,7 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
+from ...cache_utils import Cache
 
 
 logger = logging.get_logger(__name__)
@@ -472,7 +473,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, **kwargs
+        self, input_ids, past_key_values=None, inputs_embeds=None, pixel_values=None, attention_mask=None, **kwargs
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
