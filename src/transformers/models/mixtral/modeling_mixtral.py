@@ -51,17 +51,24 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
+USE_MEGABLOCKS = False
+_megablocks_available = False
+_stk_available = False
+
 try:
     import megablocks.ops as ops
+    _megablocks_available = True
 except ImportError:
     print("MegaBlocks not found, please see "
           "https://github.com/stanford-futuredata/megablocks/")
 try:
     import stk
+    _stk_available = True
 except ImportError:
     print(
         "STK not found: please see https://github.com/stanford-futuredata/stk")
 
+USE_MEGABLOCKS = _megablocks_available and _stk_available
 
 logger = logging.get_logger(__name__)
 
@@ -79,6 +86,10 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
+
+def promote_scalar(x: torch.Tensor) -> torch.Tensor:
+    return x.view(1) if len(x.size()) == 0 else x
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Mixtral
@@ -592,8 +603,7 @@ class MixtralBlockSparseMoE(nn.Module):
         super().__init__()
         self.hidden_dim = config.hidden_size
         self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_experts_per_tok
-        # TODO: use another config variable
+        self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
 
         # gating
@@ -601,11 +611,14 @@ class MixtralBlockSparseMoE(nn.Module):
 
         # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
         self.w1 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim))
+            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+        )
         self.w2 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim))
+            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+        )
         self.w3 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim))
+            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+        )
 
         # Calculate the number of bits needed to represent the expert indices
         # so that we can pass it to radix sort.
@@ -717,27 +730,8 @@ class MixtralBlockSparseMoE(nn.Module):
         bins = ops.inclusive_cumsum(tokens_per_expert, 0)
         bins = promote_scalar(bins)
         return indices, bin_ids, bins, padded_bins, tokens_per_expert
-
-    @torch.inference_mode()
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: (sequence_length, model_dim)
-        gate_logits: (sequence_length, n_experts)
-        """
-        # optional reshape
-        input_shape = x.shape
-        x = x.view(-1, input_shape[-1])
-
-        # gate_logits: (sequence_length, n_experts)
-        gate_logits = self.gate(x)
-        # all_probs: (sequence_length, n_experts) and upcast for softmax
-        all_probs = F.softmax(gate_logits, dim=1, dtype=torch.float)
-        # weights, selected_experts: (sequence_length, top-k)
-        weights, selected_experts = torch.topk(all_probs, self.top_k, dim=-1)
-        weights /= weights.sum(dim=-1, keepdim=True)
-        weights = weights.flatten().to(x.dtype)
-        selected_experts = selected_experts.flatten()
-
+    
+    def forward_megablocks(self, x, weights, selected_experts, input_shape):
         (
             indices,
             bin_ids,
@@ -787,6 +781,60 @@ class MixtralBlockSparseMoE(nn.Module):
             self.quantize_scatter_num_bits,
         )
         return x.view(*input_shape)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: (sequence_length, model_dim)
+        gate_logits: (sequence_length, n_experts)
+        """
+        # optional reshape
+        input_shape = x.shape
+        hidden_states = x.view(-1, input_shape[-1])
+
+        # gate_logits: (sequence_length, n_experts)
+        gate_logits = self.gate(hidden_states)
+        # all_probs: (sequence_length, n_experts) and upcast for softmax
+        all_probs = F.softmax(gate_logits, dim=1, dtype=torch.float)
+        # weights, selected_experts: (sequence_length, top-k)
+        weights, selected_experts = torch.topk(all_probs, self.top_k, dim=-1)
+        weights /= weights.sum(dim=-1, keepdim=True)
+        
+        # Native torch vs optimized with MegaBlocks
+        if USE_MEGABLOCKS:
+            weights = weights.flatten().to(hidden_states.dtype)
+            selected_experts = selected_experts.flatten()
+
+            return self.forward_megablocks(
+                hidden_states,
+                weights,
+                selected_experts,
+                input_shape
+            )
+
+        hidden_states = x
+        final_hidden_states = torch.zeros(input_shape).to(x.device)
+        # Naive pure pytorch
+
+        for token_idx in range(input_shape[1]):
+            current_hidden_state = hidden_states[:, token_idx, :]
+            selected_top2_experts = selected_experts[token_idx]
+
+            for i, expert_idx in enumerate(selected_top2_experts):
+                expert_hidden_state = self._get_expert_hidden_state(current_hidden_state, expert_idx)
+                final_hidden_states[:, token_idx, :] += (expert_hidden_state.squeeze(1) * weights[token_idx, i])
+
+        
+        return final_hidden_states
+    
+
+    def _get_expert_hidden_state(self, hidden_state, expert_idx):
+        current_expert_in_proj_weight = self.w1[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].t().unsqueeze(0)
+        current_expert_out_proj_weight = self.w3[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].t().unsqueeze(0)
+        current_expert_gate_proj_weight = self.w2[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].unsqueeze(0)
+
+        hidden_state = F.silu(torch.bmm(hidden_state.unsqueeze(0), current_expert_in_proj_weight)) * torch.bmm(hidden_state.unsqueeze(0), current_expert_out_proj_weight)
+        hidden_state = hidden_state @ current_expert_gate_proj_weight
+        return hidden_state
 
 
 class MixtralDecoderLayer(nn.Module):
@@ -848,7 +896,6 @@ class MixtralDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-
 
         hidden_states = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
