@@ -38,6 +38,8 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_stk_available,
+    is_megablocks_available,
     logging,
     replace_return_docstrings,
 )
@@ -51,24 +53,7 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
-USE_MEGABLOCKS = False
-_megablocks_available = False
-_stk_available = False
-
-try:
-    import megablocks.ops as ops
-    _megablocks_available = True
-except ImportError:
-    print("MegaBlocks not found, please see "
-          "https://github.com/stanford-futuredata/megablocks/")
-try:
-    import stk
-    _stk_available = True
-except ImportError:
-    print(
-        "STK not found: please see https://github.com/stanford-futuredata/stk")
-
-USE_MEGABLOCKS = _megablocks_available and _stk_available
+USE_MEGABLOCKS = is_stk_available() and is_megablocks_available()
 
 logger = logging.get_logger(__name__)
 
@@ -822,8 +807,7 @@ class MixtralBlockSparseMoE(nn.Module):
             for i, expert_idx in enumerate(selected_top2_experts):
                 expert_hidden_state = self._get_expert_hidden_state(current_hidden_state, expert_idx)
                 final_hidden_states[:, token_idx, :] += (expert_hidden_state.squeeze(1) * weights[token_idx, i])
-
-        
+  
         return final_hidden_states
     
 
