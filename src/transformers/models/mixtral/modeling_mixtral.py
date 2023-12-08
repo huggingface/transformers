@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Mixtral AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 Mistral AI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -603,13 +603,13 @@ class MixtralBlockSparseMoE(nn.Module):
 
         # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
         self.w1 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
         self.w2 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
         self.w3 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
 
         # Calculate the number of bits needed to represent the expert indices
@@ -808,12 +808,14 @@ class MixtralBlockSparseMoE(nn.Module):
         
         # num_experts * top 2, batch * seq, top2
         # combining_weights = torch.einsum("bm,be->ebm", routing_weights, expert_mask.reshape(6,-1))
-        w1 = self.w1.split(3584)[expert]
-        w2 = self.w2.split(3584)[expert]
-        w3 = self.w3.split(3584)[expert]
+        _w1 = self.w1.split(3584)
+        _w2 = self.w2.split(3584)
+        _w3 = self.w3.split(3584)
         
         for expert in range(self.num_experts):
-
+            w1 = _w1[expert]
+            w2 = _w2[expert]
+            w3 = _w3[expert]
             idx, top_x = torch.where(expert_mask[expert])
             if top_x.shape[0] == 0:
                 continue
@@ -1068,15 +1070,16 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        pass
+        # std = self.config.initializer_range
+        # if isinstance(module, nn.Linear):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.bias is not None:
+        #         module.bias.data.zero_()
+        # elif isinstance(module, nn.Embedding):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.padding_idx is not None:
+        #         module.weight.data[module.padding_idx].zero_()
 
 
 MIXTRAL_INPUTS_DOCSTRING = r"""
@@ -1409,7 +1412,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype))
         logits = logits.float()
 
         loss = None
