@@ -613,9 +613,9 @@ class MixtralBlockSparseMoE(nn.Module):
         )
 
         if not USE_MEGABLOCKS:
-            self.register_buffer("split_w1", self.w1.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
+            self.register_buffer("split_w1", self.w1.view(self.num_experts, self.ffn_dim, self.hidden_dim).permute(0,2,1), persistent=False)
             self.register_buffer("split_w2", self.w2.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
-            self.register_buffer("split_w3", self.w3.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
+            self.register_buffer("split_w3", self.w3.view(self.num_experts, self.ffn_dim, self.hidden_dim).permute(0,2,1), persistent=False)
             
         # Calculate the number of bits needed to represent the expert indices
         # so that we can pass it to radix sort.
@@ -820,7 +820,7 @@ class MixtralBlockSparseMoE(nn.Module):
                 top_x = top_x.tolist()
                 idx = idx.tolist()
                 current_state = hidden_states[None, top_x] 
-                current_hidden_states = F.silu(current_state @ w1.T) * (current_state @ w3.T)
+                current_hidden_states = F.silu(current_state @ w1) * (current_state @ w3)
                 current_hidden_states = current_hidden_states @ w2
                 final_hidden_states[top_x] += (routing_weights[top_x, idx, None] * current_hidden_states)[0]
 
