@@ -603,13 +603,13 @@ class MixtralBlockSparseMoE(nn.Module):
 
         # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
         self.w1 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
         self.w2 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
         self.w3 = nn.Parameter(
-            torch.randn(self.ffn_dim * self.num_experts, self.hidden_dim)
+            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
         )
 
         # Calculate the number of bits needed to represent the expert indices
@@ -823,7 +823,9 @@ class MixtralBlockSparseMoE(nn.Module):
         current_expert_out_proj_weight = self.w3[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].t().unsqueeze(0)
         current_expert_gate_proj_weight = self.w2[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].unsqueeze(0)
 
-        hidden_state = F.silu(torch.bmm(hidden_state.unsqueeze(0), current_expert_in_proj_weight)) * torch.bmm(hidden_state.unsqueeze(0), current_expert_out_proj_weight)
+        target_dtype = current_expert_in_proj_weight.dtype
+
+        hidden_state = F.silu(torch.bmm(hidden_state.unsqueeze(0).to(target_dtype), current_expert_in_proj_weight)) * torch.bmm(hidden_state.unsqueeze(0).to(target_dtype), current_expert_out_proj_weight)
         hidden_state = hidden_state @ current_expert_gate_proj_weight
         return hidden_state
 
@@ -933,15 +935,16 @@ class MixtralPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        pass
+        # std = self.config.initializer_range
+        # if isinstance(module, nn.Linear):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.bias is not None:
+        #         module.bias.data.zero_()
+        # elif isinstance(module, nn.Embedding):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.padding_idx is not None:
+        #         module.weight.data[module.padding_idx].zero_()
 
 
 MIXTRAL_INPUTS_DOCSTRING = r"""
@@ -1274,7 +1277,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype))
         logits = logits.float()
 
         loss = None
