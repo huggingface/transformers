@@ -19,6 +19,7 @@ Feature extractor class for SeamlessM4T
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -225,7 +226,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
 
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, torch.Tensor, tuple, list)))
         )
 
         if is_batched:
