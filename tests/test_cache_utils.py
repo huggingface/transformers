@@ -188,11 +188,12 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertTrue(decoded[0].endswith("to perform a variety of tasks. The Transformer is a neural network"))
 
-    @require_auto_gptq
     def test_sink_cache_iterative_prompts(self):
         """Tests that SinkCache supports more than one new token at once, when shifting the cache"""
-        tokenizer = AutoTokenizer.from_pretrained("TheBloke/zephyr-7B-beta-GPTQ")
-        model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-beta-GPTQ", device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained("HuggingFaceH4/zephyr-7b-beta")
+        model = AutoModelForCausalLM.from_pretrained(
+            "HuggingFaceH4/zephyr-7b-beta", device_map="auto", torch_dtype=torch.float16
+        )
         prompt = (
             "Compose an engaging travel blog post about a recent trip to Hawaii, highlighting cultural experiences "
             "and must-see attractions."
@@ -221,9 +222,10 @@ class CacheIntegrationTest(unittest.TestCase):
         # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
         last_output = (
-            "<|assistant|>\nHawaii, the Aloha State, is a paradise on earth. From its stunning beaches to its lush "
-            "greenery, Hawaii is a destination that will leave you in awe. I recently had the privilege of visiting "
-            "this tropical paradise, and I'm excited to share my experiences with you.\n\nFirstly, let's talk about "
-            "the culture. Hawaii has a rich and unique culture that is deeply rooted in its history. One of the best"
+            "<|assistant|>\nAs the sun began to set over the Pacific Ocean, I found myself standing on the shores of "
+            "Waikiki Beach, my heart filled with awe and wonder. I had just returned from a two-week journey to the "
+            "beautiful island of Hawaii, and it had been an unforgettable experience filled with cultural experiences "
+            "and must-see attractions that left me breathless.\n\nOne of the most memorable experiences of my trip "
+            "was visiting the historic district of Honolulu. Here,"
         )
         self.assertTrue(decoded[0].endswith(last_output))
