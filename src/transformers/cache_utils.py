@@ -52,7 +52,7 @@ class Cache:
         if max_length is not None:
             length_excess = previous_seq_length + new_seq_length - max_length
             if length_excess > 0:
-                return max_length - length_excess
+                return max_length - new_seq_length
         return previous_seq_length
 
 
