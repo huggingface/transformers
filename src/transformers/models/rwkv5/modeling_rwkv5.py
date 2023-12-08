@@ -22,6 +22,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import (
@@ -42,6 +43,7 @@ _CONFIG_FOR_DOC = "Rwkv5Config"
 
 RWKV5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "RWKV/rwkv-5-world-1b5",
+    "RWKV/rwkv-5-world-3b",
     # See all RWKV models at https://huggingface.co/models?filter=rwkv
 ]
 
@@ -63,22 +65,20 @@ def rwkv_linear_attention_v5(
     lxb,
     ow,
     state,
-    return_state=False,
-    seq_mode=True,
 ):
     time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(n_head, -1, 1)
     time_first = time_first.float().reshape(-1, 1, 1).reshape(n_head, -1, 1)
     lxw = lxw.float()
     lxb = lxb.float()
-    # if seq_mode:
-    out = torch.empty((B, T, H, S), dtype=receptance.dtype, device=receptance.device)
+    out = torch.zeros_like(key).reshape(B, T, H, S)
     for t in range(T):
         rt = receptance[:, :, t : t + 1, :]
         kt = key[:, :, :, t : t + 1]
         vt = value[:, :, t : t + 1, :]
         at = kt @ vt
         out[:, t] = (rt @ (time_first * at + state)).squeeze(2)
-        state = at + time_decay * state
+        with torch.no_grad():
+            state = at + time_decay * state
 
     out = out.reshape(B * T, H * S)
     out = F.group_norm(out, num_groups=H, weight=lxw, bias=lxb).reshape(B, T, H * S)
@@ -171,8 +171,6 @@ class RwkvSelfAttention(nn.Module):
             self.ln_x.bias,
             self.output.weight.t(),
             state=layer_state,
-            return_state=use_cache,
-            seq_mode=seq_mode,
         )
 
         if layer_state is not None:
@@ -472,6 +470,7 @@ class Rwkv5Model(Rwkv5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Rwkv5Output]:
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -671,8 +670,14 @@ class Rwkv5ForCausalLM(Rwkv5PreTrainedModel):
 
         loss = None
         if labels is not None:
-            # https://github.com/BlinkDL/ChatRWKV/blob/main/rwkv_pip_package/src/rwkv/model.py#L984
-            loss = torch.tensor(0.0, device=logits.device, dtype=logits.dtype)
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
         if not return_dict:
             output = (logits,) + rwkv_outputs[1:]
