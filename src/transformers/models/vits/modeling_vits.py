@@ -74,8 +74,8 @@ class VitsModelOutput(ModelOutput):
 
             Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        training_outputs (`tuple(torch.FloatTensor), *optional*, returned when `labels` is passed and `VitsModelForPreTraining` is used):
-            Tuple of `torch.FloatTensor` used to compute losses when training.
+        training_outputs (`VitsTrainingOutput`, *optional*, returned when `labels` is passed and `VitsModelForPreTraining` is used):
+            Training outputs, used to compute losses when training.
     """
 
     waveform: torch.FloatTensor = None
@@ -116,6 +116,47 @@ class VitsTextEncoderOutput(ModelOutput):
     prior_log_variances: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    
+    
+@dataclass
+class VitsTrainingOutput(ModelOutput):
+    """
+    Describes the training outputs for the VITS model, used to compute losses when training.
+
+    Args:
+        waveform (`torch.FloatTensor` of shape `(batch_size, segment_length)`):
+            A sliced-segment of the audio waveform predicted by the model.
+        log_duration (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Log duration of each element of the latent tensor.
+        attn (`torch.FloatTensor` of shape `(batch_size, text_length, latent_length)`):
+            Attention mask. Corresponds to the most likely alignment between text and speech?
+        ids_slice (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            A 1D tensor containing the starting indices for each segment of the batch.
+        input_padding_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Input padding mask.
+        labels_padding_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Labels padding mask.
+        latents (`torch.FloatTensor` of shape `(batch_size, latent_length)`):
+            Latent variable.
+        prior_latents (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Prior latent variable.
+        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Prior means.
+        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Prior log variance.
+        posterior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Posterior means.
+        posterior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Posterior log variance.
+    """
+
+    waveform: torch.FloatTensor = None
+    sequence_lengths: torch.FloatTensor = None
+    spectrogram: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    training_outputs: Optional[Tuple[torch.FloatTensor]] = None
+
 
 
 @torch.jit.script
@@ -2033,7 +2074,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         return_dict: Optional[bool] = None,
         labels: Optional[torch.FloatTensor] = None,
         labels_attention_mask: Optional[torch.Tensor] = None,
-        monotic_alignment_function: Optional[Callable] = None,
+        monotonic_alignment_function: Optional[Callable] = None,
     ) -> Union[Tuple[Any], VitsModelOutput]:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, config.spectrogram_bins, sequence_length)`, *optional*):
@@ -2045,7 +2086,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        monotic_alignment_function (`Callable`, *optional*):
+        monotonic_alignment_function (`Callable`, *optional*):
             Monotonic alignment function. Used for training, i.e when `labels` are provided. By default, it will use a
             Pytorch implementation of the monotonic alignment function which is awfully slow. An alternative relying on
             cython is proposed in examples/pytorch/text-to-speech/run_vits_finetuning.py
@@ -2076,8 +2117,8 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        monotic_alignment_function = (
-            monotonic_align_max_path if monotic_alignment_function is None else monotic_alignment_function
+        monotonic_alignment_function = (
+            monotonic_align_max_path if monotonic_alignment_function is None else monotonic_alignment_function
         )
 
         if attention_mask is not None:
@@ -2159,7 +2200,7 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
             attn_mask = torch.unsqueeze(input_padding_mask, 2) * torch.unsqueeze(labels_padding_mask, -1)
 
-            attn = monotic_alignment_function(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
+            attn = monotonic_alignment_function(neg_cent, attn_mask.squeeze(1)).unsqueeze(1).detach()
 
         durations = attn.sum(2)
 
