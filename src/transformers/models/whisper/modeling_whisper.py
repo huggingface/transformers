@@ -20,6 +20,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import copy
 import torch
+import zlib
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
@@ -47,6 +48,11 @@ from ...utils import (
 )
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
+
+
+from transformers import AutoTokenizer
+
+# tok = AutoTokenizer.from_pretrained("openai/whisper-tiny")
 
 
 if is_flash_attn_2_available():
@@ -2127,11 +2133,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
-            last_forced_decoder_ids = (
-                forced_decoder_ids[-1][-1]
-                if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None
-                else None
-            )
+            last_forced_decoder_ids = forced_decoder_ids[-1][-1] if forced_decoder_ids is not None else None
             if last_forced_decoder_ids == generation_config.no_timestamps_token_id:
                 # remove no_timestamp to be forcefully generated if we want to return timestamps
                 # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
@@ -2370,23 +2372,22 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                             return None
                         return values[batch_idx].cpu()
 
-                    seek_sequences = seek_outputs["sequences"]
+                    sequence_tokens = seek_outputs["sequences"]
                     seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(cur_bsz)]
                 else:
-                    seek_sequences = seek_outputs
+                    sequence_tokens = seek_outputs
 
                 # remove all previously passed decoder input ids
-                seek_sequences = seek_sequences[:, decoder_input_ids.shape[-1]:]
+                seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
 
                 needs_fallback = False
                 if compression_ratio_threshold is not None:
-                    compression_ratio = [seek_sequence.shape[0] / torch.unique(seek_sequence).shape[0] for seek_sequence in seek_sequences]
-
                     # TODO(PVP) only works for batch size = 1 currently
-                    if compression_ratio[0] > compression_ratio_threshold:
+                    compression_ratio = self._retrieve_compression_ratio(sequence_tokens[0], self.config.vocab_size)
+
+                    if compression_ratio > compression_ratio_threshold:
                         print("fallback compression")
                         print("current temp", temperature)
-                        
                         needs_fallback = True
 
                 if logprob_threshold is not None:
@@ -2394,7 +2395,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         logprobs = [s["sequences_scores"] for s in seek_outputs]
                     else:
                         scores = [s["scores"] for s in seek_outputs]
-                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id)
+                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
 
                     # TODO(PVP) only works for batch size = 1 currently
                     if logprobs[0] < logprob_threshold:
@@ -2405,7 +2406,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 if no_speech_threshold is not None:
                     # TODO(PVP) only works for batch size = 1 currently
                     # Need to do before all other logit processors
-                    if no_speech_detector.no_speech_prob[0].cpu() > no_speech_threshold and logprobs[0] < logprob_threshold:
+                    if no_speech_detector.no_speech_prob[0] > no_speech_threshold and logprobs[0] < logprob_threshold:
+                        print("Skip because of VAD")
                         needs_fallback = False
                         should_skip = True
 
@@ -2481,9 +2483,28 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         return sequences
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id):
+    def _retrieve_compression_ratio(tokens, vocab_size):
+        length = int(math.log2(vocab_size) / 8) + 1
+        token_bytes = b''.join([t.to_bytes(length, 'little') for t in tokens.tolist()])
+
+        # string = tok.decode(tokens, skip_special_tokens=True)
+        # string_bytes = string.encode("utf-8")
+        # string_compression_ratio = len(string_bytes) / len(zlib.compress(string_bytes))
+
+        compression_ratio = len(token_bytes) / len(zlib.compress(token_bytes))
+
+        # print(f"HERE: string: {string}")
+        # print(f"HERE: string ratio: {string_compression_ratio}")
+        # print(f"HERE: token ratio: {compression_ratio}")
+        # print('HERE:' + 20 * '-')
+
+        return compression_ratio
+
+    @staticmethod
+    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
+        rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack([torch.stack(score) for score in scores]).to(tokens.device)
-        logprobs = F.log_softmax(scores.float(), dim=-1).to(scores.dtype)
+        logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
         tokens = tokens[:, -scores.shape[1]:]
 
         def get_log_prob(logprob, token):
