@@ -49,10 +49,8 @@ class Cache:
         #   length, we will need to evict part of the cache (and thus not all cache is usable)
         max_length = self.get_max_length()
         previous_seq_length = self.get_seq_length(layer_idx)
-        if max_length is not None:
-            length_excess = previous_seq_length + new_seq_length - max_length
-            if length_excess > 0:
-                return max_length - new_seq_length
+        if max_length is not None and previous_seq_length + new_seq_length > max_length:
+            return max_length - new_seq_length
         return previous_seq_length
 
 
