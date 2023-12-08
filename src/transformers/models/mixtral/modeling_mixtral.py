@@ -51,6 +51,18 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
+try:
+    import megablocks.ops as ops
+except ImportError:
+    print("MegaBlocks not found, please see "
+          "https://github.com/stanford-futuredata/megablocks/")
+try:
+    import stk
+except ImportError:
+    print(
+        "STK not found: please see https://github.com/stanford-futuredata/stk")
+
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MixtralConfig"
