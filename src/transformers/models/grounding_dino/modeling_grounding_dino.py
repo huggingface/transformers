@@ -46,7 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
-from .configuration_grounding_dino import GroundingDINOConfig, GroundingDINOTextPrenetConfig
+from .configuration_grounding_dino import GroundingDINOConfig, GroundingDINOTextConfig
 from .load_custom import load_cuda_kernels
 
 
@@ -3572,7 +3572,7 @@ class GroundingDINOTextPooler(nn.Module):
 
 
 class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
-    config_class = GroundingDINOTextPrenetConfig
+    config_class = GroundingDINOTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)

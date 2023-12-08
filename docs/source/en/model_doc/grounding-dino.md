@@ -47,9 +47,9 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 
 [[autodoc]] GroundingDINOProcessor
 
-## GroundingDINOTextPrenetConfig
+## GroundingDINOTextConfig
 
-[[autodoc]] GroundingDINOTextPrenetConfig
+[[autodoc]] GroundingDINOTextConfig
 
 ## GroundingDINOConfig
 

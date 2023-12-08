@@ -28,7 +28,7 @@ GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class GroundingDINOTextPrenetConfig(PretrainedConfig):
+class GroundingDINOTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GroundingDINOTextPrenetModel`]. It is used to
     instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
@@ -78,10 +78,10 @@ class GroundingDINOTextPrenetConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import GroundingDINOTextPrenetConfig, GroundingDINOConfig, GroundingDINOForObjectDetection
+    >>> from transformers import GroundingDINOTextConfig, GroundingDINOConfig, GroundingDINOForObjectDetection
 
     >>> # Initializing a BERT bert-base-uncased style configuration
-    >>> configuration = GroundingDINOTextPrenetConfig()
+    >>> configuration = GroundingDINOTextConfig()
 
     >>> # Initializing a GroundingDINOConfig with generated bert-like config
     >>> config = GroundingDINOConfig(text_backbone_config=configuration)
@@ -161,7 +161,7 @@ class GroundingDINOConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
-        text_backbone_config (`str`, *optional*, defaults to `GroundingDINOTextPrenetConfig()`):
+        text_backbone_config (`str`, *optional*, defaults to `GroundingDINOTextConfig()`):
             The configuration of the text backbone model. Should be a BERT-like config.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
@@ -343,14 +343,14 @@ class GroundingDINOConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if text_backbone_config is None:
-            self.text_backbone_config = GroundingDINOTextPrenetConfig()
+            self.text_backbone_config = GroundingDINOTextConfig()
         elif isinstance(text_backbone_config, dict):
-            self.text_backbone_config = GroundingDINOTextPrenetConfig(**text_backbone_config)
-        elif isinstance(text_backbone_config, GroundingDINOTextPrenetConfig):
+            self.text_backbone_config = GroundingDINOTextConfig(**text_backbone_config)
+        elif isinstance(text_backbone_config, GroundingDINOTextConfig):
             self.text_backbone_config = text_backbone_config
         else:
             raise ValueError(
-                f"`text_backbone_config` should be either a `dict` or an instance of `GroundingDINOTextPrenetConfig`. Received {type(text_backbone_config)} instead."
+                f"`text_backbone_config` should be either a `dict` or an instance of `GroundingDINOTextConfig`. Received {type(text_backbone_config)} instead."
             )
         self.max_text_len = max_text_len
         # Text Enhancer
