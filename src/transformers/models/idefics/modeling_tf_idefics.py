@@ -27,7 +27,7 @@ from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
-from ...modeling_tf_utils import shape_list
+from ...modeling_tf_utils import shape_list, unpack_inputs, TFModelInputType
 from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
@@ -1059,6 +1059,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
+@keras_serializable
 class TFIdeficsMainLayer(tf.keras.layers.Layer):
     """
     Transformer decoder consisting of `config.num_hidden_layers` layers. Each layer is a [`IdeficsDecoderLayer`]
@@ -1156,11 +1157,11 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
             )
 
         return combined_attention_mask
-
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -1409,14 +1410,14 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         )
 
 class TFIdeficsModel(TFIdeficsPreTrainedModel):
-    def __init__(self, config: IdeficsConfig, **kwargs):
-        super().__init__(config, **kwargs)
+    def __init__(self, config: IdeficsConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
 
         self.model = TFIdeficsMainLayer(config, name="idefics")
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
@@ -1508,11 +1509,12 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
             ):
                 output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFIdeficsCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: tf.Tensor = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[tf.Tensor] = None,
         position_ids: Optional[tf.Tensor] = None,
         past_key_values: Optional[List[tf.Tensor]] = None,
