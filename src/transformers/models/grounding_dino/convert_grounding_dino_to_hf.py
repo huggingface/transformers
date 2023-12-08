@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert GroundingDINO SimMIM checkpoints from the original repository.
+"""Convert GroundingDino SimMIM checkpoints from the original repository.
 
 URL: https://github.com/IDEA-Research/GroundingDINO"""
 
@@ -25,10 +25,10 @@ from torchvision import transforms as T
 
 from transformers import (
     AutoTokenizer,
-    GroundingDINOConfig,
-    GroundingDINOForObjectDetection,
-    GroundingDINOImageProcessor,
-    GroundingDINOProcessor,
+    GroundingDinoConfig,
+    GroundingDinoForObjectDetection,
+    GroundingDinoImageProcessor,
+    GroundingDinoProcessor,
     SwinConfig,
 )
 
@@ -62,7 +62,7 @@ def get_grounding_dino_config(model_name):
         out_indices=[2, 3, 4],
     )
 
-    config = GroundingDINOConfig(backbone_config=backbone_config)
+    config = GroundingDinoConfig(backbone_config=backbone_config)
 
     return config
 
@@ -334,10 +334,10 @@ def convert_grounding_dino_checkpoint(args):
     push_to_hub = args.push_to_hub
 
     checkpoint_mapping = {
-        "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swint_ogc.pth",
-        "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDINO/resolve/main/groundingdino_swinb_cogcoor.pth",
+        "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swint_ogc.pth",
+        "grounding-dino-base": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swinb_cogcoor.pth",
     }
-    # Define default GroundingDINO configuation
+    # Define default GroundingDino configuation
     config = get_grounding_dino_config(model_name)
 
     # Load original checkpoint
@@ -354,7 +354,7 @@ def convert_grounding_dino_checkpoint(args):
     read_in_q_k_v(new_state_dict, config)
 
     # Load HF model
-    model = GroundingDINOForObjectDetection(config)
+    model = GroundingDinoForObjectDetection(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
 
@@ -363,9 +363,9 @@ def convert_grounding_dino_checkpoint(args):
     transforms = T.Compose([T.Resize(size=800, max_size=1333), T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
     original_pixel_values = transforms(image).unsqueeze(0)
 
-    image_processor = GroundingDINOImageProcessor()
+    image_processor = GroundingDinoImageProcessor()
     tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-    processor = GroundingDINOProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = GroundingDinoProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     text = "a cat"
     inputs = processor(images=image, text=preprocess_caption(text), return_tensors="pt")
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         default="grounding-dino-tiny",
         type=str,
         choices=["grounding-dino-tiny", "grounding-dino-base"],
-        help="Name of the GroundingDINO model you'd like to convert.",
+        help="Name of the GroundingDino model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

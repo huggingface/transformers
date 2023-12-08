@@ -51,13 +51,13 @@ def get_phrases_from_posmap(posmaps, input_ids):
     return token_ids
 
 
-class GroundingDINOProcessor(ProcessorMixin):
+class GroundingDinoProcessor(ProcessorMixin):
     r"""
     Constructs a Grounding DINO processor which wraps a Deformable DETR image processor and a BERT tokenizer into a
     single processor.
 
-    [`GroundingDINOProcessor`] offers all the functionalities of [`DeformableDetrImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~GroundingDINOProcessor.__call__`] and [`~GroundingDINOProcessor.decode`]
+    [`GroundingDinoProcessor`] offers all the functionalities of [`DeformableDetrImageProcessor`] and
+    [`AutoTokenizer`]. See the docstring of [`~GroundingDinoProcessor.__call__`] and [`~GroundingDinoProcessor.decode`]
     for more information.
 
     Args:
@@ -68,7 +68,7 @@ class GroundingDINOProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "GroundingDINOImageProcessor"
+    image_processor_class = "GroundingDinoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):

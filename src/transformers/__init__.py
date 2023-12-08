@@ -372,9 +372,9 @@ _import_structure = {
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
     "models.grounding_dino": [
         "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GroundingDINOConfig",
-        "GroundingDINOProcessor",
-        "GroundingDINOTextConfig",
+        "GroundingDinoConfig",
+        "GroundingDinoProcessor",
+        "GroundingDinoTextConfig",
     ],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -994,7 +994,7 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
-    _import_structure["models.grounding_dino"].extend(["GroundingDINOImageProcessor"])
+    _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -2001,9 +2001,9 @@ else:
     _import_structure["models.grounding_dino"].extend(
         [
             "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GroundingDINOForObjectDetection",
-            "GroundingDINOModel",
-            "GroundingDINOPreTrainedModel",
+            "GroundingDinoForObjectDetection",
+            "GroundingDinoModel",
+            "GroundingDinoPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -4601,9 +4601,9 @@ if TYPE_CHECKING:
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
     from .models.grounding_dino import (
         GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GroundingDINOConfig,
-        GroundingDINOProcessor,
-        GroundingDINOTextConfig,
+        GroundingDinoConfig,
+        GroundingDinoProcessor,
+        GroundingDinoTextConfig,
     )
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5164,7 +5164,7 @@ if TYPE_CHECKING:
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
-        from .models.grounding_dino import GroundingDINOImageProcessor
+        from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
@@ -6010,9 +6010,9 @@ if TYPE_CHECKING:
         )
         from .models.grounding_dino import (
             GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GroundingDINOForObjectDetection,
-            GroundingDINOModel,
-            GroundingDINOPreTrainedModel,
+            GroundingDinoForObjectDetection,
+            GroundingDinoModel,
+            GroundingDinoPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,

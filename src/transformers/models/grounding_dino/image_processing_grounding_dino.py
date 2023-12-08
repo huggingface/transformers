@@ -286,7 +286,7 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
     return masks
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->GroundingDINO
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->GroundingDino
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -294,7 +294,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by GroundingDINO.
+    Convert the target in COCO format into the format expected by GroundingDino.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
@@ -379,7 +379,7 @@ def masks_to_boxes(masks: np.ndarray) -> np.ndarray:
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->GroundingDINO
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_panoptic_annotation with DETR->GroundingDino
 def prepare_coco_panoptic_annotation(
     image: np.ndarray,
     target: Dict,
@@ -388,7 +388,7 @@ def prepare_coco_panoptic_annotation(
     input_data_format: Union[ChannelDimension, str] = None,
 ) -> Dict:
     """
-    Prepare a coco panoptic annotation for GroundingDINO.
+    Prepare a coco panoptic annotation for GroundingDino.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
     annotation_path = pathlib.Path(masks_path) / target["file_name"]
@@ -758,7 +758,7 @@ def compute_segments(
     return segmentation, segments
 
 
-class GroundingDINOImageProcessor(BaseImageProcessor):
+class GroundingDinoImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Grounding DINO image processor.
 
@@ -839,11 +839,11 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
 
     @classmethod
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->GroundingDINO
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->GroundingDino
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `GroundingDINOImageProcessor.from_pretrained(checkpoint, size=600,
+        created using from_dict and kwargs e.g. `GroundingDinoImageProcessor.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -853,7 +853,7 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
             image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
         return super().from_dict(image_processor_dict, **kwargs)
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->GroundingDINO
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_annotation with DETR->GroundingDino
     def prepare_annotation(
         self,
         image: np.ndarray,
@@ -864,7 +864,7 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> Dict:
         """
-        Prepare an annotation for feeding into GroundingDINO model.
+        Prepare an annotation for feeding into GroundingDino model.
         """
         format = format if format is not None else self.format
 
@@ -1345,16 +1345,16 @@ class GroundingDINOImageProcessor(BaseImageProcessor):
 
         return encoded_inputs
 
-    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection with OwlViT->GroundingDINO
+    # Copied from transformers.models.owlvit.image_processing_owlvit.OwlViTImageProcessor.post_process_object_detection with OwlViT->GroundingDino
     def post_process_object_detection(
         self, outputs, threshold: float = 0.1, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
-        Converts the raw output of [`GroundingDINOForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
 
         Args:
-            outputs ([`GroundingDINOObjectDetectionOutput`]):
+            outputs ([`GroundingDinoObjectDetectionOutput`]):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.

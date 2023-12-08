@@ -30,11 +30,11 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GroundingDINOImageProcessor
+    from transformers import GroundingDinoImageProcessor
 
 
-# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester with DeformableDetr->GroundingDINO
-class GroundingDINOImageProcessingTester(unittest.TestCase):
+# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTester with DeformableDetr->GroundingDino
+class GroundingDinoImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -81,7 +81,7 @@ class GroundingDINOImageProcessingTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to GroundingDINOImageProcessor,
+        This function computes the expected height and width when providing images to GroundingDinoImageProcessor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
@@ -128,12 +128,12 @@ class GroundingDINOImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDINO
-class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = GroundingDINOImageProcessor if is_vision_available() else None
+# Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDino
+class GroundingDinoImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = GroundingDinoImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        self.image_processor_tester = GroundingDINOImageProcessingTester(self)
+        self.image_processor_tester = GroundingDinoImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
@@ -170,7 +170,7 @@ class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        image_processing = GroundingDINOImageProcessor()
+        image_processing = GroundingDinoImageProcessor()
         encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
@@ -216,7 +216,7 @@ class GroundingDINOImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        image_processing = GroundingDINOImageProcessor(format="coco_panoptic")
+        image_processing = GroundingDinoImageProcessor(format="coco_panoptic")
         encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values

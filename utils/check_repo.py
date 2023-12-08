@@ -232,7 +232,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
-    "GroundingDINOTextPrenet",
+    "GroundingDinoTextPrenet",
     "InstructBlipVisionModel",
     "InstructBlipQFormerModel",
     "LayoutLMForQuestionAnswering",

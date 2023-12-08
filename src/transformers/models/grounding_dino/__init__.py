@@ -20,10 +20,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_grounding_dino": [
         "GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "GroundingDINOConfig",
-        "GroundingDINOTextConfig",
+        "GroundingDinoConfig",
+        "GroundingDinoTextConfig",
     ],
-    "processing_grounding_dino": ["GroundingDINOProcessor"],
+    "processing_grounding_dino": ["GroundingDinoProcessor"],
 }
 
 try:
@@ -34,9 +34,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_grounding_dino"] = [
         "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GroundingDINOForObjectDetection",
-        "GroundingDINOModel",
-        "GroundingDINOPreTrainedModel",
+        "GroundingDinoForObjectDetection",
+        "GroundingDinoModel",
+        "GroundingDinoPreTrainedModel",
     ]
 
 try:
@@ -45,16 +45,16 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_grounding_dino"] = ["GroundingDINOImageProcessor"]
+    _import_structure["image_processing_grounding_dino"] = ["GroundingDinoImageProcessor"]
 
 
 if TYPE_CHECKING:
     from .configuration_grounding_dino import (
         GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        GroundingDINOConfig,
-        GroundingDINOTextConfig,
+        GroundingDinoConfig,
+        GroundingDinoTextConfig,
     )
-    from .processing_grounding_dino import GroundingDINOProcessor
+    from .processing_grounding_dino import GroundingDinoProcessor
 
     try:
         if not is_torch_available():
@@ -64,9 +64,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_grounding_dino import (
             GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GroundingDINOForObjectDetection,
-            GroundingDINOModel,
-            GroundingDINOPreTrainedModel,
+            GroundingDinoForObjectDetection,
+            GroundingDinoModel,
+            GroundingDinoPreTrainedModel,
         )
 
     try:
@@ -75,7 +75,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_grounding_dino import GroundingDINOImageProcessor
+        from .image_processing_grounding_dino import GroundingDinoImageProcessor
 
 else:
     import sys

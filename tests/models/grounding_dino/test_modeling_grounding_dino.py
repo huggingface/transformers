@@ -22,8 +22,8 @@ import unittest
 from typing import Dict, List, Tuple
 
 from transformers import (
-    GroundingDINOConfig,
-    GroundingDINOTextConfig,
+    GroundingDinoConfig,
+    GroundingDinoTextConfig,
     SwinConfig,
     is_torch_available,
     is_vision_available,
@@ -47,7 +47,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import GroundingDINOForObjectDetection, GroundingDINOModel
+    from transformers import GroundingDinoForObjectDetection, GroundingDinoModel
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -57,7 +57,7 @@ if is_vision_available():
     from transformers import AutoProcessor
 
 
-class GroundingDINOModelTester:
+class GroundingDinoModelTester:
     def __init__(
         self,
         parent,
@@ -146,10 +146,10 @@ class GroundingDINOModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        text_backbone = GroundingDINOTextConfig(
+        text_backbone = GroundingDinoTextConfig(
             hidden_size=8, num_hidden_layers=2, num_attention_heads=2, intermediate_size=8, max_position_embeddings=8
         )
-        return GroundingDINOConfig(
+        return GroundingDinoConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -176,7 +176,7 @@ class GroundingDINOModelTester:
         return config, inputs_dict
 
     def create_and_check_model(self, config, pixel_values, pixel_mask, input_ids, labels):
-        model = GroundingDINOModel(config=config)
+        model = GroundingDinoModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -185,7 +185,7 @@ class GroundingDINOModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_queries, self.hidden_size))
 
     def create_and_check_object_detection_head_model(self, config, pixel_values, pixel_mask, input_ids, labels):
-        model = GroundingDINOForObjectDetection(config=config)
+        model = GroundingDinoForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -202,15 +202,15 @@ class GroundingDINOModelTester:
 
 
 @require_torch
-class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GroundingDINOModel, GroundingDINOForObjectDetection) if is_torch_available() else ()
+class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (GroundingDinoModel, GroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
     pipeline_model_mapping = (
-        {"feature-extraction": GroundingDINOModel, "object-detection": GroundingDINOForObjectDetection}
+        {"feature-extraction": GroundingDinoModel, "object-detection": GroundingDinoForObjectDetection}
         if is_torch_available()
         else {}
     )
@@ -220,7 +220,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "GroundingDINOForObjectDetection":
+            if model_class.__name__ == "GroundingDinoForObjectDetection":
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -243,8 +243,8 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = GroundingDINOModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GroundingDINOConfig, has_text_modality=False)
+        self.model_tester = GroundingDinoModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=GroundingDinoConfig, has_text_modality=False)
 
     def test_config(self):
         # we don't test common_properties and arguments_init as these don't apply for Grounding DINO
@@ -325,7 +325,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Object Detection model returns pred_logits and pred_boxes
-            if model_class.__name__ == "GroundingDINOForObjectDetection":
+            if model_class.__name__ == "GroundingDinoForObjectDetection":
                 correct_outlen += 2
 
             self.assertEqual(out_len, correct_outlen)
@@ -580,7 +580,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "GroundingDINOForObjectDetection":
+            if model_class.__name__ == "GroundingDinoForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -617,7 +617,7 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                     )
 
     def test_two_stage_training(self):
-        model_class = GroundingDINOForObjectDetection
+        model_class = GroundingDinoForObjectDetection
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
         config.two_stage = True
@@ -655,9 +655,9 @@ class GroundingDINOModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 for i in range(len(tied_params)):
                     tied_params[i] = [p for p in tied_params[i] if re.search(key, p) is None]
 
-            # GroundingDINO when sharing weights also uses the shared ones in GroundingDINODecoder
+            # GroundingDino when sharing weights also uses the shared ones in GroundingDinoDecoder
             # Therefore, differently from DeformableDetr, we expect the group lens to be 2
-            # one for self.bbox_embed in GroundingDINOForObejectDetection and another one
+            # one for self.bbox_embed in GroundingDinoForObejectDetection and another one
             # in the decoder
             tied_params = [group for group in tied_params if len(group) > 2]
             self.assertListEqual(
@@ -684,13 +684,13 @@ def prepare_text():
 @require_timm
 @require_vision
 @slow
-class GroundingDINOModelIntegrationTests(unittest.TestCase):
+class GroundingDinoModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
         return AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").to(torch_device)
+        model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny").to(torch_device)
 
         processor = self.default_processor
         image = prepare_img()
@@ -749,7 +749,7 @@ class GroundingDINOModelIntegrationTests(unittest.TestCase):
         encoding = processor(images=image, text=text, return_tensors="pt")
 
         # 1. run model on CPU
-        model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         with torch.no_grad():
             cpu_outputs = model(**encoding)

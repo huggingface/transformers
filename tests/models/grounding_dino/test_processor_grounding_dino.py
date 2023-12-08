@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 import pytest
 
-from transformers import BertTokenizer, BertTokenizerFast, GroundingDINOProcessor
+from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_vision
 from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
@@ -30,11 +30,11 @@ from transformers.utils import IMAGE_PROCESSOR_NAME, is_vision_available
 if is_vision_available():
     from PIL import Image
 
-    from transformers import GroundingDINOImageProcessor
+    from transformers import GroundingDinoImageProcessor
 
 
 @require_vision
-class GroundingDINOProcessorTest(unittest.TestCase):
+class GroundingDinoProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -65,9 +65,9 @@ class GroundingDINOProcessorTest(unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs):
         return BertTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDINO
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_image_processor with CLIP->GroundingDino
     def get_image_processor(self, **kwargs):
-        return GroundingDINOImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+        return GroundingDinoImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
     def tearDown(self):
@@ -85,19 +85,19 @@ class GroundingDINOProcessorTest(unittest.TestCase):
 
         return image_inputs
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDINO,GroundingDINOTokenizer->BertTokenizer
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_default with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_default(self):
         tokenizer_slow = self.get_tokenizer()
         tokenizer_fast = self.get_rust_tokenizer()
         image_processor = self.get_image_processor()
 
-        processor_slow = GroundingDINOProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
+        processor_slow = GroundingDinoProcessor(tokenizer=tokenizer_slow, image_processor=image_processor)
         processor_slow.save_pretrained(self.tmpdirname)
-        processor_slow = GroundingDINOProcessor.from_pretrained(self.tmpdirname, use_fast=False)
+        processor_slow = GroundingDinoProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
-        processor_fast = GroundingDINOProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
+        processor_fast = GroundingDinoProcessor(tokenizer=tokenizer_fast, image_processor=image_processor)
         processor_fast.save_pretrained(self.tmpdirname)
-        processor_fast = GroundingDINOProcessor.from_pretrained(self.tmpdirname)
+        processor_fast = GroundingDinoProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor_slow.tokenizer.get_vocab(), tokenizer_slow.get_vocab())
         self.assertEqual(processor_fast.tokenizer.get_vocab(), tokenizer_fast.get_vocab())
@@ -107,18 +107,18 @@ class GroundingDINOProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor_slow.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertEqual(processor_fast.image_processor.to_json_string(), image_processor.to_json_string())
-        self.assertIsInstance(processor_slow.image_processor, GroundingDINOImageProcessor)
-        self.assertIsInstance(processor_fast.image_processor, GroundingDINOImageProcessor)
+        self.assertIsInstance(processor_slow.image_processor, GroundingDinoImageProcessor)
+        self.assertIsInstance(processor_fast.image_processor, GroundingDinoImageProcessor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDINO,GroundingDINOTokenizer->BertTokenizer
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_save_load_pretrained_additional_features with CLIP->GroundingDino,GroundingDinoTokenizer->BertTokenizer
     def test_save_load_pretrained_additional_features(self):
-        processor = GroundingDINOProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
+        processor = GroundingDinoProcessor(tokenizer=self.get_tokenizer(), image_processor=self.get_image_processor())
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_image_processor(do_normalize=False, padding_value=1.0)
 
-        processor = GroundingDINOProcessor.from_pretrained(
+        processor = GroundingDinoProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -126,14 +126,14 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, BertTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, GroundingDINOImageProcessor)
+        self.assertIsInstance(processor.image_processor, GroundingDinoImageProcessor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDINO
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_image_processor with CLIP->GroundingDino
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = GroundingDINOProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         image_input = self.prepare_image_inputs()
 
@@ -143,12 +143,12 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         for key in input_image_proc.keys():
             self.assertAlmostEqual(input_image_proc[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer with CLIP->GroundingDINO
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer with CLIP->GroundingDino
     def test_tokenizer(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = GroundingDINOProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
 
@@ -163,7 +163,7 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = GroundingDINOProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -178,12 +178,12 @@ class GroundingDINOProcessorTest(unittest.TestCase):
         with pytest.raises(ValueError):
             processor()
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer_decode with CLIP->GroundingDINO
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_tokenizer_decode with CLIP->GroundingDino
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = GroundingDINOProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -192,12 +192,12 @@ class GroundingDINOProcessorTest(unittest.TestCase):
 
         self.assertListEqual(decoded_tok, decoded_processor)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDINO
+    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.test_model_input_names with CLIP->GroundingDino
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
 
-        processor = GroundingDINOProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()

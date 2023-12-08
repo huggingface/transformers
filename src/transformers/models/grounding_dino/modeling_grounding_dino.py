@@ -46,7 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, meshgrid, prune_linear_layer
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
-from .configuration_grounding_dino import GroundingDINOConfig, GroundingDINOTextConfig
+from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoTextConfig
 from .load_custom import load_cuda_kernels
 
 
@@ -71,7 +71,7 @@ if is_scipy_available():
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "GroundingDINOConfig"
+_CONFIG_FOR_DOC = "GroundingDinoConfig"
 _CHECKPOINT_FOR_DOC = "EduardoPacheco/grounding-dino-tiny"
 
 GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -130,9 +130,9 @@ class MultiScaleDeformableAttentionFunction(Function):
 
 
 @dataclass
-class GroundingDINODecoderOutput(ModelOutput):
+class GroundingDinoDecoderOutput(ModelOutput):
     """
-    Base class for outputs of the GroundingDINODecoder. This class adds two attributes to
+    Base class for outputs of the GroundingDinoDecoder. This class adds two attributes to
     BaseModelOutputWithCrossAttentions, namely:
     - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
     - a stacked tensor of intermediate reference points.
@@ -162,9 +162,9 @@ class GroundingDINODecoderOutput(ModelOutput):
 
 
 @dataclass
-class GroundingDINOEncoderOutput(ModelOutput):
+class GroundingDinoEncoderOutput(ModelOutput):
     """
-    Base class for outputs of the GroundingDINOEncoder. This class extends BaseModelOutput, due to:
+    Base class for outputs of the GroundingDinoEncoder. This class extends BaseModelOutput, due to:
     - vision and text last hidden states
     - vision and text intermediate hidden states
 
@@ -196,7 +196,7 @@ class GroundingDINOEncoderOutput(ModelOutput):
 
 
 @dataclass
-class GroundingDINOModelOutput(ModelOutput):
+class GroundingDinoModelOutput(ModelOutput):
     """
     Base class for outputs of the Grounding DINO encoder-decoder model.
 
@@ -259,9 +259,9 @@ class GroundingDINOModelOutput(ModelOutput):
 
 
 @dataclass
-class GroundingDINOObjectDetectionOutput(ModelOutput):
+class GroundingDinoObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`GroundingDINOForObjectDetection`].
+    Output type of [`GroundingDinoForObjectDetection`].
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -275,7 +275,7 @@ class GroundingDINOObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~GroundingDINOProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~GroundingDinoProcessor.post_process_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`List[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -353,8 +353,8 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDINO
-class GroundingDINOFrozenBatchNorm2d(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
+class GroundingDinoFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
@@ -393,10 +393,10 @@ class GroundingDINOFrozenBatchNorm2d(nn.Module):
         return x * scale + bias
 
 
-# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->GroundingDINO
+# Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->GroundingDino
 def replace_batch_norm(model):
     r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `GroundingDINOFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `GroundingDinoFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
@@ -404,7 +404,7 @@ def replace_batch_norm(model):
     """
     for name, module in model.named_children():
         if isinstance(module, nn.BatchNorm2d):
-            new_module = GroundingDINOFrozenBatchNorm2d(module.num_features)
+            new_module = GroundingDinoFrozenBatchNorm2d(module.num_features)
 
             if not module.weight.device == torch.device("meta"):
                 new_module.weight.data.copy_(module.weight)
@@ -418,11 +418,11 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-class GroundingDINOConvEncoder(nn.Module):
+class GroundingDinoConvEncoder(nn.Module):
     """
     Convolutional backbone using the AutoBackbone API.
 
-    nn.BatchNorm2d layers are replaced by GroundingDINOFrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by GroundingDinoFrozenBatchNorm2d as defined above.
     """
 
     def __init__(self, config):
@@ -455,8 +455,8 @@ class GroundingDINOConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->GroundingDINO
-class GroundingDINOConvModel(nn.Module):
+# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->GroundingDino
+class GroundingDinoConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
     """
@@ -477,7 +477,7 @@ class GroundingDINOConvModel(nn.Module):
         return out, pos
 
 
-class GroundingDINOSinePositionEmbedding(nn.Module):
+class GroundingDinoSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
     need paper, generalized to work on images.
@@ -516,7 +516,7 @@ class GroundingDINOSinePositionEmbedding(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
-class GroundingDINOLearnedPositionEmbedding(nn.Module):
+class GroundingDinoLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -543,11 +543,11 @@ def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
         # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDINOSinePositionEmbedding(
+        position_embedding = GroundingDinoSinePositionEmbedding(
             n_steps, config.positional_embedding_temperature, normalize=True
         )
     elif config.position_embedding_type == "learned":
-        position_embedding = GroundingDINOLearnedPositionEmbedding(n_steps)
+        position_embedding = GroundingDinoLearnedPositionEmbedding(n_steps)
     else:
         raise ValueError(f"Not supported {config.position_embedding_type}")
 
@@ -594,13 +594,13 @@ def multi_scale_deformable_attention(
     return output.transpose(1, 2).contiguous()
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->GroundingDINO,Deformable DETR->Grounding DINO
-class GroundingDINOMultiscaleDeformableAttention(nn.Module):
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrMultiscaleDeformableAttention with DeformableDetr->GroundingDino,Deformable DETR->Grounding DINO
+class GroundingDinoMultiscaleDeformableAttention(nn.Module):
     """
     Multiscale deformable attention as proposed in Deformable DETR.
     """
 
-    def __init__(self, config: GroundingDINOConfig, num_heads: int, n_points: int):
+    def __init__(self, config: GroundingDinoConfig, num_heads: int, n_points: int):
         super().__init__()
         if config.d_model % num_heads != 0:
             raise ValueError(
@@ -610,7 +610,7 @@ class GroundingDINOMultiscaleDeformableAttention(nn.Module):
         # check if dim_per_head is power of 2
         if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
-                "You'd better set embed_dim (d_model) in GroundingDINOMultiscaleDeformableAttention to make the"
+                "You'd better set embed_dim (d_model) in GroundingDinoMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
                 " implementation."
             )
@@ -728,7 +728,7 @@ class GroundingDINOMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-class GroundingDINOTextEnhancerLayer(nn.Module):
+class GroundingDinoTextEnhancerLayer(nn.Module):
     """Vanilla Transformer with text embeddings as input"""
 
     def __init__(self, config):
@@ -760,7 +760,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         position_embeddings: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """Text self-attention to enhance projection of text features generated by
-        the text encoder (GroundingDINOTextPrenet) within GroundingDINOEncoderLayer
+        the text encoder (GroundingDinoTextPrenet) within GroundingDinoEncoderLayer
 
         Args:
             hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
@@ -803,7 +803,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         return hidden_states, attention_weights
 
 
-class GroundingDINOBiMultiHeadAttention(nn.Module):
+class GroundingDinoBiMultiHeadAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -975,8 +975,8 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDINO
-class GroundingDINODropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDino
+class GroundingDinoDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -990,7 +990,7 @@ class GroundingDINODropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class GroundingDINOFusionLayer(nn.Module):
+class GroundingDinoFusionLayer(nn.Module):
     def __init__(self, config, init_values=1e-4):
         super().__init__()
         drop_path = config.fusion_droppath
@@ -998,10 +998,10 @@ class GroundingDINOFusionLayer(nn.Module):
         # pre layer norm
         self.layer_norm_vision = nn.LayerNorm(config.d_model)
         self.layer_norm_text = nn.LayerNorm(config.d_model)
-        self.attn = GroundingDINOBiMultiHeadAttention(config)
+        self.attn = GroundingDinoBiMultiHeadAttention(config)
 
         # add layer scale for training stability
-        self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
         self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
 
@@ -1053,11 +1053,11 @@ class GroundingDINOFusionLayer(nn.Module):
 
 
 # NOTE just renamed the class
-class GroundingDINODeformableLayer(nn.Module):
-    def __init__(self, config: GroundingDINOConfig):
+class GroundingDinoDeformableLayer(nn.Module):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = GroundingDINOMultiscaleDeformableAttention(
+        self.self_attn = GroundingDinoMultiscaleDeformableAttention(
             config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -1165,15 +1165,15 @@ def get_sine_pos_embed(
     return pos_res
 
 
-class GroundingDINOEncoderLayer(nn.Module):
+class GroundingDinoEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
 
         self.d_model = config.d_model
 
-        self.text_enhancer_layer = GroundingDINOTextEnhancerLayer(config)
-        self.fusion_layer = GroundingDINOFusionLayer(config)
-        self.deformable_layer = GroundingDINODeformableLayer(config)
+        self.text_enhancer_layer = GroundingDinoTextEnhancerLayer(config)
+        self.fusion_layer = GroundingDinoFusionLayer(config)
+        self.deformable_layer = GroundingDinoDeformableLayer(config)
 
     def get_text_position_embeddings(
         self, text_features: Tensor, text_position_embedding: Tensor, text_position_ids: Tensor
@@ -1240,8 +1240,8 @@ class GroundingDINOEncoderLayer(nn.Module):
         )
 
 
-class GroundingDINODecoderLayer(nn.Module):
-    def __init__(self, config: GroundingDINOConfig):
+class GroundingDinoDecoderLayer(nn.Module):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -1266,7 +1266,7 @@ class GroundingDINODecoderLayer(nn.Module):
         )
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
-        self.encoder_attn = GroundingDINOMultiscaleDeformableAttention(
+        self.encoder_attn = GroundingDinoMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
@@ -1358,7 +1358,7 @@ class GroundingDINODecoderLayer(nn.Module):
         return outputs
 
 
-class GroundingDINOContrastiveEmbedding(nn.Module):
+class GroundingDinoContrastiveEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.max_text_len = config.max_text_len
@@ -1380,7 +1380,7 @@ class GroundingDINOContrastiveEmbedding(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrClassificationHead
-class GroundingDINOClassificationHead(nn.Module):
+class GroundingDinoClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float):
@@ -1398,20 +1398,20 @@ class GroundingDINOClassificationHead(nn.Module):
         return hidden_states
 
 
-class GroundingDINOPreTrainedModel(PreTrainedModel):
-    config_class = GroundingDINOConfig
+class GroundingDinoPreTrainedModel(PreTrainedModel):
+    config_class = GroundingDinoConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         std = self.config.init_std
 
-        if isinstance(module, GroundingDINOLearnedPositionEmbedding):
+        if isinstance(module, GroundingDinoLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
-        elif isinstance(module, GroundingDINOMultiscaleDeformableAttention):
+        elif isinstance(module, GroundingDinoMultiscaleDeformableAttention):
             module._reset_parameters()
-        elif isinstance(module, GroundingDINOBiMultiHeadAttention):
+        elif isinstance(module, GroundingDinoBiMultiHeadAttention):
             nn.init.xavier_uniform_(module.vision_proj.weight)
             module.vision_proj.bias.data.fill_(0)
             nn.init.xavier_uniform_(module.text_proj.weight)
@@ -1424,7 +1424,7 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
             module.out_vision_proj.bias.data.fill_(0)
             nn.init.xavier_uniform_(module.out_text_proj.weight)
             module.out_text_proj.bias.data.fill_(0)
-        elif isinstance(module, (GroundingDINOEncoderLayer, GroundingDINODecoderLayer)):
+        elif isinstance(module, (GroundingDinoEncoderLayer, GroundingDinoDecoderLayer)):
             for p in module.parameters():
                 if p.dim() > 1:
                     nn.init.normal_(p, mean=0.0, std=std)
@@ -1438,7 +1438,7 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, GroundingDINOMLPPredictionHead):
+        elif isinstance(module, GroundingDinoMLPPredictionHead):
             nn.init.constant_(module.layers[-1].weight.data, 0)
             nn.init.constant_(module.layers[-1].bias.data, 0)
 
@@ -1449,7 +1449,7 @@ class GroundingDINOPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.level_embed)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GroundingDINODecoder):
+        if isinstance(module, GroundingDinoDecoder):
             module.gradient_checkpointing = value
 
 
@@ -1463,7 +1463,7 @@ GROUNDING_DINO_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GroundingDINOConfig`]):
+        config ([`GroundingDinoConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -1474,7 +1474,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDINOImageProcessor.__call__`] for
+            Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDinoImageProcessor.__call__`] for
             details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
@@ -1489,7 +1489,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`AutoTokenizer`]. See [`GroundingDINOTokenizer.__call__`] for details.
+            Indices can be obtained using [`AutoTokenizer`]. See [`GroundingDinoTokenizer.__call__`] for details.
 
         attention_mask (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1522,22 +1522,22 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 """
 
 
-class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
+class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
-    [`GroundingDINOEncoderLayer`].
+    [`GroundingDinoEncoderLayer`].
 
     The encoder updates the flattened multi-scale feature maps through multiple deformable attention layers.
 
     Args:
-        config: GroundingDINOConfig
+        config: GroundingDinoConfig
     """
 
-    def __init__(self, config: GroundingDINOConfig):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layers = nn.ModuleList([GroundingDINOEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([GroundingDinoEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1681,7 +1681,7 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
         if not return_dict:
             enc_outputs = [vision_features, text_features, encoder_vision_states, encoder_text_states, all_attns]
             return tuple(v for v in enc_outputs if v is not None)
-        return GroundingDINOEncoderOutput(
+        return GroundingDinoEncoderOutput(
             last_hidden_state_vision=vision_features,
             last_hidden_state_text=text_features,
             hidden_states_vision=encoder_vision_states,
@@ -1690,9 +1690,9 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
         )
 
 
-class GroundingDINODecoder(GroundingDINOPreTrainedModel):
+class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`GroundingDINODecoderLayer`].
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`GroundingDinoDecoderLayer`].
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
 
@@ -1702,16 +1702,16 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
     - it also returns a stack of intermediate outputs and reference points from all decoding layers.
 
     Args:
-        config: GroundingDINOConfig
+        config: GroundingDinoConfig
     """
 
-    def __init__(self, config: GroundingDINOConfig):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layer_norm = nn.LayerNorm(config.d_model)
-        self.layers = nn.ModuleList([GroundingDINODecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.reference_points_head = GroundingDINOMLPPredictionHead(
+        self.layers = nn.ModuleList([GroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.reference_points_head = GroundingDinoMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
         )
         self.gradient_checkpointing = False
@@ -1941,7 +1941,7 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 ]
                 if v is not None
             )
-        return GroundingDINODecoderOutput(
+        return GroundingDinoDecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_hidden_states=intermediate,
             intermediate_reference_points=intermediate_reference_points,
@@ -1999,14 +1999,14 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
-class GroundingDINOModel(GroundingDINOPreTrainedModel):
-    def __init__(self, config: GroundingDINOConfig):
+class GroundingDinoModel(GroundingDinoPreTrainedModel):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = GroundingDINOConvEncoder(config)
+        backbone = GroundingDinoConvEncoder(config)
         position_embeddings = build_position_encoding(config)
-        self.backbone = GroundingDINOConvModel(backbone, position_embeddings)
+        self.backbone = GroundingDinoConvModel(backbone, position_embeddings)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
@@ -2040,14 +2040,14 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = GroundingDINOTextPrenet(config.text_backbone_config)
+        self.text_backbone = GroundingDinoTextPrenet(config.text_backbone_config)
         self.text_projection = nn.Linear(config.text_backbone_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
 
-        self.encoder = GroundingDINOEncoder(config)
-        self.decoder = GroundingDINODecoder(config)
+        self.encoder = GroundingDinoEncoder(config)
+        self.decoder = GroundingDinoDecoder(config)
 
         self.level_embed = nn.Parameter(torch.Tensor(config.num_feature_levels, config.d_model))
 
@@ -2061,11 +2061,11 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
             ):
                 self.encoder_output_bbox_embed = self.decoder.bbox_embed
             else:
-                self.encoder_output_bbox_embed = GroundingDINOMLPPredictionHead(
+                self.encoder_output_bbox_embed = GroundingDinoMLPPredictionHead(
                     input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
                 )
 
-            self.encoder_output_class_embed = GroundingDINOContrastiveEmbedding(config)
+            self.encoder_output_class_embed = GroundingDinoContrastiveEmbedding(config)
         else:
             self.reference_points = nn.Embedding(config.num_queries, 4)
 
@@ -2166,7 +2166,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         return object_query, output_proposals
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GroundingDINOModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=GroundingDinoModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Tensor,
@@ -2185,7 +2185,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, GroundingDINOModel
+        >>> from transformers import AutoProcessor, GroundingDinoModel
         >>> from PIL import Image
         >>> import requests
 
@@ -2194,7 +2194,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         >>> text = "a cat."
 
         >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2315,9 +2315,9 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a GroundingDINOEncoderOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, GroundingDINOEncoderOutput):
-            encoder_outputs = GroundingDINOEncoderOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a GroundingDinoEncoderOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, GroundingDinoEncoderOutput):
+            encoder_outputs = GroundingDinoEncoderOutput(
                 last_hidden_state_vision=encoder_outputs[0],
                 last_hidden_state_text=encoder_outputs[1],
                 hidden_states_vision=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
@@ -2387,7 +2387,7 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
 
             return tuple_outputs
 
-        return GroundingDINOModelOutput(
+        return GroundingDinoModelOutput(
             init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
@@ -2411,19 +2411,19 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
-class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
+class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = [r"bbox_embed\.[1-9]\d*"]
 
-    def __init__(self, config: GroundingDINOConfig):
+    def __init__(self, config: GroundingDinoConfig):
         super().__init__(config)
 
         # Deformable DETR encoder-decoder model
-        self.model = GroundingDINOModel(config)
+        self.model = GroundingDinoModel(config)
 
         # Detection heads on top
-        _class_embed = GroundingDINOContrastiveEmbedding(config)
-        _bbox_embed = GroundingDINOMLPPredictionHead(
+        _class_embed = GroundingDinoContrastiveEmbedding(config)
+        _bbox_embed = GroundingDinoMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
 
@@ -2448,7 +2448,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(GROUNDING_DINO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GroundingDINOObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=GroundingDinoObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -2456,7 +2456,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         attention_mask: torch.LongTensor = None,
         token_type_ids: torch.LongTensor = None,
         pixel_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[Union[GroundingDINOEncoderOutput, Tuple]] = None,
+        encoder_outputs: Optional[Union[GroundingDinoEncoderOutput, Tuple]] = None,
         labels: List[Dict[str, Union[torch.LongTensor, torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -2474,7 +2474,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, GroundingDINOForObjectDetection
+        >>> from transformers import AutoProcessor, GroundingDinoForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
@@ -2483,7 +2483,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         >>> text = "a cat."
 
         >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
-        >>> model = GroundingDINOForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2560,12 +2560,12 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
-            matcher = GroundingDINOHungarianMatcher(
+            matcher = GroundingDinoHungarianMatcher(
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
             losses = ["labels", "boxes", "cardinality"]
-            criterion = GroundingDINOLoss(
+            criterion = GroundingDinoLoss(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
                 focal_alpha=self.config.focal_alpha,
@@ -2603,7 +2603,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
 
             return tuple_outputs
 
-        dict_outputs = GroundingDINOObjectDetectionOutput(
+        dict_outputs = GroundingDinoObjectDetectionOutput(
             loss=loss,
             loss_dict=loss_dict,
             logits=logits,
@@ -2679,15 +2679,15 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     return loss.mean(1).sum() / num_boxes
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss with DeformableDetr->GroundingDINO
-class GroundingDINOLoss(nn.Module):
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrLoss with DeformableDetr->GroundingDino
+class GroundingDinoLoss(nn.Module):
     """
-    This class computes the losses for `GroundingDINOForObjectDetection`. The process happens in two steps: 1) we
+    This class computes the losses for `GroundingDinoForObjectDetection`. The process happens in two steps: 1) we
     compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of
     matched ground-truth / prediction (supervise class and box).
 
     Args:
-        matcher (`GroundingDINOHungarianMatcher`):
+        matcher (`GroundingDinoHungarianMatcher`):
             Module able to compute a matching between targets and proposals.
         num_classes (`int`):
             Number of object categories, omitting the special no-object category.
@@ -2858,7 +2858,7 @@ class GroundingDINOLoss(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
-class GroundingDINOMLPPredictionHead(nn.Module):
+class GroundingDinoMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
@@ -2879,8 +2879,8 @@ class GroundingDINOMLPPredictionHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->GroundingDINO
-class GroundingDINOHungarianMatcher(nn.Module):
+# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrHungarianMatcher with DeformableDetr->GroundingDino
+class GroundingDinoHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
 
@@ -3078,8 +3078,8 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     return NestedTensor(tensor, mask)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->GroundingDINOText
-class GroundingDINOTextEmbeddings(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->GroundingDinoText
+class GroundingDinoTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -3143,8 +3143,8 @@ class GroundingDINOTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDINOText
-class GroundingDINOTextSelfAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDinoText
+class GroundingDinoTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -3251,7 +3251,7 @@ class GroundingDINOTextSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in GroundingDINOTextModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in GroundingDinoTextModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -3278,8 +3278,8 @@ class GroundingDINOTextSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->GroundingDINOText
-class GroundingDINOTextSelfOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->GroundingDinoText
+class GroundingDinoTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -3293,12 +3293,12 @@ class GroundingDINOTextSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->GroundingDINOText
-class GroundingDINOTextAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->GroundingDinoText
+class GroundingDinoTextAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = GroundingDINOTextSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = GroundingDINOTextSelfOutput(config)
+        self.self = GroundingDinoTextSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = GroundingDinoTextSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -3343,8 +3343,8 @@ class GroundingDINOTextAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->GroundingDINOText
-class GroundingDINOTextIntermediate(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->GroundingDinoText
+class GroundingDinoTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -3359,8 +3359,8 @@ class GroundingDINOTextIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->GroundingDINOText
-class GroundingDINOTextOutput(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->GroundingDinoText
+class GroundingDinoTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -3374,21 +3374,21 @@ class GroundingDINOTextOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->GroundingDINOText
-class GroundingDINOTextLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->GroundingDinoText
+class GroundingDinoTextLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = GroundingDINOTextAttention(config)
+        self.attention = GroundingDinoTextAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = GroundingDINOTextAttention(config, position_embedding_type="absolute")
-        self.intermediate = GroundingDINOTextIntermediate(config)
-        self.output = GroundingDINOTextOutput(config)
+            self.crossattention = GroundingDinoTextAttention(config, position_embedding_type="absolute")
+        self.intermediate = GroundingDinoTextIntermediate(config)
+        self.output = GroundingDinoTextOutput(config)
 
     def forward(
         self,
@@ -3461,12 +3461,12 @@ class GroundingDINOTextLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->GroundingDINOText
-class GroundingDINOTextEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->GroundingDinoText
+class GroundingDinoTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([GroundingDINOTextLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([GroundingDinoTextLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -3555,8 +3555,8 @@ class GroundingDINOTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->GroundingDINOText
-class GroundingDINOTextPooler(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->GroundingDinoText
+class GroundingDinoTextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -3571,17 +3571,17 @@ class GroundingDINOTextPooler(nn.Module):
         return pooled_output
 
 
-class GroundingDINOTextPrenet(GroundingDINOPreTrainedModel):
-    config_class = GroundingDINOTextConfig
+class GroundingDinoTextPrenet(GroundingDinoPreTrainedModel):
+    config_class = GroundingDinoTextConfig
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = GroundingDINOTextEmbeddings(config)
-        self.encoder = GroundingDINOTextEncoder(config)
+        self.embeddings = GroundingDinoTextEmbeddings(config)
+        self.encoder = GroundingDinoTextEncoder(config)
 
-        self.pooler = GroundingDINOTextPooler(config) if add_pooling_layer else None
+        self.pooler = GroundingDinoTextPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()

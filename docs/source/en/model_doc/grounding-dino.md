@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use [`GroundingDINOProcessor`] to prepare image-text pairs for the model.
+- One can use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
 alt="drawing" width="600"/>
@@ -37,30 +37,30 @@ This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPac
 The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
 
 
-## GroundingDINOImageProcessor
+## GroundingDinoImageProcessor
 
-[[autodoc]] GroundingDINOImageProcessor
+[[autodoc]] GroundingDinoImageProcessor
     - preprocess
     - post_process_object_detection
 
-## GroundingDINOProcessor
+## GroundingDinoProcessor
 
-[[autodoc]] GroundingDINOProcessor
+[[autodoc]] GroundingDinoProcessor
 
-## GroundingDINOTextConfig
+## GroundingDinoTextConfig
 
-[[autodoc]] GroundingDINOTextConfig
+[[autodoc]] GroundingDinoTextConfig
 
-## GroundingDINOConfig
+## GroundingDinoConfig
 
-[[autodoc]] GroundingDINOConfig
+[[autodoc]] GroundingDinoConfig
 
-## GroundingDINOModel
+## GroundingDinoModel
 
-[[autodoc]] GroundingDINOModel
+[[autodoc]] GroundingDinoModel
     - forward
 
-## GroundingDINOForObjectDetection
+## GroundingDinoForObjectDetection
 
-[[autodoc]] GroundingDINOForObjectDetection
+[[autodoc]] GroundingDinoForObjectDetection
     - forward

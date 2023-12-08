@@ -28,9 +28,9 @@ GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class GroundingDINOTextConfig(PretrainedConfig):
+class GroundingDinoTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroundingDINOTextPrenetModel`]. It is used to
+    This is the configuration class to store the configuration of a [`GroundingDinoTextPrenetModel`]. It is used to
     instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BERT
     [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
@@ -41,7 +41,7 @@ class GroundingDINOTextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GroundingDINOTextPrenetModel`].
+            `inputs_ids` passed when calling [`GroundingDinoTextPrenetModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -61,7 +61,7 @@ class GroundingDINOTextConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`GroundingDINOTextPrenetModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`GroundingDinoTextPrenetModel`].
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
@@ -78,16 +78,16 @@ class GroundingDINOTextConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import GroundingDINOTextConfig, GroundingDINOConfig, GroundingDINOForObjectDetection
+    >>> from transformers import GroundingDinoTextConfig, GroundingDinoConfig, GroundingDinoForObjectDetection
 
     >>> # Initializing a BERT bert-base-uncased style configuration
-    >>> configuration = GroundingDINOTextConfig()
+    >>> configuration = GroundingDinoTextConfig()
 
-    >>> # Initializing a GroundingDINOConfig with generated bert-like config
-    >>> config = GroundingDINOConfig(text_backbone_config=configuration)
+    >>> # Initializing a GroundingDinoConfig with generated bert-like config
+    >>> config = GroundingDinoConfig(text_backbone_config=configuration)
 
     >>> # Initializing a model from the ground-up with a config
-    >>> model = GroundingDINOForObjectDetection(config)
+    >>> model = GroundingDinoForObjectDetection(config)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -148,9 +148,9 @@ class GroundingDINOTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class GroundingDINOConfig(PretrainedConfig):
+class GroundingDinoConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GroundingDINOModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GroundingDinoModel`]. It is used to instantiate a
     Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Grounding DINO
     [EduardoPacheco/grounding-dino-tiny](https://huggingface.co/EduardoPacheco/grounding-dino-tiny) architecture.
@@ -161,11 +161,11 @@ class GroundingDINOConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
-        text_backbone_config (`str`, *optional*, defaults to `GroundingDINOTextConfig()`):
+        text_backbone_config (`str`, *optional*, defaults to `GroundingDinoTextConfig()`):
             The configuration of the text backbone model. Should be a BERT-like config.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`GroundingDINOModel`] can detect in a single image.
+            [`GroundingDinoModel`] can detect in a single image.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         encoder_ffn_dim (`int`, *optional*, defaults to 2048):
@@ -244,13 +244,13 @@ class GroundingDINOConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import GroundingDINOConfig, GroundingDINOModel
+    >>> from transformers import GroundingDinoConfig, GroundingDinoModel
 
     >>> # Initializing a Grounding DINO EduardoPacheco/grounding-dino-tiny style configuration
-    >>> configuration = GroundingDINOConfig()
+    >>> configuration = GroundingDinoConfig()
 
     >>> # Initializing a model (with random weights) from the EduardoPacheco/grounding-dino-tiny style configuration
-    >>> model = GroundingDINOModel(configuration)
+    >>> model = GroundingDinoModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -343,14 +343,14 @@ class GroundingDINOConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         if text_backbone_config is None:
-            self.text_backbone_config = GroundingDINOTextConfig()
+            self.text_backbone_config = GroundingDinoTextConfig()
         elif isinstance(text_backbone_config, dict):
-            self.text_backbone_config = GroundingDINOTextConfig(**text_backbone_config)
-        elif isinstance(text_backbone_config, GroundingDINOTextConfig):
+            self.text_backbone_config = GroundingDinoTextConfig(**text_backbone_config)
+        elif isinstance(text_backbone_config, GroundingDinoTextConfig):
             self.text_backbone_config = text_backbone_config
         else:
             raise ValueError(
-                f"`text_backbone_config` should be either a `dict` or an instance of `GroundingDINOTextConfig`. Received {type(text_backbone_config)} instead."
+                f"`text_backbone_config` should be either a `dict` or an instance of `GroundingDinoTextConfig`. Received {type(text_backbone_config)} instead."
             )
         self.max_text_len = max_text_len
         # Text Enhancer

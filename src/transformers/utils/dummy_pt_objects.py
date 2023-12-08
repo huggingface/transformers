@@ -4043,21 +4043,21 @@ class GraphormerPreTrainedModel(metaclass=DummyObject):
 GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class GroundingDINOForObjectDetection(metaclass=DummyObject):
+class GroundingDinoForObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GroundingDINOModel(metaclass=DummyObject):
+class GroundingDinoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class GroundingDINOPreTrainedModel(metaclass=DummyObject):
+class GroundingDinoPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
