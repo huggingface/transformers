@@ -169,7 +169,7 @@ class DetaModelTester:
 
         model.freeze_backbone()
 
-        for _, param in model.backbone.model.named_parametesr():
+        for _, param in model.backbone.model.named_parameters():
             self.parent.assertEqual(False, param.requires_grad)
 
     def create_and_check_deta_unfreeze_backbone(self, config, pixel_values, pixel_mask, labels):
@@ -179,7 +179,7 @@ class DetaModelTester:
 
         model.unfreeze_backbone()
 
-        for _, param in model.backbone.model.named_parametesr():
+        for _, param in model.backbone.model.named_parameters():
             self.parent.assertEqual(True, param.requires_grad)
 
     def create_and_check_deta_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
