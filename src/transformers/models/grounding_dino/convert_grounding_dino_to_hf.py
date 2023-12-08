@@ -358,8 +358,6 @@ def convert_grounding_dino_checkpoint(args):
     model = GroundingDINOForObjectDetection(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
 
     # Load and process test image
     image = prepare_img()
@@ -379,8 +377,6 @@ def convert_grounding_dino_checkpoint(args):
     with torch.no_grad():
         outputs = model(**inputs)
 
-    print("First values of logits:", outputs.logits[0, :3, :3])
-    print("First values of boxes:", outputs.pred_boxes[0, :3, :3])
 
     # verify outputs
     expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]])
@@ -389,15 +385,12 @@ def convert_grounding_dino_checkpoint(args):
     )
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3)
-    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"EduardoPacheco/{model_name}")
         processor.push_to_hub(f"EduardoPacheco/{model_name}")
 
