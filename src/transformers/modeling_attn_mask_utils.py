@@ -353,12 +353,22 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
                 # may be wrong. We will set `is_causal=False` in SDPA and rely on Transformers attention_mask instead, hence not setting it to None here.
                 # Reference: https://github.com/pytorch/pytorch/issues/108108
                 pass
+    elif query_length > 1 and key_value_length != query_length:
+        # See the comment above (https://github.com/pytorch/pytorch/issues/108108).
+        # Ugly: we set it to True here to dispatch in the following controlflow to `to_causal_4d`.
+        attention_mask = True
     elif is_tracing:
         raise ValueError(
             'Attention using SDPA can not be traced with torch.jit.trace when no attention_mask is provided. To solve this issue, please either load your model with the argument `attn_implementation="eager"` or pass an attention_mask input when tracing the model.'
         )
 
-    if attention_mask is not None:
+    if attention_mask is None:
+        expanded_4d_mask = None
+    elif attention_mask is True:
+        expanded_4d_mask = attn_mask_converter.to_causal_4d(
+            input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
+        )
+    else:
         expanded_4d_mask = attn_mask_converter.to_4d(
             attention_mask,
             input_shape[-1],
@@ -372,8 +382,6 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, attention_mask, unmasked_value=0.0
             )
-    else:
-        expanded_4d_mask = None
 
     return expanded_4d_mask
 
@@ -409,8 +417,16 @@ def _prepare_4d_attention_mask_for_sdpa(mask: torch.Tensor, dtype: torch.dtype, 
     """
     batch_size, key_value_length = mask.shape
     tgt_len = tgt_len if tgt_len is not None else key_value_length
-    if batch_size == 1 and torch.all(mask == 1):
-        if tgt_len == 1:
+
+    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
+    # TODO: Fix this as well when using torchdynamo with fullgraph=True.
+    is_tracing = torch.jit.is_tracing()
+
+    if torch.all(mask == 1):
+        if is_tracing:
+            pass
+        elif tgt_len == 1:
             # For query_length == 1, causal attention and bi-directional attention are the same.
             return None
         elif key_value_length == tgt_len:

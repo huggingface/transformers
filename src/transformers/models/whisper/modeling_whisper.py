@@ -763,8 +763,6 @@ class WhisperSdpaAttention(WhisperAttention):
             past_key_value = (key_states, value_states)
 
         query_states = self._shape(query_states, tgt_len, bsz)
-        key_states = key_states
-        value_states = value_states
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
