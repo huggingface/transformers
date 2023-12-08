@@ -860,7 +860,6 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
     """,
     OPEN_LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->OPEN_LLAMA,Llama->OpenLlama
 class OpenLlamaForSequenceClassification(OpenLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
