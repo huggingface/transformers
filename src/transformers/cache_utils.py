@@ -38,6 +38,10 @@ class Cache:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states, if there is any."""
+        raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
+
 
 class DynamicCache(Cache):
     """
@@ -119,6 +123,10 @@ class DynamicCache(Cache):
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
+        return None
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -209,8 +217,11 @@ class SinkCache(Cache):
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
             return 0
-        cache_length = self.key_cache[layer_idx].shape[-2]
-        return min(cache_length, self.window_length - 1)
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states."""
+        return self.window_length
 
     def update(
         self,
@@ -239,8 +250,8 @@ class SinkCache(Cache):
         """
         # Optional kwargs for `SinkCache` -- needed on models using RoPE. `partial_rotation_size` is used on models
         # with partially rotated position embeddings, like Phi or Persimmon.
-        sin = cache_kwargs.get("sin")
-        cos = cache_kwargs.get("cos")
+        sin = cache_kwargs.get("sin")[: self.window_length]
+        cos = cache_kwargs.get("cos")[: self.window_length]
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
         using_rope = cos is not None and sin is not None
 

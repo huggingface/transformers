@@ -275,6 +275,12 @@ class MistralAttention(nn.Module):
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # If the cache has a fixed length and we were about to go beyond it, update the key/value length and the
+            # attention mask accordingly. `.update()` handles the cache cropping internally if needed.
+            kv_max_length = past_key_value.get_max_length()
+            if kv_max_length is not None and kv_seq_len > kv_max_length:
+                kv_seq_len = kv_max_length
+                attention_mask = attention_mask[:, :, :, -kv_seq_len:]
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -408,6 +414,12 @@ class MistralFlashAttention2(MistralAttention):
 
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # If the cache has a fixed length and we were about to go beyond it, update the key/value length and the
+            # attention mask accordingly. `.update()` handles the cache cropping internally if needed.
+            kv_max_length = past_key_value.get_max_length()
+            if kv_max_length is not None and kv_seq_len > kv_max_length:
+                kv_seq_len = kv_max_length
+                attention_mask = attention_mask[:, :, :, -kv_seq_len:]
 
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
