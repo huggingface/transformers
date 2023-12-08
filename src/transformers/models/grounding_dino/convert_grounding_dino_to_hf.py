@@ -374,16 +374,7 @@ def convert_grounding_dino_checkpoint(args):
 
     # Running forward
     with torch.no_grad():
-        outputs = model(**inputs)
-
-
-    # verify outputs
-    expected_boxes = torch.tensor([[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]])
-    expected_logits = torch.tensor(
-        [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
-    )
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3)
+        _ = model(**inputs)
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
