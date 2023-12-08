@@ -43,6 +43,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_greater_or_equal_than_2_0,
     logging,
 )
 from .configuration_falcon import FalconConfig
@@ -958,7 +959,14 @@ class FalconPreTrainedModel(PreTrainedModel):
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
     def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
-        # We remove the checks on `is_torch_sdpa_available()` and `cls._supports_sdpa` as Falcon supports SDPA from torch==2.0.0 (no requirement on 2.1).
+        # NOTE: Falcon supported SDPA from PyTorch 2.0. We keep it like that for backward compatibility (automatically use SDPA for torch>=2.0).
+        if hard_check_only:
+            if not is_torch_greater_or_equal_than_2_0:
+                raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.0.")
+
+        if not is_torch_greater_or_equal_than_2_0:
+            return config
+
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
             return config
