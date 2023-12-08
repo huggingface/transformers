@@ -578,6 +578,7 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
+
 class MixtralBlockSparseMoE(nn.Module):
     """
     Built on the paper and library Megablocks as described in
@@ -602,21 +603,9 @@ class MixtralBlockSparseMoE(nn.Module):
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
         # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
-        self.w1 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-        self.w2 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-        self.w3 = nn.Parameter(
-            torch.Tensor(self.ffn_dim * self.num_experts, self.hidden_dim)
-        )
-
-        if not USE_MEGABLOCKS:
-            self.register_buffer("split_w1", self.w1.view(self.num_experts, self.ffn_dim, self.hidden_dim).permute(0,2,1), persistent=False)
-            self.register_buffer("split_w2", self.w2.view(self.num_experts, self.ffn_dim, self.hidden_dim), persistent=False)
-            self.register_buffer("split_w3", self.w3.view(self.num_experts, self.ffn_dim, self.hidden_dim).permute(0,2,1), persistent=False)
-            
+        self.w1 = nn.Linear(self.ffn_dim * self.num_experts, self.hidden_dim, bias=False)
+        self.w2 = nn.Linear(self.hidden_dim, self.ffn_dim * self.num_experts, bias=False)
+        self.w3 = nn.Linear(self.ffn_dim * self.num_experts, self.hidden_dim, bias=False)
         # Calculate the number of bits needed to represent the expert indices
         # so that we can pass it to radix sort.
         self.sort_end_bit = max(int(np.ceil(np.log2(self.num_experts))), 1)
@@ -638,8 +627,7 @@ class MixtralBlockSparseMoE(nn.Module):
         # NOTE: Our sort operation uses the same width indices as the input
         # values. To avoid overflow when we have large activation matrices
         # we cast to 32-bit before sorting.
-        _, gather_indices = ops.sort(column_indices.int(),
-                                     self.transpose_sort_end_bit)
+        _, gather_indices = ops.sort(column_indices.int(),self.transpose_sort_end_bit)
 
         # There are a constant number of blocks in every row of the sparse
         # matrix. A blocks offset is:
@@ -751,8 +739,8 @@ class MixtralBlockSparseMoE(nn.Module):
         # (top_k * sequence_length  padding, ffn_dim * n_experts)
         x = stk.Matrix(
             topo.size(),
-            F.silu(stk.ops.sdd(x, self.w1.t(), topo).data) *
-            stk.ops.sdd(x, self.w3.t(), topo).data,
+            F.silu(stk.ops.sdd(x, self.w1.weight.t(), topo).data) *
+            stk.ops.sdd(x, self.w3.weight.t(), topo).data,
             topo.row_indices,
             topo.column_indices,
             topo.offsets,
@@ -763,7 +751,7 @@ class MixtralBlockSparseMoE(nn.Module):
 
         # Then Sparse x Dense -> Dense for w2
         # (top_k * sequence_length  padding, model_dim)
-        x = stk.ops.dsd(x, self.w2)
+        x = stk.ops.dsd(x, self.w2.weight)
 
         # Permute back and remove padding
         # (top_k * sequence_length, model_dim)
@@ -810,9 +798,9 @@ class MixtralBlockSparseMoE(nn.Module):
             expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
             
             for expert in range(self.num_experts):
-                w1 = self.split_w1[expert]
-                w2 = self.split_w2[expert]
-                w3 = self.split_w3[expert]
+                w1 = self.w1.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)[self.num_experts]
+                w2 = self.w2.weight.view(self.num_experts, self.ffn_dim , self.hidden_dim)[self.num_experts]
+                w3 = self.w3.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)[self.num_experts]
                 idx, top_x = torch.where(expert_mask[expert])
                 if top_x.shape[0] == 0:
                     continue
