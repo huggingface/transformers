@@ -15,8 +15,6 @@
 
 import unittest
 
-from datasets import load_dataset
-
 from transformers import set_seed
 from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch, require_torch_gpu, slow
 
@@ -195,15 +193,15 @@ class CacheIntegrationTest(unittest.TestCase):
         """Tests that SinkCache supports more than one new token at once, when shifting the cache"""
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/zephyr-7B-beta-GPTQ")
         model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-beta-GPTQ", device_map="auto")
-
-        # Loading the prompts to simulate user interactions
-        prompt_dataset = load_dataset("HuggingFaceH4/mt_bench_prompts", split="train")
-        prompts = [prompt for prompts in prompt_dataset["prompt"] for prompt in prompts]
+        prompt = (
+            "Compose an engaging travel blog post about a recent trip to Hawaii, highlighting cultural experiences "
+            "and must-see attractions."
+        )
 
         # Prepare generation settings
-        cache = SinkCache(window_length=512, num_sink_tokens=4)
+        cache = SinkCache(window_length=256, num_sink_tokens=4)
         input_ids = torch.tensor([], device=model.device, dtype=torch.int)
-        for prompt in sorted(prompts)[:8]:
+        for _ in range(3):
             # Tokenize the prompt with the correct chat template
             chat = [{"role": "user", "content": prompt}]
             tokenized_chat = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
@@ -213,7 +211,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
             # Perform the generation
             gen_out = model.generate(
-                input_ids, do_sample=False, max_new_tokens=10, past_key_values=cache, use_cache=True
+                input_ids, do_sample=False, max_new_tokens=100, past_key_values=cache, use_cache=True
             )
             input_ids = gen_out
 
@@ -222,4 +220,11 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # And it still produces a coherent output
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-        self.assertTrue(decoded[0].endswith("<|assistant|>\n<|> interface is uninspiringly"))
+        last_output = (
+            "<|assistant|>\nHawaii, the Aloha State post for a travel destination you've taken. Your post's and "
+            "must-see landmarks. Use a descriptive and engaging writing style, incorporating personal anecdotes and "
+            "recommendations for fellow travelers. Your post should be at least 800 words and include high-quality "
+            "images to enhance the reader's experience. Be sure to cover a variety of experiences, from cultural "
+            "immersion to outdoor adventures, and provide practical"
+        )
+        self.assertTrue(decoded[0].endswith(last_output))
