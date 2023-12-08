@@ -276,7 +276,7 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_deta_unfreeze_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_unfreeze_backbone(*config_and_inputs)
+        self.model_tester.create_and_check_deta_unfreeze_backbone(*config_and_inputs)
 
     def test_deta_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
