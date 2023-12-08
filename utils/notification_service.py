@@ -634,7 +634,6 @@ class Message:
         ]
 
     def get_new_model_failure_blocks(self, with_header=True):
-
         if self.prev_ci_artifacts is None:
             return {}
 
