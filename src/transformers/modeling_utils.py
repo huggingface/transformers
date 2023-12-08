@@ -346,7 +346,7 @@ def shard_checkpoint(
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-        print (key, weights_size, weight.numel(), weight.dtype, dtype(byte_size(weight.dtype)))
+        print (key, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
