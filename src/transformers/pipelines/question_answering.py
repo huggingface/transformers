@@ -169,7 +169,8 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                     raise ValueError(f"`{k}` cannot be empty")
 
             return QuestionAnsweringPipeline.create_sample(**item)
-        raise ValueError(f"{item} argument needs to be of type (SquadExample, dict)")
+        else:
+            raise ValueError(f"{item} argument needs to be of type (SquadExample, dict)")
 
     def __call__(self, *args, **kwargs):
         # Detect where the actual inputs are
