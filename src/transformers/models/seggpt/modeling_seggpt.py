@@ -84,19 +84,19 @@ def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) 
 @dataclass
 class SegGptEncoderOutput(BaseModelOutput):
     """
-    Output type of [`SegGptEncoderOutput`].
+    Output type of [*SegGptEncoderOutput*].
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
+        last_hidden_state (*torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
-        intermediate_features (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.encoder_output_indicies`` is set):
-            Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-            Each element in the Tuple corresponds to the output of the layer specified in ``config.encoder_output_indicies``.
+        hidden_states (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_hidden_states=True`):
+            Tuple of *torch.FloatTensor* (one for the output of the embeddings + one for the output of each layer)
+            of shape *(batch_size, patch_height, patch_width, hidden_size)*.
+        attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
+            Tuple of *torch.FloatTensor* (one for each layer) of shape
+            *(batch_size, num_heads, seq_len, seq_len)*.
+        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.encoder_output_indicies` is set):
+            Tuple of *torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*.
+            Each element in the Tuple corresponds to the output of the layer specified in `config.encoder_output_indicies`.
             Additionaly, each feature passes through a LayerNorm.
     """
 
@@ -106,18 +106,18 @@ class SegGptEncoderOutput(BaseModelOutput):
 @dataclass
 class SegGptImageSegmentationOutput(ModelOutput):
     """
-    Output type of [`SegGptImageSegmentationOutput`].
+    Output type of [*SegGptImageSegmentationOutput*].
 
     Args:
-        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pred_masks (*torch.FloatTensor* of shape *(batch_size, num_channels, height, width)*):
             The predicted masks.
-        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_hidden_states=True``):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
-        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when ``config.output_attentions=True``):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, seq_len, seq_len)`.
-        loss (`torch.FloatTensor`, `optional`, returned when ``labels`` is provided):
+        hidden_states (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_hidden_states=True`):
+            Tuple of *torch.FloatTensor* (one for the output of the embeddings + one for the output of each layer)
+            of shape *(batch_size, patch_height, patch_width, hidden_size)*.
+        attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
+            Tuple of *torch.FloatTensor* (one for each layer) of shape
+            *(batch_size, num_heads, seq_len, seq_len)*.
+        loss (*torch.FloatTensor*, *optional*, returned when `labels` is provided):
             The loss value.
 
     """
@@ -454,19 +454,19 @@ class SegGptDropPath(nn.Module):
 
 
 class SegGptLayer(nn.Module):
-    """This corresponds to the Block class in the timm implementation."""
-
-    def __init__(self, config: SegGptConfig, drop_path_rate: float) -> None:
+    def __init__(self, config: SegGptConfig, drop_path_rate: float, pre_merge_index: bool) -> None:
         super().__init__()
         self.attention = SegGptAttention(config)
         self.mlp = SegGptMlp(config)
         self.drop_path = SegGptDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pre_merge_index = pre_merge_index
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        feature_ensemble: bool = False,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
@@ -476,7 +476,19 @@ class SegGptLayer(nn.Module):
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        # TODO: Add feature_ensemble
+        # Condition to check if we have the appropriate number of prompts to ensemble
+        ensemble_cond = 2 if self.pre_merge_index else 1
+
+        if feature_ensemble and attention_output.shape[0] // 2 >= ensemble_cond:
+            prompt, inputs = attention_output.split(attention_output.shape[1] // 2, dim=1)
+            if self.pre_merge_index:
+                num_prompts = attention_output.shape[0] // 2
+                inputs = inputs.reshape(2, num_prompts, -1)
+                inputs = inputs.mean(dim=1, keepdim=True).expand_as(inputs)
+                inputs = inputs.reshape(*prompt.shape)
+            else:
+                inputs = inputs.mean(dim=0, keepdim=True).expand_as(inputs)
+            attention_output = torch.cat([prompt, inputs], dim=1)
 
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
@@ -496,13 +508,16 @@ class SegGptEncoder(nn.Module):
         super().__init__()
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layers = nn.ModuleList([SegGptLayer(config, dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [SegGptLayer(config, dpr[i], config.merge_index > i) for i in range(config.num_hidden_layers)]
+        )
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        feature_ensemble: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -519,10 +534,11 @@ class SegGptEncoder(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
+                    feature_ensemble,
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions)
+                layer_outputs = layer_module(hidden_states, feature_ensemble, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -723,6 +739,11 @@ SEGGPT_INPUTS_DOCSTRING = r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
 
+        feature_ensemble (`bool`, *optional*):
+            Boolean indicating whether to use feature ensemble or not. If `True`, the model will use feature ensemble
+            if we have at least two prompts. If `False`, the model will not use feature ensemble. This argument should
+            be considered when doing few-shot inference on an input image i.e. more than one prompt for the same image.
+
         embedding_type (`str`, *optional*):
             Embedding type. Indicates whether the prompt is a semantic or instance embedding. Can be either
             instance or semantic.
@@ -790,6 +811,7 @@ class SegGptModel(SegGptPreTrainedModel):
         prompt_pixel_values: Optional[torch.Tensor] = None,
         prompt_masks: Optional[torch.FloatTensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
+        feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
         labels: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -832,6 +854,7 @@ class SegGptModel(SegGptPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        feature_ensemble = feature_ensemble if feature_ensemble is not None else False
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -862,6 +885,7 @@ class SegGptModel(SegGptPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
+            feature_ensemble=feature_ensemble,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

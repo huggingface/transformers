@@ -248,9 +248,10 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    images = load_dataset("EduardoPacheco/seggpt-example-data")["train"]["image"]
-    images = [image.convert("RGB") for image in images]
-    return images
+    ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
+    images = [image.convert("RGB") for image in ds["image"]]
+    masks = [image.convert("RGB") for image in ds["mask"]]
+    return images, masks
 
 
 "./tests/fixtures/tests_samples/COCO/000000039769.png"
@@ -266,15 +267,16 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    def test_inference(self):
-        # SegGpt models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
+    def test_one_shot_inference(self):
         model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
 
-        image_processor = SegGptImageProcessor.from_pretrained("EduardoPacheco/seggpt-vit-large")
-        prompt_image, prompt_mask, input_image = prepare_img()
+        image_processor = self.default_image_processor
+
+        images, masks = prepare_img()
+        input_image = images[1]
+        prompt_image = images[0]
+        prompt_mask = masks[0]
+
         inputs = image_processor(
             images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
         )
@@ -336,3 +338,33 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         area = (torch.clip(result * 255, 0, 255).mean(dim=1) > 0).sum().item()
         self.assertEqual(result.shape, result_expected_shape)
         self.assertEqual(area, expected_area)
+
+    @slow
+    def test_few_shot_inference(self):
+        model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        image_processor = self.default_image_processor
+
+        images, masks = prepare_img()
+        input_images = [images[1]] * 2
+        prompt_images = [images[0], images[2]]
+        prompt_masks = [masks[0], masks[2]]
+
+        inputs = image_processor(
+            images=input_images, prompt_images=prompt_images, prompt_masks=prompt_masks, return_tensors="pt"
+        )
+
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = model(**inputs, feature_ensemble=True)
+
+        expected_shape = torch.Size((2, 3, 896, 448))
+        expected_slice = torch.tensor(
+            [
+                [[-2.1201, -2.1192, -2.1189], [-2.1217, -2.1210, -2.1204], [-2.1216, -2.1202, -2.1194]],
+                [[-2.0393, -2.0390, -2.0387], [-2.0402, -2.0402, -2.0397], [-2.0400, -2.0394, -2.0388]],
+                [[-1.8083, -1.8076, -1.8077], [-1.8105, -1.8102, -1.8099], [-1.8105, -1.8095, -1.8090]],
+            ]
+        ).to(torch_device)
+
+        self.assertEqual(outputs.pred_masks.shape, expected_shape)
+        self.assertTrue(torch.allclose(outputs.pred_masks[0, :, 448:451, :3], expected_slice, atol=4e-4))
