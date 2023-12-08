@@ -346,6 +346,7 @@ def shard_checkpoint(
             continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
+        print (key, weights_size, weight.numel(), weight.dtype, dtype(byte_size(weight.dtype)))
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
@@ -2260,7 +2261,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 original_values = {}
                 # init state_dict for this shard
                 state_dict = {name: "" for name in shard}
-                print (state_dict)
                 # extract data for shard state dict
                 for key in state_dict.keys():
                     original_values[key] = state_dict[key]
