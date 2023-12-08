@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Relleno y truncamiento
 
-Las entradas agrupadas por lotes (batched) suelen tener longitudes diferentes, por lo que no se pueden convertir en tensores de tamaño fijo. El relleno (también conocido como "Padding") y el truncamiento (conocido como "Truncation") son estrategias para abordar este problema y crear tensores rectangulares a partir de lotes de longitudes variables. El Padding agrega un **padding token** especial para garantizar que las secuencias más cortas tengan la misma longitud que la secuencia más larga en un lote o la longitud máxima aceptada por el modelo. Truncation funciona en la otra dirección al truncar secuencias largas.
+Las entradas agrupadas por lotes (batched) suelen tener longitudes diferentes, por lo que no se pueden convertir en tensores de tamaño fijo. El relleno (también conocido como "Padding") y el truncamiento (conocido como "Truncation") son estrategias para abordar este problema y crear tensores rectangulares a partir de lotes de longitudes variables. El relleno agrega un **padding token** especial para garantizar que las secuencias más cortas tengan la misma longitud que la secuencia más larga en un lote o la longitud máxima aceptada por el modelo. El truncamiento funciona en la otra dirección al truncar secuencias largas.
 
 En la mayoría de los casos, es bastante eficaz rellenar el lote hasta la longitud de la secuencia más larga y truncar hasta la longitud máxima que un modelo puede aceptar. Sin embargo, la API admite más estrategias si las necesitas. Los tres argumentos que necesitas son: `padding`, `truncation` y `max_length`.
 
@@ -24,7 +24,7 @@ El argumento `padding` controla el relleno. Puede ser un booleano o una cadena:
 
   - `True` o `'longest'`: rellena hasta la longitud de la secuencia más larga en el lote (no se aplica relleno si solo proporcionas una única secuencia).
   - `'max_length'`: rellena hasta una longitud especificada por el argumento `max_length` o la longitud máxima aceptada
-    por el modelo si no se proporciona `max_length` (`max_length=None`). El Padding se aplicará incluso si solo proporcionas una única secuencia.
+    por el modelo si no se proporciona `max_length` (`max_length=None`). El relleno se aplicará incluso si solo proporcionas una única secuencia.
   - `False` o `'do_not_pad'`: no se aplica relleno. Este es el comportamiento predeterminado.
 
 El argumento `truncation` controla el truncamiento. Puede ser un booleano o una cadena:
@@ -40,9 +40,9 @@ El argumento `truncation` controla el truncamiento. Puede ser un booleano o una 
     la primera oración de un par si se proporciona un par de secuencias (o un lote de pares de secuencias).
   - `False` o `'do_not_truncate'`: no se aplica truncamiento. Este es el comportamiento predeterminado.
 
-El argumento `max_length` controla la longitud del Padding (relleno) y el Truncation (truncamiento). Puede ser un número entero o `None`, en cuyo caso se establecerá automáticamente en la longitud máxima que el modelo puede aceptar. Si el modelo no tiene una longitud máxima de entrada específica, se desactiva el Truncation o el Padding hasta `max_length`.
+El argumento `max_length` controla la longitud del relleno y del truncamiento. Puede ser un número entero o `None`, en cuyo caso se establecerá automáticamente en la longitud máxima que el modelo puede aceptar. Si el modelo no tiene una longitud máxima de entrada específica, se desactiva el truncamiento o el relleno hasta `max_length`.
 
-La siguiente tabla resume la forma recomendada de configurar el Padding y el Truncation. Si usas pares de secuencias de entrada en alguno de los siguientes ejemplos, puedes reemplazar `truncation=True` por una `ESTRATEGIA` seleccionada en
+La siguiente tabla resume la forma recomendada de configurar el relleno y el truncamiento. Si usas pares de secuencias de entrada en alguno de los siguientes ejemplos, puedes reemplazar `truncation=True` por una `ESTRATEGIA` seleccionada en
 `['only_first', 'only_second', 'longest_first']`, es decir, `truncation='only_second'` o `truncation='longest_first'` para controlar cómo se truncan ambas secuencias en el par, como se detalló anteriormente.
 
 | Truncation                           | Padding                             | Instrucción                                                                                 |
