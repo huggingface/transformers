@@ -218,7 +218,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # We went well beyond the cache length
         self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
 
-        # And it still produces a coherent output
+        # And it still produces a coherent english (the repetition is due to the prompt being repeated 3 times)
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
         last_output = (
             "<|assistant|>\nHawaii, the Aloha State post for a travel destination you've taken. Your post's and "
