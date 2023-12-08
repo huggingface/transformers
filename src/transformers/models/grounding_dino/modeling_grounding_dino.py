@@ -14,11 +14,12 @@
 # limitations under the License.
 """ PyTorch Grounding DINO model."""
 
-
 import copy
 import math
+import os
 import warnings
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -47,10 +48,42 @@ from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and
 from ...utils import is_ninja_available, logging
 from ..auto import AutoBackbone
 from .configuration_grounding_dino import GroundingDinoConfig, GroundingDinoTextConfig
-from .load_custom import load_cuda_kernels
 
 
 logger = logging.get_logger(__name__)
+
+
+def load_cuda_kernels():
+    from torch.utils.cpp_extension import load
+
+    root = Path(__file__).resolve().parent.parent.parent / "kernels" / "grounding_dino"
+    src_files = [
+        root / filename
+        for filename in [
+            "vision.cpp",
+            os.path.join("cpu", "ms_deform_attn_cpu.cpp"),
+            os.path.join("cuda", "ms_deform_attn_cuda.cu"),
+        ]
+    ]
+
+    load(
+        "MultiScaleDeformableAttention",
+        src_files,
+        with_cuda=True,
+        extra_include_paths=[str(root)],
+        extra_cflags=["-DWITH_CUDA=1"],
+        extra_cuda_cflags=[
+            "-DCUDA_HAS_FP16=1",
+            "-D__CUDA_NO_HALF_OPERATORS__",
+            "-D__CUDA_NO_HALF_CONVERSIONS__",
+            "-D__CUDA_NO_HALF2_OPERATORS__",
+        ],
+    )
+
+    import MultiScaleDeformableAttention as MSDA
+
+    return MSDA
+
 
 # Move this to not compile only when importing, this needs to happen later, like in __init__.
 if is_torch_cuda_available() and is_ninja_available():
