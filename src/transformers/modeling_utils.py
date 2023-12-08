@@ -1132,6 +1132,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # SDPA support
     _supports_sdpa = False
 
+    # Has support for a `Cache` instance as `past_key_values`
+    _supports_cache_class = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """

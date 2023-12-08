@@ -558,10 +558,6 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
             if (
                 model_class.__name__
                 in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
@@ -570,6 +566,8 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.use_cache = False
+            config.return_dict = True
             model = model_class(config)
 
             model.to(torch_device)
