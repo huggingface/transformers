@@ -2337,6 +2337,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # 6.6 Batch generate current chunk
             token_sequences  = [None for _ in range(cur_bsz)]
             needs_fallback = [False for _ in range(cur_bsz)]
+            needs_fallback = False
+            should_skip = False
             for temperature in temperatures:
                 do_sample = temperature > 0.0
 
@@ -2425,6 +2427,35 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                             needs_fallback[i] = False
                             should_skip = True
 
+                if compression_ratio_threshold is not None:
+                    # TODO(PVP) only works for batch size = 1 currently
+                    compression_ratio = self._retrieve_compression_ratio(sequence_tokens[0], self.config.vocab_size)
+
+                    if compression_ratio > compression_ratio_threshold:
+                        print("fallback compression")
+                        print("current temp", temperature)
+                        needs_fallback = True
+
+                if logprob_threshold is not None:
+                    if "sequences_scores" in seek_outputs[0]:
+                        logprobs = [s["sequences_scores"] for s in seek_outputs]
+                    else:
+                        scores = [s["scores"] for s in seek_outputs]
+                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
+
+                    # TODO(PVP) only works for batch size = 1 currently
+                    if logprobs < logprob_threshold:
+                        print("current temp", temperature)
+                        needs_fallback = True
+                
+                if no_speech_threshold is not None:
+                    # TODO(PVP) only works for batch size = 1 currently
+                    # Need to do before all other logit processors
+                    if no_speech_detector.no_speech_prob[0] > no_speech_threshold and logprobs < logprob_threshold:
+                        print("Skip because of VAD")
+                        needs_fallback = False
+                        should_skip = True
+                
                 if not needs_fallback:
                     break
 
