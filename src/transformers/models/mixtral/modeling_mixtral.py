@@ -827,21 +827,6 @@ class MixtralBlockSparseMoE(nn.Module):
             final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
             return final_hidden_states
 
-
-class MixtralMoeExpert(nn.Module):
-    def __init__(self, config, ffn_dim: int):
-        super().__init__()
-        self.w1 = nn.Linear(config.d_model, ffn_dim)
-        self.w2 = nn.Linear(config.d_model, ffn_dim)
-        self.w3 = nn.Linear(ffn_dim, config.d_model)
-        self.dropout = nn.Dropout(config.activation_dropout)
-        self.act = ACT2FN[config.activation_function]
-
-    def forward(self, hidden_states):
-        hidden_states = self.act(self.w1(hidden_states)) * self.w2(hidden_states)
-        hidden_states = self.w3(hidden_states)
-        return hidden_states
-
     
 class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig):
