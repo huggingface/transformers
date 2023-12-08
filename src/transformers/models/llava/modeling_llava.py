@@ -22,6 +22,7 @@ from torch import nn
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     add_start_docstrings,
@@ -31,7 +32,6 @@ from ...utils import (
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
-from ...cache_utils import Cache
 
 
 logger = logging.get_logger(__name__)
@@ -494,12 +494,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 input_ids = input_ids[:, past_length:]
             # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
             elif self.config.image_token_index in input_ids:
-                input_ids = input_ids[:, input_ids.shape[1]-1:]
+                input_ids = input_ids[:, input_ids.shape[1] - 1 :]
             # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
-            
+
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
@@ -520,7 +520,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values
+                "pixel_values": pixel_values,
             }
         )
         return model_inputs
