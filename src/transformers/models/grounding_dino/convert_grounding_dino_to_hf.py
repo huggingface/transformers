@@ -70,7 +70,6 @@ def get_grounding_dino_config(model_name):
 def create_rename_keys(state_dict, config):
     rename_keys = []
     # fmt: off
-    #TODO names might change after modifing GroundingDINOModel class
     ########################################## VISION BACKBONE - START
     # patch embedding layer
     rename_keys.append(("backbone.0.patch_embed.proj.weight",
