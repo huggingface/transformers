@@ -776,7 +776,6 @@ class ModelTesterMixin:
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
-        configs_no_init._attn_implementation = "eager"
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
@@ -813,8 +812,21 @@ class ModelTesterMixin:
                     )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
-                    model(main_input)
-                    traced_model = torch.jit.trace(model, main_input)
+
+                    if model.config._attn_implementation == "sdpa":
+                        trace_input = {main_input_name: main_input}
+
+                        if "attention_mask" in inputs:
+                            trace_input["attention_mask"] = inputs["attention_mask"]
+                        else:
+                            self.skipTest("testing SDPA without attention_mask is not supported")
+
+                        model(main_input, attention_mask=inputs["attention_mask"])
+                        # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
+                        traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
+                    else:
+                        model(main_input)
+                        traced_model = torch.jit.trace(model, (main_input,))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
