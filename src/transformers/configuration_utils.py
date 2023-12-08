@@ -429,7 +429,7 @@ class PretrainedConfig(PushToHubMixin):
 
     @property
     def _attn_implementation(self):
-        # This property is made private for now (as it may not be changed alone and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
+        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
         if hasattr(self, "_attn_implementation_internal"):
             if self._attn_implementation_internal is None:
                 # `config.attn_implementation` should never be None, for backward compatibility.
