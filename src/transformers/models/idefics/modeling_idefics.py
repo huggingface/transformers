@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -578,6 +578,7 @@ class IdeficsAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.dropout = dropout
+        self.is_causal = True
 
         if (self.head_dim * num_heads) != self.hidden_size:
             raise ValueError(
@@ -693,6 +694,8 @@ class IdeficsAttention(nn.Module):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout,
+            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+            is_causal=self.is_causal and attention_mask is None and q_len > 1,
         )
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -960,6 +963,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
@@ -974,6 +978,18 @@ class IdeficsPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> PretrainedConfig:
+        # We remove the checks on `is_torch_sdpa_available()` and `cls._supports_sdpa` as Falcon supports SDPA from torch==2.0.0 (no requirement on 2.1).
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
+        if _is_bettertransformer:
+            return config
+
+        if not hard_check_only:
+            config._attn_implementation = "sdpa"
+        return config
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -1240,7 +1256,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             attention_mask = torch.ones(
                 (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
-        attention_mask = _prepare_4d_causal_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
             attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         )
 

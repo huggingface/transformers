@@ -16,7 +16,7 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -24,7 +24,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import (
+    AttentionMaskConverter,
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -33,6 +37,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_2_0
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -43,6 +48,9 @@ from ...utils import (
 )
 from .configuration_falcon import FalconConfig
 
+
+if TYPE_CHECKING:
+    from ...configuration_utils import PretrainedConfig
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -278,6 +286,7 @@ class FalconAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -439,16 +448,15 @@ class FalconAttention(nn.Module):
             present = None
 
         if alibi is None:
-            if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
-                # TODO: deprecate this once we add FA2 support in Falcon
-                logger.warning_once(
-                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
-                    " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
-                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
-                )
-
+            if self._use_sdpa and not output_attentions:
                 attn_output = F.scaled_dot_product_attention(
-                    query_layer, key_layer, value_layer, attention_mask, 0.0, is_causal=False
+                    query_layer,
+                    key_layer,
+                    value_layer,
+                    attention_mask,
+                    0.0,
+                    # The query_length > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case query_length == 1.
+                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
                 )
                 attention_scores = None
             else:
@@ -456,58 +464,70 @@ class FalconAttention(nn.Module):
                 attention_scores /= math.sqrt(self.head_dim)
 
                 attention_scores = F.softmax(attention_scores + attention_mask, dim=-1, dtype=hidden_states.dtype)
+                # It is unclear why neither dropout nor head_mask is applied here (while it is with alibi).
                 attn_output = attention_scores @ value_layer
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
             attn_output = attn_output.permute(0, 2, 1, 3)
             attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
-            output_tensor = self.dense(attn_output)
+            attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return output_tensor, present, attention_scores
+                return attn_output, present, attention_scores
             else:
-                return output_tensor, present
+                return attn_output, present
 
         else:
-            matmul_result = query_layer @ key_layer.transpose(-1, -2)
+            if self._use_sdpa and not output_attentions and head_mask is None:
+                attn_output = F.scaled_dot_product_attention(
+                    query_layer,
+                    key_layer,
+                    value_layer,
+                    attn_mask=attention_mask,
+                    dropout_p=self.attention_dropout.p if self.training else 0.0,
+                    is_causal=self.is_causal and attention_mask is None and query_length > 1,
+                )
+                attn_output = attn_output.transpose(1, 2)
+                attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
 
-            # change view to [batch_size, num_heads, q_length, kv_length]
-            attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
+                attn_output = self.dense(attn_output)
+            else:
+                matmul_result = query_layer @ key_layer.transpose(-1, -2)
 
-            # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-            input_dtype = attention_scores.dtype
-            # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-            if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
-                attention_scores = attention_scores.to(torch.float32)
-            # Matt (HF) note: We could possibly use F.scaled_dot_product_attention here too, by
-            # adding (alibi * self.inv_norm_factor) to attention_mask. I think this would be mathematically
-            # equivalent and more performant, but there might be a numerical difference. If you're reading this
-            # and you'd like to experiment and maybe file a PR, feel free!
-            attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
-            attention_logits *= self.inv_norm_factor
-            attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
-            # [batch_size, num_heads, q_length, kv_length]
-            attention_probs = self.attention_dropout(attention_probs)
+                # change view to [batch_size, num_heads, q_length, kv_length]
+                attention_scores = matmul_result.view(batch_size, self.num_heads, query_length, kv_length)
 
-            if head_mask is not None:
-                attention_probs = attention_probs * head_mask
+                # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
+                input_dtype = attention_scores.dtype
+                # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
+                if input_dtype == torch.float16 or input_dtype == torch.bfloat16:
+                    attention_scores = attention_scores.to(torch.float32)
 
-            # change view [batch_size, num_heads, q_length, kv_length]
-            attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
+                attention_logits = attention_scores + alibi.view(batch_size, self.num_heads, 1, -1)
+                attention_logits *= self.inv_norm_factor
+                attention_probs = F.softmax(attention_logits + attention_mask, dim=-1, dtype=hidden_states.dtype)
+                # [batch_size, num_heads, q_length, kv_length]
+                attention_probs = self.attention_dropout(attention_probs)
 
-            # matmul: [batch_size * num_heads, q_length, head_dim]
-            context_layer = (attention_probs_reshaped @ value_layer).flatten(0, 1)
+                if head_mask is not None:
+                    attention_probs = attention_probs * head_mask
 
-            # change view [batch_size, q_length, num_heads * head_dim]
-            context_layer = self._merge_heads(context_layer)
+                # change view [batch_size, num_heads, q_length, kv_length]
+                attention_probs_reshaped = attention_probs.view(batch_size, self.num_heads, query_length, kv_length)
 
-            output_tensor = self.dense(context_layer)
+                # matmul: [batch_size * num_heads, q_length, head_dim]
+                attn_output = (attention_probs_reshaped @ value_layer).flatten(0, 1)
+
+                # change view [batch_size, q_length, num_heads * head_dim]
+                attn_output = self._merge_heads(attn_output)
+
+                attn_output = self.dense(attn_output)
 
             if output_attentions:
-                return output_tensor, present, attention_probs
+                return attn_output, present, attention_probs
             else:
-                return output_tensor, present
+                return attn_output, present
 
 
 class FalconFlashAttention2(FalconAttention):
@@ -734,17 +754,20 @@ class FalconMLP(nn.Module):
         return x
 
 
+FALCON_ATTENTION_CLASSES = {
+    "eager": FalconAttention,
+    "sdpa": FalconAttention,  # FalconAttention originally implemented both a forward with & without SDPA
+    "flash_attention_2": FalconFlashAttention2,
+}
+
+
 class FalconDecoderLayer(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
 
-        self.self_attention = (
-            FalconAttention(config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else FalconFlashAttention2(config)
-        )
+        self.self_attention = FALCON_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
@@ -912,6 +935,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -932,6 +956,25 @@ class FalconPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
+    # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
+    @classmethod
+    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
+        # NOTE: Falcon supported SDPA from PyTorch 2.0. We keep it like that for backward compatibility (automatically use SDPA for torch>=2.0).
+        if hard_check_only:
+            if not is_torch_greater_or_equal_than_2_0:
+                raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.0.")
+
+        if not is_torch_greater_or_equal_than_2_0:
+            return config
+
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
+        if _is_bettertransformer:
+            return config
+
+        if not hard_check_only:
+            config._attn_implementation = "sdpa"
+        return config
+
 
 @add_start_docstrings(
     "The bare Falcon Model transformer outputting raw hidden-states without any specific head on top.",
@@ -950,6 +993,8 @@ class FalconModel(FalconPreTrainedModel):
 
         # Transformer blocks
         self.h = nn.ModuleList([FalconDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Final Layer Norm
         self.ln_f = LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
@@ -1003,12 +1048,6 @@ class FalconModel(FalconPreTrainedModel):
         if past_key_values is None:
             past_key_values = tuple([None] * len(self.h))
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape batch_size x num_heads x N x N
-        # head_mask has shape n_layer x batch x num_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
@@ -1047,14 +1086,60 @@ class FalconModel(FalconPreTrainedModel):
                 )
                 position_ids = position_ids.unsqueeze(0)
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._use_sdpa and not output_attentions:
+            # output_attentions=True can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            if alibi is None:
+                attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    (batch_size, seq_length),
+                    inputs_embeds,
+                    past_key_values_length,
+                )
+            elif head_mask is None:
+                alibi = alibi.reshape(batch_size, -1, *alibi.shape[1:])
+
+                attention_mask_2d = attention_mask
+                # We don't call _prepare_4d_causal_attention_mask_for_sdpa as we need to mask alibi using the 4D attention_mask untouched.
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
+
+                # We take care to integrate alibi bias in the attention_mask here.
+                if attention_mask_2d is None:
+                    attention_mask = alibi / math.sqrt(self.config.hidden_size // self.num_heads)
+                else:
+                    attention_mask = torch.masked_fill(
+                        alibi / math.sqrt(self.config.hidden_size // self.num_heads),
+                        attention_mask < -1,
+                        torch.finfo(alibi.dtype).min,
+                    )
+
+                    # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
+                    # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
+                    if seq_length > 1:
+                        attention_mask = AttentionMaskConverter._unmask_unattended(
+                            attention_mask, attention_mask_2d, unmasked_value=0.0
+                        )
+            else:
+                # PyTorch SDPA does not support head_mask, we fall back on the eager implementation in this case.
+                attention_mask = _prepare_4d_causal_attention_mask(
+                    attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape batch_size x num_heads x N x N
+        # head_mask has shape n_layer x batch x num_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
