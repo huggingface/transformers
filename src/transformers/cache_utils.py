@@ -38,6 +38,21 @@ class Cache:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states, if there is any."""
+        raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
+
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+        """Given the sequence length of the new inputs, returns the usable length of the cache."""
+        # Cache without size limit -> all cache is usable
+        # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
+        #   length, we will need to evict part of the cache (and thus not all cache is usable)
+        max_length = self.get_max_length()
+        previous_seq_length = self.get_seq_length(layer_idx)
+        if max_length is not None and previous_seq_length + new_seq_length > max_length:
+            return max_length - new_seq_length
+        return previous_seq_length
+
 
 class DynamicCache(Cache):
     """
@@ -119,6 +134,10 @@ class DynamicCache(Cache):
         if len(self.key_cache) <= layer_idx:
             return 0
         return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
+        return None
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
@@ -209,8 +228,11 @@ class SinkCache(Cache):
         # Workaround to make 'key_states.shape[-2] + past_key_value.get_seq_length(self.layer_idx)' <= window_length
         if len(self.key_cache) <= layer_idx:
             return 0
-        cache_length = self.key_cache[layer_idx].shape[-2]
-        return min(cache_length, self.window_length - 1)
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_max_length(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cached states."""
+        return self.window_length
 
     def update(
         self,
@@ -267,7 +289,9 @@ class SinkCache(Cache):
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
             if using_rope:
-                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(key_states, cos, sin)
+                rerotation_cos, rerotation_sin = self._get_rerotation_cos_sin(
+                    key_states, cos[: self.window_length], sin[: self.window_length]
+                )
                 if partial_rotation_size is not None:
                     keys_to_keep, keys_pass = (
                         keys_to_keep[..., :partial_rotation_size],
