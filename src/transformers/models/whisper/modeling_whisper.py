@@ -2335,7 +2335,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             print("hf  in tokens", decoder_input_ids[0].tolist())
 
             # 6.6 Batch generate current chunk
-            should_skip = False
+            token_sequences  = [None for _ in range(cur_bsz)]
+            needs_fallback = [False for _ in range(cur_bsz)]
             for temperature in temperatures:
                 do_sample = temperature > 0.0
 
@@ -2380,39 +2381,55 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # remove all previously passed decoder input ids
                 seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
 
-                needs_fallback = False
-                if compression_ratio_threshold is not None:
-                    # TODO(PVP) only works for batch size = 1 currently
-                    compression_ratio = self._retrieve_compression_ratio(sequence_tokens[0], self.config.vocab_size)
+                if False:
+                    # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
+                    for i, seek_sequence in enumerate(seek_sequences):
+                        # make sure we cut a predicted EOS token if we are not finished with the generation yet
+                        is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
+                        if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
+                            seek_sequence = seek_sequence[:-1]
 
-                    if compression_ratio > compression_ratio_threshold:
-                        print("fallback compression")
-                        print("current temp", temperature)
-                        needs_fallback = True
+                        print("hf  out tokens", seek_sequence.tolist())
 
-                if logprob_threshold is not None:
-                    if "sequences_scores" in seek_outputs[0]:
-                        logprobs = [s["sequences_scores"] for s in seek_outputs]
-                    else:
-                        scores = [s["scores"] for s in seek_outputs]
-                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
+                        # remove all padding tokens
+                        if seek_sequence[-1] == generation_config.pad_token_id:
+                            num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
+                            seek_sequence = seek_sequence[:-num_paddings]
 
-                    # TODO(PVP) only works for batch size = 1 currently
-                    if logprobs[0] < logprob_threshold:
-                        print("fallback logprob")
-                        print("current temp", temperature)
-                        needs_fallback = True
+                    if compression_ratio_threshold is not None:
+                        # TODO(PVP) only works for batch size = 1 currently
+                        compression_ratio = self._retrieve_compression_ratio(sequence_tokens[i], self.config.vocab_size)
+
+                        if compression_ratio > compression_ratio_threshold:
+                            print("fallback compression")
+                            print("current temp", temperature)
+                            needs_fallback[i] = True
+
+                    if logprob_threshold is not None:
+                        if "sequences_scores" in seek_outputs[0]:
+                            logprobs = [s["sequences_scores"] for s in seek_outputs]
+                        else:
+                            scores = [s["scores"] for s in seek_outputs]
+                            logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, self.config.eos_token_id, temperature)
+
+                        # TODO(PVP) only works for batch size = 1 currently
+                        if logprobs < logprob_threshold:
+                            print("current temp", temperature)
+                            needs_fallback[i] = True
                 
-                if no_speech_threshold is not None:
-                    # TODO(PVP) only works for batch size = 1 currently
-                    # Need to do before all other logit processors
-                    if no_speech_detector.no_speech_prob[0] > no_speech_threshold and logprobs[0] < logprob_threshold:
-                        print("Skip because of VAD")
-                        needs_fallback = False
-                        should_skip = True
+                    if no_speech_threshold is not None:
+                        # TODO(PVP) only works for batch size = 1 currently
+                        # Need to do before all other logit processors
+                        if no_speech_detector.no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
+                            print("Skip because of VAD")
+                            needs_fallback[i] = False
+                            should_skip = True
 
                 if not needs_fallback:
                     break
+
+                # if not needs_fallback.any():
+                #    break
 
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
@@ -2516,7 +2533,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         lengths = (tokens != eos_token_id).sum(-1)
 
         avg_logprobs = torch.div(sum_logprobs, lengths + 1)
-        return avg_logprobs
+        return avg_logprobs[0]
 
     @staticmethod
     def _retrieve_segment(
