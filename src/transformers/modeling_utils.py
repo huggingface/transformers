@@ -339,14 +339,14 @@ def shard_checkpoint(
         else:
             storage_id = id_tensor_storage(weight)
 
-        # # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
-        # if storage_id in storage_id_to_block:
-        #     block_id = storage_id_to_block[storage_id]
-        #     sharded_state_dicts[block_id][key] = weight
-        #     continue
+        # If a `weight` shares the same underlying storage as another tensor, we put `weight` in the same `block`
+        if storage_id in storage_id_to_block and weight.device != torch.device('meta'):
+            block_id = storage_id_to_block[storage_id]
+            sharded_state_dicts[block_id][key] = weight
+            continue
 
         weight_size = weight.numel() * dtype_byte_size(weight.dtype)
-        print (key, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
+        print (key, weight.device, weight_size, weight.numel(), weight.dtype, dtype_byte_size(weight.dtype))
 
         # If this weight is going to tip up over the maximal size, we split, but only if we have put at least one
         # weight in the current shard.
@@ -2285,7 +2285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         module._hf_hook.post_forward(module, torch.tensor([]))
 
                 # transform shard's state dict back to single shard
-                shard, _ = shard_checkpoint(state_dict)  # will be ({name: tensor}, None)
+                shard = {name: state_dict} # will be ({name: tensor}, None)
                 name = list(shard.keys())[0]  # will have one name
                 shard = shard[name]
                 del state_dict
