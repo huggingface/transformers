@@ -500,11 +500,30 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             if cache_length < past_length and attention_mask is not None:
                 attention_mask = attention_mask[:, -(cache_length + input_ids.shape[1]) :]
             
-        model_input = self.language_model.prepare_inputs_for_generation(
-            input_ids, past_key_values, inputs_embeds=inputs_embeds, attention_mask=attention_mask, **kwargs
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values
+            }
         )
-        model_input.update({"pixel_values": pixel_values})
-        return model_input
+        return model_inputs
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
