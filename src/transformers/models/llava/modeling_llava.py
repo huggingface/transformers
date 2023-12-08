@@ -493,8 +493,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             elif past_length < input_ids.shape[1]:
                 input_ids = input_ids[:, past_length:]
             # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-            elif self.config.image_token_id in input_ids:
-                input_ids = input_ids[:, past_length:]
+            elif self.config.image_token_index in input_ids:
+                input_ids = input_ids[:, input_ids.shape[1]-1:]
             # If the cache has seen more tokens than it can hold, then the cache has a size limit. Let's discard the
             # older attention values, as their corresponding values are not part of the input.
             if cache_length < past_length and attention_mask is not None:
