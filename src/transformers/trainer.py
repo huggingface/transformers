@@ -1507,6 +1507,10 @@ class Trainer:
             and not self.is_fsdp_enabled
         ):
             self._load_from_checkpoint(resume_from_checkpoint)
+            # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
+            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if state.train_batch_size is not None:
+                self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1542,6 +1546,8 @@ class Trainer:
     ):
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
+        if self.args.auto_find_batch_size:
+            self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1618,6 +1624,7 @@ class Trainer:
 
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
+        self.state.train_batch_size = self._train_batch_size
 
         # Compute absolute values for logging, eval, and save if given as ratio
         if args.logging_steps is not None:
