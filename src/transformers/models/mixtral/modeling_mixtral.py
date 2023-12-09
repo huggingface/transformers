@@ -857,7 +857,7 @@ class MixtralBlockSparseMoE(nn.Module):
         else:
             final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(hidden_states.device)
             expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
-
+            expert_mask[0][:, 0] = torch.tensor([1,1], dtype=torch.long)
             for expert_idx in range(self.num_experts):
                 expert_layer = self.experts[expert_idx]
 
@@ -872,7 +872,7 @@ class MixtralBlockSparseMoE(nn.Module):
                 current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
 
                 current_hidden_states = expert_layer(current_state, routing_weights[top_x, idx, None])
-                final_hidden_states[top_x] += current_hidden_states
+                final_hidden_states.scatter_add_(0, torch.tensor(top_x, device="cuda")[:,None], current_hidden_states)
 
             final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
             return final_hidden_states
