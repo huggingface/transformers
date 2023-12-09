@@ -1117,6 +1117,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     @slow
+    def test_seamless_v2(self):
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="facebook/seamless-m4t-v2-large",
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        result = pipe(sample, generate_kwargs={"tgt_lang": "eng"})
+        EXPECTED_RESULT = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+
+        assert result["text"] == EXPECTED_RESULT
+
+    @require_torch
+    @slow
     def test_chunking_and_timestamps(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
