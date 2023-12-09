@@ -680,7 +680,7 @@ class MixtralDecoderLayer(nn.Module):
             else MixtralFlashAttention2(config, layer_idx=layer_idx)
         )
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.block_sparse_moe = MixtralBlockSparseMoE(config)
+        self.block_sparse_moe = MixtralSparseMoeBlock(config)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
