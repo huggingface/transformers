@@ -31,7 +31,7 @@ class MixtralConfig(PretrainedConfig):
     Mixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Mixtral-7B-v0.1 or Mixtral-7B-Instruct-v0.1.
 
-    [mixtralai/Mixtral-7B-v0.1](https://huggingface.co/mixtralai/Mixtral-7B-v0.1)
+    [mixtralai/Mixtral-8x7B](https://huggingface.co/mixtralai/Mixtral-8x7B)
     [mixtralai/Mixtral-7B-Instruct-v0.1](https://huggingface.co/mixtralai/Mixtral-7B-Instruct-v0.1)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -83,8 +83,11 @@ class MixtralConfig(PretrainedConfig):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        num_experts_per_tok (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
-        num_local_experts (`<fill_type>`, *optional*, defaults to 8): <fill_docstring>
+        num_experts_per_tok (`int`, *optional*, defaults to 2):
+            The number of experts to root per-token, can be also interpreted as the `top-p` routing
+            parameter
+        num_local_experts (`int`, *optional*, defaults to 8): 
+            Number of experts per Sparse MLP layer.
 
     ```python
     >>> from transformers import MixtralModel, MixtralConfig
