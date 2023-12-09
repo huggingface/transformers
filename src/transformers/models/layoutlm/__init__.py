@@ -20,11 +20,13 @@ from ...utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    is_vision_available,
 )
 
 
 _import_structure = {
     "configuration_layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMOnnxConfig"],
+    "processing_layoutlm": ["LayoutLMProcessor"],
     "tokenization_layoutlm": ["LayoutLMTokenizer"],
 }
 
@@ -35,6 +37,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["tokenization_layoutlm_fast"] = ["LayoutLMTokenizerFast"]
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_layoutlm"] = ["LayoutLMImageProcessor"]
 
 try:
     if not is_torch_available():
@@ -72,6 +82,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMOnnxConfig
+    from .processing_layoutlm import LayoutLMProcessor
     from .tokenization_layoutlm import LayoutLMTokenizer
 
     try:
@@ -81,6 +92,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_layoutlm import LayoutLMImageProcessor
 
     try:
         if not is_torch_available():
