@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
+import re
 from glob import glob
 import argparse
 from transformers import MixtralConfig, MixtralForCausalLM, AutoTokenizer
@@ -74,6 +75,20 @@ def load_and_save_weights(weights_path, save_model_path):
 
         # Clone parameters to avoid a bug with safetensors
         new_state_dict = {k: v.clone() for k, v in partial_state_dict.items()}
+        for k, v in partial_state_dict.items():
+            moe_block_match = re.match(r".*.(block_sparse_moe\.w(\d)).*", k)
+            if moe_block_match:
+                group_string = moe_block_match.group(1)
+                
+                experts = [v[config.intermediate_size * expert_idx : config.intermediate_size * (expert_idx + 1), :].contiguous().clone() for expert_idx in range(num_experts)]
+                for idx, expert_block in enumerate(experts):
+                    expert_key = k.replace("block_sparse_moe.", f"block_sparse_moe.experts.{idx}.")
+                    if int(moe_block_match.group(2)) != 2:
+                        new_state_dict[expert_key + ".weight"] = expert_block.contiguous().clone()
+                    else:
+                        new_state_dict[expert_key + ".weight"] = expert_block.T.clone().contiguous()
+            else:
+                new_state_dict[k] = v.contiguous().clone()
 
         errors = model.load_state_dict(new_state_dict, strict=False, assign=True)
         mismatched_weights.append(errors)
