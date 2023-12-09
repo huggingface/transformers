@@ -232,9 +232,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         self.multi_modal_projector = LlavaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
-        use_flash_attention_2 = getattr(config, "_flash_attn_2_enabled", False)
         self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, use_flash_attention_2=use_flash_attention_2
+            config.text_config, attn_implementation=config._attn_implementation
         )
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()

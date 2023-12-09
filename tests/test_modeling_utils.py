@@ -60,7 +60,13 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
+from transformers.utils.import_utils import (
+    is_flash_attn_2_available,
+    is_flax_available,
+    is_tf_available,
+    is_torch_sdpa_available,
+    is_torchdynamo_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -1689,3 +1695,158 @@ class AttentionMaskTester(unittest.TestCase):
         res_compiled = compiled_model(mask, inputs_embeds)
 
         self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_left_padding(self):
+        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
+
+        expanded_mask = torch.Tensor(
+            [
+                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        reference_output = torch.Tensor(
+            [
+                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
+
+        self.assertTrue(torch.equal(result, reference_output))
+
+        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+        min_inf = torch.finfo(torch.float32).min
+        reference_output = torch.Tensor(
+            [
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0],
+                        [min_inf, min_inf, 0, min_inf, min_inf],
+                        [min_inf, min_inf, 0, 0, min_inf],
+                        [min_inf, min_inf, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, min_inf, min_inf, min_inf, min_inf],
+                        [0, 0, min_inf, min_inf, min_inf],
+                        [0, 0, 0, min_inf, min_inf],
+                        [0, 0, 0, 0, min_inf],
+                        [0, 0, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [min_inf, 0, min_inf, min_inf, min_inf],
+                        [min_inf, 0, 0, min_inf, min_inf],
+                        [min_inf, 0, 0, 0, min_inf],
+                        [min_inf, 0, 0, 0, 0],
+                    ]
+                ],
+            ]
+        )
+
+        self.assertTrue(torch.equal(reference_output, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_right_padding(self):
+        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_random_mask(self):
+        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+
+@require_torch
+class TestAttentionImplementation(unittest.TestCase):
+    def test_error_no_sdpa_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="sdpa")
+
+        self.assertTrue(
+            "does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention"
+            in str(cm.exception)
+        )
+
+        _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+    def test_error_no_flash_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_wrong_attn_implementation(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
+
+        self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
+
+    def test_not_available_flash(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_sdpa(self):
+        if is_torch_sdpa_available():
+            self.skipTest("This test requires torch<=2.0")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="sdpa"
+            )
+
+        self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))

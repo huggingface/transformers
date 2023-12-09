@@ -471,6 +471,12 @@ class FFN(nn.Module):
         return x
 
 
+DISTILBERT_ATTENTION_CLASSES = {
+    "eager": MultiHeadSelfAttention,
+    "flash_attention_2": DistilBertFlashAttention2,
+}
+
+
 class TransformerBlock(nn.Module):
     def __init__(self, config: PretrainedConfig):
         super().__init__()
@@ -479,11 +485,7 @@ class TransformerBlock(nn.Module):
         if config.dim % config.n_heads != 0:
             raise ValueError(f"config.n_heads {config.n_heads} must divide config.dim {config.dim} evenly")
 
-        self.attention = (
-            MultiHeadSelfAttention(config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else DistilBertFlashAttention2(config)
-        )
+        self.attention = DISTILBERT_ATTENTION_CLASSES[config._attn_implementation](config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -703,6 +705,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -808,7 +811,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:
