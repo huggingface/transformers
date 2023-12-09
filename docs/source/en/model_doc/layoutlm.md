@@ -115,6 +115,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LayoutLMConfig
 
+## LayoutLMImageProcessor
+
+[[autodoc]] LayoutLMImageProcessor
+    - preprocess
+
 ## LayoutLMTokenizer
 
 [[autodoc]] LayoutLMTokenizer
@@ -122,6 +127,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LayoutLMTokenizerFast
 
 [[autodoc]] LayoutLMTokenizerFast
+
+## LayoutLMProcessor
+
+[[autodoc]] LayoutLMProcessor
+    - __call__
 
 <frameworkcontent>
 <pt>

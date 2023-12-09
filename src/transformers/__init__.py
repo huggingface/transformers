@@ -519,6 +519,8 @@ _import_structure = {
     "models.layoutlm": [
         "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LayoutLMConfig",
+        "LayoutLMImageProcessor",
+        "LayoutLMProcessor",
         "LayoutLMTokenizer",
     ],
     "models.layoutlmv2": [
@@ -5160,6 +5162,8 @@ if TYPE_CHECKING:
     from .models.layoutlm import (
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMConfig,
+        LayoutLMImageProcessor,
+        LayoutLMProcessor,
         LayoutLMTokenizer,
     )
     from .models.layoutlmv2 import (
