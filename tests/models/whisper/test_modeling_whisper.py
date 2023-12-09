@@ -84,6 +84,7 @@ if is_torch_available():
             self.batch_size = batch_size
             self.max_length = max_length
             self.count = 0
+            self.begin_index = 0
 
             self.let_pass = [[] for _ in range(batch_size)]
             for k in range(batch_size):
@@ -91,9 +92,14 @@ if is_torch_available():
                 for _ in range(10000):
                     self.let_pass[k].append(random.randint(1, 10) <= 3)
 
+        def set_begin_index(self, begin_index: int):
+            self.begin_index = begin_index
+
         def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
             # we don't want to randomely sample timestamp tokens
-            if input_ids.shape[-1] > 1:
+            orig_scores = scores.clone()
+
+            if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
 
             self.no_time_stamp_counter = [x + 1 for x in self.no_time_stamp_counter]
@@ -132,6 +138,7 @@ if is_torch_available():
             self.count += 1
 
             if torch.isinf(scores).all():
+                import ipdb; ipdb.set_trace()
                 raise ValueError("Dummy logit processor is incorrectly set up. Scores should not be all inf.")
 
             return scores
@@ -2272,10 +2279,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         for i in range(num_samples):
             assert decoded_all[i] == decoded_single[i]
-            try:
-                assert decoded_all[i] == EXPECTED_TEXT[i]
-            except:
-                import ipdb; ipdb.set_trace()
+            assert decoded_all[i] == EXPECTED_TEXT[i]
 
     @slow
     def test_whisper_longform_multi_batch_hard_prev_cond(self):
@@ -2322,7 +2326,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         for i in range(num_samples):
-            import ipdb; ipdb.set_trace()
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):

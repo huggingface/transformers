@@ -2309,8 +2309,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 )
                 decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
-                kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
-                kwargs["decoder_position_ids"] = (kwargs["decoder_attention_mask"].cumsum(-1) - 1).clamp(min=0)
+                # kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
 
                 passed_max_length = kwargs.get("max_length", None)
                 passed_max_new_tokens = kwargs.get("max_new_tokens", None)
@@ -2426,7 +2425,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                         if compression_ratio_threshold is not None:
                             # TODO(PVP) only works for batch size = 1 currently
-                            compression_ratio = self._retrieve_compression_ratio(sequence_tokens[i], self.config.vocab_size)
+                            # compression_ratio = self._retrieve_compression_ratio(sequence_tokens[i], self.config.vocab_size)
+                            compression_ratio = self._retrieve_compression_ratio(seek_sequence, self.config.vocab_size)
 
                             if compression_ratio > compression_ratio_threshold:
                                 print("fallback compression")
@@ -2456,7 +2456,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                         seek_sequence_list[fallback_index_map[i]] = seek_sequence
                         seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
-                        do_condition_on_prev_tokens[fallback_index_map[i]] = temperature < 0.5
+                        do_condition_on_prev_tokens[fallback_index_map[i]] = condition_on_prev_tokens and temperature < 0.5
 
                         if needs_fallback[i]:
                             new_fallback_index_map.append(fallback_index_map[i])
@@ -2595,7 +2595,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 if cut_off_length is not None:
                     sequence = sequence[-cut_off_length:]
 
-                sequence = torch.cat([bos_token_tensor, sequence])
+                if bos_token_tensor is not None:
+                    sequence = torch.cat([bos_token_tensor, sequence])
+
                 sequences.append(sequence)
                 max_total_length = max(max_total_length, len(sequences[-1]))
             else:
@@ -2731,10 +2733,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
-        decoder_position_ids=None,
         decoder_attention_mask=None,
         **kwargs,
     ):
+        decoder_position_ids = None
+        if decoder_attention_mask is not None:
+            decoder_position_ids = (decoder_attention_mask.cumsum(-1) - 1).clamp(min=0)
+
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
 
@@ -2750,7 +2755,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
 
-        decoder_attention_mask = kwargs.pop("decoder_attention_mask", None)
 
         return {
             "encoder_outputs": encoder_outputs,
