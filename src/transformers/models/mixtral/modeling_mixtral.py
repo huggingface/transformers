@@ -618,10 +618,9 @@ class MixtralBLockSparseTop2MLP(nn.Module):
         return routing_weights * current_hidden_states
 
 
-class MixtralBlockSparseMoE(nn.Module):
+class MixtralSparseMoeBlock(nn.Module):
     """
-    Built on the paper and library Megablocks as described in
-    https://arxiv.org/abs/2211.15841. This implementation is
+    This implementation is
     strictly equivalent to standard MoE with full capacity (no
     dropped tokens). It's faster since it formulates MoE operations
     in terms of block-sparse operations to accomodate imbalanced
@@ -645,8 +644,6 @@ class MixtralBlockSparseMoE(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
-        x: (sequence_length, model_dim)
-        gate_logits: (sequence_length, n_experts)
         """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
