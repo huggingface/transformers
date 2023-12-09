@@ -33,6 +33,8 @@ from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -40,7 +42,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
-    is_torch_greater_or_equal_than_1_13,
     logging,
     replace_return_docstrings,
 )
@@ -51,7 +52,7 @@ from .configuration_mixtral import MixtralConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
+    _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
@@ -369,12 +370,12 @@ class MixtralFlashAttention2(MixtralAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         use_sliding_windows = (
-            self._flash_supports_window_size
+            _flash_supports_window_size
             and getattr(self.config, "sliding_window", None) is not None
             and kv_seq_len > self.config.sliding_window
         )
 
-        if not self._flash_supports_window_size:
+        if not _flash_supports_window_size:
             logger.warning_once(
                 "The current flash attention version does not support sliding window attention, for a more memory efficient implementation"
                 " make sure to upgrade flash-attn library."
@@ -672,13 +673,13 @@ class MixtralBlockSparseMoE(nn.Module):
 
 
 class MixtralDecoderLayer(nn.Module):
-    def __init__(self, config: MixtralConfig):
+    def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = (
-            MixtralAttention(config=config)
+            MixtralAttention(config=config, layer_idx=layer_idx)
             if not getattr(config, "_flash_attn_2_enabled", False)
-            else MixtralFlashAttention2(config)
+            else MixtralFlashAttention2(config, layer_idx=layer_idx)
         )
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.block_sparse_moe = MixtralBlockSparseMoE(config)
