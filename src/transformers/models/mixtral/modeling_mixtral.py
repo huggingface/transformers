@@ -632,7 +632,7 @@ class MixtralBlockSparseMoE(nn.Module):
             # Index the correct hidden states
             current_state = hidden_states[None, top_x.tolist()].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
-            final_hidden_states.index_add_(0, top_x current_hidden_states)
+            final_hidden_states.index_add_(0, top_x, current_hidden_states)
 
 
         final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
