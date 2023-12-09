@@ -314,8 +314,11 @@ class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
 
-    def forward(self, input_ids, past_key_values_length=0):
-        return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
+    def forward(self, input_ids, past_key_values_length=0, position_ids=None):
+        if position_ids is None:
+            return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[1]]
+        else:
+            return self.weight[position_ids]
 
 
 class WhisperAttention(nn.Module):
@@ -1255,6 +1258,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
+        position_ids=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1353,9 +1357,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         # embed positions
         if input_ids is not None:
-            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+            positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length, position_ids=position_ids)
         else:
-            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length)
+            positions = self.embed_positions(inputs_embeds, past_key_values_length=past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1537,6 +1541,7 @@ class WhisperModel(WhisperPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1595,6 +1600,7 @@ class WhisperModel(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
+            position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1668,6 +1674,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1722,6 +1729,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             decoder_inputs_embeds=decoder_inputs_embeds,
+            decoder_position_ids=decoder_position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -2228,6 +2236,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
         temperature = temperatures[0]
+        do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
 
         output_scores = logprob_threshold is not None
         return_dict_in_generate = return_dict_in_generate or output_scores
@@ -2287,16 +2296,22 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             one_tensor = torch.ones((cur_bsz, 1), device=segment_input.device, dtype=torch.long)
             decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
 
-            if condition_on_prev_tokens and len(current_segments[0]) > 0 and temperature < 0.5:
+            # if condition_on_prev_tokens and len(current_segments[0]) > 0 and temperature < 0.5:
+            if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
                 # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
                 cut_off_length = self.config.max_target_positions // 2 - 1
-                active_segments = [current_segments[i] for i in new_cur_to_prev_index_map]
-                prev_tokens = self._pad_to_max_length(
-                    active_segments, generation_config.pad_token_id, padding="left"
-                )
+                active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in new_cur_to_prev_index_map]
                 prev_start_of_text = getattr(generation_config, "prev_bos_token_id", None) or suppress_tokens_processor.suppress_tokens[-2]  # TODO(Patrick): Need to put in generation_config
 
-                decoder_input_ids = torch.cat([prev_start_of_text * one_tensor, prev_tokens[:, -cut_off_length:], decoder_input_ids], dim=-1)
+                bos_token_tensor = prev_start_of_text * one_tensor[0]
+                prev_tokens = self._pad_to_max_length(
+                    active_segments, generation_config.pad_token_id, padding="left", bos_token_tensor=bos_token_tensor, cut_off_length=cut_off_length
+                )
+                decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
+
+                kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
+                kwargs["decoder_position_ids"] = (kwargs["decoder_attention_mask"].cumsum(-1) - 1).clamp(min=0)
+
                 passed_max_length = kwargs.get("max_length", None)
                 passed_max_new_tokens = kwargs.get("max_new_tokens", None)
                 max_length_config = getattr(generation_config, "max_length", None)
@@ -2338,6 +2353,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # 6.6 Batch generate current chunk
             if RUN_NEW_WAY:
                 seek_sequence_list = [None for _ in range(cur_bsz)]
+                seek_outputs_list = [None for _ in range(cur_bsz)]
                 needs_fallback = [False for _ in range(cur_bsz)]
                 should_skip = [False for _ in range(cur_bsz)]
                 fallback_index_map = list(range(cur_bsz))
@@ -2383,7 +2399,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         return values[batch_idx].cpu()
 
                     sequence_tokens = seek_outputs["sequences"]
-                    seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(cur_bsz)]
+                    seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(sequence_tokens.shape[0])]
                 else:
                     sequence_tokens = seek_outputs
 
@@ -2438,17 +2454,20 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                                 needs_fallback[i] = False
                                 should_skip[i] = True
 
+                        seek_sequence_list[fallback_index_map[i]] = seek_sequence
+                        seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
+                        do_condition_on_prev_tokens[fallback_index_map[i]] = temperature < 0.5
+
                         if needs_fallback[i]:
                             new_fallback_index_map.append(fallback_index_map[i])
                             new_segment_input.append(segment_input[i])
                             new_decoder_input_ids.append(decoder_input_ids[i])
 
-                        seek_sequence_list[fallback_index_map[i]] = seek_sequence
-
                     fallback_index_map = new_fallback_index_map
 
                     if len(fallback_index_map) == 0 or fallback_idx == len(temperatures) - 1:
                         seek_sequences = seek_sequence_list
+                        seek_outputs = seek_outputs_list
                         break
 
                     decoder_input_ids = torch.stack(new_decoder_input_ids)
@@ -2563,15 +2582,24 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         return sequences
 
     @staticmethod
-    def _pad_to_max_length(current_segments, pad_token_id, padding="right"):
+    def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
         max_total_length = 0
         sequences = []
         if padding not in ["right", "left"]:
             raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
 
         for current_segment_list in current_segments:
-            sequences.append(torch.cat([d["tokens"] for d in current_segment_list], dim=-1))
-            max_total_length = max(max_total_length, len(sequences[-1]))
+            if current_segment_list is not None:
+                sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
+
+                if cut_off_length is not None:
+                    sequence = sequence[-cut_off_length:]
+
+                sequence = torch.cat([bos_token_tensor, sequence])
+                sequences.append(sequence)
+                max_total_length = max(max_total_length, len(sequences[-1]))
+            else:
+                sequences.append(bos_token_tensor)
 
         for i in range(len(current_segments)):
             pad_length = max_total_length - len(sequences[i])
@@ -2703,6 +2731,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
+        decoder_position_ids=None,
+        decoder_attention_mask=None,
         **kwargs,
     ):
         if past_key_values is not None:
@@ -2717,12 +2747,18 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
+            if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
+                decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
+
+        decoder_attention_mask = kwargs.pop("decoder_attention_mask", None)
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_position_ids": decoder_position_ids,
         }
 
     @staticmethod

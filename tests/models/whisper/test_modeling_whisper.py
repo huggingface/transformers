@@ -2320,7 +2320,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
+        torch.manual_seed(0)
         for i in range(num_samples):
+            import ipdb; ipdb.set_trace()
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
