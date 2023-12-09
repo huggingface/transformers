@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Mixtral model."""
+import inspect
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
@@ -33,10 +34,9 @@ from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
-
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -52,6 +52,7 @@ from .configuration_mixtral import MixtralConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
+
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
