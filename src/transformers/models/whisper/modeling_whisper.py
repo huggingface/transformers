@@ -2337,8 +2337,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # 6.6 Batch generate current chunk
             token_sequences  = [None for _ in range(cur_bsz)]
             needs_fallback = [False for _ in range(cur_bsz)]
-            needs_fallback = False
-            should_skip = False
+            should_skip = [False for _ in range(cur_bsz)]
+            fallback_index_map = list(range(cur_bsz))
+            # needs_fallback = False
+            # should_skip = False
             for temperature in temperatures:
                 do_sample = temperature > 0.0
 
@@ -2383,7 +2385,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 # remove all previously passed decoder input ids
                 seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
 
-                if False:
+                if True:
                     # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
                     for i, seek_sequence in enumerate(seek_sequences):
                         # make sure we cut a predicted EOS token if we are not finished with the generation yet
@@ -2398,108 +2400,153 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                             num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                             seek_sequence = seek_sequence[:-num_paddings]
 
+                        if compression_ratio_threshold is not None:
+                            # TODO(PVP) only works for batch size = 1 currently
+                            compression_ratio = self._retrieve_compression_ratio(sequence_tokens[i], self.config.vocab_size)
+
+                            if compression_ratio > compression_ratio_threshold:
+                                print("fallback compression")
+                                print("current temp", temperature)
+                                needs_fallback[i] = True
+
+                        if logprob_threshold is not None:
+                            if "sequences_scores" in seek_outputs[0]:
+                                logprobs = [s["sequences_scores"] for s in seek_outputs]
+                            else:
+                                scores = [s["scores"] for s in seek_outputs]
+                                logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, self.config.eos_token_id, temperature)
+
+                            # TODO(PVP) only works for batch size = 1 currently
+                            if logprobs < logprob_threshold:
+                                print("current temp", temperature)
+                                needs_fallback[i] = True
+                    
+                        if no_speech_threshold is not None:
+                            # TODO(PVP) only works for batch size = 1 currently
+                            # Need to do before all other logit processors
+                            if no_speech_detector.no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
+                                print("Skip because of VAD")
+                                needs_fallback[i] = False
+                                should_skip[i] = True
+
+                    new_fallback_index_map = []
+                    new_segment_input = []
+                    new_decoder_input_ids = []
+                    for i, seek_sequence in enumerate(seek_sequences):
+                        if needs_fallback[i]:
+                            new_fallback_index_map.append(fallback_index_map[i])
+                            new_segment_input.append(segment_input[i])
+                            new_decoder_input_ids.append(decoder_input_ids[i])
+
+                        token_sequences[fallback_index_map[i]] = seek_sequence
+
+                    fallback_index_map = new_fallback_index_map
+                    seek_sequences = torch.stack(token_sequences)
+
+                    if len(fallback_index_map) == 0:
+                        break
+
+                    decoder_input_ids = torch.stack(new_decoder_input_ids)
+                    segment_input = torch.stack(new_segment_input)
+
+
+                if False:
                     if compression_ratio_threshold is not None:
                         # TODO(PVP) only works for batch size = 1 currently
-                        compression_ratio = self._retrieve_compression_ratio(sequence_tokens[i], self.config.vocab_size)
+                        compression_ratio = self._retrieve_compression_ratio(sequence_tokens[0], self.config.vocab_size)
 
                         if compression_ratio > compression_ratio_threshold:
                             print("fallback compression")
                             print("current temp", temperature)
-                            needs_fallback[i] = True
+                            needs_fallback = True
 
                     if logprob_threshold is not None:
                         if "sequences_scores" in seek_outputs[0]:
                             logprobs = [s["sequences_scores"] for s in seek_outputs]
                         else:
                             scores = [s["scores"] for s in seek_outputs]
-                            logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, self.config.eos_token_id, temperature)
+                            logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
 
                         # TODO(PVP) only works for batch size = 1 currently
                         if logprobs < logprob_threshold:
                             print("current temp", temperature)
-                            needs_fallback[i] = True
-                
+                            needs_fallback = True
+                    
                     if no_speech_threshold is not None:
                         # TODO(PVP) only works for batch size = 1 currently
                         # Need to do before all other logit processors
-                        if no_speech_detector.no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
+                        if no_speech_detector.no_speech_prob[0] > no_speech_threshold and logprobs < logprob_threshold:
                             print("Skip because of VAD")
-                            needs_fallback[i] = False
+                            needs_fallback = False
                             should_skip = True
+                    
+                    if not needs_fallback:
+                        break
 
-                if compression_ratio_threshold is not None:
-                    # TODO(PVP) only works for batch size = 1 currently
-                    compression_ratio = self._retrieve_compression_ratio(sequence_tokens[0], self.config.vocab_size)
+            if True:
+                for i, seek_sequence in enumerate(seek_sequences):
+                    prev_i = cur_to_prev_index_map[i]
 
-                    if compression_ratio > compression_ratio_threshold:
-                        print("fallback compression")
-                        print("current temp", temperature)
-                        needs_fallback = True
+                    if should_skip[i]:
+                        seek[prev_i] += seek_num_frames[prev_i]
+                        print("Skipped!")
+                        continue
 
-                if logprob_threshold is not None:
-                    if "sequences_scores" in seek_outputs[0]:
-                        logprobs = [s["sequences_scores"] for s in seek_outputs]
-                    else:
-                        scores = [s["scores"] for s in seek_outputs]
-                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
+                    # TODO(Patrick: delete cut type)
+                    segments, segment_offset, cut_type = self._retrieve_segment(
+                        seek_sequence=seek_sequence,
+                        seek_outputs=seek_outputs,
+                        time_offset=time_offset,
+                        timestamp_begin=timestamp_begin,
+                        seek_num_frames=seek_num_frames,
+                        time_precision=time_precision,
+                        input_stride=input_stride,
+                        prev_idx=prev_i,
+                        idx=i,
+                    )
 
-                    # TODO(PVP) only works for batch size = 1 currently
-                    if logprobs < logprob_threshold:
-                        print("current temp", temperature)
-                        needs_fallback = True
-                
-                if no_speech_threshold is not None:
-                    # TODO(PVP) only works for batch size = 1 currently
-                    # Need to do before all other logit processors
-                    if no_speech_detector.no_speech_prob[0] > no_speech_threshold and logprobs < logprob_threshold:
-                        print("Skip because of VAD")
-                        needs_fallback = False
-                        should_skip = True
-                
-                if not needs_fallback:
-                    break
+                    current_segments[prev_i] += segments
+                    seek[prev_i] += segment_offset
 
-                # if not needs_fallback.any():
-                #    break
+            if False:
+                # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
+                for i, seek_sequence in enumerate(seek_sequences):
+                    prev_i = cur_to_prev_index_map[i]
 
-            # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
-            for i, seek_sequence in enumerate(seek_sequences):
-                prev_i = cur_to_prev_index_map[i]
+                    if should_skip:
+                        seek[prev_i] += seek_num_frames[prev_i]
+                        print("Skipped!")
+                        continue
 
-                if should_skip:
-                    seek[prev_i] += seek_num_frames[prev_i]
-                    print("Skipped!")
-                    continue
+                    # make sure we cut a predicted EOS token if we are not finished with the generation yet
+                    is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
+                    if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
+                        seek_sequence = seek_sequence[:-1]
 
-                # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
-                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
-                    seek_sequence = seek_sequence[:-1]
+                    print("hf  out tokens", seek_sequence.tolist())
 
-                print("hf  out tokens", seek_sequence.tolist())
+                    # remove all padding tokens
+                    if seek_sequence[-1] == generation_config.pad_token_id:
+                        num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
+                        seek_sequence = seek_sequence[:-num_paddings]
 
-                # remove all padding tokens
-                if seek_sequence[-1] == generation_config.pad_token_id:
-                    num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
+                    # TODO(Patrick: delete cut type)
+                    segments, segment_offset, cut_type = self._retrieve_segment(
+                        seek_sequence=seek_sequence,
+                        seek_outputs=seek_outputs,
+                        time_offset=time_offset,
+                        timestamp_begin=timestamp_begin,
+                        seek_num_frames=seek_num_frames,
+                        time_precision=time_precision,
+                        input_stride=input_stride,
+                        prev_idx=prev_i,
+                        idx=i,
+                    )
 
-                # TODO(Patrick: delete cut type)
-                segments, segment_offset, cut_type = self._retrieve_segment(
-                    seek_sequence=seek_sequence,
-                    seek_outputs=seek_outputs,
-                    time_offset=time_offset,
-                    timestamp_begin=timestamp_begin,
-                    seek_num_frames=seek_num_frames,
-                    time_precision=time_precision,
-                    input_stride=input_stride,
-                    prev_idx=prev_i,
-                    idx=i,
-                )
+                    current_segments[prev_i] += segments
+                    seek[prev_i] += segment_offset
 
-                current_segments[prev_i] += segments
-                seek[prev_i] += segment_offset
-
-            print(f"{cut_type} seek {seek[0]}")
+                print(f"{cut_type} seek {seek[0]}")
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
