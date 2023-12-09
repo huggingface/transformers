@@ -18,10 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Mixtral model."""
+import inspect
 import math
 import warnings
 from typing import List, Optional, Tuple, Union
-import inspect
+
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
