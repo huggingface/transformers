@@ -466,7 +466,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 class MixtralIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
-    def test_small_model_logits_batched(self):
+    def test_small_model_logits(self):
         model_id = "mx-test/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
@@ -484,3 +484,40 @@ class MixtralIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3))
         self.assertTrue(torch.allclose(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3))
+
+    @slow
+    @require_torch_gpu
+    def test_small_model_logits_batched(self):
+        model_id = "mx-test/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(0)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        EXPECTED_LOGITS_LEFT = torch.Tensor(
+            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+        )
+
+        # logits[0, -3:, -3:].half()
+        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
+            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+        )
+
+        # logits[1, -3:, -3:].half()
+        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
+            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
+        )
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3))
+        self.assertTrue(
+            torch.allclose(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        )
+        self.assertTrue(
+            torch.allclose(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+        )

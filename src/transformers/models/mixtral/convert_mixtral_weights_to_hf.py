@@ -221,7 +221,7 @@ def main():
     parser.add_argument(
         "--input_dir",
         help="Location of Mistral weights, which contains tokenizer.model and model folders",
-        required=True
+        required=True,
     )
     parser.add_argument(
         "--model_size",
@@ -229,11 +229,7 @@ def main():
         help="'f' models correspond to the finetuned versions, and are specific to the Mistral2 official release. For more details on Mistral2, checkout the original repo: https://huggingface.co/meta-mistral",
         default="7B",
     )
-    parser.add_argument(
-        "--output_dir",
-        help="Location to write HF model and tokenizer",
-        required=True
-    )
+    parser.add_argument("--output_dir", help="Location to write HF model and tokenizer", required=True)
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     write_model(
