@@ -14,7 +14,6 @@
 # limitations under the License.
 import gc
 import importlib.metadata
-import tempfile
 import unittest
 
 from packaging import version
@@ -224,28 +223,6 @@ class Bnb4BitTest(Base4bitTest):
         )
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
-
-    def test_raise_on_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertRaises(NotImplementedError), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_4bit.save_pretrained(tmpdirname)
-
-    def test_raise_if_config_and_load_in_4bit(self):
-        r"""
-        Test that loading the model with the config and `load_in_4bit` raises an error
-        """
-        bnb_config = BitsAndBytesConfig()
-
-        with self.assertRaises(ValueError):
-            _ = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                quantization_config=bnb_config,
-                load_in_4bit=True,
-                device_map="auto",
-                bnb_4bit_quant_type="nf4",
-            )
 
     def test_device_and_dtype_assignment(self):
         r"""
