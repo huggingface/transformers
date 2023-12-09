@@ -75,8 +75,6 @@ _bitsandbytes_available = _is_package_available("bitsandbytes")
 _flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
     importlib.metadata.version("flash_attn")
 ) >= version.parse("2.1.0")
-_megablocks_available = _is_package_available("megablocks") 
-_stk_available = importlib.util.find_spec("stk") is not None
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -638,13 +636,6 @@ def is_flash_attn_greater_or_equal_2_10():
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
-
-def is_megablocks_available():
-    return _megablocks_available
-
-
-def is_stk_available():
-    return _stk_available
 
 def is_flash_attn_available():
     logger.warning(
