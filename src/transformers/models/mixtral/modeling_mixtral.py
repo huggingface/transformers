@@ -53,7 +53,8 @@ if is_flash_attn_2_available():
     _flash_supports_window_size = "window_size" in list(inspect.signature(flash_attn_func).parameters)
 
 
-USE_MEGABLOCKS = is_stk_available() and is_megablocks_available()
+# USE_MEGABLOCKS = is_stk_available() and is_megablocks_available()
+USE_MEGABLOCKS = False
 
 logger = logging.get_logger(__name__)
 
@@ -578,6 +579,23 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
+class MixtralBLockSparseTop2MLP(nn.Module):
+    def __init__(self, config: MixtralConfig):
+        super().__init__()
+        self.ffn_dim = config.intermediate_size
+        self.hidden_dim = config.hidden_size
+
+        self.w1 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+        self.w2 = nn.Linear(self.ffn_dim, self.hidden_dim, bias=False)
+        self.w3 = nn.Linear(self.hidden_dim, self.ffn_dim, bias=False)
+
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states, routing_weights):
+        current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
+        current_hidden_states = self.w2(current_hidden_states)      
+        return routing_weights * current_hidden_states
+
 
 class MixtralBlockSparseMoE(nn.Module):
     """
@@ -603,9 +621,11 @@ class MixtralBlockSparseMoE(nn.Module):
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
         # merged expert weights, all of size  (ffn_dim * n_experts, model_dim)
-        self.w1 = nn.Linear(self.ffn_dim * self.num_experts, self.hidden_dim, bias=False)
-        self.w2 = nn.Linear(self.hidden_dim, self.ffn_dim * self.num_experts, bias=False)
-        self.w3 = nn.Linear(self.ffn_dim * self.num_experts, self.hidden_dim, bias=False)
+
+        self.experts = nn.ModuleList([
+            MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)
+        ])
+
         # Calculate the number of bits needed to represent the expert indices
         # so that we can pass it to radix sort.
         self.sort_end_bit = max(int(np.ceil(np.log2(self.num_experts))), 1)
@@ -617,6 +637,44 @@ class MixtralBlockSparseMoE(nn.Module):
         max_column_index = (self.ffn_dim * self.num_experts) // self.blocking
         self.transpose_sort_end_bit = max(
             int(np.ceil(np.log2(max_column_index))), 1)
+        
+        self._megablocks_contiguified = False
+        
+    def _megablocks_contiguify_weights(self):
+        if self._megablocks_contiguified:
+            return
+        else:
+            w1 = torch.cat([expert.w1.weight.T for expert in self.experts], dim=1).T
+            w2 = torch.cat([expert.w2.weight for expert in self.experts], dim=1).T
+            w3 = torch.cat([expert.w3.weight.T for expert in self.experts], dim=1).T
+
+            self.register_buffer("w1", w1, persistent=False)
+            self.register_buffer("w2", w2, persistent=False)
+            self.register_buffer("w3", w3, persistent=False)
+
+            self._megablocks_contiguified = True
+            # Free experts memory
+            self.experts = None
+
+        
+    def state_dict(self, *args, **kwargs):    
+        if USE_MEGABLOCKS and self._megablocks_contiguified:
+            prefix = kwargs.get("prefix")
+            destination_state_dict = kwargs.get("destination")
+
+            for expert_idx in range(self.num_experts):
+                expert_w1 = self.w1[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].clone().contiguous()
+                expert_w2 = self.w2[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].T.clone().contiguous()
+                expert_w3 = self.w3[self.ffn_dim * expert_idx : self.ffn_dim * (expert_idx + 1), :].clone().contiguous()
+                target_weight_names = ["w1", "w2", "w3"]
+                for target_weight_name, target_weight in zip(target_weight_names, [expert_w1, expert_w2, expert_w3]):
+                    destination_key = f"{prefix}experts.{expert_idx}.{target_weight_name}.weight"
+                    destination_state_dict.update({destination_key: target_weight})
+            destination_state_dict.update({f"{prefix}gate.weight": self.gate.weight.data})
+            return destination_state_dict
+        else:
+            return super().state_dict(*args, **kwargs)
+ 
 
     def sparse_transpose(self, size, row_indices, column_indices):
         block_columns = size[1] // self.blocking
@@ -725,6 +783,9 @@ class MixtralBlockSparseMoE(nn.Module):
             _,
         ) = self.indices_and_padded_bins(selected_experts)
 
+        if not self._megablocks_contiguified:
+            self._megablocks_contiguify_weights()
+
         # Permute tokens and pad to prepare expert computation
         # (top_k * sequence_length  padding, model_dim)
         x = ops.padded_gather(x, indices, bin_ids, bins, padded_bins,
@@ -739,8 +800,8 @@ class MixtralBlockSparseMoE(nn.Module):
         # (top_k * sequence_length  padding, ffn_dim * n_experts)
         x = stk.Matrix(
             topo.size(),
-            F.silu(stk.ops.sdd(x, self.w1.weight.t(), topo).data) *
-            stk.ops.sdd(x, self.w3.weight.t(), topo).data,
+            F.silu(stk.ops.sdd(x, self.w1.t(), topo).data) *
+            stk.ops.sdd(x, self.w3.t(), topo).data,
             topo.row_indices,
             topo.column_indices,
             topo.offsets,
@@ -751,7 +812,7 @@ class MixtralBlockSparseMoE(nn.Module):
 
         # Then Sparse x Dense -> Dense for w2
         # (top_k * sequence_length  padding, model_dim)
-        x = stk.ops.dsd(x, self.w2.weight)
+        x = stk.ops.dsd(x, self.w2)
 
         # Permute back and remove padding
         # (top_k * sequence_length, model_dim)
@@ -773,7 +834,7 @@ class MixtralBlockSparseMoE(nn.Module):
         gate_logits: (sequence_length, n_experts)
         """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size * sequence_length, hidden_dim)
+        hidden_states = hidden_states.view(-1, hidden_dim)
         # gate_logits: (batch * sequence_length, n_experts)
         gate_logits = self.gate(hidden_states)
         # all_probs: (batch * sequence_length, n_experts) and upcast for softmax
@@ -796,23 +857,22 @@ class MixtralBlockSparseMoE(nn.Module):
         else:
             final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(hidden_states.device)
             expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
-            _w1 = self.w1.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)
-            _w2 = self.w2.weight.view(self.num_experts, self.ffn_dim , self.hidden_dim)
-            _w3 = self.w3.weight.T.view(self.num_experts, self.ffn_dim, self.hidden_dim)
-            for expert in range(self.num_experts):
-                w1 = _w1[expert]
-                w2 = _w2[expert]
-                w3 = _w3[expert]
-                idx, top_x = torch.where(expert_mask[expert])
+
+            for expert_idx in range(self.num_experts):
+                expert_layer = self.experts[expert_idx]
+
+                idx, top_x = torch.where(expert_mask[expert_idx])
                 if top_x.shape[0] == 0:
                     continue
                 # list indexing is a lot faster in torch
                 top_x = top_x.tolist()
                 idx = idx.tolist()
-                current_state = hidden_states[None, top_x] 
-                current_hidden_states = F.silu(current_state @ w1) * (current_state @ w3)
-                current_hidden_states = current_hidden_states @ w2
-                final_hidden_states[top_x] += (routing_weights[top_x, idx, None] * current_hidden_states)[0]
+
+                # Index the correct hidden states
+                current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
+
+                current_hidden_states = expert_layer(current_state, routing_weights[top_x, idx, None])
+                final_hidden_states[top_x] += current_hidden_states
 
             final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
             return final_hidden_states
