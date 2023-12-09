@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for LayoutLM."""
 
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -156,7 +156,7 @@ class LayoutLMImageProcessor(BaseImageProcessor):
         tesseract_config = tesseract_config if tesseract_config is not None else self.tesseract_config
 
         if not apply_ocr:
-            raise ValueError("apply_ocr must be True")
+            return None
 
         images = make_list_of_images(images)
 
