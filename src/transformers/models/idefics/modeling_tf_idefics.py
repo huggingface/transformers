@@ -27,7 +27,12 @@ from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
-from ...modeling_tf_utils import shape_list, unpack_inputs, TFModelInputType
+from ...modeling_tf_utils import (
+     shape_list,
+     unpack_inputs,
+     keras_serializable,
+     TFModelInputType
+)
 from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
@@ -1067,7 +1072,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
     Args:
         config: IdeficsConfig
     """
-
+    config_class = IdeficsConfig
     def __init__(self, config: IdeficsConfig, add_pooling_year: bool = True, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -1456,7 +1461,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
 class TFIdeficsForVisionText2Text(TFPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
-
+    config_class = IdeficsConfig
     def __init__(self, config, vision_model=None, **kwargs):
         super().__init__(config, **kwargs)
         self.model = TFIdeficsMainLayer(config)
