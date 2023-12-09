@@ -119,7 +119,6 @@ from .import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_available,
     is_megablocks_available,
-    is_stk_available,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
     is_fsdp_available,
