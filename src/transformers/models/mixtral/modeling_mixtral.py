@@ -621,14 +621,13 @@ class MixtralBlockSparseMoE(nn.Module):
         routing_weights, selected_experts = torch.topk(gate_logits, self.top_k, dim=-1)
         routing_weights = routing_weights.softmax(dim=-1)
 
-        final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim), device = hidden_states.device)
+        final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device)
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
             if top_x.shape[0] == 0:
                 continue
-            
             # Index the correct hidden states
             current_state = hidden_states[None, top_x.tolist()].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
