@@ -841,10 +841,10 @@ class MixtralBlockSparseMoE(nn.Module):
         all_probs = F.softmax(gate_logits, dim=1, dtype=torch.float)
         # weights, selected_experts: (batch * sequence_length, top-k)
         routing_weights, selected_experts = torch.topk(all_probs, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        
+
         # Native torch vs optimized with MegaBlocks
         if USE_MEGABLOCKS:
+            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
             routing_weights = routing_weights.flatten().to(hidden_states.dtype)
             selected_experts = selected_experts.flatten()
 
@@ -855,24 +855,19 @@ class MixtralBlockSparseMoE(nn.Module):
                 (batch_size, sequence_length, hidden_dim)
             )
         else:
-            final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim)).to(hidden_states.device)
+            final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim), device = hidden_states.device)
             expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
             expert_mask[0][:, 0] = torch.tensor([1,1], dtype=torch.long)
             for expert_idx in range(self.num_experts):
                 expert_layer = self.experts[expert_idx]
-
                 idx, top_x = torch.where(expert_mask[expert_idx])
                 if top_x.shape[0] == 0:
                     continue
-                # list indexing is a lot faster in torch
-                top_x = top_x.tolist()
-                idx = idx.tolist()
-
+                
                 # Index the correct hidden states
-                current_state = hidden_states[None, top_x].reshape(-1, hidden_dim)
-
-                current_hidden_states = expert_layer(current_state, routing_weights[top_x, idx, None])
-                final_hidden_states.scatter_add_(0, torch.tensor(top_x, device="cuda")[:,None], current_hidden_states)
+                current_state = hidden_states[None, top_x.tolist()].reshape(-1, hidden_dim)
+                current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
+                final_hidden_states.scatter_add_(0, top_x.unsqueeze(1).expand(len(top_x), hidden_dim), current_hidden_states)
 
             final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
             return final_hidden_states
