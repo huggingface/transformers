@@ -86,7 +86,7 @@ class MixtralConfig(PretrainedConfig):
         num_experts_per_tok (`int`, *optional*, defaults to 2):
             The number of experts to root per-token, can be also interpreted as the `top-p` routing
             parameter
-        num_local_experts (`int`, *optional*, defaults to 8): 
+        num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
 
     ```python

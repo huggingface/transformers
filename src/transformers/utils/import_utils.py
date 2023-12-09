@@ -72,9 +72,6 @@ _accelerate_available, _accelerate_version = _is_package_available("accelerate",
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 
-_flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
-    importlib.metadata.version("flash_attn")
-) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -255,10 +252,6 @@ def is_cv2_available():
 
 
 def is_torch_available():
-    return _torch_available
-
-
-def is_megablocks_available():
     return _torch_available
 
 
