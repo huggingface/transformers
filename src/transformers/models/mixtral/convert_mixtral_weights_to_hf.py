@@ -12,12 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import gc
 import json
 import os
-import re
-import shutil
-import warnings
 
 import torch
 
@@ -47,6 +43,7 @@ Important note: you need to be able to host the whole model in RAM to execute th
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
 
+
 def compute_intermediate_size(n, ffn_dim_multiplier=1, multiple_of=256):
     return multiple_of * ((int(ffn_dim_multiplier * int(8 * n / 3)) + multiple_of - 1) // multiple_of)
 
@@ -75,7 +72,6 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     dim = params["hidden_size"]
     dims_per_head = dim // n_heads
     base = params.get("rope_theta", 10000.0)
-    inv_freq = 1.0 / (base ** (torch.arange(0, dims_per_head, 2).float() / dims_per_head))
     max_position_embeddings = 4096 * 8
     num_local_experts = params["num_local_experts"]
     ffn_dim = params["intermediate_size"]
@@ -98,8 +94,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu")
-        for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
     ]
 
     merged_state_dict = {}
@@ -114,59 +109,82 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         # the same storage object, saving attention_norm and ffn_norm will save other weights too, which is
         # redundant as other weights will be stitched from multiple shards. To avoid that, they are cloned.
 
-        state_dict.update({
-            f"model.layers.{layer_i}.input_layernorm.weight": merged_state_dict[
-                f"layers.{layer_i}.attention_norm.weight"
-            ].clone(),
-            f"model.layers.{layer_i}.post_attention_layernorm.weight": merged_state_dict[
-                f"layers.{layer_i}.ffn_norm.weight"
-            ].clone(),
-        })
-
+        state_dict.update(
+            {
+                f"model.layers.{layer_i}.input_layernorm.weight": merged_state_dict[
+                    f"layers.{layer_i}.attention_norm.weight"
+                ].clone(),
+                f"model.layers.{layer_i}.post_attention_layernorm.weight": merged_state_dict[
+                    f"layers.{layer_i}.ffn_norm.weight"
+                ].clone(),
+            }
+        )
 
         state_dict[f"model.layers.{layer_i}.self_attn.q_proj.weight"] = permute(
-            merged_state_dict[f"layers.{layer_i}.attention.wq.weight"].view(n_heads_per_shard, dims_per_head, dim).reshape(dim, dim)
+            merged_state_dict[f"layers.{layer_i}.attention.wq.weight"]
+            .view(n_heads_per_shard, dims_per_head, dim)
+            .reshape(dim, dim)
         )
         state_dict[f"model.layers.{layer_i}.self_attn.k_proj.weight"] = permute(
-            merged_state_dict[f"layers.{layer_i}.attention.wk.weight"].view(num_local_key_value_heads, dims_per_head, dim).reshape(key_value_dim, dim),
+            merged_state_dict[f"layers.{layer_i}.attention.wk.weight"]
+            .view(num_local_key_value_heads, dims_per_head, dim)
+            .reshape(key_value_dim, dim),
             num_key_value_heads,
             key_value_dim,
             dim,
         )
-        state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = merged_state_dict[f"layers.{layer_i}.attention.wv.weight"].view(num_local_key_value_heads, dims_per_head, dim).reshape(key_value_dim, dim)
+        state_dict[f"model.layers.{layer_i}.self_attn.v_proj.weight"] = (
+            merged_state_dict[f"layers.{layer_i}.attention.wv.weight"]
+            .view(num_local_key_value_heads, dims_per_head, dim)
+            .reshape(key_value_dim, dim)
+        )
 
-        state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = merged_state_dict[f"layers.{layer_i}.attention.wo.weight"]
+        state_dict[f"model.layers.{layer_i}.self_attn.o_proj.weight"] = merged_state_dict[
+            f"layers.{layer_i}.attention.wo.weight"
+        ]
 
         w1 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w1"]
-        w2 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w2"] 
+        w2 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w2"]
         w3 = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.w3"]
-        
-        experts_w1 = [w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone() for expert_idx in range(num_local_experts)]
-        
+
+        experts_w1 = [
+            w1[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            for expert_idx in range(num_local_experts)
+        ]
+
         for idx, expert_block in enumerate(experts_w1):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w1"
             state_dict[expert_key + ".weight"] = expert_block.clone()
 
+        experts_w2 = [
+            w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            for expert_idx in range(num_local_experts)
+        ]
 
-        experts_w2 = [w2[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone() for expert_idx in range(num_local_experts)]
-        
         for idx, expert_block in enumerate(experts_w2):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w2"
             state_dict[expert_key + ".weight"] = expert_block.T.clone()
 
-        experts_w3 = [w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone() for expert_idx in range(num_local_experts)]
+        experts_w3 = [
+            w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
+            for expert_idx in range(num_local_experts)
+        ]
 
         for idx, expert_block in enumerate(experts_w3):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w3"
             state_dict[expert_key + ".weight"] = expert_block.clone()
 
-        state_dict[f"model.layers.{layer_i}.block_sparse_moe.gate.weight"] = merged_state_dict[f"layers.{layer_i}.block_sparse_moe.gate.weight"]
+        state_dict[f"model.layers.{layer_i}.block_sparse_moe.gate.weight"] = merged_state_dict[
+            f"layers.{layer_i}.block_sparse_moe.gate.weight"
+        ]
 
-    state_dict.update({
-        "model.norm.weight": merged_state_dict["norm.weight"],
-        "model.embed_tokens.weight": merged_state_dict["tok_embeddings.weight"],
-        "lm_head.weight": merged_state_dict["output.weight"],
-    })
+    state_dict.update(
+        {
+            "model.norm.weight": merged_state_dict["norm.weight"],
+            "model.embed_tokens.weight": merged_state_dict["tok_embeddings.weight"],
+            "lm_head.weight": merged_state_dict["output.weight"],
+        }
+    )
 
     config = MixtralConfig(
         hidden_size=dim,
@@ -203,18 +221,18 @@ def main():
     parser.add_argument(
         "--input_dir",
         help="Location of Mistral weights, which contains tokenizer.model and model folders",
-        default="/home/younes/Mixtral-8x7B"
+        default="/home/younes/Mixtral-8x7B",
     )
     parser.add_argument(
         "--model_size",
         choices=["7B"],
         help="'f' models correspond to the finetuned versions, and are specific to the Mistral2 official release. For more details on Mistral2, checkout the original repo: https://huggingface.co/meta-mistral",
-        default="7B"
+        default="7B",
     )
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
-        default="/home/younes/code/new-model-addition/Mixtral-8x7B"
+        default="/home/younes/code/new-model-addition/Mixtral-8x7B",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
