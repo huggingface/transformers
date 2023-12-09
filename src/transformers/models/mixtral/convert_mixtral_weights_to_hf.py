@@ -221,7 +221,7 @@ def main():
     parser.add_argument(
         "--input_dir",
         help="Location of Mistral weights, which contains tokenizer.model and model folders",
-        default="/home/younes/Mixtral-8x7B",
+        required=True
     )
     parser.add_argument(
         "--model_size",
@@ -232,7 +232,7 @@ def main():
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
-        default="/home/younes/code/new-model-addition/Mixtral-8x7B",
+        required=True
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
