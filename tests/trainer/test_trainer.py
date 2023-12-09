@@ -2288,12 +2288,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @slow
     @require_torch_multi_accelerator
     def test_end_to_end_example(self):
-        # Tests that `translation.py` will run without issues
+        # Tests that `run_translation.py` will run without issues.
         script_path = os.path.abspath(
             os.path.join(
                 os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
             )
         )
+        save_steps = 10
 
         with tempfile.TemporaryDirectory() as tmpdir:
             command = [
@@ -2326,9 +2327,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "--predict_with_generate",
                 "--ddp_timeout",
                 "60",
+                "--save_steps",
+                str(save_steps),
             ]
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
+            self.check_saved_checkpoints(tmpdir, freq=save_steps, total=32 // save_steps, is_pretrained=False)
 
 
 @require_torch
