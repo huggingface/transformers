@@ -118,7 +118,7 @@ class MixtralConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         tie_word_embeddings=False,
-        rope_theta=10000.0,
+        rope_theta=1000000.0,
         sliding_window=4096,
         attention_dropout=0.0,
         num_experts_per_tok=2,
