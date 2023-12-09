@@ -101,7 +101,7 @@ class MixtralModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
-    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
+    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -284,8 +284,8 @@ class MixtralModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-# Copied from tests.models.misatral.test_modeling_mistral.MistralModelTest Mistral->Mixtral
 @require_torch
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
 class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MixtralModel, MixtralForCausalLM, MixtralForSequenceClassification) if is_torch_available() else ()
