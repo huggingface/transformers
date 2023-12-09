@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Whisper model."""
-RUN_NEW_WAY = False
+RUN_NEW_WAY = True
 
 import math
 from typing import Optional, Tuple, Union
@@ -2337,7 +2337,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             # 6.6 Batch generate current chunk
             if RUN_NEW_WAY:
-                token_sequences  = [None for _ in range(cur_bsz)]
+                seek_sequence_list = [None for _ in range(cur_bsz)]
                 needs_fallback = [False for _ in range(cur_bsz)]
                 should_skip = [False for _ in range(cur_bsz)]
                 fallback_index_map = list(range(cur_bsz))
@@ -2346,7 +2346,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 needs_fallback = False
                 should_skip = False
 
-            for temperature in temperatures:
+            for fallback_idx, temperature in enumerate(temperatures):
                 do_sample = temperature > 0.0
 
                 num_beams = kwargs.pop("num_beams", 1)
@@ -2391,6 +2391,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
 
                 if RUN_NEW_WAY:
+                    new_fallback_index_map = []
+                    new_segment_input = []
+                    new_decoder_input_ids = []
                     # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
                     for i, seek_sequence in enumerate(seek_sequences):
                         # make sure we cut a predicted EOS token if we are not finished with the generation yet
@@ -2416,13 +2419,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
                         if logprob_threshold is not None:
                             if "sequences_scores" in seek_outputs[0]:
-                                logprobs = [s["sequences_scores"] for s in seek_outputs]
+                                logprobs = [s["sequences_scores"] for s in seek_outputs][i]
                             else:
                                 scores = seek_outputs[i]["scores"]
                                 logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, self.config.eos_token_id, temperature)
 
                             # TODO(PVP) only works for batch size = 1 currently
                             if logprobs < logprob_threshold:
+                                print("fallback logprobs", logprobs)
                                 print("current temp", temperature)
                                 needs_fallback[i] = True
                     
@@ -2434,26 +2438,21 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                                 needs_fallback[i] = False
                                 should_skip[i] = True
 
-                    new_fallback_index_map = []
-                    new_segment_input = []
-                    new_decoder_input_ids = []
-                    for i, seek_sequence in enumerate(seek_sequences):
                         if needs_fallback[i]:
                             new_fallback_index_map.append(fallback_index_map[i])
                             new_segment_input.append(segment_input[i])
                             new_decoder_input_ids.append(decoder_input_ids[i])
 
-                        token_sequences[fallback_index_map[i]] = seek_sequence
+                        seek_sequence_list[fallback_index_map[i]] = seek_sequence
 
                     fallback_index_map = new_fallback_index_map
-                    seek_sequences = torch.stack(token_sequences)
 
-                    if len(fallback_index_map) == 0:
+                    if len(fallback_index_map) == 0 or fallback_idx == len(temperatures) - 1:
+                        seek_sequences = seek_sequence_list
                         break
 
                     decoder_input_ids = torch.stack(new_decoder_input_ids)
                     segment_input = torch.stack(new_segment_input)
-
 
                 if not RUN_NEW_WAY:
                     if compression_ratio_threshold is not None:
@@ -2470,7 +2469,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                             logprobs = [s["sequences_scores"] for s in seek_outputs]
                         else:
                             scores = [s["scores"] for s in seek_outputs]
-                            logprobs = self._retrieve_avg_logprobs(scores, seek_sequences, self.config.eos_token_id, temperature)
+                            logprobs = self._retrieve_avg_logprobs(scores[0], seek_sequences[0], self.config.eos_token_id, temperature)
 
                         # TODO(PVP) only works for batch size = 1 currently
                         if logprobs < logprob_threshold:
@@ -2604,12 +2603,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
+
+        # TODO(Patrick) - only leave scores = scores[:tokens.shape[0]] part
+        if scores.shape[0] > tokens.shape[0]:
+            scores = scores[:tokens.shape[0]]
+        else:
+            tokens = tokens[-scores.shape[0]:]
+
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
-        tokens = tokens[-scores.shape[0]:]
 
         # retrieve logprob of selected tokens and sum
         sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-
         length = (tokens != eos_token_id).sum(-1)
 
         avg_logprobs = sum_logprobs / (length + 1)
