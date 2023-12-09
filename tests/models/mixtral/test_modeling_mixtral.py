@@ -46,8 +46,9 @@ if is_torch_available():
         MixtralModel,
     )
 
-
 class MixtralModelTester:
+    
+    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def __init__(
         self,
         parent,
@@ -100,6 +101,7 @@ class MixtralModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
+    # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -139,8 +141,11 @@ class MixtralModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            num_experts_per_tok=2,
+            num_local_experts=2
         )
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mixtral
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -151,6 +156,7 @@ class MixtralModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Mixtral
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -181,6 +187,7 @@ class MixtralModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Mixtral
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -199,6 +206,7 @@ class MixtralModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Mixtral
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -261,6 +269,7 @@ class MixtralModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->Mixtral
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -275,7 +284,7 @@ class MixtralModelTester:
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-
+# Copied from tests.models.misatral.test_modeling_mistral.MistralModelTest Mistral->Mixtral
 @require_torch
 class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
