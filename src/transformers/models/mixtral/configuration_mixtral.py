@@ -25,7 +25,6 @@ MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class MixtralConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MixtralModel`]. It is used to instantiate an
@@ -122,7 +121,7 @@ class MixtralConfig(PretrainedConfig):
         sliding_window=4096,
         attention_dropout=0.0,
         num_experts_per_tok=2,
-        num_local_experts=8, 
+        num_local_experts=8,
         **kwargs,
     ):
         self.vocab_size = vocab_size

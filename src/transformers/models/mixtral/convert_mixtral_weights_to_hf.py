@@ -17,11 +17,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import torch
+import argparse
 import re
 from glob import glob
-import argparse
-from transformers import MixtralConfig, MixtralForCausalLM, AutoTokenizer
+
+import torch
+
+from transformers import AutoTokenizer, MixtralConfig, MixtralForCausalLM
+
 
 KEYS_TO_MODIFY_MAPPING = {
     "tok_embeddings": "model.embed_tokens",
@@ -36,11 +39,10 @@ KEYS_TO_MODIFY_MAPPING = {
     ".ffn_norm.": ".post_attention_layernorm.",
 }
 
-KEYS_TO_MODIFY_EXACT_MATCH = {
-    "norm.weight": "model.norm.weight"
-}
+KEYS_TO_MODIFY_EXACT_MATCH = {"norm.weight": "model.norm.weight"}
 
 torch.set_default_dtype(torch.bfloat16)
+
 
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
@@ -66,7 +68,7 @@ def load_and_save_weights(weights_path, save_model_path):
         model = MixtralForCausalLM(config)
 
     mismatched_weights = []
-
+    num_experts = 8
     for pt_file in pt_files:
         new_state_dict = {}
 
@@ -78,9 +80,12 @@ def load_and_save_weights(weights_path, save_model_path):
         for k, v in partial_state_dict.items():
             moe_block_match = re.match(r".*.(block_sparse_moe\.w(\d)).*", k)
             if moe_block_match:
-                group_string = moe_block_match.group(1)
-                
-                experts = [v[config.intermediate_size * expert_idx : config.intermediate_size * (expert_idx + 1), :].contiguous().clone() for expert_idx in range(num_experts)]
+                experts = [
+                    v[config.intermediate_size * expert_idx : config.intermediate_size * (expert_idx + 1), :]
+                    .contiguous()
+                    .clone()
+                    for expert_idx in range(num_experts)
+                ]
                 for idx, expert_block in enumerate(experts):
                     expert_key = k.replace("block_sparse_moe.", f"block_sparse_moe.experts.{idx}.")
                     if int(moe_block_match.group(2)) != 2:
@@ -93,12 +98,12 @@ def load_and_save_weights(weights_path, save_model_path):
         errors = model.load_state_dict(new_state_dict, strict=False, assign=True)
         mismatched_weights.append(errors)
 
-
     for n, p in model.named_parameters():
         assert p.device.type != "meta", f"{n} has not been loaded properly"
 
     model.save_pretrained(save_model_path)
     tokenizer.save_pretrained(save_model_path)
+
 
 def main():
     parser = argparse.ArgumentParser()

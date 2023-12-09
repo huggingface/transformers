@@ -21,7 +21,6 @@
 import inspect
 import math
 import warnings
-import numpy as np
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -576,7 +575,7 @@ class MixtralBLockSparseTop2MLP(nn.Module):
 
     def forward(self, hidden_states, routing_weights):
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
-        current_hidden_states = self.w2(current_hidden_states)      
+        current_hidden_states = self.w2(current_hidden_states)
         return routing_weights * current_hidden_states
 
 
@@ -603,10 +602,7 @@ class MixtralBlockSparseMoE(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([
-            MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)
-        ])
-
+        self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """
@@ -617,12 +613,14 @@ class MixtralBlockSparseMoE(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
         # gate_logits: (batch * sequence_length, n_experts)
         gate_logits = self.gate(hidden_states)
-        
+
         routing_weights, selected_experts = torch.topk(gate_logits, self.top_k, dim=-1)
         routing_weights = routing_weights.softmax(dim=-1)
 
-        final_hidden_states = torch.zeros((batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device)
-        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2,1,0)
+        final_hidden_states = torch.zeros(
+            (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
+        )
+        expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
@@ -632,12 +630,10 @@ class MixtralBlockSparseMoE(nn.Module):
             current_state = hidden_states[None, top_x.tolist()].reshape(-1, hidden_dim)
             current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
             final_hidden_states.index_add_(0, top_x, current_hidden_states)
-
-
-        final_hidden_states = final_hidden_states.reshape(batch_size , sequence_length, hidden_dim)
+        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states
 
-    
+
 class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig):
         super().__init__()

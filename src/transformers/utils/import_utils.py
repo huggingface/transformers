@@ -261,6 +261,7 @@ def is_torch_available():
 def is_megablocks_available():
     return _torch_available
 
+
 def get_torch_version():
     return _torch_version
 
