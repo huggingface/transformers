@@ -31,9 +31,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
+from ...test_configuration_common import ConfigTester
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -46,8 +46,8 @@ if is_torch_available():
         MixtralModel,
     )
 
+
 class MixtralModelTester:
-    
     # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.__init__
     def __init__(
         self,
@@ -142,7 +142,7 @@ class MixtralModelTester:
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
             num_experts_per_tok=2,
-            num_local_experts=2
+            num_local_experts=2,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Mixtral
@@ -283,6 +283,7 @@ class MixtralModelTester:
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
+
 
 @require_torch
 # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Mixtral
