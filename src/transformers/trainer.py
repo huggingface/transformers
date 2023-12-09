@@ -28,6 +28,7 @@ import random
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from collections.abc import Mapping
@@ -595,7 +596,6 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        self.use_tune_checkpoints = False
         default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(self.model.__class__)
@@ -1201,7 +1201,8 @@ class Trainer:
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
-        self.objective = self.compute_objective(metrics.copy())
+        metrics = metrics.copy()
+        self.objective = self.compute_objective(metrics)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
@@ -1211,24 +1212,23 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            from ray import tune
+            import ray.train
 
-            if self.control.should_save:
-                self._tune_save_checkpoint()
-            tune.report(objective=self.objective, **metrics)
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                checkpoint = None
+                if self.control.should_save:
+                    self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                metrics["objective"] = self.objective
+                ray.train.report(metrics, checkpoint=checkpoint)
 
-    def _tune_save_checkpoint(self):
-        from ray import tune
-
-        if not self.use_tune_checkpoints:
-            return
-        with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
-            output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
-            self.save_model(output_dir, _internal_call=True)
-            if self.args.should_save:
-                self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+    def _tune_save_checkpoint(self, checkpoint_dir: str):
+        output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
+        self.save_model(output_dir, _internal_call=True)
+        if self.args.should_save:
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
 
     def call_model_init(self, trial=None):
         model_init_argcount = number_of_arguments(self.model_init)
@@ -2004,9 +2004,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                from ray import tune
+                import ray.train
 
-                run_id = tune.get_trial_id()
+                run_id = ray.train.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
