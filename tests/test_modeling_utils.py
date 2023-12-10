@@ -1853,6 +1853,8 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
+@require_torch
+@slow
 class Mask4DTest(unittest.TestCase):
     def setUp(self):
         self.device = torch.device("cuda:0")
