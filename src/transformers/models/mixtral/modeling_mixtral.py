@@ -83,7 +83,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     experts is too unbalanced.
 
     Args:
-        router_probs (Union[`torch.Tensor`, List[torch.Tensor]):
+        router_probs (Union[`torch.Tensor`, Tuple[torch.Tensor]):
             Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
         expert_indices (`torch.Tensor`):
             Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
@@ -94,9 +94,12 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     if router_probs is None:
         return 0
 
-    if isinstance(router_probs, list):
+    if isinstance(router_probs, tuple):
         router_probs = torch.cat(router_probs, dim=0)
 
+    if isinstance(expert_indices, tuple):
+        expert_indices = torch.cat(expert_indices, dim=0)
+        
     num_experts = router_probs.shape[-1]
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
