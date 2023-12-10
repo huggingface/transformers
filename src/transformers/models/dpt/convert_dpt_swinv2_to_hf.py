@@ -287,8 +287,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, verify_logits, 
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"Intel/{model_name}")
+        processor.push_to_hub(repo_id=f"Intel/{model_name}")
 
 
 if __name__ == "__main__":
