@@ -275,6 +275,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         self.vocab_size = model_embeds.num_embeddings
         return model_embeds
 
+    # Ignore copy
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
@@ -306,6 +307,15 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         final_attention_mask = torch.zeros(
             batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
         )
+        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
+        # set the corresponding tensors into their correct target device.
+        target_device = inputs_embeds.device
+        batch_indices, non_image_indices, text_to_overwrite = (
+            batch_indices.to(target_device),
+            non_image_indices.to(target_device),
+            text_to_overwrite.to(target_device),
+        )
+        attention_mask = attention_mask.to(target_device)
 
         # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
         # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
@@ -314,7 +324,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
-        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None]
+        image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
@@ -322,7 +332,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 f" the number of image given to the model is {nb_images}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim)
+        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
         return final_embedding, final_attention_mask, position_ids
@@ -384,12 +394,6 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
-
-        if len(vision_feature_layers) != 5:
-            raise ValueError(
-                "To use VipLlava, you must have a `vision_feature_layers` of size 4, i.e. select 4 features from different"
-                " layers of the vision backbone."
-            )
 
         if inputs_embeds is None:
             # 1. Extra the input embeddings

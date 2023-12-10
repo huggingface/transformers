@@ -49,10 +49,8 @@ class VipLlavaConfig(PretrainedConfig):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
-            The feature selection strategy used to select the vision feature from the CLIP backbone.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layers (`List[int]`):
+            The list of layers to select the vision features from.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the VipLlava model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~VipLlavaForConditionalGeneration`]
