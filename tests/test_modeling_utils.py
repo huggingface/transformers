@@ -1904,6 +1904,7 @@ class Mask4DTest(unittest.TestCase):
         return input_0, input_1, mask_1, position_ids_1
 
     def test_attention(self):
+        """comparing outputs of attention layer"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         hid_0 = self.model.model.embed_tokens(input_0)
@@ -1921,6 +1922,7 @@ class Mask4DTest(unittest.TestCase):
         assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens, atol=1e-8)
 
     def test_model(self):
+        """comparing hidden outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
         logits_0 = self.model.forward(input_0).logits
@@ -1928,4 +1930,19 @@ class Mask4DTest(unittest.TestCase):
 
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
         logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
-        assert torch.allclose(logits_0_last_tokens, logits_1_last_tokens, atol=1e-5)
+        assert torch.allclose(
+            logits_0_last_tokens, logits_1_last_tokens, atol=1e-5
+        )  # note higher atol set to deal with noise
+
+    def test_causal_model_logits(self):
+        """comparing logits outputs of whole inner model"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+        assert torch.allclose(
+            logits_0_last_tokens, logits_1_last_tokens, atol=1e-5
+        )  # note higher atol set to deal with noise
