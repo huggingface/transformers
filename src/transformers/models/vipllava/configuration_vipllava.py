@@ -47,8 +47,8 @@ class VipLlavaConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
-        projector_layernorm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        projector_layernorm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
+        projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
+            The layer norm epsilon of the projector layernorm
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
         vision_feature_layer (`int`, *optional*, defaults to -2):
@@ -88,20 +88,16 @@ class VipLlavaConfig(PretrainedConfig):
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
-        projector_layernorm=False,
         projector_layernorm_eps=1e-5,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-2,
+        vision_feature_layers=[-2, -5, -8, -11, 6],
         vocab_size=32000,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.projector_layernorm = projector_layernorm
         self.projector_layernorm_eps = projector_layernorm_eps
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
+        self.vision_feature_layers = vision_feature_layers
         self.vocab_size = vocab_size
 
         self.vision_config = vision_config

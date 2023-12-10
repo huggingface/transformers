@@ -49,8 +49,7 @@ class VipLlavaVisionText2TextModelTester:
         image_token_index=0,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
+        vision_feature_layers=[0, 0, 1, 1],
         text_config={
             "model_type": "llama",
             "seq_length": 7,
@@ -95,8 +94,7 @@ class VipLlavaVisionText2TextModelTester:
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
+        self.vision_feature_layers = vision_feature_layers
         self.text_config = text_config
         self.vision_config = vision_config
         self.seq_length = seq_length
@@ -119,8 +117,7 @@ class VipLlavaVisionText2TextModelTester:
             ignore_index=self.ignore_index,
             image_token_index=self.image_token_index,
             projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
+            vision_feature_layers=self.vision_feature_layers,
         )
 
     def prepare_config_and_inputs(self):

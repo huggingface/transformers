@@ -91,11 +91,11 @@ class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
         self.projector_layernorm = nn.LayerNorm(
-            config.text_config.hidden_size + config.vision_config.hidden_size, eps=config.projector_layernorm_eps
+            len(config.vision_feature_layers) * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
         )
 
         self.linear_1 = nn.Linear(
-            config.text_config.hidden_size + config.vision_config.hidden_size,
+            len(config.vision_feature_layers) * config.vision_config.hidden_size,
             config.text_config.hidden_size,
             bias=True,
         )
@@ -338,8 +338,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layers: Optional[List[int]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -382,14 +381,15 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        vision_feature_layers = (
+            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
+
+        if len(vision_feature_layers) != 4:
+            raise ValueError(
+                "To use VipLlava, you must have a `vision_feature_layers` of size 4, i.e. select 4 features from different"
+                " layers of the vision backbone."
+            )
 
         if inputs_embeds is None:
             # 1. Extra the input embeddings
@@ -400,7 +400,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
                 # For VIP-llava, the image features are computed this way
                 # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
-                image_features = [image_outputs.hidden_states[index][:, 1:] for index in [-2, -5, -8, -11, 6]]
+                image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
                 image_features = torch.cat(image_features, dim=-1)
 
                 image_features = self.multi_modal_projector(image_features)
