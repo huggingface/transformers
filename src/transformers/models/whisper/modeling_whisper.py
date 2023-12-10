@@ -2024,8 +2024,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             
             # 6.5 prepare decoder input ids
             # TODO(Patrick) - clean up prev_start_of_text
-            suppress_tokens_processor = [l for l in logits_processor if isinstance(l, SuppressTokensLogitsProcessor)]
-            prev_start_of_text = suppress_tokens_processor[0].suppress_tokens[-2] if len(suppress_tokens_processor) > 0 else None
+            suppress_tokens = self._get_attr_from_logit_processors(logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens")
+            prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(cur_bsz=cur_bsz, init_tokens=init_tokens, current_segments=current_segments, batch_idx_map=batch_idx_map, do_condition_on_prev_tokens=do_condition_on_prev_tokens, generation_config=generation_config, config=self.config, device=segment_input.device, kwargs=kwargs, prev_start_of_text=prev_start_of_text)
 
             # 6.6 set max new tokens or max length
@@ -2130,7 +2130,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     if no_speech_threshold is not None:
                         # TODO(PVP) only works for batch size = 1 currently
                         # Need to do before all other logit processors
-                        if no_speech_detector.no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
+                        no_speech_prob = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
+                        if no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
                             print("Skip because of VAD")
                             needs_fallback[i] = False
                             should_skip[i] = True
@@ -2189,6 +2190,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         return sequences
 
     @staticmethod
+    def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
+        logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
+        if logit_processor:
+            return getattr(logit_processor, attribute_name, None)
+        return None
+
+    @staticmethod
     def _retrieve_total_input_frames(input_features, kwargs):
         if input_features is not None:
             return input_features.shape[-1]
@@ -2213,8 +2221,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             generation_config.output_attentions = True
 
         if not is_shortform and logprob_threshold is not None:
+            return_dict_in_generate = True
             generation_config.output_scores = True
-            generation_config.output_attentions = True
+
+        generation_config.return_dict_in_generate = return_dict_in_generate
 
     @staticmethod
     def _set_return_timestamps(return_timestamps, is_shortform, generation_config):
@@ -2519,7 +2529,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             prev_start_of_text = getattr(generation_config, "prev_bos_token_id", None) or prev_start_of_text
 
             bos_token_tensor = prev_start_of_text * one_tensor[0]
-            prev_tokens = self._pad_to_max_length(
+            prev_tokens = WhisperForConditionalGeneration._pad_to_max_length(
                 active_segments, generation_config.pad_token_id, padding="left", bos_token_tensor=bos_token_tensor, cut_off_length=cut_off_length
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
