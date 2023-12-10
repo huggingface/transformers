@@ -1110,14 +1110,14 @@ class MixtralModel(MixtralPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, all_hidden_states, all_self_attns, next_cache, all_router_logits]
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
                 if v is not None
             )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
+            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            past_key_values=next_cache,
             router_logits=all_router_logits,
         )
 
@@ -1241,7 +1241,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
         aux_loss = None
         if output_router_logits:
-            aux_loss = load_balancing_loss_func(outputs[-1], self.num_experts, self.num_experts_per_tok)
+            aux_loss = load_balancing_loss_func(outputs.router_logits if return_dict else outputs[-1], self.num_experts, self.num_experts_per_tok)
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss
 
@@ -1255,9 +1255,9 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            past_key_values=outputs.past_key_values,
             router_logits=outputs.router_logits,
         )
 

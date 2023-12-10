@@ -132,8 +132,8 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_local_experts=8,
-        output_router_logits=False,
-        router_aux_loss_coef=0.001,
+        output_router_logits=True,
+        router_aux_loss_coef=0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
