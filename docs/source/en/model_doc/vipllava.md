@@ -28,6 +28,21 @@ The abstract from the paper is the following:
 
 Tips:
 
+- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+
+- Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
+
+- For better results, we recommend users to prompt the model with the correct prompt format: 
+
+```bash
+"USER: <image>\n<prompt>ASSISTANT:"
+```
+
+For multiple turns conversation:
+
+```bash
+"USER: <image>\n<prompt1>ASSISTANT: <answer1>USER: <prompt2>ASSISTANT: <answer2>USER: <prompt3>ASSISTANT:"
+```
 
 The original code can be found [here](https://github.com/mu-cai/ViP-LLaVA).
 
