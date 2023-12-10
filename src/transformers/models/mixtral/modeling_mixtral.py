@@ -737,7 +737,7 @@ class MixtralSparseMoeBlock(nn.Module):
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
-            final_hidden_states.index_add_(0, top_x, current_hidden_states)
+            final_hidden_states.index_add_(0, top_x, current_hidden_states.to(hidden_states.dtype))
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, router_logits
 
@@ -1226,6 +1226,11 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         logits = self.lm_head(hidden_states)
         logits = logits.float()
 
+        if return_dict and output_router_logits:
+            router_logits = outputs.router_logits
+        else:
+            router_logits = outputs[-1]
+
         loss = None
         if labels is not None:
             # Shift so that tokens < n predict n
@@ -1241,7 +1246,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
         aux_loss = None
         if output_router_logits:
-            aux_loss = load_balancing_loss_func(outputs[-1], self.num_experts, self.num_experts_per_tok)
+            aux_loss = load_balancing_loss_func(router_logits, self.num_experts, self.num_experts_per_tok)
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss
 
