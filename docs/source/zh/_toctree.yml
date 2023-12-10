@@ -68,11 +68,66 @@
   title: 概念指南
 - sections:
   - sections:
+    - local: main_classes/agent
+      title: Agents和工具
+    - local: main_classes/callback
+      title: Callbacks
+    - local: main_classes/configuration
+      title: Configuration
+    - local: main_classes/data_collator
+      title: Data Collator
+    - local: main_classes/keras_callbacks
+      title: Keras callbacks
+    - local: main_classes/logging
+      title: Logging
     - local: main_classes/model
       title: 模型
+    - local: main_classes/text_generation
+      title: 文本生成
+    - local: main_classes/onnx
+      title: ONNX
+    - local: main_classes/optimizer_schedules
+      title: Optimization
+    - local: main_classes/output
+      title: 模型输出
+    - local: main_classes/pipelines
+      title: Pipelines
+    - local: main_classes/processors
+      title: Processors
+    - local: main_classes/quantization
+      title: Quantization
+    - local: main_classes/tokenizer
+      title: Tokenizer
     - local: main_classes/trainer
       title: Trainer
     - local: main_classes/deepspeed
       title: DeepSpeed集成
+    - local: main_classes/feature_extractor
+      title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
     title: 主要类
+  - sections:
+    - local: internal/modeling_utils
+      title: 自定义层和工具
+    - local: internal/pipelines_utils
+      title: pipelines工具
+    - local: internal/tokenization_utils
+      title: Tokenizers工具
+    - local: internal/trainer_utils
+      title: 训练器工具
+    - local: internal/generation_utils
+      title: 生成工具
+    - local: internal/image_processing_utils
+      title: 图像处理工具
+    - local: internal/audio_utils
+      title: 音频处理工具
+    - local: internal/file_utils
+      title: 通用工具
+    - local: internal/time_series_utils
+      title: 时序数据工具
+    title: 内部辅助工具
   title: 应用程序接口 (API) 
+
+
+

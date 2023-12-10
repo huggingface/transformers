@@ -21,9 +21,11 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import uuid
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+import requests
+from huggingface_hub import HfApi, HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
 from pytest import mark
 from requests.exceptions import HTTPError
@@ -58,7 +60,13 @@ from transformers.utils import (
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
 )
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torchdynamo_available
+from transformers.utils.import_utils import (
+    is_flash_attn_2_available,
+    is_flax_available,
+    is_tf_available,
+    is_torch_sdpa_available,
+    is_torchdynamo_available,
+)
 
 
 sys.path.append(str(Path(__file__).parent.parent / "utils"))
@@ -83,7 +91,12 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+    from transformers.modeling_attn_mask_utils import (
+        AttentionMaskConverter,
+        _create_4d_causal_attention_mask,
+        _prepare_4d_attention_mask,
+        _prepare_4d_causal_attention_mask,
+    )
     from transformers.modeling_utils import shard_checkpoint
 
     # Fake pretrained models for tests
@@ -147,6 +160,32 @@ if is_torch_available():
 
         def tie_weights(self):
             self.decoder.weight = self.base.linear.weight
+
+    class Prepare4dCausalAttentionMaskModel(nn.Module):
+        def forward(self, inputs_embeds):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            past_key_values_length = 4
+            attention_mask = _prepare_4d_causal_attention_mask(
+                None, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            )
+            return attention_mask
+
+    class Create4dCausalAttentionMaskModel(nn.Module):
+        def forward(self, inputs_embeds):
+            batch_size, seq_length, _ = inputs_embeds.shape
+            past_key_values_length = 4
+            attention_mask = _create_4d_causal_attention_mask(
+                (batch_size, seq_length),
+                dtype=inputs_embeds.dtype,
+                device=inputs_embeds.device,
+                past_key_values_length=past_key_values_length,
+            )
+            return attention_mask
+
+    class Prepare4dAttentionMaskModel(nn.Module):
+        def forward(self, mask, inputs_embeds):
+            attention_mask = _prepare_4d_attention_mask(mask, dtype=inputs_embeds.dtype)
+            return attention_mask
 
 
 if is_flax_available():
@@ -829,14 +868,8 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_safetensors
     def test_use_safetensors(self):
-        # test nice error message if no safetensor files available
-        with self.assertRaises(OSError) as env_error:
-            AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
-
-        self.assertTrue(
-            "model.safetensors or model.safetensors.index.json and thus cannot be loaded with `safetensors`"
-            in str(env_error.exception)
-        )
+        # Should not raise anymore
+        AutoModel.from_pretrained("hf-internal-testing/tiny-random-RobertaModel", use_safetensors=True)
 
         # test that error if only safetensors is available
         with self.assertRaises(OSError) as env_error:
@@ -1171,6 +1204,203 @@ class ModelUtilsTest(TestCasePlus):
             self.assertTrue(torch.equal(p1, p2))
 
 
+@slow
+@require_torch
+class ModelOnTheFlyConversionTester(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.user = "huggingface-hub-ci"
+        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+
+        if cls.token is None:
+            raise ValueError("Cannot run tests as secret isn't setup.")
+
+        cls.api = HfApi(token=cls.token)
+
+    def setUp(self) -> None:
+        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+
+    def tearDown(self) -> None:
+        self.api.delete_repo(self.repo_name)
+
+    def test_safetensors_on_the_fly_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self.token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb")
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_private(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(
+            self.repo_name, token=self.token, safe_serialization=False, max_shard_size="200kb", private=True
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_sharded_conversion_gated(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, max_shard_size="200kb", safe_serialization=False)
+        headers = {"Authorization": f"Bearer {self.token}"}
+        requests.put(
+            f"https://huggingface.co/api/models/{self.repo_name}/settings", json={"gated": "auto"}, headers=headers
+        )
+        converted_model = BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("Initial and converted models are equal"):
+            for p1, p2 in zip(initial_model.parameters(), converted_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, "SFconvertbot")
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+    @unittest.skip("Edge case, should work once the Space is updated`")
+    def test_safetensors_on_the_fly_wrong_user_opened_pr(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, private=True)
+        BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        # This should have opened a PR with the user's account
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+            discussion = next(discussions)
+            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
+
+        # We now switch the repo visibility to public
+        self.api.update_repo_visibility(self.repo_name, private=False)
+
+        # We once again call from_pretrained, which should call the bot to open a PR
+        BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
+
+        with self.subTest("PR was open with the safetensors account"):
+            discussions = self.api.get_repo_discussions(self.repo_name)
+
+            bot_opened_pr = None
+            bot_opened_pr_title = None
+
+            for discussion in discussions:
+                if discussion.author == "SFconvertBot":
+                    bot_opened_pr = True
+                    bot_opened_pr_title = discussion.title
+
+            self.assertTrue(bot_opened_pr)
+            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+
+    def test_safetensors_on_the_fly_specific_revision(self):
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        initial_model = BertModel(config)
+
+        # Push a model on `main`
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False)
+
+        # Push a model on a given revision
+        initial_model.push_to_hub(self.repo_name, token=self.token, safe_serialization=False, revision="new-branch")
+
+        # Try to convert the model on that revision should raise
+        with self.assertRaises(EnvironmentError):
+            BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token, revision="new-branch")
+
+
 @require_torch
 @is_staging_test
 class ModelPushToHubTester(unittest.TestCase):
@@ -1300,7 +1530,7 @@ class AttentionMaskTester(unittest.TestCase):
             for bsz_idx, seq_idx in additional_mask:
                 mask_2d[bsz_idx, seq_idx] = 0
 
-        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len)
+        mask_4d = mask_converter.to_4d(mask_2d, query_length=q_len, key_value_length=kv_len, dtype=torch.float32)
 
         assert mask_4d.shape == (bsz, 1, q_len, kv_len)
 
@@ -1336,7 +1566,9 @@ class AttentionMaskTester(unittest.TestCase):
                 self.check_non_causal(bsz, q_len, kv_len, mask_2d, mask_4d)
 
     def check_to_causal(self, mask_converter, q_len, kv_len, bsz=3):
-        mask_4d = mask_converter.to_causal_4d(bsz, query_length=q_len, key_value_length=kv_len, device=torch_device)
+        mask_4d = mask_converter.to_causal_4d(
+            bsz, query_length=q_len, key_value_length=kv_len, device=torch_device, dtype=torch.float32
+        )
 
         if q_len == 1 and mask_converter.sliding_window is None:
             # no causal mask if q_len is 1
@@ -1428,3 +1660,193 @@ class AttentionMaskTester(unittest.TestCase):
         self.check_to_causal(mask_converter, q_len=3, kv_len=7)
         # non auto-regressive case
         self.check_to_causal(mask_converter, q_len=7, kv_len=7)
+
+    def test_torch_compile_fullgraph(self):
+        model = Prepare4dCausalAttentionMaskModel()
+
+        inputs_embeds = torch.rand([1, 3, 32])
+        res_non_compiled = model(inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+
+        res_compiled = compiled_model(inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+        model = Create4dCausalAttentionMaskModel()
+
+        inputs_embeds = torch.rand(2, 4, 16)
+        res_non_compiled = model(inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+        res_compiled = compiled_model(inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+        model = Prepare4dAttentionMaskModel()
+
+        mask = torch.ones(2, 4)
+        mask[0, :2] = 0
+        inputs_embeds = torch.rand(2, 4, 16)
+
+        res_non_compiled = model(mask, inputs_embeds)
+
+        compiled_model = torch.compile(model, fullgraph=True)
+        res_compiled = compiled_model(mask, inputs_embeds)
+
+        self.assertTrue(torch.equal(res_non_compiled, res_compiled))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_left_padding(self):
+        attention_mask = torch.Tensor([[0, 0, 1], [1, 1, 1], [0, 1, 1]]).to(torch.int64)
+
+        expanded_mask = torch.Tensor(
+            [
+                [[[0, 0, 0], [0, 0, 0], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[0, 0, 0], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        reference_output = torch.Tensor(
+            [
+                [[[1, 1, 1], [1, 1, 1], [0, 0, 1]]],
+                [[[1, 0, 0], [1, 1, 0], [1, 1, 1]]],
+                [[[1, 1, 1], [0, 1, 0], [0, 1, 1]]],
+            ]
+        ).to(torch.int64)
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=1)
+
+        self.assertTrue(torch.equal(result, reference_output))
+
+        attention_mask = torch.Tensor([[0, 0, 1, 1, 1], [1, 1, 1, 1, 1], [0, 1, 1, 1, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+        min_inf = torch.finfo(torch.float32).min
+        reference_output = torch.Tensor(
+            [
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [0, 0, 0, 0, 0],
+                        [min_inf, min_inf, 0, min_inf, min_inf],
+                        [min_inf, min_inf, 0, 0, min_inf],
+                        [min_inf, min_inf, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, min_inf, min_inf, min_inf, min_inf],
+                        [0, 0, min_inf, min_inf, min_inf],
+                        [0, 0, 0, min_inf, min_inf],
+                        [0, 0, 0, 0, min_inf],
+                        [0, 0, 0, 0, 0],
+                    ]
+                ],
+                [
+                    [
+                        [0, 0, 0, 0, 0],
+                        [min_inf, 0, min_inf, min_inf, min_inf],
+                        [min_inf, 0, 0, min_inf, min_inf],
+                        [min_inf, 0, 0, 0, min_inf],
+                        [min_inf, 0, 0, 0, 0],
+                    ]
+                ],
+            ]
+        )
+
+        self.assertTrue(torch.equal(reference_output, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_right_padding(self):
+        attention_mask = torch.Tensor([[1, 1, 1, 0], [1, 1, 1, 1], [1, 1, 0, 0]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+    @require_torch
+    @slow
+    def test_unmask_unattended_random_mask(self):
+        attention_mask = torch.Tensor([[1, 0, 1, 0], [1, 0, 1, 1], [1, 1, 0, 1]]).to(torch.int64)
+
+        attn_mask_converter = AttentionMaskConverter(is_causal=True)
+        past_key_values_length = 0
+        key_value_length = attention_mask.shape[-1] + past_key_values_length
+
+        expanded_mask = attn_mask_converter.to_4d(
+            attention_mask, attention_mask.shape[-1], key_value_length=key_value_length, dtype=torch.float32
+        )
+
+        result = AttentionMaskConverter._unmask_unattended(expanded_mask, attention_mask, unmasked_value=0)
+
+        self.assertTrue(torch.equal(expanded_mask, result))
+
+
+@require_torch
+class TestAttentionImplementation(unittest.TestCase):
+    def test_error_no_sdpa_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="sdpa")
+
+        self.assertTrue(
+            "does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention"
+            in str(cm.exception)
+        )
+
+        _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+    def test_error_no_flash_available(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
+    def test_error_wrong_attn_implementation(self):
+        with self.assertRaises(ValueError) as cm:
+            _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
+
+        self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
+
+    def test_not_available_flash(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
+    def test_not_available_sdpa(self):
+        if is_torch_sdpa_available():
+            self.skipTest("This test requires torch<=2.0")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="sdpa"
+            )
+
+        self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
