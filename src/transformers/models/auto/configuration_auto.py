@@ -656,7 +656,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("seamless_m4t", "SeamlessM4T"),
         ("seamless_m4t_v2", "SeamlessM4Tv2"),
         ("segformer", "SegFormer"),
-        ("seggpt", "SegGpt"),
+        ("seggpt", "SegGPT"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
         ("speech-encoder-decoder", "Speech Encoder decoder"),

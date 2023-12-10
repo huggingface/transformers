@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# SegGpt
+# SegGPT
 
 ## Overview
 
-The SegGpt model was proposed in [SegGPT: Segmenting Everything In Context](https://arxiv.org/abs/2304.03284) by Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang.
+The SegGPT model was proposed in [SegGPT: Segmenting Everything In Context](https://arxiv.org/abs/2304.03284) by Xinlong Wang, Xiaosong Zhang, Yue Cao, Wen Wang, Chunhua Shen, Tiejun Huang.
 SegGpt is an in-context generalist segmentation model meaning that given an input image, a prompt image and its mask one can obtain related masks in the input image. The model achieves remarkable one-shot results with 56.1 mIoU on COCO-20 and 85.6 mIoU on FSS-1000
 
 The abstract from the paper is the following:
