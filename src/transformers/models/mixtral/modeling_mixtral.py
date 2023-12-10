@@ -116,8 +116,8 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     expert_mask = expert_mask.to(torch.float32)
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
 
-    router_prob_per_group_and_expert = torch.mean(routing_weights, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+    router_prob_per_group_and_expert = torch.mean(routing_weights, axis=-1)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert.unsqueeze(-1)) * (num_experts**2)
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
