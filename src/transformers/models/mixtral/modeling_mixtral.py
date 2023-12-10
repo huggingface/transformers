@@ -73,8 +73,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MixtralConfig"
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.load_balancing_loss_func
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+
+def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -83,33 +83,32 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     experts is too unbalanced.
 
     Args:
-        router_probs (Union[`torch.Tensor`, Tuple[torch.Tensor]):
-            Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
-        expert_indices (`torch.Tensor`):
-            Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
+        gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
+            Logits from the `gate`, should be a tuple of tensors. Shape: [batch_size, seqeunce_length, num_experts].
+        num_experts (`int`, *optional*):
+            Number of experts
 
     Returns:
         The auxiliary loss.
     """
-    if router_probs is None:
+    if gate_logits is None:
         return 0
-
-    if isinstance(router_probs, tuple):
-        router_probs = torch.cat(router_probs, dim=0)
-
-    if isinstance(expert_indices, tuple):
-        expert_indices = torch.cat(expert_indices, dim=0)
         
-    num_experts = router_probs.shape[-1]
+    if isinstance(gate_logits, tuple):
+        # cat along the layers?
+        gate_logits = torch.cat(gate_logits, dim=0)
+
+    routing_weights, selected_experts = torch.topk(gate_logits, top_k, dim=-1)
+    routing_weights = routing_weights.softmax(dim=-1)
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
-    if expert_indices.dtype != torch.int64:
-        expert_indices = expert_indices.to(torch.int64)
+    if selected_experts.dtype != torch.int64:
+        selected_experts = selected_experts.to(torch.int64)
 
-    if len(expert_indices.shape) == 2:
-        expert_indices = expert_indices.unsqueeze(2)
+    if len(selected_experts.shape) == 2:
+        selected_experts = selected_experts.unsqueeze(2)
 
-    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+    expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
 
     # For a given token, determine if it was routed to a given expert.
     expert_mask = torch.max(expert_mask, axis=-2).values
@@ -118,7 +117,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     expert_mask = expert_mask.to(torch.float32)
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
 
-    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
+    router_prob_per_group_and_expert = torch.mean(routing_weights, axis=-2)
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
@@ -705,10 +704,10 @@ class MixtralSparseMoeBlock(nn.Module):
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        # gate_logits: (batch * sequence_length, n_experts)
-        gate_logits = self.gate(hidden_states)
+        # router_logits: (batch * sequence_length, n_experts)
+        router_logits = self.gate(hidden_states)
 
-        routing_weights, selected_experts = torch.topk(gate_logits, self.top_k, dim=-1)
+        routing_weights, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
         routing_weights = routing_weights.softmax(dim=-1)
 
         final_hidden_states = torch.zeros(
@@ -741,7 +740,7 @@ class MixtralSparseMoeBlock(nn.Module):
             # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states)
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states, (routing_weights, selected_experts)
+        return final_hidden_states, router_logits
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer with mlp->block_sparse_moe
@@ -807,7 +806,7 @@ class MixtralDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, router_states = self.block_sparse_moe(hidden_states)
+        hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -819,7 +818,7 @@ class MixtralDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         if output_router_logits:
-            outputs += (router_states,)
+            outputs += (router_logits,)
 
         return outputs
 
@@ -1074,6 +1073,7 @@ class MixtralModel(MixtralPreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
+                    output_router_logits,
                     use_cache,
                 )
             else:
@@ -1083,6 +1083,7 @@ class MixtralModel(MixtralPreTrainedModel):
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
+                    output_router_logits=output_router_logits,
                     use_cache=use_cache,
                 )
 
@@ -1131,7 +1132,9 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         self.model = MixtralModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.router_aux_loss_coef = config.router_aux_loss_coef
+        self.num_experts = config.num_local_experts
+        self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1239,23 +1242,27 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
         aux_loss = None
         if output_router_logits:
-            router_logits, expert_index = outputs[-1]
-            aux_loss = load_balancing_loss_func(router_logits, expert_index)
-
+            aux_loss = load_balancing_loss_func(outputs[-2], self.num_experts, self.num_experts_per_tok)
+            if labels is not None:
+                loss += self.router_aux_loss_coef*aux_loss
+    
         if not return_dict:
             output = (logits,) + outputs[1:]
+            if output_router_logits:
+                output = (aux_loss,) + output
             return (loss,) + output if loss is not None else output
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
-            aux_loss=aux_loss,
             logits=logits,
+            aux_loss=aux_loss,
+            router_logits=output.router_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
         )
 
+    
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):

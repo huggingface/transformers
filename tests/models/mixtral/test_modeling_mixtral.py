@@ -469,7 +469,6 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
-        config.problem_type = "multi_label_classification"
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -478,7 +477,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
         self.assertEqual(result.router_logits[0].shape, (self.model_tester.batch_size, config.num_hidden_layers))
-        torch.testing.all_close(result.aux_loss, torch.zeros())
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(-0.0234))
 
 
 @require_torch
