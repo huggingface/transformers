@@ -2,7 +2,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from .configuration_utils import PretrainedConfig
 import torch
 
+from dataclasses import dataclass
 
+@dataclass
 class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
@@ -327,12 +329,24 @@ class StaticCache(Cache):
     # know the batch size max for beam search! 
     # TODO Store the relevant values in the generation config rather than having kwargs
     
+    # TODO extra the batchsize in the generate method.
     def __init__(self, config: PretrainedConfig, num_layers, max_batch_size, max_sequence_length, num_heads, hidden_dim, dtype=torch.float16) -> None:
+        super().__init__()
+        self.num_layers = num_layers
         self.max_batch_size = max_batch_size
         self.max_sequence_length = max_sequence_length
         self.head_dim = hidden_dim // num_heads
-        self.key_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
-        self.value_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        self.num_heads = num_heads
+        self.shape = (max_batch_size, max_sequence_length, hidden_dim // num_heads,  num_heads)
+        self.dtype = dtype # Property?
+        
+        # TODO device meta? 
+        self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, num_heads, max_sequence_length, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, num_heads, max_sequence_length, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        
+        # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
+        # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        # self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
 
@@ -359,9 +373,9 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        # Update the number of seen tokens
-        if layer_idx == 0:
-            self.seen_tokens += key_states.shape[-2]
+        if self.seen_tokens == 0:
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
 
         # Update the cache
         if len(self.key_cache) + 1 == self.max_sequence_length:
@@ -372,18 +386,22 @@ class StaticCache(Cache):
             self.value_cache[layer_idx][0] = value_states
             self.value_cache[layer_idx] = torch.roll(self.value_cache[layer_idx],-1,0)
         else:
-            self.key_cache[layer_idx, self.seen_tokens] = key_states
-            self.value_cache[layer_idx, self.seen_tokens] = value_states
+            self.key_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = key_states
+            self.value_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = value_states
 
+        # Update the number of seen tokens
+        if layer_idx == self.num_layers:
+            self.seen_tokens += key_states.shape[-2]
+            
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        return self.key_cache[layer_idx].shape[-2]
+        """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
+        return self.seen_tokens
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
-        return self.maximum_sequence_length
+        return self.max_sequence_length
     
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
