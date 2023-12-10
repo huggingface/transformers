@@ -2309,7 +2309,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 )
                 decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
-                # kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
+                kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
 
                 passed_max_length = kwargs.get("max_length", None)
                 passed_max_new_tokens = kwargs.get("max_new_tokens", None)
@@ -2754,7 +2754,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             if decoder_position_ids is not None and decoder_position_ids.shape[1] > decoder_input_ids.shape[1]:
                 decoder_position_ids = decoder_position_ids[:, remove_prefix_length:]
-
 
         return {
             "encoder_outputs": encoder_outputs,
