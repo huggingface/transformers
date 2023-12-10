@@ -1110,14 +1110,14 @@ class MixtralModel(MixtralPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                for v in [hidden_states, all_hidden_states, all_self_attns, next_cache, all_router_logits]
                 if v is not None
             )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            past_key_values=next_cache,
             router_logits=all_router_logits,
         )
 
@@ -1253,12 +1253,12 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
         return MoeCausalLMOutputWithPast(
             loss=loss,
-            logits=logits,
             aux_loss=aux_loss,
-            router_logits=outputs.router_logits,
-            past_key_values=outputs.past_key_values,
+            logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            attentions=outputs.attention,
+            past_key_values=outputs.past_key_values,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
