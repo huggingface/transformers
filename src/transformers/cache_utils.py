@@ -322,17 +322,18 @@ class SinkCache(Cache):
             self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
-def StaticCache(Cache):
+class StaticCache(Cache):
     # Nice to have: pass a model config
     # know the batch size max for beam search! 
     # TODO Store the relevant values in the generation config rather than having kwargs
     
-    def __init__(self, config: PretrainedConfig, num_layers, max_batch_size, max_sequence_length, num_heads, head_dim, dtype=torch.float16) -> None:
+    def __init__(self, config: PretrainedConfig, num_layers, max_batch_size, max_sequence_length, num_heads, hidden_dim, dtype=torch.float16) -> None:
         self.max_batch_size = max_batch_size
-        self.key_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, head_dim, dtype=dtype) for _ in range(num_layers)]
-        self.value_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, head_dim, dtype=dtype) for _ in range(num_layers)]
+        self.max_sequence_length = max_sequence_length
+        self.head_dim = hidden_dim // num_heads
+        self.key_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        self.value_cache: List[torch.Tensor] = [torch.zeors(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-
 
 
     def update(
@@ -378,13 +379,11 @@ def StaticCache(Cache):
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        if len(self.key_cache) <= layer_idx:
-            return 0
         return self.key_cache[layer_idx].shape[-2]
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
-        return None
+        return self.maximum_sequence_length
     
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""

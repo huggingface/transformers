@@ -107,7 +107,7 @@ class CacheTest(unittest.TestCase):
 
 
 @require_torch_gpu
-@slow
+# @slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
@@ -236,7 +236,7 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
         )
-        cache = StaticCache(model.config, model.config.num_layers, 2, 4096, model.config.num_head, model.config.head_dim)
+        cache = StaticCache(model.config, model.config.num_hidden_layers, 2, 4096, model.config.num_attention_heads, model.config.hidden_size)
 
         inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
         gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache)
