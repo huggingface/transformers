@@ -807,9 +807,9 @@ class SegGptModel(SegGptPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        prompt_pixel_values: Optional[torch.Tensor] = None,
-        prompt_masks: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.Tensor,
+        prompt_pixel_values: torch.Tensor,
+        prompt_masks: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
@@ -855,13 +855,6 @@ class SegGptModel(SegGptPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         feature_ensemble = feature_ensemble if feature_ensemble is not None else False
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-        if prompt_pixel_values is None:
-            raise ValueError("You have to specify prompt_pixel_values")
-        if prompt_masks is None:
-            raise ValueError("You have to specify prompt_masks")
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
         expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
