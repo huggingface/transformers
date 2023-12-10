@@ -618,6 +618,12 @@ class MixtralBLockSparseTop2MLP(nn.Module):
         return routing_weights * current_hidden_states
 
 
+MISTRAL_ATTENTION_CLASSES = {
+    "eager": MixtralAttention,
+    "flash_attention_2": MixtralFlashAttention2,
+}
+
+
 class MixtralSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -675,13 +681,11 @@ class MixtralDecoderLayer(nn.Module):
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
-            MixtralAttention(config=config, layer_idx=layer_idx)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else MixtralFlashAttention2(config, layer_idx=layer_idx)
-        )
-        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        
+        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+
         self.block_sparse_moe = MixtralSparseMoeBlock(config)
+        self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
