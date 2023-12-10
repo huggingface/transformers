@@ -21,9 +21,9 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     CLIPImageProcessor,
+    LlavaProcessor,
     VipLlavaConfig,
     VipLlavaForConditionalGeneration,
-    LlavaProcessor,
 )
 
 
@@ -38,7 +38,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
     "final_linear.0": "linear_1",
     "final_linear.2": "linear_2",
-    "multi_modal_projector.clip_layernorm": "multi_modal_projector.projector_layernorm"
+    "multi_modal_projector.clip_layernorm": "multi_modal_projector.projector_layernorm",
 }
 
 
@@ -122,7 +122,9 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_vipllava_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+    convert_vipllava_llama_to_hf(
+        args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id
+    )
 
 
 if __name__ == "__main__":

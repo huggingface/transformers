@@ -25,7 +25,6 @@ VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class VipLlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`VipLlavaForConditionalGeneration`]. It is used to instantiate an

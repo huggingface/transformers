@@ -44,7 +44,6 @@ VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VipLlava
 class VipLlavaCausalLMOutputWithPast(ModelOutput):
@@ -91,9 +90,15 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
 class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
-        self.projector_layernorm = nn.LayerNorm(config.text_config.hidden_size + config.vision_config.hidden_size, eps=config.projector_layernorm_eps)
-        
-        self.linear_1 = nn.Linear(config.text_config.hidden_size + config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.projector_layernorm = nn.LayerNorm(
+            config.text_config.hidden_size + config.vision_config.hidden_size, eps=config.projector_layernorm_eps
+        )
+
+        self.linear_1 = nn.Linear(
+            config.text_config.hidden_size + config.vision_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=True,
+        )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 

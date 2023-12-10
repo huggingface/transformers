@@ -546,10 +546,6 @@ _import_structure = {
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
     ],
-    "models.vipllava": [
-        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "VipLlavaConfig",
-    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -858,6 +854,10 @@ _import_structure = {
         "ViltFeatureExtractor",
         "ViltImageProcessor",
         "ViltProcessor",
+    ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": [
@@ -2450,14 +2450,6 @@ else:
             "LlavaProcessor",
         ]
     )
-    _import_structure["models.vipllava"].extend(
-        [
-            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VipLlavaForConditionalGeneration",
-            "VipLlavaPreTrainedModel",
-           
-        ]
-    )
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3370,6 +3362,13 @@ else:
             "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -5199,10 +5198,6 @@ if TYPE_CHECKING:
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
     )
-    from .models.vipllava import (
-        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        VipLlavaConfig,
-    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -5519,6 +5514,10 @@ if TYPE_CHECKING:
         ViltFeatureExtractor,
         ViltImageProcessor,
         ViltProcessor,
+    )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
     )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
@@ -6910,12 +6909,6 @@ if TYPE_CHECKING:
             LlavaPreTrainedModel,
             LlavaProcessor,
         )
-        from .models.vipllava import (
-            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VipLlavaForConditionalGeneration,
-            VipLlavaPreTrainedModel,
-           
-        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,
@@ -7655,6 +7648,11 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel
