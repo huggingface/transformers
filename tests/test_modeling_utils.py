@@ -1897,7 +1897,7 @@ class Mask4DTest(unittest.TestCase):
                 ]
             ],
             device="cuda:0",
-            dtype=torch.bool,
+            dtype=torch.int64,
         )
 
         # Creating a position_ids tensor. note the repeating figures in the end.
