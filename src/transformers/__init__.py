@@ -546,6 +546,10 @@ _import_structure = {
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
     ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
+    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -2444,6 +2448,14 @@ else:
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
             "LlavaProcessor",
+        ]
+    )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
+           
         ]
     )
     _import_structure["models.longformer"].extend(
@@ -5187,6 +5199,10 @@ if TYPE_CHECKING:
         LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LlavaConfig,
     )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -6893,6 +6909,12 @@ if TYPE_CHECKING:
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
             LlavaProcessor,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
+           
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
