@@ -88,24 +88,18 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VipLlava
 class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
-        if config.projector_layernorm:
-            self.projector_layernorm = nn.LayerNorm(config.text_config.hidden_size + config.vision_config.hidden_size, eps=config.projector_layernorm_eps)
-        else:
-            self.projector_layernorm = None
-
+        self.projector_layernorm = nn.LayerNorm(config.text_config.hidden_size + config.vision_config.hidden_size, eps=config.projector_layernorm_eps)
+        
         self.linear_1 = nn.Linear(config.text_config.hidden_size + config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
-    def forward(self, image_features):
-        if self.projector_layernorm is not None:
-            image_features = self.projector_layernorm(image_features)
-
-        hidden_states = self.linear_1(image_features)
+    def forward(self, hidden_states):
+        hidden_states = self.projector_layernorm(hidden_states)
+        hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
@@ -330,6 +324,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -398,19 +393,12 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                # For VIP-llava, the image features are computed this way
+                # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
+                image_features = [image_outputs.hidden_states[index][:, 1:] for index in [-2, -5, -8, -11, 6]]
+                image_features = torch.cat(image_features, dim=-1)
 
-                if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, 1:]
-                elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
-                else:
-                    raise ValueError(
-                        f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                    )
-
-                image_features = self.multi_modal_projector(selected_image_feature)
+                image_features = self.multi_modal_projector(image_features)
                 inputs_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, position_ids
                 )

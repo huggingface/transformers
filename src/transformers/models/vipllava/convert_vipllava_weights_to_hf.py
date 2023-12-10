@@ -36,7 +36,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "model.model": "language_model.model",
     "multi_modal_projector.0": "multi_modal_projector.linear_1",
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
-    # ".final_linear": "",
     "final_linear.0": "linear_1",
     "final_linear.2": "linear_2",
     "multi_modal_projector.clip_layernorm": "multi_modal_projector.projector_layernorm"
@@ -49,12 +48,6 @@ def convert_state_dict_to_hf(state_dict):
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
-
-            # multi_modal_projector.linear_1.weight
-            # multi_modal_projector.2.bias
-            # if "multi_modal_projector.0" in key:
-            #   import pdb; pdb.set_trace()
-        
         new_state_dict[key] = value
     return new_state_dict
 
@@ -71,7 +64,7 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
 
     processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-    config = VipLlavaConfig(text_config=text_config, projector_layernorm=True)
+    config = VipLlavaConfig(text_config=text_config)
     config.pad_token_id = 32001
 
     with torch.device("meta"):
