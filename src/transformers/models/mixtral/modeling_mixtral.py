@@ -1256,7 +1256,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             aux_loss=aux_loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            attentions=outputs.attention,
+            attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
             router_logits=outputs.router_logits,
         )
