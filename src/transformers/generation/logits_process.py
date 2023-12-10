@@ -1596,7 +1596,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                 scores[k, : self.timestamp_begin] = -float("inf")
 
         if torch.isinf(scores).all():
-           import ipdb; ipdb.set_trace()
+            print("RED FLAG")
 
         return scores
 
