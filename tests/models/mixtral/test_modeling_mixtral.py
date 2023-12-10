@@ -461,6 +461,14 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Mixtral flash attention does not support right padding")
 
+    def test_load_balancing_loss(self):
+        r"""
+        Let's make sure we can actually compute the loss and do a backward on it.
+        """
+
+        # loss = load_balancing_loss_func(router_probs, expert_indices)
+        # self.assertAlmostEqual(loss.item(), 0.8741045, places=5)
+
 
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):

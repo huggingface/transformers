@@ -34,7 +34,11 @@ from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
@@ -67,6 +71,49 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MixtralConfig"
+
+
+# Copied from transformers.models.nllb_moe.modeling_nllb_moe.load_balancing_loss_func
+def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        router_probs (`torch.Tensor`):
+            Probability assigned to each expert per token. Shape: [batch_size, seqeunce_length, num_experts].
+        expert_indices (`torch.Tensor`):
+            Indices tensor of shape [batch_size, seqeunce_length] identifying the selected expert for a given token.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if router_probs is None:
+        return 0
+
+    num_experts = router_probs.shape[-1]
+
+    # cast the expert indices to int64, otherwise one-hot encoding will fail
+    if expert_indices.dtype != torch.int64:
+        expert_indices = expert_indices.to(torch.int64)
+
+    if len(expert_indices.shape) == 2:
+        expert_indices = expert_indices.unsqueeze(2)
+
+    expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
+
+    # For a given token, determine if it was routed to a given expert.
+    expert_mask = torch.max(expert_mask, axis=-2).values
+
+    # cast to float32 otherwise mean will fail
+    expert_mask = expert_mask.to(torch.float32)
+    tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
+
+    router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -670,7 +717,7 @@ class MixtralBlockSparseMoE(nn.Module):
             current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
             final_hidden_states.index_add_(0, top_x, current_hidden_states)
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return final_hidden_states
+        return final_hidden_states, (routing_weights, selected_experts)
 
 
 class MixtralDecoderLayer(nn.Module):
@@ -693,6 +740,7 @@ class MixtralDecoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -705,13 +753,16 @@ class MixtralDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            output_router_logits (`bool`, *optional*):
+                Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+                should not be returned during inference.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
 
         residual = hidden_states
@@ -732,7 +783,7 @@ class MixtralDecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states, router_states = self.block_sparse_moe(hidden_states)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -742,6 +793,9 @@ class MixtralDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
+
+        if output_router_logits:
+            outputs += (router_states,)
 
         return outputs
 
@@ -848,6 +902,9 @@ MIXTRAL_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        output_router_logits (`bool`, *optional*):
+            Whether or not to return the logits of all the routers. They are useful for computing the router loss, and
+            should not be returned during inference.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -887,6 +944,7 @@ class MixtralModel(MixtralPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Ignore copy
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -898,9 +956,13 @@ class MixtralModel(MixtralPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -979,6 +1041,7 @@ class MixtralModel(MixtralPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_router_logits = () if output_router_logits else None
         next_decoder_cache = None
 
         for decoder_layer in self.layers:
@@ -1013,6 +1076,9 @@ class MixtralModel(MixtralPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+            if output_router_logits:
+                all_router_logits += (layer_outputs[-1],)
+
         hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
@@ -1024,12 +1090,17 @@ class MixtralModel(MixtralPreTrainedModel):
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_router_logits]
+                if v is not None
+            )
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            router_logits=all_router_logits,
         )
 
 
@@ -1065,7 +1136,8 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         return self.model
 
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1077,8 +1149,9 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1106,6 +1179,10 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -1121,6 +1198,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
         )
 
@@ -1141,16 +1219,22 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        if output_router_logits:
+            router_logits, expert_index = outputs[-1]
+            aux_loss = load_balancing_loss_func(router_logits, expert_index)
+
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
     def prepare_inputs_for_generation(
