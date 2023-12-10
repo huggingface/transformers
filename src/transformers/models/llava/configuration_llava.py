@@ -86,6 +86,8 @@ class LlavaConfig(PretrainedConfig):
         ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
+        projector_layernorm=False,
+        projector_layernorm_eps=1e-5,
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         vocab_size=32000,
@@ -94,6 +96,8 @@ class LlavaConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.projector_layernorm = projector_layernorm
+        self.projector_layernorm_eps = projector_layernorm_eps
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self.vocab_size = vocab_size
