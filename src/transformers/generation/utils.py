@@ -2575,7 +2575,6 @@ class GenerationMixin:
                     break
 
             # prepare model inputs
-            import ipdb; ipdb.set_trace()
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
