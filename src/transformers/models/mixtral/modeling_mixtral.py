@@ -1231,6 +1231,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             shift_labels = shift_labels.to(shift_logits.device)
             loss = loss_fct(shift_logits, shift_labels)
 
+        aux_loss = None
         if output_router_logits:
             router_logits, expert_index = outputs[-1]
             aux_loss = load_balancing_loss_func(router_logits, expert_index)

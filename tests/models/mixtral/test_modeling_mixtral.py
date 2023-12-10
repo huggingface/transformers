@@ -467,8 +467,18 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         Let's make sure we can actually compute the loss and do a backward on it.
         """
 
-        # loss = load_balancing_loss_func(router_probs, expert_indices)
-        # self.assertAlmostEqual(loss.item(), 0.8741045, places=5)
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        config.output_router_logits = True
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = MixtralForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(result.router_logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+        torch.testing.all_close(result.aux_loss, torch.zeros())
 
 
 @require_torch
