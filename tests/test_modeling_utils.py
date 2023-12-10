@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import gc
 import glob
 import json
 import os
@@ -1850,3 +1851,81 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
+
+
+class Mask4DTest(unittest.TestCase):
+    def setUp(self):
+        self.device = torch.device("cuda:0")
+        model_name = "JackFram/llama-160m"  # small Llama-like model from FlexFlow
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(self.device)
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def get_test_data(self):
+        texts = ["the cat sat", "the cat had", "the cat is"]
+        encoded = [self.tokenizer.encode(t) for t in texts]
+        input_0 = torch.tensor(encoded, device=self.device)
+        # tensor([[   1,  278, 6635, 3290],
+        # [   1,  278, 6635,  750],
+        # [   1,  278, 6635,  338]], device='cuda:0')
+
+        # Combining common prefix with the unique ending tokens:
+        input_1 = torch.cat([input_0[0][:-1], input_0[:, -1]]).unsqueeze(0)
+        # tensor([[   1,  278, 6635, 3290,  750,  338]], device='cuda:0')
+
+        # Creating a 4D mask where each of the last 3 tokens do not attend to each other.
+        mask_1 = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0],
+                        [1, 1, 1, 0, 1, 0],
+                        [1, 1, 1, 0, 0, 1],
+                    ]
+                ]
+            ],
+            device="cuda:0",
+            dtype=torch.bool,
+        )
+
+        # Creating a position_ids tensor. note the repeating figures in the end.
+        position_ids_1 = torch.tensor([[0, 1, 2, 3, 3, 3]], device=self.device, dtype=torch.int64)
+
+        return input_0, input_1, mask_1, position_ids_1
+
+    def test_attention(self):
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        hid_0 = self.model.model.embed_tokens(input_0)
+        outs_0 = self.model.model.layers[0].self_attn.forward(hid_0)[0]
+        # outs_0.shape == torch.Size([3, 4, 768])
+
+        hid_1 = self.model.model.embed_tokens(input_1)
+        outs_1 = self.model.model.layers[0].self_attn.forward(
+            hid_1, attention_mask=mask_1.bool(), position_ids=position_ids_1
+        )[0]
+        # outs_1.shape == torch.Size([1, 6, 768])
+
+        outs_0_last_tokens = outs_0[:, -1, :]  # last tokens in each batch line
+        outs_1_last_tokens = outs_1[0, -3:, :]  # last three tokens
+        assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens, atol=1e-8)
+
+    def test_model(self):
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+        assert torch.allclose(logits_0_last_tokens, logits_1_last_tokens, atol=1e-5)
