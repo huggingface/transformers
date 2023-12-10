@@ -22,7 +22,7 @@ from transformers.testing_utils import is_torch_available, require_auto_gptq, re
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, LlamaForCausalLM, SinkCache
+    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, LlamaForCausalLM, SinkCache, StaticCache
 
 
 @require_torch
@@ -229,3 +229,39 @@ class CacheIntegrationTest(unittest.TestCase):
             "was visiting the historic district of Honolulu. Here,"
         )
         self.assertTrue(decoded[0].endswith(last_output))
+
+
+    def test_static_cache_greedy(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+        )
+        cache = StaticCache(model.config, model.config.num_layers, 2, 4096, model.config.num_head, model.config.head_dim)
+
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = ["The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good"]
+        self.assertListEqual(decoded, expected_text)
+        
+    def test_static_cache_beam_search(self):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        model = AutoModelForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+        )
+        cache = StaticCache(model.config, model.config.num_layers, 2, 4096, model.config.num_head, model.config.head_dim)
+
+        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
+        gen_out = model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=20,
+            num_beams=2,
+            num_return_sequences=2,
+        )
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            "The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good",
+            "The best color is the one that suits you.\nThe best color is the one that suits you. The",
+        ]
+        self.assertListEqual(decoded, expected_text)
