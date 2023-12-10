@@ -76,7 +76,7 @@ class BloomConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
-            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            document](https://huggingface.co/docs/transformers/perf_train_gpu_many#tensor-parallelism) to understand more about it. This value is
             necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
             issue](https://github.com/pytorch/pytorch/issues/76232). Note also that this is enabled only when
             `slow_but_exact=True`.
