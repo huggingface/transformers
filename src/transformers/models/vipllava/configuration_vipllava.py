@@ -48,6 +48,8 @@ class VipLlavaConfig(PretrainedConfig):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
+        projector_layernorm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        projector_layernorm_eps (`<fill_type>`, *optional*, defaults to 1e-05): <fill_docstring>
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
         vision_feature_layer (`int`, *optional*, defaults to -2):
