@@ -138,7 +138,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mixtral-8x7B` checkpoint and the Flash Attention 2 version of the model.
 
 <div style="text-align: center">
-<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mistral-7b-inference-large-seqlen.png">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mixtral-7b-inference-large-seqlen.png">
 </div>
 
 ### Sliding window Attention
