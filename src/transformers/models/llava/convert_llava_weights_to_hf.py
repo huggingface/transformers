@@ -36,8 +36,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "model.model": "language_model.model",
     "multi_modal_projector.0": "multi_modal_projector.linear_1",
     "multi_modal_projector.2": "multi_modal_projector.linear_2",
-    ".final_linear.": "",
-    "clip_layernorm": "pre_projector_layernom"
 }
 
 

@@ -92,19 +92,12 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
 class LlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaConfig):
         super().__init__()
-        if config.projector_layernorm:
-            self.projector_layernorm = nn.LayerNorm(config.vision_config.hidden_size, eps=config.projector_layernorm_eps)
-        else:
-            self.projector_layernorm = None
 
         self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
     def forward(self, image_features):
-        if self.projector_layernorm is not None:
-            image_features = self.projector_layernorm(image_features)
-
         hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
