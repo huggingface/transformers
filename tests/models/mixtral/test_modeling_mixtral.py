@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Mixtral AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,13 @@
 """ Testing suite for the PyTorch Mixtral model. """
 
 
-import gc
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, MixtralConfig, is_torch_available
+from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -477,66 +474,59 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 class MixtralIntegrationTest(unittest.TestCase):
     @slow
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = MixtralForCausalLM.from_pretrained("mixtralai/Mixtral-7B-v0.1", device_map="auto")
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        with torch.no_grad():
-            out = model(input_ids).logits.cpu()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
-        print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+    @require_torch_gpu
+    def test_small_model_logits(self):
+        model_id = "mx-test/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("mixtralai/Mixtral-7B-v0.1", use_fast=False)
-        model = MixtralForCausalLM.from_pretrained("mixtralai/Mixtral-7B-v0.1", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @require_bitsandbytes
-    @slow
-    @require_flash_attn
-    def test_model_7b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = MixtralForCausalLM.from_pretrained(
-            "mixtralai/Mixtral-7B-v0.1",
-            device_map="auto",
-            load_in_4bit=True,
-            use_flash_attention_2=True,
+        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
         )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        # these logits have been obtained with the original megablocks impelmentation.
+        EXPECTED_LOGITS = torch.Tensor(
+            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
+        ).to(torch_device)
 
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+        with torch.no_grad():
+            logits = model(dummy_input).logits
 
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        self.assertTrue(torch.allclose(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3))
+        self.assertTrue(torch.allclose(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3))
+
+    @slow
+    @require_torch_gpu
+    def test_small_model_logits_batched(self):
+        model_id = "mx-test/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(0)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        EXPECTED_LOGITS_LEFT = torch.Tensor(
+            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+        )
+
+        # logits[0, -3:, -3:].half()
+        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
+            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+        )
+
+        # logits[1, -3:, -3:].half()
+        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
+            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
+        )
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+
+        self.assertTrue(torch.allclose(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3))
+        self.assertTrue(
+            torch.allclose(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        )
+        self.assertTrue(
+            torch.allclose(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
+        )

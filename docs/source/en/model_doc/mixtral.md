@@ -18,10 +18,10 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Mixtral-7B-v0.1 is Mistral AI's second Large Language Model (LLM). 
+Mixtral-8x7B is Mistral AI's second Large Language Model (LLM). 
 
-The Mixtral model was proposed in [<INSERT PAPER NAME HERE>](https://mistral.ai/news/announcing-mistral-7b/) by the Mistral AI team.
-<INSERT SHORT SUMMARY HERE>
+The Mixtral model was proposed in the [Mistral AI team](https://mistral.ai/).
+
 
 The abstract from the paper is the following:
 
@@ -40,6 +40,7 @@ The original code can be found [here](https://github.com/mistralai/mistral-src).
 ### Model Details
 
 Mixtral-84B is a decoder-based LM with the following architectural choices:
+
 * Mixtral is a Mixture of Expert (MOE) model with 8 experts per MLP, with a total of 85B paramateres but the compute required is the same as a 14B model. This is because even though each experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dipatched twice (top 2 routing) and thus the compute (the operation required at each foward computation) is just 2 X sequence_length. 
 
 The following implementation details are shared with Mistral AI's first model [mistral](~models/doc/mistral):
@@ -53,12 +54,11 @@ For more details please read our [release blog post](https://mistral.ai/news/ann
 
 ### License
 
-TODO 
-Both `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` are released under the Apache 2.0 license.
+`Mixtral-8x7B` is released under the Apache 2.0 license.
 
 ## Usage tips
 
-`Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` can be found on the [Huggingface Hub](https://huggingface.co/mistralai)
+`Mixtral-8x7B` can be found on the [Huggingface Hub](https://huggingface.co/mistralai)
 
 These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hub:
 
@@ -66,8 +66,8 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-8x7B")
 
 >>> prompt = "My favourite condiment is"
 
@@ -90,20 +90,20 @@ Raw weights for `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` can be download
 To use these raw checkpoints with HuggingFace you can use the `convert_mistral_weights_to_hf.py` script to convert them to the HuggingFace format:
 
 ```bash
-python src/transformers/models/mistral/convert_mistral_weights_to_hf.py \
-    --input_dir /path/to/downloaded/mistral/weights --model_size 7B --output_dir /output/path
+python src/transformers/models/mixtral/convert_mixtral_weights_to_hf.py \
+    --input_dir /path/to/downloaded/mistral/weights --output_dir /output/path
 ```
 
 You can then load the converted model from the `output/path`:
 
 ```python
-from transformers import MistralForCausalLM, LlamaTokenizer
+from transformers import MixtralForCausalLM, LlamaTokenizer
 
 tokenizer = LlamaTokenizer.from_pretrained("/output/path")
-model = MistralForCausalLM.from_pretrained("/output/path")
+model = MixtralForCausalLM.from_pretrained("/output/path")
 ```
 
-## Combining Mistral and Flash Attention 2
+## Combining Mixtral and Flash Attention 2
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
@@ -120,8 +120,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B")
 
 >>> prompt = "My favourite condiment is"
 
@@ -135,7 +135,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ### Expected speedups
 
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mistral-7B-v0.1` checkpoint and the Flash Attention 2 version of the model.
+Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mixtral-8x7B` checkpoint and the Flash Attention 2 version of the model.
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mistral-7b-inference-large-seqlen.png">

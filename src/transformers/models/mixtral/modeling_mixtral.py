@@ -665,10 +665,15 @@ class MixtralBLockSparseTop2MLP(nn.Module):
         return routing_weights * current_hidden_states
 
 
-class MixtralBlockSparseMoE(nn.Module):
+MISTRAL_ATTENTION_CLASSES = {
+    "eager": MixtralAttention,
+    "flash_attention_2": MixtralFlashAttention2,
+}
+
+
+class MixtralSparseMoeBlock(nn.Module):
     """
-    Built on the paper and library Megablocks as described in
-    https://arxiv.org/abs/2211.15841. This implementation is
+    This implementation is
     strictly equivalent to standard MoE with full capacity (no
     dropped tokens). It's faster since it formulates MoE operations
     in terms of block-sparse operations to accomodate imbalanced
@@ -691,10 +696,7 @@ class MixtralBlockSparseMoE(nn.Module):
         self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """
-        x: (sequence_length, model_dim)
-        gate_logits: (sequence_length, n_experts)
-        """
+        """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         # gate_logits: (batch * sequence_length, n_experts)
@@ -706,31 +708,47 @@ class MixtralBlockSparseMoE(nn.Module):
         final_hidden_states = torch.zeros(
             (batch_size * sequence_length, hidden_dim), dtype=hidden_states.dtype, device=hidden_states.device
         )
+
+        # One hot encode the selected experts to create an expert mask
+        # this will be used to easily index which expert is going to be sollicitated
         expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes=self.num_experts).permute(2, 1, 0)
+
+        # Loop over all available experts in the model and perform the computation on each expert
         for expert_idx in range(self.num_experts):
             expert_layer = self.experts[expert_idx]
             idx, top_x = torch.where(expert_mask[expert_idx])
+
             if top_x.shape[0] == 0:
                 continue
-            # Index the correct hidden states
-            current_state = hidden_states[None, top_x.tolist()].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state, routing_weights[top_x.tolist(), idx.tolist(), None])
+
+            # in torch it is faster to index using lists than torch tensors
+            top_x_list = top_x.tolist()
+            idx_list = idx.tolist()
+
+            # Index the correct hidden states and compute the expert hidden state for
+            # the current expert. We need to make sure to multiply the output hidden
+            # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
+            current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
+            current_hidden_states = expert_layer(current_state, routing_weights[top_x_list, idx_list, None])
+
+            # However `index_add_` only support torch tensors for indexing so we'll use
+            # the `top_x` tensor here.
             final_hidden_states.index_add_(0, top_x, current_hidden_states)
         final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return final_hidden_states, (routing_weights, selected_experts)
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer with mlp->block_sparse_moe
 class MixtralDecoderLayer(nn.Module):
+    # Ignore copy
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = (
-            MixtralAttention(config=config, layer_idx=layer_idx)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else MixtralFlashAttention2(config, layer_idx=layer_idx)
-        )
+
+        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+
+        self.block_sparse_moe = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.block_sparse_moe = MixtralBlockSparseMoE(config)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
@@ -981,15 +999,13 @@ class MixtralModel(MixtralPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        seq_length_with_past = seq_length
         past_key_values_length = 0
 
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_seq_length()
-            seq_length_with_past = seq_length_with_past + past_key_values_length
+            past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1003,12 +1019,7 @@ class MixtralModel(MixtralPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if (
-            attention_mask is not None
-            and hasattr(self.config, "_flash_attn_2_enabled")
-            and self.config._flash_attn_2_enabled
-            and use_cache
-        ):
+        if attention_mask is not None and self._use_flash_attention_2 and use_cache:
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
                 raise ValueError(
@@ -1017,7 +1028,7 @@ class MixtralModel(MixtralPreTrainedModel):
                     " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                 )
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
