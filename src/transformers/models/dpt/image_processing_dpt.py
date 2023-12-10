@@ -381,14 +381,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(
-                    image=image,
-                    size=size,
-                    resample=resample,
-                    keep_aspect_ratio=keep_aspect_ratio,
-                    ensure_multiple_of=ensure_multiple_of,
-                    input_data_format=input_data_format,
-                )
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
 
