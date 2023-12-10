@@ -30,7 +30,6 @@ else:
         "VipLlavaForConditionalGeneration",
         "VipLlavaPreTrainedModel",
     ]
-    _import_structure["processing_vipllava"] = ["LlavaProcessor"]
 
 
 if TYPE_CHECKING:
