@@ -73,7 +73,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MixtralConfig"
 
 
-
 def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tensor = None, top_k=2) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -93,7 +92,7 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     """
     if gate_logits is None:
         return 0
-        
+
     if isinstance(gate_logits, tuple):
         # cat along the layers?
         gate_logits = torch.cat(gate_logits, dim=0)
@@ -1244,8 +1243,8 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         if output_router_logits:
             aux_loss = load_balancing_loss_func(outputs[-2], self.num_experts, self.num_experts_per_tok)
             if labels is not None:
-                loss += self.router_aux_loss_coef*aux_loss
-    
+                loss += self.router_aux_loss_coef * aux_loss
+
         if not return_dict:
             output = (logits,) + outputs[1:]
             if output_router_logits:
@@ -1262,7 +1261,6 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
