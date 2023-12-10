@@ -385,7 +385,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
 
-        if len(vision_feature_layers) != 4:
+        if len(vision_feature_layers) != 5:
             raise ValueError(
                 "To use VipLlava, you must have a `vision_feature_layers` of size 4, i.e. select 4 features from different"
                 " layers of the vision backbone."

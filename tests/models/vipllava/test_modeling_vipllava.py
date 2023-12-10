@@ -49,7 +49,7 @@ class VipLlavaVisionText2TextModelTester:
         image_token_index=0,
         projector_hidden_act="gelu",
         seq_length=7,
-        vision_feature_layers=[0, 0, 1, 1],
+        vision_feature_layers=[0, 0, 1, 1, 0],
         text_config={
             "model_type": "llama",
             "seq_length": 7,
