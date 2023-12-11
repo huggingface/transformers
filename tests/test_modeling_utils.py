@@ -1932,7 +1932,7 @@ class Mask4DTest(unittest.TestCase):
 
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
         logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
-        assert torch.allclose(
+        torch.testing.assert_close(
             logits_0_last_tokens, logits_1_last_tokens, atol=1e-5
         )  # note higher atol set to deal with noise
 
