@@ -106,9 +106,11 @@ class SegGptEncoderOutput(BaseModelOutput):
 @dataclass
 class SegGptImageSegmentationOutput(ModelOutput):
     """
-    Output type of [*SegGptImageSegmentationOutput*].
+    Output type of [`SegGptImageSegmentationOutput`].
 
     Args:
+        loss (*torch.FloatTensor*, *optional*, returned when `labels` is provided):
+            The loss value.
         pred_masks (*torch.FloatTensor* of shape *(batch_size, num_channels, height, width)*):
             The predicted masks.
         hidden_states (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_hidden_states=True`):
@@ -117,15 +119,12 @@ class SegGptImageSegmentationOutput(ModelOutput):
         attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
             *(batch_size, num_heads, seq_len, seq_len)*.
-        loss (*torch.FloatTensor*, *optional*, returned when `labels` is provided):
-            The loss value.
-
     """
 
-    pred_masks: torch.FloatTensor
+    loss: Optional[torch.FloatTensor] = None
+    pred_masks: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    loss: Optional[torch.FloatTensor] = None
 
 
 class SegGptEmbeddings(nn.Module):
@@ -665,7 +664,7 @@ class SegGptPreTrainedModel(PreTrainedModel):
     """
 
     config_class = SegGptConfig
-    base_model_prefix = "seggpt"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["SegGptEmbeddings", "SegGptLayer"]
@@ -813,7 +812,6 @@ class SegGptModel(SegGptPreTrainedModel):
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         feature_ensemble: Optional[bool] = None,
         embedding_type: Optional[str] = None,
-        labels: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -884,9 +882,104 @@ class SegGptModel(SegGptPreTrainedModel):
             return_dict=return_dict,
         )
 
-        intermediate_features = encoder_outputs[-1]
-        intermediate_features = torch.cat(intermediate_features, dim=-1)
+        return encoder_outputs
 
+
+class SegGptLoss(nn.Module):
+    def __init__(self, beta: float = 0.01):
+        super().__init__()
+        self.beta = beta
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        prompt_pixel_values: torch.FloatTensor,
+        pred_masks: torch.FloatTensor,
+        labels: torch.FloatTensor,
+        bool_masked_pos: torch.BoolTensor,
+    ):
+        patch_size = self.config.patch_size
+        mask = bool_masked_pos[:, :, None].repeat(1, 1, patch_size**2 * 3)
+        mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
+        # Changing dummy mask in prompt_pixel_values to labels values
+        prompt_pixel_values[:, :, prompt_pixel_values.shape[2] // 2 :, :] = labels
+        loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=0.01)
+        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+
+        return loss
+
+
+class SegGptForImageSegmentation(SegGptPreTrainedModel):
+    def __init__(self, config: SegGptConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.model = SegGptModel(config)
+        self.decoder = SegGptDecoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        prompt_pixel_values: torch.Tensor,
+        prompt_masks: torch.Tensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        feature_ensemble: Optional[bool] = None,
+        embedding_type: Optional[str] = None,
+        labels: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SegGptImageSegmentationOutput]:
+        r"""
+        labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
+            Ground truth mask for input images.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import SegGptImageProcessor, SegGptForImageSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> image_input_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_2.jpg"
+        >>> image_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1.jpg"
+        >>> mask_prompt_url = "https://raw.githubusercontent.com/baaivision/Painter/main/SegGPT/SegGPT_inference/examples/hmbb_1_target.png"
+
+        >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
+        >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
+        >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw)
+
+        >>> checkpoint = "EduardoPacheco/seggpt-vit-large"
+        >>> model = SegGptForImageSegmentation.from_pretrained(checkpoint)
+        >>> image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
+
+        >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> list(outputs.pred_masks.shape)
+        [1, 3, 896, 448]
+        ```
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            pixel_values=pixel_values,
+            prompt_pixel_values=prompt_pixel_values,
+            prompt_masks=prompt_masks,
+            bool_masked_pos=bool_masked_pos,
+            feature_ensemble=feature_ensemble,
+            embedding_type=embedding_type,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        intermediate_features = outputs.intermediate_features if return_dict else outputs[-1]
+        intermediate_features = torch.cat(intermediate_features, dim=-1)
         pred_masks = self.decoder(intermediate_features)
 
         loss = None
@@ -895,23 +988,13 @@ class SegGptModel(SegGptPreTrainedModel):
             loss = loss_fn(pixel_values, prompt_pixel_values, pred_masks, labels, bool_masked_pos)
 
         if not return_dict:
-            output = (pred_masks,)
-            if output_hidden_states:
-                output = output + (encoder_outputs[1],)
-
-            if output_attentions:
-                idx = 2 if output_hidden_states else 1
-                output = output + (encoder_outputs[idx],)
-
-            if loss is not None:
-                output = output + (loss,)
-            return output
+            raise NotImplementedError("To do")
 
         return SegGptImageSegmentationOutput(
-            pred_masks=pred_masks,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
             loss=loss,
+            pred_masks=pred_masks,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

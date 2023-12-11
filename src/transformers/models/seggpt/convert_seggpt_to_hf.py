@@ -21,7 +21,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import SegGptConfig, SegGptImageProcessor, SegGptModel
+from transformers import SegGptConfig, SegGptForImageSegmentation, SegGptImageProcessor
 from transformers.utils import logging
 
 
@@ -36,18 +36,18 @@ def create_rename_keys(config):
     # fmt: off
 
     # rename embedding and its parameters
-    rename_keys.append(("patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
-    rename_keys.append(("patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
-    rename_keys.append(("mask_token", "embeddings.mask_token"))
-    rename_keys.append(("segment_token_x", "embeddings.segment_token_input"))
-    rename_keys.append(("segment_token_y", "embeddings.segment_token_prompt"))
-    rename_keys.append(("type_token_cls", "embeddings.type_token_semantic"))
-    rename_keys.append(("type_token_ins", "embeddings.type_token_instance"))
-    rename_keys.append(("pos_embed", "embeddings.position_embeddings"))
+    rename_keys.append(("patch_embed.proj.weight", "model.embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("patch_embed.proj.bias", "model.embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("mask_token", "model.embeddings.mask_token"))
+    rename_keys.append(("segment_token_x", "model.embeddings.segment_token_input"))
+    rename_keys.append(("segment_token_y", "model.embeddings.segment_token_prompt"))
+    rename_keys.append(("type_token_cls", "model.embeddings.type_token_semantic"))
+    rename_keys.append(("type_token_ins", "model.embeddings.type_token_instance"))
+    rename_keys.append(("pos_embed", "model.embeddings.position_embeddings"))
 
     # rename decoder and other
-    rename_keys.append(("norm.weight", "encoder.layernorm.weight"))
-    rename_keys.append(("norm.bias", "encoder.layernorm.bias"))
+    rename_keys.append(("norm.weight", "model.encoder.layernorm.weight"))
+    rename_keys.append(("norm.bias", "model.encoder.layernorm.bias"))
     rename_keys.append(("decoder_embed.weight", "decoder.decoder_embed.weight"))
     rename_keys.append(("decoder_embed.bias", "decoder.decoder_embed.bias"))
     rename_keys.append(("decoder_pred.0.weight", "decoder.decoder_pred.conv.weight"))
@@ -59,22 +59,22 @@ def create_rename_keys(config):
 
     # rename blocks
     for i in range(config.num_hidden_layers):
-        rename_keys.append((f"blocks.{i}.attn.qkv.weight", f"encoder.layers.{i}.attention.qkv.weight"))
-        rename_keys.append((f"blocks.{i}.attn.qkv.bias", f"encoder.layers.{i}.attention.qkv.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layers.{i}.attention.proj.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layers.{i}.attention.proj.bias"))
-        rename_keys.append((f"blocks.{i}.attn.rel_pos_h", f"encoder.layers.{i}.attention.rel_pos_h"))
-        rename_keys.append((f"blocks.{i}.attn.rel_pos_w", f"encoder.layers.{i}.attention.rel_pos_w"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.weight", f"model.encoder.layers.{i}.attention.qkv.weight"))
+        rename_keys.append((f"blocks.{i}.attn.qkv.bias", f"model.encoder.layers.{i}.attention.qkv.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"model.encoder.layers.{i}.attention.proj.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"model.encoder.layers.{i}.attention.proj.bias"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_h", f"model.encoder.layers.{i}.attention.rel_pos_h"))
+        rename_keys.append((f"blocks.{i}.attn.rel_pos_w", f"model.encoder.layers.{i}.attention.rel_pos_w"))
 
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layers.{i}.mlp.fc1.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layers.{i}.mlp.fc1.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layers.{i}.mlp.fc2.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layers.{i}.mlp.fc2.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"model.encoder.layers.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"model.encoder.layers.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"model.encoder.layers.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"model.encoder.layers.{i}.mlp.fc2.bias"))
 
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"encoder.layers.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"encoder.layers.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"encoder.layers.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layers.{i}.layernorm_after.bias"))
+        rename_keys.append((f"blocks.{i}.norm1.weight", f"model.encoder.layers.{i}.layernorm_before.weight"))
+        rename_keys.append((f"blocks.{i}.norm1.bias", f"model.encoder.layers.{i}.layernorm_before.bias"))
+        rename_keys.append((f"blocks.{i}.norm2.weight", f"model.encoder.layers.{i}.layernorm_after.weight"))
+        rename_keys.append((f"blocks.{i}.norm2.bias", f"model.encoder.layers.{i}.layernorm_after.bias"))
 
     # fmt: on
 
@@ -115,8 +115,8 @@ def convert_seggpt_checkpoint(args):
     config = SegGptConfig()
 
     # Load original checkpoint
-    checkpoint_url = "https://huggingface.co/BAAI/SegGpt/blob/main/seggpt_vit_large.pth"
-    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    checkpoint_path = "/Users/nielsrogge/Documents/Repos on the HF hub/SegGPT/seggpt_vit_large.pth"
+    original_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     # # Rename keys
     new_state_dict = original_state_dict.copy()
@@ -126,7 +126,7 @@ def convert_seggpt_checkpoint(args):
         rename_key(new_state_dict, src, dest)
 
     # Load HF model
-    model = SegGptModel(config)
+    model = SegGptForImageSegmentation(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
     print("Missing keys:", missing_keys)

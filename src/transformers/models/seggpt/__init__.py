@@ -30,6 +30,7 @@ else:
         "SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SegGptModel",
         "SegGptPreTrainedModel",
+        "SegGptForImageSegmentation",
     ]
 
 try:
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_seggpt import (
             SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SegGptForImageSegmentation,
             SegGptModel,
             SegGptPreTrainedModel,
         )

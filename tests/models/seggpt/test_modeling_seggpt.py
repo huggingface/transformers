@@ -38,7 +38,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import SegGptModel
+    from transformers import SegGptForImageSegmentation, SegGptModel
     from transformers.models.seggpt.modeling_seggpt import SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -132,7 +132,13 @@ class SegGptModelTester:
         model.eval()
         result = model(pixel_values, prompt_pixel_values, prompt_masks)
         self.parent.assertEqual(
-            result.pred_masks.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.last_hidden_state.shape,
+            (
+                self.batch_size,
+                self.image_size // self.patch_size,
+                self.image_size // self.patch_size,
+                self.hidden_size,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -159,7 +165,14 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (SegGptModel,) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            SegGptModel,
+            SegGptForImageSegmentation,
+        )
+        if is_torch_available()
+        else ()
+    )
     fx_compatible = False
 
     test_pruning = False

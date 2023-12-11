@@ -46,3 +46,8 @@ The original code can be found [here]([(https://github.com/baaivision/Painter/tr
 
 [[autodoc]] SegGptModel
     - forward
+
+## SegGptForImageSegmentation
+
+[[autodoc]] SegGptForImageSegmentation
+    - forward
