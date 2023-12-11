@@ -36,6 +36,7 @@ from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     PretrainedConfig,
+    PreTrainedModel,
     is_torch_available,
     logging,
 )
@@ -428,6 +429,8 @@ class ModelTesterMixin:
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_fast_init_context_manager(self):
+        # test_save_load_fast_init_from_base is also important to check
+        
         # TODO ESMFold and some other work have calls to torch.nn.init which should not be skipped
         # Only weights that have "_is_hf_initialized" have to be skipped?
         from transformers import set_seed
@@ -435,28 +438,48 @@ class ModelTesterMixin:
         from transformers.utils.generic import ContextManagers
 
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
-        class MyClass(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.linear = nn.Linear(10, 10, True)
+        class MyClass(PreTrainedModel):
+            def __init__(self, config=PretrainedConfig()):
+                super().__init__(config)
+                self.linear = nn.Linear(10, 10, bias = True)
+                self.embedding = nn.Embedding(10, 10)
+                self.std = 1
+
+            def init_weights(self):
+                if isinstance(module, nn.Linear):
+                    module.weight.data.normal_(mean=0.0, std=self.std)
+                    if module.bias is not None:
+                        module.bias.data.normal_(mean=0.0, std=self.std)
 
         # 1. Make sure a linear layer's reset params is properly skipped:
         with ContextManagers([no_init_weights(True)]):
             no_init_instance = MyClass()
-        set_seed(0)
-        init_instance = MyClass()
-        torch.testing.assert_allclose(no_init_instance.linear.bias, torch.zeros(10))
-        torch.testing.assert_allclose(
-            init_instance.linear.bias,
-            torch.tensor(([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475])),
-            rtol=1e-3,
-            atol=1e-4,
-        )
 
-        # 2. Make sure torch.init function still work as expected
+
+        torch.testing.assert_allclose(no_init_instance.linear.bias, torch.zeros(10),rtol=1e-4,atol=1e-4)
+        
+        set_seed(0)
+        expected_bias = torch.tensor(([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475]))
+        init_instance = MyClass()
+        torch.testing.assert_allclose(init_instance.linear.bias,expected_bias,rtol=1e-3,atol=1e-4)
+        
+        set_seed(0)
+        torch.testing.assert_allclose(init_instance.linear.weight ,nn.init.kaiming_uniform_(no_init_instance.linear.weight, np.sqrt(5)))
 
         # 3. Make sure weights that have the "_is_hf_initialized" skipped but not the ones that have something else?
+        # check that certain keys didn't get saved with the model
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = init_instance.state_dict()
+            del state_dict["linear.weight"]
+            
+            model.config.save_pretrained(tmpdirname)
+            torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
+            model_fast_init = MyClass.from_pretrained(tmpdirname)
+            model_slow_init = MyClass.from_pretrained(tmpdirname, _fast_init=False)
+        
+
+            
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
