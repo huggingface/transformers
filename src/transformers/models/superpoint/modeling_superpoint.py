@@ -453,56 +453,44 @@ class SuperPointModel(SuperPointPreTrainedModel):
 
         batch_size = pixel_values.shape[0]
 
-        batched_encoder_outputs = self.encoder(
+        encoder_outputs = self.encoder(
             pixel_values,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            batched_last_hidden_state = batched_encoder_outputs[0]
-            if output_hidden_states:
-                batched_hidden_states = batched_encoder_outputs[1]
-        else:
-            batched_last_hidden_state = batched_encoder_outputs.last_hidden_state
-            if output_hidden_states:
-                batched_hidden_states = batched_encoder_outputs.hidden_states
+        last_hidden_state = encoder_outputs[0] if return_dict else encoder_outputs.last_hidden_state
 
-        listed_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in batched_last_hidden_state
+        list_keypoints_scores = [
+            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
         ]
 
-        listed_keypoints = [keypoints_scores[0] for keypoints_scores in listed_keypoints_scores]
-        listed_scores = [keypoints_scores[1] for keypoints_scores in listed_keypoints_scores]
+        list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
+        list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
 
-        listed_descriptors = [
+        list_descriptors = [
             self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(batched_last_hidden_state, listed_keypoints)
+            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
-        maximum_num_keypoints = max([keypoints.shape[0] for keypoints in listed_keypoints])
+        maximum_num_keypoints = max([keypoints.shape[0] for keypoints in list_keypoints])
 
-        batched_keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
-        batched_scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
-        batched_descriptors = torch.zeros(
+        keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
+        scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
+        descriptors = torch.zeros(
             (batch_size, maximum_num_keypoints, self.config.descriptor_dim),
             device=pixel_values.device,
         )
-        batched_mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
+        mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
 
-        for i, (keypoints, scores, descriptors) in enumerate(zip(listed_keypoints, listed_scores, listed_descriptors)):
-            batched_keypoints[i, : keypoints.shape[0]] = keypoints
-            batched_scores[i, : scores.shape[0]] = scores
-            batched_descriptors[i, : descriptors.shape[0]] = descriptors
-            batched_mask[i, : scores.shape[0]] = 1
+        for i, (_keypoints, _scores, _descriptors) in enumerate(zip(list_keypoints, list_scores, list_descriptors)):
+            keypoints[i, : _keypoints.shape[0]] = _keypoints
+            scores[i, : _scores.shape[0]] = _scores
+            descriptors[i, : _descriptors.shape[0]] = _descriptors
+            mask[i, : _scores.shape[0]] = 1
 
-        keypoints = batched_keypoints
-        scores = batched_scores
-        descriptors = batched_descriptors
-        mask = batched_mask
-        last_hidden_state = batched_last_hidden_state
         if output_hidden_states:
-            hidden_states = batched_hidden_states
+            hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[1]
         else:
             hidden_states = None
         if not return_dict:
