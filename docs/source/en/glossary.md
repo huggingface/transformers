@@ -166,8 +166,7 @@ embeddings `[batch_size, sequence_length, config.intermediate_size]` can account
 use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
 computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
 embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
-individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n =
-sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
+individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n = sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
 **equivalent** result.
 
 For models employing the function [`apply_chunking_to_forward`], the `chunk_size` defines the number of output

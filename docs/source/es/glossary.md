@@ -133,7 +133,7 @@ Algoritmos de aprendizaje automático que utilizan redes neuronales con varias c
 
 ### encoder models
 
-Also known as autoencoding models, encoder models take an input (such as text or images) and transform them into a condensed numerical representation called an embedding. Oftentimes, encoder models are pretrained using techniques like [masked language modeling](#masked-language-modeling-mlm), which masks parts of the input sequence and forces the model to create more meaningful representations.
+También conocidos como modelos de codificación automática (autoencoding models), los modelos codificadores toman una entrada (como texto o imágenes) y las transforman en una representación numérica condensada llamada embedding. A menudo, los modelos codificadores se preentrenan utilizando técnicas como el [modelado de lenguaje enmascarado](#masked-language-modeling-mlm), que enmascara partes de la secuencia de entrada y obliga al modelo a crear representaciones más significativas.
 
 <Youtube id="H39Z_720T5s"/>
 
@@ -141,32 +141,21 @@ Also known as autoencoding models, encoder models take an input (such as text or
 
 ### feature extraction
 
-The process of selecting and transforming raw data into a set of features that are more informative and useful for machine learning algorithms. Some examples of feature extraction include transforming raw text into word embeddings and extracting important features such as edges or shapes from image/video data.
+El proceso de seleccionar y transformar datos crudos en un conjunto de características más informativas y útiles para algoritmos de aprendizaje automático. Algunos ejemplos de extracción de características incluyen transformar texto crudo en embeddings de palabras y extraer características importantes como bordes o formas de datos de imágenes/videos.
 
 ### feed forward chunking
 
-In each residual attention block in transformers the self-attention layer is usually followed by 2 feed forward layers.
-The intermediate embedding size of the feed forward layers is often bigger than the hidden size of the model (e.g., for
-`bert-base-uncased`).
+En cada bloque de atención residual en los transformadores, la capa de autoatención suele ir seguida de 2 capas de avance. El tamaño de embedding intermedio de las capas de avance suele ser mayor que el tamaño oculto del modelo (por ejemplo, para `bert-base-uncased`).
 
-For an input of size `[batch_size, sequence_length]`, the memory required to store the intermediate feed forward
-embeddings `[batch_size, sequence_length, config.intermediate_size]` can account for a large fraction of the memory
-use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
-computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
-embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
-individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n =
-sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
-**equivalent** result.
+Para una entrada de tamaño `[batch_size, sequence_length]`, la memoria requerida para almacenar los embeddings intermedios de avance `[batch_size, sequence_length, config.intermediate_size]` puede representar una gran fracción del uso de memoria. Los autores de [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) observaron que, dado que el cálculo es independiente de la dimensión `sequence_length`, es matemáticamente equivalente calcular los embeddings de salida de ambas capas de avance  `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n` individualmente y concatenarlos después a `[batch_size, sequence_length, config.hidden_size]` con `n = sequence_length`, lo que intercambia el aumento del tiempo de cálculo por una reducción en el uso de memoria, pero produce un resultado matemáticamente **equivalente**.
 
-For models employing the function [`apply_chunking_to_forward`], the `chunk_size` defines the number of output
-embeddings that are computed in parallel and thus defines the trade-off between memory and time complexity. If
-`chunk_size` is set to 0, no feed forward chunking is done.
+Para modelos que utilizan la función [`apply_chunking_to_forward`], el `chunk_size` define el número de embeddings de salida que se calculan en paralelo y, por lo tanto, define el equilibrio entre la complejidad de memoria y tiempo. Si `chunk_size` se establece en 0, no se realiza ninguna fragmentación de avance.
 
 ### finetuned models
 
-Finetuning is a form of transfer learning which involves taking a pretrained model, freezing its weights, and replacing the output layer with a newly added [model head](#head). The model head is trained on your target dataset.
+El ajuste fino es una forma de transferencia de aprendizaje que implica tomar un modelo preentrenado, congelar sus pesos y reemplazar la capa de salida con una nueva [cabecera de modelo](#head) recién añadida. La cabecera del modelo se entrena en tu conjunto de datos objetivo.
 
-See the [Fine-tune a pretrained model](https://huggingface.co/docs/transformers/training) tutorial for more details, and learn how to fine-tune models with 🤗 Transformers.
+Consulta el tutorial [Ajustar finamente un modelo preentrenado](https://huggingface.co/docs/transformers/training) para obtener más detalles y aprende cómo ajustar finamente modelos con 🤗 Transformers.
 
 ## H
 
