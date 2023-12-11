@@ -27,16 +27,16 @@ from transformers import (
 Sample usage:
 
 ```
-python src/transformers/models/mistral/convert_mistral_weights_to_hf.py \
-    --input_dir /path/to/downloaded/mistral/weights --model_size 7B --output_dir /output/path
+python src/transformers/models/mixtral/convert_mixtral_weights_to_hf.py \
+    --input_dir /path/to/downloaded/mixtral/weights --model_size 7B --output_dir /output/path
 ```
 
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import MistralForCausalLM
+from transformers import MixtralForCausalLM
 
-model = MistralForCausalLM.from_pretrained("/output/path")
+model = MixtralForCausalLM.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -200,7 +200,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         num_local_experts=num_local_experts,
     )
 
-    print("Loading the checkpoint in a Mistral model.")
+    print("Loading the checkpoint in a Mixtral model.")
     with torch.device("meta"):
         model = MixtralForCausalLM(config)
     # Avoid saving this as part of the config.
@@ -220,16 +220,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        help="Location of Mistral weights, which contains tokenizer.model and model folders",
+        help="Location of Mixtral weights, which contains tokenizer.model and model folders",
         required=True,
     )
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mistral2 official release. For more details on Mistral2, checkout the original repo: https://huggingface.co/meta-mistral",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
-    parser.add_argument("--output_dir", help="Location to write HF model and tokenizer", required=True)
+    parser.add_argument("--output_dir", help="Location to write HF model", required=True)
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     write_model(
