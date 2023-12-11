@@ -31,7 +31,7 @@ class VipLlavaConfig(PretrainedConfig):
     VipLlava model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VipLlava-9B.
 
-    e.g. [vipllava-hf/vipllava-9b](https://huggingface.co/vipllava-hf/vipllava-9b)
+    e.g. [vipllava-hf/vipllava-9b](https://huggingface.co/llava-hf/vip-llava-7b-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -66,10 +66,10 @@ class VipLlavaConfig(PretrainedConfig):
     >>> # Initializing a Llama config
     >>> text_config = LlamaConfig()
 
-    >>> # Initializing a VipLlava vipllava-1.5-7b style configuration
+    >>> # Initializing a VipLlava vipllava-7b style configuration
     >>> configuration = VipLlavaConfig(vision_config, text_config)
 
-    >>> # Initializing a model from the vipllava-1.5-7b style configuration
+    >>> # Initializing a model from the vipllava-7b style configuration
     >>> model = VipLlavaForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
