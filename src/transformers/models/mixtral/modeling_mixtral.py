@@ -743,7 +743,6 @@ class MixtralSparseMoeBlock(nn.Module):
 
 
 class MixtralDecoderLayer(nn.Module):
-    # Ignore copy
     def __init__(self, config: MixtralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
