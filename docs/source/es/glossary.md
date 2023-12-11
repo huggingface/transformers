@@ -133,7 +133,7 @@ Algoritmos de aprendizaje automático que utilizan redes neuronales con varias c
 
 ### encoder models
 
-También conocidos como modelos de codificación automática (autoencoding models), los modelos codificadores toman una entrada (como texto o imágenes) y las transforman en una representación numérica condensada llamada embedding. A menudo, los modelos codificadores se preentrenan utilizando técnicas como el [modelado de lenguaje enmascarado](#masked-language-modeling-mlm), que enmascara partes de la secuencia de entrada y obliga al modelo a crear representaciones más significativas.
+También conocidos como modelos de codificación automática (autoencoding models), los modelos codificadores toman una entrada (como texto o imágenes) y las transforman en una representación numérica condensada llamada embedding. A menudo, los modelos codificadores se entrenan previamente utilizando técnicas como el [modelado de lenguaje enmascarado](#masked-language-modeling-mlm), que enmascara partes de la secuencia de entrada y obliga al modelo a crear representaciones más significativas.
 
 <Youtube id="H39Z_720T5s"/>
 
@@ -153,7 +153,7 @@ Para modelos que utilizan la función [`apply_chunking_to_forward`], el `chunk_s
 
 ### finetuned models
 
-El ajuste fino es una forma de transferencia de aprendizaje que implica tomar un modelo preentrenado, congelar sus pesos y reemplazar la capa de salida con una nueva [cabecera de modelo](#head) recién añadida. La cabecera del modelo se entrena en tu conjunto de datos objetivo.
+El ajuste fino es una forma de transferencia de aprendizaje que implica tomar un modelo entrenado previamente, congelar sus pesos y reemplazar la capa de salida con una nueva [cabecera de modelo](#head) recién añadida. La cabecera del modelo se entrena en tu conjunto de datos objetivo.
 
 Consulta el tutorial [Ajustar finamente un modelo preentrenado](https://huggingface.co/docs/transformers/training) para obtener más detalles y aprende cómo ajustar finamente modelos con 🤗 Transformers.
 
