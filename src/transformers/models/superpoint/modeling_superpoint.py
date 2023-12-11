@@ -307,11 +307,9 @@ class SuperPointDescriptorDecoder(nn.Module):
         """Interpolate descriptors at keypoint locations"""
         batch_size, num_channels, height, width = descriptors.shape
         keypoints = keypoints - scale / 2 + 0.5
-        keypoints /= torch.tensor(
-            [(width * scale - scale / 2 - 0.5), (height * scale - scale / 2 - 0.5)],
-        ).to(
-            keypoints
-        )[None]
+        divisor = torch.tensor([[(width * scale - scale / 2 - 0.5), (height * scale - scale / 2 - 0.5)]])
+        divisor = divisor.to(keypoints)
+        keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
         args = {"align_corners": True} if torch.__version__ >= "1.3" else {}
         descriptors = torch.nn.functional.grid_sample(
@@ -474,9 +472,8 @@ class SuperPointModel(SuperPointPreTrainedModel):
             self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in batched_last_hidden_state
         ]
 
-        listed_keypoints, listed_scores = [keypoints_scores[0] for keypoints_scores in listed_keypoints_scores], [
-            keypoints_scores[1] for keypoints_scores in listed_keypoints_scores
-        ]
+        listed_keypoints = [keypoints_scores[0] for keypoints_scores in listed_keypoints_scores]
+        listed_scores = [keypoints_scores[1] for keypoints_scores in listed_keypoints_scores]
 
         listed_descriptors = [
             self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
