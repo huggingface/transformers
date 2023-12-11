@@ -280,6 +280,28 @@ class DPTModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
 
+    def test_inference_depth_estimation_beit(self):
+        image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-beit-base-384")
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-beit-base-384").to(torch_device)
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
+
+        # verify the predicted depth
+        expected_shape = torch.Size((1, 384, 384))
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[2669.7061, 2663.7144, 2674.9399], [2633.9326, 2650.9092, 2665.4270], [2621.8271, 2632.0129, 2637.2290]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
     def test_inference_depth_estimation_swinv2(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-swinv2-tiny-256")
         model = DPTForDepthEstimation.from_pretrained("Intel/dpt-swinv2-tiny-256").to(torch_device)
