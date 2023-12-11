@@ -1577,7 +1577,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
         # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16 * trainer.args.n_gpu)
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 8 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, 8)
