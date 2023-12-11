@@ -485,7 +485,7 @@ class MixtralIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_logits(self):
-        model_id = "mx-test/Mixtral-tiny"
+        model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
         model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
@@ -506,8 +506,8 @@ class MixtralIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_logits_batched(self):
-        model_id = "mx-test/Mixtral-tiny"
-        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(0)
+        model_id = "hf-internal-testing/Mixtral-tiny"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
         model = MixtralForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
