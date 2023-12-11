@@ -64,8 +64,7 @@ Podemos ver que se han agregado ceros a la derecha de la primera oración para q
 [[101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]]
 ```
 
-Esto luego se puede convertir en un tensor en PyTorch o TensorFlow. La máscara de atención es un tensor binario que indica la posición de los índices de relleno para que el modelo no los tenga en cuenta. Para el [`BertTokenizer`], `1` indica un
-valor al que se debe prestar atención, mientras que `0` indica un valor de relleno. Esta máscara de atención está en el diccionario devuelto por el tokenizador bajo la clave "attention_mask":
+Esto luego se puede convertir en un tensor en PyTorch o TensorFlow. La máscara de atención es un tensor binario que indica la posición de los índices de relleno para que el modelo no los tenga en cuenta. Para el [`BertTokenizer`], `1` indica un valor al que se debe prestar atención, mientras que `0` indica un valor de relleno. Esta máscara de atención está en el diccionario devuelto por el tokenizador bajo la clave "attention_mask":
 
 ```python
 >>> padded_sequences["attention_mask"]
@@ -84,26 +83,25 @@ Consulta [modelado de lenguaje causal](#causal-language-modeling) y [modelos de 
 
 ### backbone
 
-The backbone is the network (embeddings and layers) that outputs the raw hidden states or features. It is usually connected to a [head](#head) which accepts the features as its input to make a prediction. For example, [`ViTModel`] is a backbone without a specific head on top. Other models can also use [`VitModel`] as a backbone such as [DPT](model_doc/dpt).
+La columna vertebral, backbone en inglés, es la red (incrustaciones y capas) que produce los estados ocultos o características crudas. Normalmente, está conectado a una [cabecera](#head), que acepta las características como entrada para hacer una predicción. Por ejemplo, [`ViTModel`] es una columna vertebral sin una cabecera específica encima. Otros modelos también pueden usar [`VitModel`] como columna vertebral, como por ejemplo [DPT](model_doc/dpt).
 
 ## C
 
 ### causal language modeling
 
-A pretraining task where the model reads the texts in order and has to predict the next word. It's usually done by
-reading the whole sentence but using a mask inside the model to hide the future tokens at a certain timestep.
+Una tarea de preentrenamiento donde el modelo lee los textos en orden y tiene que predecir la siguiente palabra. Generalmente, se realiza leyendo toda la oración pero utilizando una máscara dentro del modelo para ocultar los tokens futuros en un cierto paso de tiempo.
 
 ### channel
 
-Color images are made up of some combination of values in three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
+Las imágenes a color están compuestas por alguna combinación de valores en tres canales: rojo, verde y azul (RGB), y las imágenes en escala de grises solo tienen un canal. En 🤗 Transformers, el canal puede ser la primera o última dimensión del tensor de una imagen: [`n_channels`, `height`, `width`] o [`height`, `width`, `n_channels`].
 
 ### connectionist temporal classification (CTC)
 
-An algorithm which allows a model to learn without knowing exactly how the input and output are aligned; CTC calculates the distribution of all possible outputs for a given input and chooses the most likely output from it. CTC is commonly used in speech recognition tasks because speech doesn't always cleanly align with the transcript for a variety of reasons such as a speaker's different speech rates.
+Un algoritmo que permite que un modelo aprenda sin saber exactamente cómo están alineadas la entrada y la salida; CTC calcula la distribución de todas las salidas posibles para una entrada dada y elige la salida más probable de ella. CTC se utiliza comúnmente en tareas de reconocimiento de voz porque el habla no siempre se alinea perfectamente con la transcripción debido a diversas razones, como las diferentes velocidades de habla de los oradores.
 
 ### convolution
 
-A type of layer in a neural network where the input matrix is multiplied element-wise by a smaller matrix (kernel or filter) and the values are summed up in a new matrix. This is known as a convolutional operation which is repeated over the entire input matrix. Each operation is applied to a different segment of the input matrix. Convolutional neural networks (CNNs) are commonly used in computer vision.
+Un tipo de capa en una red neuronal donde la matriz de entrada se multiplica elemento por elemento por una matriz más pequeña (núcleo o filtro) y los valores se suman en una nueva matriz. Esto se conoce como una operación de convolución que se repite sobre toda la matriz de entrada. Cada operación se aplica a un segmento diferente de la matriz de entrada. Las redes neuronales convolucionales (CNN) se utilizan comúnmente en visión por computadora.
 
 ## D
 
