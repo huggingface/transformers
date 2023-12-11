@@ -21,7 +21,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "llava-hf/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
+    "ybelkada/vip-llava-7b-hf": "https://huggingface.co/llava-hf/vip-llava-7b-hf/resolve/main/config.json",
 }
 
 
