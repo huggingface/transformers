@@ -162,6 +162,7 @@ else:
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
+            ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
@@ -202,6 +203,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -345,6 +347,13 @@ else:
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "seamless_m4t_v2",
+                (
+                    "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
+                    "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -370,6 +379,7 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "umt5",
                 (

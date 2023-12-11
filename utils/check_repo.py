@@ -76,6 +76,9 @@ PRIVATE_MODELS = [
     "Kosmos2TextModel",
     "Kosmos2TextForCausalLM",
     "Kosmos2VisionModel",
+    "SeamlessM4Tv2TextToUnitModel",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2TextToUnitForConditionalGeneration",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -114,7 +117,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BarkCausalModel",  # Building part of bigger (tested) model.
-    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -186,6 +189,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
     "AutoformerForPrediction",
+    "PatchTSTForPretraining",
+    "PatchTSTForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
@@ -247,6 +252,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Owlv2TextModel",
     "Owlv2VisionModel",
     "OwlViTForObjectDetection",
+    "PatchTSMixerForPrediction",
+    "PatchTSMixerForPretraining",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
@@ -296,6 +303,11 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "VitsDiscriminator",
     "VitsModelForPreTraining",
+    "TvpForVideoGrounding",
+    "SeamlessM4Tv2NARTextToUnitModel",
+    "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
 ]
 
 # DO NOT edit this list!
@@ -399,13 +411,11 @@ def get_model_modules() -> List[str]:
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
         "modeling_timm_backbone",
-        "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
-        "modeling_tf_transfo_xl_utilities",
         "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
@@ -967,6 +977,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
     "AutoBackbone",
+    "BeitBackbone",
     "BitBackbone",
     "ConvNextBackbone",
     "ConvNextV2Backbone",

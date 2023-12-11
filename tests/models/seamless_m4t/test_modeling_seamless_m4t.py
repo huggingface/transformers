@@ -16,7 +16,6 @@
 
 
 import copy
-import inspect
 import tempfile
 import unittest
 
@@ -34,6 +33,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -478,10 +478,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="The speech encoder doesn't support head masking")
-    def test_generate_with_head_masking(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
@@ -616,7 +612,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4TModelWithTextInputTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -636,6 +634,19 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         else ()
     )
     all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "automatic-speech-recognition": SeamlessM4TForSpeechToText,
+            "conversational": SeamlessM4TForTextToText,
+            "feature-extraction": SeamlessM4TModel,
+            "summarization": SeamlessM4TForTextToText,
+            "text-to-audio": SeamlessM4TForTextToSpeech,
+            "text2text-generation": SeamlessM4TForTextToText,
+            "translation": SeamlessM4TForTextToText,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
@@ -697,43 +708,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
-
-    def test_generate_with_head_masking(self):
-        """Test designed for encoder-decoder models to ensure the attention head masking is used."""
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-
-            head_masking = {
-                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
-                "decoder_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-                "cross_attn_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-            }
-
-            signature = inspect.signature(model.forward)
-            # We want to test only models where encoder/decoder head masking is implemented
-            if not set(head_masking.keys()) < {*signature.parameters.keys()}:
-                continue
-
-            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-                out = model.generate(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    num_beams=1,
-                    output_attentions=True,
-                    return_dict_in_generate=True,
-                    remove_invalid_values=True,
-                    **{name: mask},
-                )
-                # We check the state of decoder_attentions and cross_attentions just from the last step
-                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-                self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @unittest.skip(reason="SeamlessM4TModel can take input_ids or input_features")
     def test_forward_signature(self):
@@ -1001,9 +975,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     def input_text(self):
         # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
 
-        # fmt: off
-        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])
-        # fmt: on
+        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])  # fmt: skip
 
         input_ids = input_ids.to(torch_device)
 
@@ -1049,9 +1021,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: eng
 
-        # fmt: off
-        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1062,9 +1032,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]
-        # fmt: on
+        expected_wav_slice = [-3e-05, -0.0004, -0.00037, -0.00013, -6e-05, 0.00012, -0.00016, 0.00025, 7e-05, -3e-05]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="eng", return_intermediate_token_ids=True)
@@ -1081,9 +1049,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test text - tgt lang: swh
 
-        # fmt: off
-        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1093,9 +1059,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]
-        # fmt: on
+        expected_wav_slice = [1e-05, -7e-05, -4e-05, -4e-05, -6e-05, -9e-05, -0.0001, -2e-05, -7e-05, -2e-05]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_text, num_beams=1, tgt_lang="swh", return_intermediate_token_ids=True)
@@ -1111,9 +1075,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
         # test audio - tgt lang: rus
 
-        # fmt: off
-        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]
-        # fmt: on
+        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]  # fmt: skip
 
         # fmt: off
         expected_unit_tokens = [
@@ -1124,9 +1086,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ]
         # fmt: on
 
-        # fmt: off
-        expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]
-        # fmt: on
+        expected_wav_slice = [0.00013, 0.00012, 0.00014, 3e-05, 0.0, -6e-05, -0.00018, -0.00016, -0.00021, -0.00018]  # fmt: skip
 
         set_seed(0)
         output = model.generate(**self.input_audio, num_beams=1, tgt_lang="rus", return_intermediate_token_ids=True)

@@ -220,7 +220,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 오디오 작업은 모델에 맞는 데이터 세트를 준비하기 위해 [특성 추출기](main_classes/feature_extractor)가 필요합니다. 특성 추출기는 원시 오디오 데이터에서 특성를 추출하고 이를 텐서로 변환하는 것이 목적입니다.
 
-오디오 데이터 세트에 특성 추출기를 사용하는 방법을 보기 위해 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트를 가져오세요. (데이터 세트를 가져오는 방법은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 자세히 설명하고 있습니다.)
+오디오 데이터 세트에 특성 추출기를 사용하는 방법을 보기 위해 [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) 데이터 세트를 가져오세요. (데이터 세트를 가져오는 방법은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub)에서 자세히 설명하고 있습니다.)
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -346,7 +346,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 </Tip>
 
 [food101](https://huggingface.co/datasets/food101) 데이터 세트를 가져와서 컴퓨터 비전 데이터 세트에서 이미지 프로세서를 어떻게 사용하는지 알아보세요.
-데이터 세트를 불러오는 방법은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)을 참고하세요.
+데이터 세트를 불러오는 방법은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub)을 참고하세요.
 
 <Tip>
 
@@ -360,7 +360,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-다음으로, 🤗 Datasets의 [`image`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=image#datasets.Image)로 이미지를 확인해보세요:
+다음으로, 🤗 Datasets의 [`image`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image)로 이미지를 확인해보세요:
 
 ```py
 >>> dataset[0]["image"]
@@ -418,7 +418,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 </Tip>
 
-3. 🤗 Datasets의 [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)를 사용하여 실시간으로 변환을 적용합니다:
+3. 🤗 Datasets의 [`set_transform`](https://huggingface.co/docs/datasets/process#format-transform)를 사용하여 실시간으로 변환을 적용합니다:
 
 ```py
 >>> dataset.set_transform(transforms)
@@ -476,7 +476,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 프로세서는 토크나이저와 특성 추출기와 같은 두 가지 처리 객체를 결합합니다.
 
 [LJ Speech](https://huggingface.co/datasets/lj_speech) 데이터 세트를 가져와서 자동 음성 인식(ASR)을 위한 프로세서를 사용하는 방법을 확인하세요.
-(데이터 세트를 가져오는 방법에 대한 자세한 내용은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub.html)에서 볼 수 있습니다.)
+(데이터 세트를 가져오는 방법에 대한 자세한 내용은 🤗 [데이터 세트 튜토리얼](https://huggingface.co/docs/datasets/load_hub)에서 볼 수 있습니다.)
 
 ```py
 >>> from datasets import load_dataset

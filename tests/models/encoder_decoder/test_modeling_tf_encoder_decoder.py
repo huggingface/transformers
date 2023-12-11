@@ -474,7 +474,7 @@ class TFEncoderDecoderMixin:
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
-            if type(key) == bool:
+            if isinstance(key, bool):
                 pt_inputs_dict[name] = key
             elif name == "input_values":
                 pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)

@@ -90,6 +90,7 @@ class Pix2StructTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "pix2struct_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
