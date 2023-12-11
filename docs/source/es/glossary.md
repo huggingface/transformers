@@ -14,22 +14,21 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Glossary
+# Glosario
 
-This glossary defines general machine learning and 🤗 Transformers terms to help you better understand the
-documentation.
+Este glosario define términos generales de aprendizaje automático y términos relacionados con 🤗 Transformers para ayudarte a comprender mejor la documentación.
 
 ## A
 
 ### attention mask
 
-The attention mask is an optional argument used when batching sequences together.
+La máscara de atención es un argumento opcional utilizado al agrupar secuencias.
 
 <Youtube id="M6adb1j2jPI"/>
 
-This argument indicates to the model which tokens should be attended to, and which should not.
+Este argumento indica al modelo qué tokens deben recibir atención y cuáles no.
 
-For example, consider these two sequences:
+Por ejemplo, considera estas dos secuencias:
 
 ```python
 >>> from transformers import BertTokenizer
@@ -43,34 +42,30 @@ For example, consider these two sequences:
 >>> encoded_sequence_b = tokenizer(sequence_b)["input_ids"]
 ```
 
-The encoded versions have different lengths:
+Las versiones codificadas tienen longitudes diferentes:
 
 ```python
 >>> len(encoded_sequence_a), len(encoded_sequence_b)
 (8, 19)
 ```
 
-Therefore, we can't put them together in the same tensor as-is. The first sequence needs to be padded up to the length
-of the second one, or the second one needs to be truncated down to the length of the first one.
+Por lo tanto, no podemos colocarlas juntas en el mismo tensor tal cual. La primera secuencia necesita ser rellenada hasta la longitud de la segunda, o la segunda necesita ser truncada hasta la longitud de la primera.
 
-In the first case, the list of IDs will be extended by the padding indices. We can pass a list to the tokenizer and ask
-it to pad like this:
+En el primer caso, la lista de IDs se extenderá con los índices de relleno. Podemos pasar una lista al tokenizador y pedirle que realice el relleno de esta manera:
 
 ```python
 >>> padded_sequences = tokenizer([sequence_a, sequence_b], padding=True)
 ```
 
-We can see that 0s have been added on the right of the first sentence to make it the same length as the second one:
+Podemos ver que se han agregado ceros a la derecha de la primera oración para que tenga la misma longitud que la segunda:
 
 ```python
 >>> padded_sequences["input_ids"]
 [[101, 1188, 1110, 170, 1603, 4954, 119, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [101, 1188, 1110, 170, 1897, 1263, 4954, 119, 1135, 1110, 1120, 1655, 2039, 1190, 1103, 4954, 138, 119, 102]]
 ```
 
-This can then be converted into a tensor in PyTorch or TensorFlow. The attention mask is a binary tensor indicating the
-position of the padded indices so that the model does not attend to them. For the [`BertTokenizer`], `1` indicates a
-value that should be attended to, while `0` indicates a padded value. This attention mask is in the dictionary returned
-by the tokenizer under the key "attention_mask":
+Esto luego se puede convertir en un tensor en PyTorch o TensorFlow. La máscara de atención es un tensor binario que indica la posición de los índices de relleno para que el modelo no los tenga en cuenta. Para el [`BertTokenizer`], `1` indica un
+valor al que se debe prestar atención, mientras que `0` indica un valor de relleno. Esta máscara de atención está en el diccionario devuelto por el tokenizador bajo la clave "attention_mask":
 
 ```python
 >>> padded_sequences["attention_mask"]
@@ -79,11 +74,11 @@ by the tokenizer under the key "attention_mask":
 
 ### autoencoding models
 
-See [encoder models](#encoder-models) and [masked language modeling](#masked-language-modeling-mlm)
+Consulta [modelos de codificación](#encoder-models) y [modelado de lenguaje enmascarado](#masked-language-modeling-mlm)
 
 ### autoregressive models
 
-See [causal language modeling](#causal-language-modeling) and [decoder models](#decoder-models)
+Consulta [modelado de lenguaje causal](#causal-language-modeling) y [modelos de decodificación](#decoder-models)
 
 ## B
 
