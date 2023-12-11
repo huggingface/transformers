@@ -20,12 +20,11 @@ rendered properly in your Markdown viewer.
 
 Mixtral-8x7B is Mistral AI's second Large Language Model (LLM). 
 
-The Mixtral model was proposed in the [Mistral AI team](https://mistral.ai/).
+The Mixtral model was proposed in the by the [Mistral AI](https://mistral.ai/) team.
 
+It was introduced in the [Mixtral of Experts blogpost](https://mistral.ai/news/mixtral-of-experts/) with the following introduction:
 
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
+*Today, the team is proud to release Mixtral 8x7B, a high-quality sparse mixture of experts models (SMoE) with open weights. Licensed under Apache 2.0. Mixtral outperforms Llama 2 70B on most benchmarks with 6x faster inference. It is the strongest open-weight model with a permissive license and the best model overall regarding cost/performance trade-offs. In particular, it matches or outperforms GPT3.5 on most standard benchmarks.*
 
 Tips:
 
