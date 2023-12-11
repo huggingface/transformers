@@ -86,7 +86,9 @@ from transformers.utils import (
     is_torch_fx_available,
 )
 from transformers.utils.generic import ModelOutput
-
+from transformers import set_seed
+from transformers.modeling_utils import no_init_weights
+from transformers.utils.generic import ContextManagers
 
 if is_accelerate_available():
     from accelerate.utils import compute_module_sizes
@@ -429,14 +431,6 @@ class ModelTesterMixin:
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_fast_init_context_manager(self):
-        # test_save_load_fast_init_from_base is also important to check
-
-        # TODO ESMFold and some other work have calls to torch.nn.init which should not be skipped
-        # Only weights that have "_is_hf_initialized" have to be skipped?
-        from transformers import set_seed
-        from transformers.modeling_utils import no_init_weights
-        from transformers.utils.generic import ContextManagers
-
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
         class MyClass(PreTrainedModel):
             config_class = PretrainedConfig
@@ -453,7 +447,7 @@ class ModelTesterMixin:
                     if module.bias is not None:
                         module.bias.data.normal_(mean=0.0, std=self.std)
 
-        # 1. Make sure a linear layer's reset params is properly skipped:
+        # 2. Make sure a linear layer's reset params is properly skipped:
         with ContextManagers([no_init_weights(True)]):
             no_init_instance = MyClass()
 
@@ -471,15 +465,13 @@ class ModelTesterMixin:
             init_instance.linear.weight, nn.init.kaiming_uniform_(no_init_instance.linear.weight, np.sqrt(5))
         )
 
-        # 3. Make sure weights that have the "_is_hf_initialized" skipped but not the ones that have something else?
-        # check that certain keys didn't get saved with the model
+        # 3. Make sure weights that are not present use init_weight_ and get expected values
         with tempfile.TemporaryDirectory() as tmpdirname:
             state_dict = init_instance.state_dict()
             del state_dict["linear.weight"]
 
             init_instance.config.save_pretrained(tmpdirname)
             torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
             set_seed(0)
             model_fast_init = MyClass.from_pretrained(tmpdirname)
 
