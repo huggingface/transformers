@@ -41,29 +41,24 @@ class CogVLMProcessor(ProcessorMixin):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['LlamaTokenizer`]. The tokenizer is a required input.
-        image_size (`int`):
-            The image size used by the model.
-        patch_size (`int`):
-            The patch size used by the model.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "LlamaTokenizer"
 
-    def __init__(self, image_processor, tokenizer, image_size, patch_size):
+    def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
-        self.image_size = image_size
-        self.patch_size = patch_size
 
     def __call__(
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = False,
+        add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
+        # TODO support all these kwargs?
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = True,
@@ -83,54 +78,15 @@ class CogVLMProcessor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
 
-        input_ids = [self.tokenizer.bos_token_id]
-        token_type_ids = [LANGUAGE_TOKEN_TYPE]
-        pixel_values = None
-
         if images is not None:
-            num_vision_tokens = (self.image_size // self.patch_size) ** 2 + 2
-            input_ids += [self.tokenizer.pad_token_id] * num_vision_tokens
-            token_type_ids += [VISION_TOKEN_TYPE] * num_vision_tokens
-            pixel_values = self.image_processor(images, return_tensors=return_tensors).pixel_values
+            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
+        else:
+            pixel_values = None
+        text_inputs = self.tokenizer(
+            text, return_tensors=return_tensors, return_token_type_ids=return_token_type_ids, padding=padding, truncation=truncation, max_length=max_length
+        )
 
-        if text is not None:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                # TODO support the following 3 flags
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=None,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=None,
-                **kwargs,
-            )
-            text_ids = text_encoding.input_ids
-            input_ids += text_ids
-            token_type_ids += [LANGUAGE_TOKEN_TYPE] * len(text_ids)
-
-        data = {}
-        data["input_ids"] = [input_ids]
-        if return_token_type_ids:
-            data["token_type_ids"] = [token_type_ids]
-        if return_attention_mask:
-            attention_mask = [1] * len(input_ids)
-            data["attention_mask"] = [attention_mask]
-
-        result = BatchFeature(data=data, tensor_type=return_tensors)
-
-        if pixel_values is not None:
-            result["pixel_values"] = pixel_values
-
-        return result
+        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
     def batch_decode(self, *args, **kwargs):
         """

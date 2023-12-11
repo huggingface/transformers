@@ -34,7 +34,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 original_device = "cuda:0"
-hf_device = "cuda:2"
+hf_device = "cuda:3"
 
 
 @torch.no_grad()
@@ -110,10 +110,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         image_mean=OPENAI_CLIP_MEAN,
         image_std=OPENAI_CLIP_STD,
     )
-    patch_size = original_model.config.vision_config["patch_size"]
-    processor = CogVLMProcessor(
-        image_processor=image_processor, tokenizer=tokenizer, image_size=image_size, patch_size=patch_size
-    )
+    processor = CogVLMProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     original_inputs = gather_inputs(inputs, device=hf_device)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
@@ -124,9 +121,11 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     for k, v in inputs.items():
         print(k, v.shape)
 
+    print("Decoded input_ids:", processor.batch_decode(inputs["input_ids"]))
+
     # verify inputs
-    for k, v in inputs.items():
-        assert torch.allclose(v, original_inputs[k].to(v.device))
+    # for k, v in inputs.items():
+    #     assert torch.allclose(v, original_inputs[k].to(v.device))
 
     with torch.no_grad():
         outputs = model.generate(**inputs, **gen_kwargs)
@@ -150,11 +149,11 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
-        # model.save_pretrained(pytorch_dump_folder_path)
+        model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        processor.push_to_hub(f"nielsr/{model_name}")
-        # model.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name.split('/')[-1]}")
+        model.push_to_hub(f"nielsr/{model_name.split('/')[-1]}")
 
 
 if __name__ == "__main__":

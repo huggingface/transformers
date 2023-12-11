@@ -663,18 +663,40 @@ class CogVLMModel(CogVLMPreTrainedModel):
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
+
             if pixel_values is not None:
                 # multi-modality
-                if token_type_ids is None:
-                    raise ValueError("Multi-modality requires `token_type_ids`!")
                 if len(input_ids) != len(pixel_values):
                     raise ValueError("Make sure to pass as many texts as images")
+                
+                # prepend the input_ids and token_type_ids with image tokens
+                num_vision_tokens = (
+                    self.config.vision_config.image_size // self.config.vision_config.patch_size
+                ) ** 2 + 2
+                batch_size = input_ids.shape[0]
+
+                vision_input_ids = torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * num_vision_tokens).repeat(batch_size, 1).to(input_ids.device)
+                vision_token_type_ids = torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * num_vision_tokens).repeat(batch_size, 1).to(token_type_ids.device)
+
+                print("Shape of vision input ids:", vision_input_ids.shape)
+                print("Shape of vision token type ids:", vision_token_type_ids.shape)
+                print("Shape of input ids:", input_ids[:,1:].shape)
+                print("Shape of token type ids:", token_type_ids[:,1:].shape)
+
+                input_ids = torch.cat([vision_input_ids, input_ids[:,1:]], dim=1)
+                token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:,1:]], dim=1)
+
+                print("Shape of input ids after concatenation:", input_ids.shape)
+                print("Shape of token type ids after concatenation:", token_type_ids.shape)
+
                 inputs_embeds = self.embed_tokens(input_ids)
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
-            else:  # single-modality
+
+            else:
+                # TODO verify single-modality
                 if token_type_ids is None:
                     token_type_ids = (
                         torch.ones_like(input_ids, dtype=torch.long, device=input_ids.device) * LANGUAGE_TOKEN_TYPE
