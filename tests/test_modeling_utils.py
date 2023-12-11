@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -1855,11 +1856,13 @@ class TestAttentionImplementation(unittest.TestCase):
 
 @require_torch_gpu
 @slow
-class Mask4DTest(unittest.TestCase):
+class Mask4DTestBase(unittest.TestCase):
+    model_dtype = None
+
     def setUp(self):
-        model_name = "JackFram/llama-160m"  # small Llama-like model from FlexFlow
+        model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(torch_device)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
 
     def tearDown(self):
         r"""
@@ -1904,6 +1907,10 @@ class Mask4DTest(unittest.TestCase):
 
         return input_0, input_1, mask_1, position_ids_1
 
+
+class Mask4DTestFP32(Mask4DTestBase):
+    model_dtype = torch.float32
+
     def test_attention(self):
         """comparing outputs of attention layer"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
@@ -1920,9 +1927,9 @@ class Mask4DTest(unittest.TestCase):
 
         outs_0_last_tokens = outs_0[:, -1, :]  # last tokens in each batch line
         outs_1_last_tokens = outs_1[0, -3:, :]  # last three tokens
-        assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens, atol=1e-8)
+        assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens)
 
-    def test_model(self):
+    def test_inner_model(self):
         """comparing hidden outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
 
@@ -1932,8 +1939,9 @@ class Mask4DTest(unittest.TestCase):
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
         logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
         torch.testing.assert_close(
-            logits_0_last_tokens, logits_1_last_tokens, atol=1e-5
-        )  # note higher atol set to deal with noise
+            logits_0_last_tokens,
+            logits_1_last_tokens,
+        )
 
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
@@ -1944,6 +1952,33 @@ class Mask4DTest(unittest.TestCase):
 
         logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
         logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
-        assert torch.allclose(
-            logits_0_last_tokens, logits_1_last_tokens, atol=1e-5
-        )  # note higher atol set to deal with noise
+        torch.testing.assert_close(
+            logits_0_last_tokens,
+            logits_1_last_tokens,
+        )
+
+
+class Mask4DTestFP16(Mask4DTestBase):
+    model_dtype = torch.float16
+
+    test_attention = Mask4DTestFP32.test_attention
+
+    def test_causal_model_logits(self):
+        """comparing logits outputs of whole inner model"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+
+        indices_0 = logits_0_last_tokens.sort(descending=True).indices
+        indices_1 = logits_1_last_tokens.sort(descending=True).indices
+
+        # checking logits, but note relaxed tolerances for FP16
+        torch.testing.assert_close(logits_0_last_tokens, logits_1_last_tokens, atol=0.02, rtol=0.001)
+
+        # checking tokens order for the top tokens
+        for token_ids_0, token_ids_1 in zip(indices_0, indices_1):
+            self.assertTrue(torch.equal(token_ids_0[:128], token_ids_1[:128]))
