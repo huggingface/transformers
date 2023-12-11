@@ -163,7 +163,7 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.conv_layers_sizes = config.conv_layers_sizes
+        self.hidden_sizes = config.hidden_sizes
         self.descriptor_dim = config.descriptor_dim
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
@@ -173,13 +173,13 @@ class SuperPointInterestPointDecoder(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.convSa = nn.Conv2d(
-            self.conv_layers_sizes[3],
-            self.conv_layers_sizes[4],
+            self.hidden_sizes[3],
+            self.hidden_sizes[4],
             kernel_size=3,
             stride=1,
             padding=1,
         )
-        self.convSb = nn.Conv2d(self.conv_layers_sizes[4], 65, kernel_size=1, stride=1, padding=0)
+        self.convSb = nn.Conv2d(self.hidden_sizes[4], 65, kernel_size=1, stride=1, padding=0)
 
     def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Compute the dense keypoint scores
@@ -265,7 +265,7 @@ class SuperPointDescriptorDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.conv_layers_sizes = config.conv_layers_sizes
+        self.hidden_sizes = config.hidden_sizes
         self.descriptor_dim = config.descriptor_dim
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
@@ -275,14 +275,14 @@ class SuperPointDescriptorDecoder(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.convDa = nn.Conv2d(
-            self.conv_layers_sizes[3],
-            self.conv_layers_sizes[4],
+            self.hidden_sizes[3],
+            self.hidden_sizes[4],
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.convDb = nn.Conv2d(
-            self.conv_layers_sizes[4],
+            self.hidden_sizes[4],
             self.descriptor_dim,
             kernel_size=1,
             stride=1,

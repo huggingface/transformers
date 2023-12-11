@@ -87,7 +87,7 @@ class SuperPointModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.conv_layers_sizes[-2], self.image_width // 8, self.image_height // 8),
+            (self.batch_size, self.hidden_sizes[-2], self.image_width // 8, self.image_height // 8),
         )
 
     def create_and_check_for_interest_point_description(self, config, pixel_values):
@@ -191,7 +191,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             # SuperPoint's feature maps are of shape (batch_size, num_channels, width, height)
-            for i, conv_layer_size in enumerate(self.model_tester.conv_layers_sizes[:-2]):
+            for i, conv_layer_size in enumerate(self.model_tester.hidden_sizes[:-2]):
                 self.assertListEqual(
                     list(hidden_states[i].shape[-3:]),
                     [
