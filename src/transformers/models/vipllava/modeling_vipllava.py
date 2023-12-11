@@ -371,19 +371,19 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-        >>> model = VipLlavaForConditionalGeneration.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vipllava-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/vipllava-7b-hf")
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=text, images=image, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=20)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "There seems to be a stop sign"
+        "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on a green surface, with a red ball in its paw."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
