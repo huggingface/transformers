@@ -163,7 +163,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
 
         for idx, expert_block in enumerate(experts_w2):
             expert_key = f"model.layers.{layer_i}.block_sparse_moe.experts.{idx}.w2"
-            state_dict[expert_key + ".weight"] = expert_block.T.clone()
+            state_dict[expert_key + ".weight"] = expert_block.T.clone().contiguous()
 
         experts_w3 = [
             w3[ffn_dim * expert_idx : ffn_dim * (expert_idx + 1), :].contiguous().clone()
