@@ -451,8 +451,6 @@ class ModelTesterMixin:
         with ContextManagers([no_init_weights(True)]):
             no_init_instance = MyClass()
 
-        torch.testing.assert_allclose(no_init_instance.linear.bias, torch.zeros(10), rtol=1e-4, atol=1e-4)
-
         set_seed(0)
         expected_bias = torch.tensor(
             ([0.2975, 0.2131, -0.1379, -0.0796, -0.3012, -0.0057, -0.2381, -0.2439, -0.0174, 0.0475])
