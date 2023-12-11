@@ -1157,7 +1157,7 @@ PYCTCDECODE_IMPORT_ERROR = """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
-{0} requires the accelerate library minimum version {ACCELERATE_MIN_VERSION} it was not found in your environment.
+{0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
 You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
 runtime after installation.
 """
