@@ -88,10 +88,10 @@ class MixtralConfig(PretrainedConfig):
             parameter
         num_local_experts (`int`, *optional*, defaults to 8):
             Number of experts per Sparse MLP layer.
-        output_router_logits (`bool`, *optional*, defaults to `False`)
+        output_router_logits (`bool`, *optional*, defaults to `True`):
             Whether or not the router logits should be returned by the model. Enabeling this will also
             allow the model to output the auxiliary loss. See [here]() for more details
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.02):
             The aux loss factor for the total loss.
 
     ```python
@@ -132,8 +132,8 @@ class MixtralConfig(PretrainedConfig):
         attention_dropout=0.0,
         num_experts_per_tok=2,
         num_local_experts=8,
-        output_router_logits=True,
-        router_aux_loss_coef=0.02,
+        output_router_logits=False,
+        router_aux_loss_coef=0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
