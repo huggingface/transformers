@@ -74,8 +74,6 @@ class VitsModelOutput(ModelOutput):
 
             Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        training_outputs (`VitsTrainingOutput`, *optional*, returned when `labels` is passed and `VitsModelForPreTraining` is used):
-            Training outputs, used to compute losses when training.
     """
 
     waveform: torch.FloatTensor = None
@@ -83,7 +81,6 @@ class VitsModelOutput(ModelOutput):
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    training_outputs: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -124,29 +121,29 @@ class VitsTrainingOutput(ModelOutput):
     Describes the training outputs for the VITS model, used to compute losses when training.
 
     Args:
-        waveform (`torch.FloatTensor` of shape `(batch_size, segment_length)`):
+        waveform (`torch.FloatTensor` of shape `(batch_size, 1, segment_length)`):
             A sliced-segment of the audio waveform predicted by the model.
-        log_duration (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        log_duration (`torch.FloatTensor` of shape `(batch_size,)`):
             Log duration of each element of the latent tensor.
-        attn (`torch.FloatTensor` of shape `(batch_size, text_length, latent_length)`):
+        attn (`torch.FloatTensor` of shape `(batch_size, 1, audio_length, latent_length)`):
             Attention mask. Corresponds to the most likely alignment between text and speech?
-        ids_slice (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        ids_slice (`torch.FloatTensor` of shape `(batch_size,)`):
             A 1D tensor containing the starting indices for each segment of the batch.
-        input_padding_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_padding_mask (`torch.FloatTensor` of shape `(batch_size, 1, latent_length)`):
             Input padding mask.
-        labels_padding_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        labels_padding_mask (`torch.FloatTensor` of shape `(batch_size, 1, audio_length)`):
             Labels padding mask.
-        latents (`torch.FloatTensor` of shape `(batch_size, latent_length)`):
+        latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Latent variable.
-        prior_latents (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        prior_latents (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Prior latent variable.
-        prior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        prior_means (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Prior means.
-        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        prior_log_variances (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Prior log variance.
-        posterior_means (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        posterior_means (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Posterior means.
-        posterior_log_variances (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        posterior_log_variances (`torch.FloatTensor` of shape `(batch_size, hidden_size, audio_length)`):
             Posterior log variance.
     """
 
@@ -2223,33 +2220,6 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
 
         if not return_dict:
             outputs = (
-                (waveform, None)
-                + text_encoder_output[3:]
-                + (
-                    (
-                        waveform,
-                        log_duration,
-                        attn,
-                        ids_slice,
-                        input_padding_mask,
-                        labels_padding_mask,
-                        latents,
-                        prior_latents,
-                        prior_means,
-                        prior_log_variances,
-                        posterior_means,
-                        posterior_log_variances,
-                    )
-                )
-            )
-            return outputs
-
-        return VitsModelOutput(
-            waveform=waveform,
-            sequence_lengths=None,
-            hidden_states=text_encoder_output.hidden_states,
-            attentions=text_encoder_output.attentions,
-            training_outputs=(
                 waveform,
                 log_duration,
                 attn,
@@ -2262,5 +2232,20 @@ class VitsModelForPreTraining(VitsPreTrainedModel):
                 prior_log_variances,
                 posterior_means,
                 posterior_log_variances,
-            ),
+            )
+            return outputs
+
+        return VitsTrainingOutput(
+            waveform=waveform,
+            log_duration=log_duration,
+            attn=attn,
+            ids_slice=ids_slice,
+            input_padding_mask=input_padding_mask,
+            labels_padding_mask=labels_padding_mask,
+            latents=latents,
+            prior_latents=prior_latents,
+            prior_means=prior_means,
+            prior_log_variances=prior_log_variances,
+            posterior_means=posterior_means,
+            posterior_log_variances=posterior_log_variances,
         )
