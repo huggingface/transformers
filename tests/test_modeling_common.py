@@ -39,7 +39,9 @@ from transformers import (
     PreTrainedModel,
     is_torch_available,
     logging,
+    set_seed,
 )
+from transformers.modeling_utils import no_init_weights
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -85,10 +87,8 @@ from transformers.utils import (
     is_tf_available,
     is_torch_fx_available,
 )
-from transformers.utils.generic import ModelOutput
-from transformers import set_seed
-from transformers.modeling_utils import no_init_weights
-from transformers.utils.generic import ContextManagers
+from transformers.utils.generic import ContextManagers, ModelOutput
+
 
 if is_accelerate_available():
     from accelerate.utils import compute_module_sizes
