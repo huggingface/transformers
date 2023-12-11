@@ -435,8 +435,8 @@ class ModelTesterMixin:
         class MyClass(PreTrainedModel):
             config_class = PretrainedConfig
 
-            def __init__(self, config=PretrainedConfig()):
-                super().__init__(config)
+            def __init__(self, config=None):
+                super().__init__(config if config is not None else PretrainedConfig())
                 self.linear = nn.Linear(10, 10, bias=True)
                 self.embedding = nn.Embedding(10, 10)
                 self.std = 1
