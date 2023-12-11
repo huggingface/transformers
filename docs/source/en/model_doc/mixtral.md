@@ -50,7 +50,7 @@ The following implementation details are shared with Mistral AI's first model [m
 
 We also provide an instruction fine-tuned model: `Mistral-7B-Instruct-v0.1` which can be used for chat-based inference.
 
-For more details please read our [release blog post](https://mistral.ai/news/announcing-mistral-7b/)
+For more details please read our [release blog post](https://mistral.ai/news/mixtral-of-experts/)
 
 ### License
 
@@ -79,15 +79,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 "The expected output"
 ```
 
-Raw weights for `Mistral-7B-v0.1` and `Mistral-7B-Instruct-v0.1` can be downloaded from:
-
-| Model Name                 | Checkpoint                                                                              |
-|----------------------------|-----------------------------------------------------------------------------------------|
-| `Mistral-7B-v0.1`          | [Raw Checkpoint](https://files.mistral-7b-v0-1.mistral.ai/mistral-7B-v0.1.tar)          |
-| `Mistral-7B-Instruct-v0.1` | [Raw Checkpoint](https://files.mistral-7b-v0-1.mistral.ai/mistral-7B-instruct-v0.1.tar) |
-
-
-To use these raw checkpoints with HuggingFace you can use the `convert_mistral_weights_to_hf.py` script to convert them to the HuggingFace format:
+To use the raw checkpoints with HuggingFace you can use the `convert_mistral_weights_to_hf.py` script to convert them to the HuggingFace format:
 
 ```bash
 python src/transformers/models/mixtral/convert_mixtral_weights_to_hf.py \
