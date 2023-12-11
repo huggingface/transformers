@@ -37,7 +37,7 @@ from ..models.auto import (
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-from .candidates import (
+from .candidate_generator import (
     AssistedCandidateGenerator,
     CandidateGenerator,
     _crop_past_key_values,
