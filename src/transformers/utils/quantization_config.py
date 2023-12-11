@@ -379,7 +379,9 @@ class GPTQConfig(QuantizationConfigMixin):
             The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
             to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
-                Whether to cache block outputs to reuse as inputs for the succeeding block.
+            Whether to cache block outputs to reuse as inputs for the succeeding block.
+        inside_layer_modules (`List`, *optional*, defaults to `None`):
+            List of module names to quantize inside block_name_to_quantize. If not set, we will quantize all the linear layers.
     """
 
     def __init__(
@@ -402,6 +404,7 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length: Optional[int] = None,
         exllama_config: Optional[Dict[str, Any]] = None,
         cache_block_outputs: bool = True,
+        inside_layer_modules: Optional[List] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -424,6 +427,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.exllama_config = exllama_config
         self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
+        self.inside_layer_modules = inside_layer_modules
         self.post_init()
 
     def get_loading_attributes(self):
@@ -494,6 +498,12 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
+        if self.inside_layer_modules is not None:
+            optimum_version = version.parse(importlib.metadata.version("optimum"))
+            if optimum_version < version.parse("1.15.0"):
+                raise ValueError(
+                    "You current version of `optimum` does not support `inside_layers_modules` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
+                )
 
     def to_dict(self):
         config_dict = super().to_dict()
