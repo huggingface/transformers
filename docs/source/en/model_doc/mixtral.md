@@ -47,7 +47,7 @@ The following implementation details are shared with Mistral AI's first model [m
 * GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
 * Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
 
-We also provide an instruction fine-tuned model: `Mistral-7B-Instruct-v0.1` which can be used for chat-based inference.
+They also provide an instruction fine-tuned model: `mistralai/Mixtral-8x7B-v0.1` which can be used for chat-based inference.
 
 For more details please read our [release blog post](https://mistral.ai/news/mixtral-of-experts/)
 
@@ -65,7 +65,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-8x7B")
 
 >>> prompt = "My favourite condiment is"
@@ -78,7 +78,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 "The expected output"
 ```
 
-To use the raw checkpoints with HuggingFace you can use the `convert_mistral_weights_to_hf.py` script to convert them to the HuggingFace format:
+To use the raw checkpoints with HuggingFace you can use the `convert_mixtral_weights_to_hf.py` script to convert them to the HuggingFace format:
 
 ```bash
 python src/transformers/models/mixtral/convert_mixtral_weights_to_hf.py \
@@ -111,8 +111,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
 >>> prompt = "My favourite condiment is"
 
@@ -126,7 +126,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ### Expected speedups
 
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mixtral-8x7B` checkpoint and the Flash Attention 2 version of the model.
+Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/Mixtral-8x7B-v0.1` checkpoint and the Flash Attention 2 version of the model.
 
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mixtral-7b-inference-large-seqlen.png">
