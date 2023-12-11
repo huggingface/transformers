@@ -38,6 +38,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
+    torch_device
 )
 
 
@@ -521,8 +522,6 @@ class BaseSerializationTest(unittest.TestCase):
     model_name = "facebook/opt-125m"
     input_text = "Mars colonists' favorite meals are"
 
-    def setUp(self):
-        self.device = torch.device("cuda:0")
 
     def tearDown(self):
         gc.collect()
@@ -545,7 +544,7 @@ class BaseSerializationTest(unittest.TestCase):
         model_0 = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=self.quantization_config,
-            device_map=self.device,
+            device_map=torch_device,
         )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -554,7 +553,7 @@ class BaseSerializationTest(unittest.TestCase):
             config = AutoConfig.from_pretrained(tmpdirname)
             self.assertTrue(hasattr(config, "quantization_config"))
 
-            model_1 = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device)
+            model_1 = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=torch_device)
 
         # checking quantized linear module weight
         linear = get_some_linear_layer(model_1)
@@ -588,13 +587,13 @@ class BaseSerializationTest(unittest.TestCase):
                         self.assertTrue(v0 == v1)
 
         # comparing forward() outputs
-        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
         self.assertTrue(torch.equal(out_0["logits"], out_1["logits"]))
 
         # comparing generate() outputs
-        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         output_sequences_0 = model_0.generate(**encoded_input, max_new_tokens=10)
         output_sequences_1 = model_1.generate(**encoded_input, max_new_tokens=10)
 
