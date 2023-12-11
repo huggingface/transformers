@@ -742,7 +742,6 @@ class MixtralSparseMoeBlock(nn.Module):
         return final_hidden_states, router_logits
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer with mlp->block_sparse_moe
 class MixtralDecoderLayer(nn.Module):
     # Ignore copy
     def __init__(self, config: MixtralConfig, layer_idx: int):
@@ -1122,7 +1121,6 @@ class MixtralModel(MixtralPreTrainedModel):
         )
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralForCausalLM with MISTRAL->MIXTRAL,Mistral->Mixtral
 class MixtralForCausalLM(MixtralPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
