@@ -561,6 +561,7 @@ class AwqConfig(QuantizationConfigMixin):
         do_fuse: Optional[bool] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
+        modules_to_not_convert: Optional[List] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -571,6 +572,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.version = version
         self.backend = backend
         self.fuse_max_seq_len = fuse_max_seq_len
+        self.modules_to_not_convert = modules_to_not_convert
 
         self.modules_to_fuse = modules_to_fuse
         if do_fuse is None:
