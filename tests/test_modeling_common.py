@@ -440,6 +440,7 @@ class ModelTesterMixin:
         # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
         class MyClass(PreTrainedModel):
             config_class = PretrainedConfig
+
             def __init__(self, config=PretrainedConfig()):
                 super().__init__(config)
                 self.linear = nn.Linear(10, 10, bias=True)
@@ -479,20 +480,15 @@ class ModelTesterMixin:
             init_instance.config.save_pretrained(tmpdirname)
             torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
+            set_seed(0)
             model_fast_init = MyClass.from_pretrained(tmpdirname)
+
+            set_seed(0)
             model_slow_init = MyClass.from_pretrained(tmpdirname, _fast_init=False)
-            
+
             for key in model_fast_init.state_dict().keys():
-                if isinstance(model_slow_init.state_dict()[key], torch.BoolTensor):
-                    max_diff = torch.max(
-                        model_slow_init.state_dict()[key] ^ model_fast_init.state_dict()[key]
-                    ).item()
-                else:
-                    max_diff = torch.max(
-                        torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
-                    ).item()
-                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-                    
+                max_diff = torch.max(torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]))
+                self.assertLessEqual(max_diff.item(), 1e-3, msg=f"{key} not identical")
 
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
