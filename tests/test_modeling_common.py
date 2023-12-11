@@ -41,7 +41,6 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.modeling_utils import no_init_weights
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -101,6 +100,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers.modeling_utils import no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
 
