@@ -89,7 +89,7 @@ La columna vertebral, backbone en inglés, es la red (incrustaciones y capas) qu
 
 ### causal language modeling
 
-Una tarea de preentrenamiento donde el modelo lee los textos en orden y tiene que predecir la siguiente palabra. Generalmente, se realiza leyendo toda la oración pero utilizando una máscara dentro del modelo para ocultar los tokens futuros en un cierto paso de tiempo.
+Una tarea de preentrenamiento donde el modelo lee los textos en orden y tiene que predecir la siguiente palabra. Generalmente, se realiza leyendo toda la oración, pero utilizando una máscara dentro del modelo para ocultar los tokens futuros en un cierto paso de tiempo.
 
 ### channel
 
@@ -107,31 +107,27 @@ Un tipo de capa en una red neuronal donde la matriz de entrada se multiplica ele
 
 ### DataParallel (DP)
 
-Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
-receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
-Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
+Técnica de paralelismo para entrenamiento en múltiples GPUs donde se replica la misma configuración varias veces, con cada instancia recibiendo una porción de datos única. El procesamiento se realiza en paralelo y todas las configuraciones se sincronizan al final de cada paso de entrenamiento.
+
+Obtén más información sobre cómo funciona el DataParallel [aquí](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
 
 ### decoder input IDs
 
-This input is specific to encoder-decoder models, and contains the input IDs that will be fed to the decoder. These
-inputs should be used for sequence to sequence tasks, such as translation or summarization, and are usually built in a
-way specific to each model.
+Esta entrada es específica para modelos codificador-decodificador y contiene los IDs de entrada que se enviarán al decodificador. Estas entradas deben usarse para tareas de secuencia a secuencia, como traducción o resumen, y generalmente se construyen de una manera específica para cada modelo.
 
-Most encoder-decoder models (BART, T5) create their `decoder_input_ids` on their own from the `labels`. In such models,
-passing the `labels` is the preferred way to handle training.
+La mayoría de los modelos codificador-decodificador (BART, T5) crean sus `decoder_input_ids` por sí mismos a partir de las `labels`. En tales modelos, pasar las `labels` es la forma preferida de manejar el entrenamiento.
 
-Please check each model's docs to see how they handle these input IDs for sequence to sequence training.
+Consulta la documentación de cada modelo para ver cómo manejan estos IDs de entrada para el entrenamiento de secuencia a secuencia.
 
 ### decoder models
 
-Also referred to as autoregressive models, decoder models involve a pretraining task (called causal language modeling) where the model reads the texts in order and has to predict the next word. It's usually done by
-reading the whole sentence with a mask to hide future tokens at a certain timestep.
+También conocidos como modelos autorregresivos, los modelos decodificadores involucran una tarea de preentrenamiento (llamada modelado de lenguaje causal) donde el modelo lee los textos en orden y tiene que predecir la siguiente palabra. Generalmente, se realiza leyendo la oración completa con una máscara para ocultar los tokens futuros en un cierto paso de tiempo.
 
 <Youtube id="d_ixlCubqQw"/>
 
 ### deep learning (DL)
 
-Machine learning algorithms which uses neural networks with several layers.
+Algoritmos de aprendizaje automático que utilizan redes neuronales con varias capas.
 
 ## E
 

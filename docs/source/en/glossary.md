@@ -116,6 +116,7 @@ A type of layer in a neural network where the input matrix is multiplied element
 
 Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
 receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
+
 Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
 
 ### decoder input IDs
