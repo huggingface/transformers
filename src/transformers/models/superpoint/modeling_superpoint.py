@@ -311,9 +311,9 @@ class SuperPointDescriptorDecoder(nn.Module):
         divisor = divisor.to(keypoints)
         keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
-        args = {"align_corners": True} if torch.__version__ >= "1.3" else {}
+        kwargs = {"align_corners": True} if torch.__version__ >= "1.3" else {}
         descriptors = torch.nn.functional.grid_sample(
-            descriptors, keypoints.view(batch_size, 1, -1, 2), mode="bilinear", **args
+            descriptors, keypoints.view(batch_size, 1, -1, 2), mode="bilinear", **kwargs
         )
         descriptors = torch.nn.functional.normalize(descriptors.reshape(batch_size, num_channels, -1), p=2, dim=1)
         return descriptors
