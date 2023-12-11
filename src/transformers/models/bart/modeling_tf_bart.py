@@ -494,6 +494,12 @@ class TFBartPretrainedModel(TFPreTrainedModel):
             dummy_inputs["decoder_input_ids"] = dummy_inputs["decoder_input_ids"] * 2
         return dummy_inputs
 
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "model.shared.weight":
+            return tf_weight, "model.decoder.embed_tokens.weight"
+        else:
+            return (tf_weight,)
+
 
 BART_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the

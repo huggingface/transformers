@@ -59,6 +59,9 @@ class TrainerState:
             Run an evaluation every X steps.
         save_steps (`int`, *optional*, defaults to 500):
             Save checkpoint every X updates steps.
+        train_batch_size (`int`, *optional*):
+            The batch size for the training dataloader. Only needed when
+            `auto_find_batch_size` has been used.
         num_input_tokens_seen (`int`, *optional*, defaults to 0):
             The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
@@ -88,6 +91,7 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
+    train_batch_size: int = None
     num_train_epochs: int = 0
     num_input_tokens_seen: int = 0
     total_flos: float = 0
