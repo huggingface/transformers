@@ -61,7 +61,7 @@ import torch.nn.functional as F
 
 
 class ImageDistilTrainer(Trainer):
-    def __init__(self ,teacher_model=None, student_model=None, temperature=None, lambda_param=None,  *args, **kwargs):
+    def __init__(self, teacher_model=None, student_model=None, temperature=None, lambda_param=None,  *args, **kwargs):
         super().__init__(model=student_model, *args, **kwargs)
         self.teacher = teacher_model
         self.student = student_model
