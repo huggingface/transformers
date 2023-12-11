@@ -106,8 +106,8 @@ def set_module_quantized_tensor_to_device(
                     setattr(new_value, "SCB", fp16_statistics.to(device))
             elif is_4bit:
                 if prequantized_loading:
-                    is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
-                        "0.41"
+                    is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
+                        "0.41.3"
                     )
                     # TODO update version number after BNB release with PR #753
                     if not is_4bit_serializable:
