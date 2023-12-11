@@ -1853,14 +1853,13 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
-@require_torch
+@require_torch_gpu
 @slow
 class Mask4DTest(unittest.TestCase):
     def setUp(self):
-        self.device = torch.device("cuda:0")
         model_name = "JackFram/llama-160m"  # small Llama-like model from FlexFlow
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(self.device)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32).to(torch_device)
 
     def tearDown(self):
         r"""
@@ -1873,7 +1872,7 @@ class Mask4DTest(unittest.TestCase):
     def get_test_data(self):
         texts = ["the cat sat", "the cat had", "the cat is"]
         encoded = [self.tokenizer.encode(t) for t in texts]
-        input_0 = torch.tensor(encoded, device=self.device)
+        input_0 = torch.tensor(encoded, device=torch_device)
         # tensor([[   1,  278, 6635, 3290],
         # [   1,  278, 6635,  750],
         # [   1,  278, 6635,  338]], device='cuda:0')
@@ -1901,7 +1900,7 @@ class Mask4DTest(unittest.TestCase):
         )
 
         # Creating a position_ids tensor. note the repeating figures in the end.
-        position_ids_1 = torch.tensor([[0, 1, 2, 3, 3, 3]], device=self.device, dtype=torch.int64)
+        position_ids_1 = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
 
         return input_0, input_1, mask_1, position_ids_1
 
