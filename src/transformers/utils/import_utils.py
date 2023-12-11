@@ -71,9 +71,6 @@ TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _bitsandbytes_available = _is_package_available("bitsandbytes")
-_flash_attn_2_available = _is_package_available("flash_attn") and version.parse(
-    importlib.metadata.version("flash_attn")
-) >= version.parse("2.1.0")
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -259,6 +256,19 @@ def is_torch_available():
 
 def get_torch_version():
     return _torch_version
+
+
+def is_torch_sdpa_available():
+    if not is_torch_available():
+        return False
+    elif _torch_version == "N/A":
+        return False
+
+    # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
+    # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
+    # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
+    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
+    return version.parse(_torch_version) >= version.parse("2.1.1")
 
 
 def is_torchvision_available():
@@ -608,10 +618,29 @@ def is_flash_attn_2_available():
     if not is_torch_available():
         return False
 
+    if not _is_package_available("flash_attn"):
+        return False
+
     # Let's add an extra check to see if cuda is available
     import torch
 
-    return _flash_attn_2_available and torch.cuda.is_available()
+    if not torch.cuda.is_available():
+        return False
+
+    if torch.version.cuda:
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+    elif torch.version.hip:
+        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+    else:
+        return False
+
+
+def is_flash_attn_greater_or_equal_2_10():
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
 
 
 def is_flash_attn_available():
@@ -652,7 +681,7 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = None):
+def is_accelerate_available(min_version: str = "0.21.0"):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available

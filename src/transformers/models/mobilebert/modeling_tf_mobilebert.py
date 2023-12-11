@@ -1088,6 +1088,12 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
             attentions=outputs.attentions,
         )
 
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "cls.predictions.decoder.weight":
+            return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
+        else:
+            return (tf_weight,)
+
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -1167,6 +1173,12 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "cls.predictions.decoder.weight":
+            return tf_weight, "mobilebert.embeddings.word_embeddings.weight"
+        else:
+            return (tf_weight,)
 
 
 class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):

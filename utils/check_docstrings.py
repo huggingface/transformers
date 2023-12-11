@@ -233,6 +233,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxGPTJModel",
     "FlaxGPTNeoForCausalLM",
     "FlaxGPTNeoModel",
+    "FlaxLlamaForCausalLM",
+    "FlaxLlamaModel",
     "FlaxMBartForConditionalGeneration",
     "FlaxMBartForQuestionAnswering",
     "FlaxMBartForSequenceClassification",
@@ -463,6 +465,7 @@ OBJECTS_TO_IGNORE = [
     "SamConfig",
     "SamPromptEncoderConfig",
     "SeamlessM4TConfig",  # use of unconventional markdown
+    "SeamlessM4Tv2Config",  # use of unconventional markdown
     "Seq2SeqTrainingArguments",
     "SpecialTokensMixin",
     "Speech2Text2Config",
@@ -738,7 +741,6 @@ OBJECTS_TO_IGNORE = [
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TransfoXLConfig",
     "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
