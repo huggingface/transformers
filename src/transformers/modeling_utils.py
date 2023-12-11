@@ -186,48 +186,18 @@ def no_init_weights(_enable=True):
 
         def _skip_init(*args, **kwargs):
             pass
-        
-        torch.nn.init.uniform_ = _skip_init
-        torch.nn.init.normal_ = _skip_init
-        torch.nn.init.trunc_normal_ = _skip_init
-        torch.nn.init.constant_ = _skip_init
-        torch.nn.init.xavier_uniform_ = _skip_init
-        torch.nn.init.xavier_normal_ = _skip_init
-        torch.nn.init.kaiming_uniform_ = _skip_init
-        torch.nn.init.kaiming_normal_ = _skip_init
-        torch.nn.init.uniform = _skip_init
-        torch.nn.init.normal = _skip_init
-        torch.nn.init.xavier_uniform = _skip_init
-        torch.nn.init.xavier_normal = _skip_init
-        torch.nn.init.kaiming_uniform = _skip_init
-        torch.nn.init.kaiming_normal = _skip_init
 
         # # Save the original initialization functions
-        # for name, init_func in TORCH_INIT_FUNCTIONS.items():
-        #     setattr(torch.nn.init, name, _skip_init)
+        for name, init_func in TORCH_INIT_FUNCTIONS.items():
+            setattr(torch.nn.init, name, _skip_init)
     try:
         yield
     finally:
         _init_weights = old_init_weights
         if _enable:
-            torch.nn.init.uniform_ = TORCH_INIT_FUNCTIONS["uniform"]
-            torch.nn.init.normal_ = TORCH_INIT_FUNCTIONS["normal_"]
-            torch.nn.init.trunc_normal_ = TORCH_INIT_FUNCTIONS["trunc_normal_"]
-            torch.nn.init.constant_ = TORCH_INIT_FUNCTIONS["constant_"]
-            torch.nn.init.xavier_uniform_ = TORCH_INIT_FUNCTIONS["xavier_uniform_"]
-            torch.nn.init.xavier_normal_ = TORCH_INIT_FUNCTIONS["xavier_normal_"]
-            torch.nn.init.kaiming_uniform_ = TORCH_INIT_FUNCTIONS["kaiming_uniform_"]
-            torch.nn.init.kaiming_normal_ = TORCH_INIT_FUNCTIONS["kaiming_normal_"]
-            torch.nn.init.uniform = TORCH_INIT_FUNCTIONS["uniform"]
-            torch.nn.init.normal = TORCH_INIT_FUNCTIONS["normal"]
-            torch.nn.init.xavier_uniform = TORCH_INIT_FUNCTIONS["xavier_uniform"]
-            torch.nn.init.xavier_normal = TORCH_INIT_FUNCTIONS["xavier_normal"]
-            torch.nn.init.kaiming_uniform = TORCH_INIT_FUNCTIONS["kaiming_uniform"]
-            torch.nn.init.kaiming_normal = TORCH_INIT_FUNCTIONS["kaiming_normal"]
-        
             # # Restore the original initialization functions
-            # for name, init_func in TORCH_INIT_FUNCTIONS.items():
-            #     setattr(torch.nn.init, name, init_func)
+            for name, init_func in TORCH_INIT_FUNCTIONS.items():
+                setattr(torch.nn.init, name, init_func)
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
