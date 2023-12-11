@@ -67,6 +67,9 @@ FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
+ACCELERATE_MIN_VERSION = "0.21.0"
+FSDP_MIN_VERSION = "1.12.0"
+
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -681,13 +684,13 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = "0.21.0"):
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
 
 
-def is_fsdp_available(min_version: str = "1.12.0"):
+def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
     return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
@@ -1154,8 +1157,9 @@ PYCTCDECODE_IMPORT_ERROR = """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
-{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`. Please note that you may need to restart your runtime after installation.
+{0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
+You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
+runtime after installation.
 """
 
 # docstyle-ignore
