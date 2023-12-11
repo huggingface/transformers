@@ -214,7 +214,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         if self.max_keypoints >= 0:
             keypoints, scores = self.top_k_keypoints(keypoints, scores, self.max_keypoints)
 
-        # Convert (h, w) to (x, y)
+        # Convert (y, x) to (x, y)
         keypoints = torch.flip(keypoints, [1]).float()
 
         return keypoints, scores
