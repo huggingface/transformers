@@ -175,6 +175,7 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "fastspeech2_conformer"
     attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
 
@@ -387,6 +388,7 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "hifigan"
 
     def __init__(
