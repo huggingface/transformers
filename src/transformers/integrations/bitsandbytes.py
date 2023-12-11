@@ -109,7 +109,6 @@ def set_module_quantized_tensor_to_device(
                     is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
                         "0.41.3"
                     )
-                    # TODO update version number after BNB release with PR #753
                     if not is_4bit_serializable:
                         raise ValueError(
                             "Detected 4-bit weights but the version of bitsandbytes is not compatible with 4-bit serialization. "
