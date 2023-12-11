@@ -380,7 +380,7 @@ class GPTQConfig(QuantizationConfigMixin):
             to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
-        inside_layer_modules (`List`, *optional*, defaults to `None`):
+        inside_layer_modules (`List`, *optional*):
             List of module names to quantize inside block_name_to_quantize. If not set, we will quantize all the linear layers.
     """
 
