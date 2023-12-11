@@ -5239,12 +5239,32 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
     from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
-    from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
-    from .models.mobilenet_v1 import MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV1Config
-    from .models.mobilenet_v2 import MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileNetV2Config
-    from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
-    from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
-    from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mobilebert import (
+        MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileBertConfig,
+        MobileBertTokenizer,
+    )
+    from .models.mobilenet_v1 import (
+        MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV1Config,
+    )
+    from .models.mobilenet_v2 import (
+        MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileNetV2Config,
+    )
+    from .models.mobilevit import (
+        MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileViTConfig,
+    )
+    from .models.mobilevitv2 import (
+        MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MobileViTV2Config,
+    )
+    from .models.mpnet import (
+        MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MPNetConfig,
+        MPNetTokenizer,
+    )
     from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
