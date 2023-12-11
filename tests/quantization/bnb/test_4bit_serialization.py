@@ -50,7 +50,7 @@ def get_some_linear_layer(model):
 @require_accelerate
 @require_torch
 @require_torch_gpu
-# @slow
+@slow
 class BaseTest(unittest.TestCase):
     # We keep the constants inside the init function and model loading inside setUp function
 
