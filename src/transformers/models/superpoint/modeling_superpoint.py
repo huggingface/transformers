@@ -373,13 +373,13 @@ SUPERPOINT_START_DOCSTRING = r"""
 SUPERPOINT_INPUTS_DOCSTRING = r"""
 Args:
     pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
-            [`SuperPointImageProcessor.__call__`] for details.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See 
+        [`SuperPointImageProcessor.__call__`] for details.
+    output_hidden_states (`bool`, *optional*):
+        Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+        more detail.
+    return_dict (`bool`, *optional*):
+        Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
     """
 
 
