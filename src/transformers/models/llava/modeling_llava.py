@@ -270,22 +270,22 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def _merge_input_ids_with_image_features(
         self, image_features, inputs_embeds, input_ids, attention_mask, position_ids
     ):
-        nb_images, image_hidden_dim, embed_dim = image_features.shape
+        num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
         left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where image tokens are
-        image_token_mask = input_ids == self.config.image_token_index
-        num_image_tokens = torch.sum(image_token_mask, dim=-1)
+        # 1. Create a mask to know where special image tokens are
+        special_image_token_mask = input_ids == self.config.image_token_index
+        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
         # Compute the maximum embed dimension
-        max_embed_dim = (num_image_tokens.max() * (image_hidden_dim - 1)) + sequence_length
+        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
         batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
 
         # 2. Compute the positions where text should be written
         # Calculate new positions for text tokens in merged image-text sequence.
-        # `image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
+        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
         # `torch.cumsum` computes how each image token shifts subsequent text token positions.
         # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((image_token_mask * (image_hidden_dim - 1) + 1), -1) - 1
+        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
         nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
         if left_padding:
             new_token_positions += nb_image_pad[:, None]  # offset for left padding
@@ -310,8 +310,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         if image_to_overwrite.sum() != image_features.shape[:-1].numel():
             raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(image_token_mask)} while"
-                f" the number of image given to the model is {nb_images}. This prevents correct indexing and breaks batch generation."
+                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
+                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
             )
 
         final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim)
@@ -353,8 +353,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> processor = AutoProcessor.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
