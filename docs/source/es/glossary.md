@@ -242,46 +242,36 @@ Porque esta es la forma en que un [`BertModel`] espera sus entradas.
 
 ### labels
 
-The labels are an optional argument which can be passed in order for the model to compute the loss itself. These labels
-should be the expected prediction of the model: it will use the standard loss in order to compute the loss between its
-predictions and the expected value (the label).
+Las etiquetas son un argumento opcional que se puede pasar para que el modelo calcule la pérdida por sí mismo. Estas etiquetas deberían ser la predicción esperada del modelo: usará la pérdida estándar para calcular la pérdida entre sus
+predicciones y el valor esperado (la etiqueta).
 
-These labels are different according to the model head, for example:
+Estas etiquetas son diferentes según la cabecera del modelo, por ejemplo:
 
-- For sequence classification models, ([`BertForSequenceClassification`]), the model expects a tensor of dimension
-  `(batch_size)` with each value of the batch corresponding to the expected label of the entire sequence.
-- For token classification models, ([`BertForTokenClassification`]), the model expects a tensor of dimension
-  `(batch_size, seq_length)` with each value corresponding to the expected label of each individual token.
-- For masked language modeling, ([`BertForMaskedLM`]), the model expects a tensor of dimension `(batch_size,
-  seq_length)` with each value corresponding to the expected label of each individual token: the labels being the token
-  ID for the masked token, and values to be ignored for the rest (usually -100).
-- For sequence to sequence tasks, ([`BartForConditionalGeneration`], [`MBartForConditionalGeneration`]), the model
-  expects a tensor of dimension `(batch_size, tgt_seq_length)` with each value corresponding to the target sequences
-  associated with each input sequence. During training, both BART and T5 will make the appropriate
-  `decoder_input_ids` and decoder attention masks internally. They usually do not need to be supplied. This does not
-  apply to models leveraging the Encoder-Decoder framework.
-- For image classification models, ([`ViTForImageClassification`]), the model expects a tensor of dimension
-  `(batch_size)` with each value of the batch corresponding to the expected label of each individual image.
-- For semantic segmentation models, ([`SegformerForSemanticSegmentation`]), the model expects a tensor of dimension
-  `(batch_size, height, width)` with each value of the batch corresponding to the expected label of each individual pixel.
-- For object detection models, ([`DetrForObjectDetection`]), the model expects a list of dictionaries with a
-  `class_labels` and `boxes` key where each value of the batch corresponds to the expected label and number of bounding boxes of each individual image.
-- For automatic speech recognition models, ([`Wav2Vec2ForCTC`]), the model expects a tensor of dimension `(batch_size,
-  target_length)` with each value corresponding to the expected label of each individual token.
+- Para modelos de clasificación de secuencias ([`BertForSequenceClassification`]), el modelo espera un tensor de dimensión
+  `(batch_size)` con cada valor del lote correspondiente a la etiqueta esperada de toda la secuencia.
+- Para modelos de clasificación de tokens ([`BertForTokenClassification`]), el modelo espera un tensor de dimensión
+  `(batch_size, seq_length)` con cada valor correspondiente a la etiqueta esperada de cada token individual.
+- Para el modelado de lenguaje enmascarado ([`BertForMaskedLM`]), el modelo espera un tensor de dimensión `(batch_size, seq_length)` con cada valor correspondiente a la etiqueta esperada de cada token individual: las etiquetas son el ID del token enmascarado y los valores deben ignorarse para el resto (generalmente -100).
+- Para tareas de secuencia a secuencia ([`BartForConditionalGeneration`], [`MBartForConditionalGeneration`]), el modelo
+  espera un tensor de dimensión `(batch_size, tgt_seq_length)` con cada valor correspondiente a las secuencias objetivo asociadas con cada secuencia de entrada. Durante el entrenamiento, tanto BART como T5 generarán internamente los `decoder_input_ids` y las máscaras de atención del decodificador. Por lo general, no es necesario suministrarlos. Esto no se aplica a los modelos que aprovechan el marco codificador-decodificador.
+- Para modelos de clasificación de imágenes ([`ViTForImageClassification`]), el modelo espera un tensor de dimensión
+  `(batch_size)` con cada valor del lote correspondiente a la etiqueta esperada de cada imagen individual.
+- Para modelos de segmentación semántica ([`SegformerForSemanticSegmentation`]), el modelo espera un tensor de dimensión
+  `(batch_size, height, width)` con cada valor del lote correspondiente a la etiqueta esperada de cada píxel individual.
+- Para modelos de detección de objetos ([`DetrForObjectDetection`]), el modelo espera una lista de diccionarios con claves `class_labels` y `boxes` donde cada valor del lote corresponde a la etiqueta esperada y el número de cajas delimitadoras de cada imagen individual.
+- Para modelos de reconocimiento automático de voz ([`Wav2Vec2ForCTC`]), el modelo espera un tensor de dimensión `(batch_size, target_length)` con cada valor correspondiente a la etiqueta esperada de cada token individual.
   
 <Tip>
 
-Each model's labels may be different, so be sure to always check the documentation of each model for more information
-about their specific labels!
+Las etiquetas de cada modelo pueden ser diferentes, así que asegúrate siempre de revisar la documentación de cada modelo para obtener más información sobre sus etiquetas específicas.
 
 </Tip>
 
-The base models ([`BertModel`]) do not accept labels, as these are the base transformer models, simply outputting
-features.
+Los modelos base ([`BertModel`]) no aceptan etiquetas, ya que estos son los modelos base de transformadores, que simplemente generan características.
 
 ### large language models (LLM)
 
-A generic term that refers to transformer language models (GPT-3, BLOOM, OPT) that were trained on a large quantity of data. These models also tend to have a large number of learnable parameters (e.g. 175 billion for GPT-3).
+Un término genérico que se refiere a modelos de lenguaje de transformadores (GPT-3, BLOOM, OPT) que fueron entrenados con una gran cantidad de datos. Estos modelos también tienden a tener un gran número de parámetros que se pueden aprender (por ejemplo, 175 mil millones para GPT-3).
 
 ## M
 
