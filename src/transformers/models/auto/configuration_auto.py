@@ -1095,7 +1095,14 @@ class AutoConfig:
                 config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            try:
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            except KeyError:
+                raise ValueError(
+                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
+                    "but Transformers does not recognize this architecture. This could be because of an "
+                    "issue with the checkpoint, or because your version of Transformers is out of date."
+                )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.

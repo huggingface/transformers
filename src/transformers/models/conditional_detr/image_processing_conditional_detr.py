@@ -1330,8 +1330,8 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
     # POSTPROCESSING METHODS - TODO: add support for other frameworks
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
-        supports PyTorch.
+        Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the Pascal VOC format (xmin, ymin, xmax, ymax).
+        Only supports PyTorch.
 
         Args:
             outputs ([`ConditionalDetrObjectDetectionOutput`]):

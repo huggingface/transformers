@@ -95,7 +95,8 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
 
     if isinstance(gate_logits, tuple):
         # cat along the layers?
-        gate_logits = torch.cat(gate_logits, dim=0)
+        compute_device = gate_logits[0].device
+        gate_logits = torch.cat([gate.to(compute_device) for gate in gate_logits], dim=0)
 
     routing_weights, selected_experts = torch.topk(gate_logits, top_k, dim=-1)
     routing_weights = routing_weights.softmax(dim=-1)
@@ -663,10 +664,10 @@ class MixtralBLockSparseTop2MLP(nn.Module):
 
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states, routing_weights):
+    def forward(self, hidden_states):
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
         current_hidden_states = self.w2(current_hidden_states)
-        return routing_weights * current_hidden_states
+        return current_hidden_states
 
 
 MISTRAL_ATTENTION_CLASSES = {
@@ -736,7 +737,7 @@ class MixtralSparseMoeBlock(nn.Module):
             # the current expert. We need to make sure to multiply the output hidden
             # states by `routing_weights` on the corresponding tokens (top-1 and top-2)
             current_state = hidden_states[None, top_x_list].reshape(-1, hidden_dim)
-            current_hidden_states = expert_layer(current_state, routing_weights[top_x_list, idx_list, None])
+            current_hidden_states = expert_layer(current_state) * routing_weights[top_x_list, idx_list, None]
 
             # However `index_add_` only support torch tensors for indexing so we'll use
             # the `top_x` tensor here.
