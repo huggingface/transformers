@@ -380,8 +380,9 @@ class GPTQConfig(QuantizationConfigMixin):
             to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
-        inside_layer_modules (`List`, *optional*):
-            List of module names to quantize inside block_name_to_quantize. If not set, we will quantize all the linear layers.
+        modules_to_quantize_inside_block (`List[List[str]]`, *optional*):
+            List list of module names to quantize in the block specified. The block to quantize can be specified by setting
+            `block_name_to_quantize`. We will quantize each list sequentially. If not set, we will quantize all linear layers.
     """
 
     def __init__(
@@ -404,7 +405,7 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length: Optional[int] = None,
         exllama_config: Optional[Dict[str, Any]] = None,
         cache_block_outputs: bool = True,
-        inside_layer_modules: Optional[List] = None,
+        modules_to_quantize_inside_block: Optional[List[List[str]]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -427,7 +428,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.exllama_config = exllama_config
         self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
-        self.inside_layer_modules = inside_layer_modules
+        self.modules_to_quantize_inside_block = modules_to_quantize_inside_block
         self.post_init()
 
     def get_loading_attributes(self):
@@ -498,11 +499,11 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
-        if self.inside_layer_modules is not None:
+        if self.modules_to_quantize_inside_block is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
                 raise ValueError(
-                    "You current version of `optimum` does not support `inside_layers_modules` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
+                    "You current version of `optimum` does not support `modules_to_quantize_inside_block` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
                 )
 
     def to_dict(self):
