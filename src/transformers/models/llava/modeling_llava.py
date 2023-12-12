@@ -323,7 +323,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
             )
 
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim)
+        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
         final_attention_mask |= image_to_overwrite
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
         return final_embedding, final_attention_mask, position_ids
