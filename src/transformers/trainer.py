@@ -1579,19 +1579,10 @@ class Trainer:
         # FSDP-XLA, SageMaker MP/DP, DataParallel, IPEX
         use_accelerator_prepare = True if model is self.model else False
 
-        # prepare using `accelerator` prepare
+        # prepare only the model using `accelerator` prepare
         if use_accelerator_prepare:
             self.model.train()
-            if hasattr(self.lr_scheduler, "step"):
-                if self.use_apex:
-                    model = self.accelerator.prepare(self.model)
-                else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
-            else:
-                # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
-                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                    self.model, self.optimizer, self.lr_scheduler
-                )
+            model = self.accelerator.prepare(self.model)
 
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
@@ -1604,7 +1595,7 @@ class Trainer:
         if self.is_deepspeed_enabled:
             self.deepspeed = self.model_wrapped
 
-        # Data loading
+        # get training dataload
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
             self.state.train_batch_size = self._train_batch_size
@@ -1692,6 +1683,15 @@ class Trainer:
 
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        # prepeare optimizer and lr_scheduler
+        if use_accelerator_prepare:
+            if hasattr(self.lr_scheduler, "step"):
+                if not self.use_apex:
+                    self.optimizer = self.accelerator.prepare(self.optimizer)
+            else:
+                # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
+                self.optimizer, self.lr_scheduler = self.accelerator.prepare(self.optimizer, self.lr_scheduler)
 
         # ckpt loading
         if resume_from_checkpoint is not None:
