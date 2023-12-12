@@ -550,7 +550,7 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
             # key = key.expand(-1, self.num_heads, -1, -1)
             # value = value.expand(-1, self.num_heads, -1, -1)
             #
-            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs,
+            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
             # so we always dispatch to the math path: https://github.com/pytorch/pytorch/issues/112577.
             # Arguably we could still do expand + contiguous when `query.device.type == "cuda"` in order to dispatch on memory-efficient
             # backend, but it feels very hacky.
@@ -558,7 +558,7 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
             query_length = query_shape[-1]
 
             # See the comment above.
-            if query.device.type == "cuda":
+            if query.device.type == "cuda" and attention_mask is not None:
                 query = query.contiguous()
                 key = key.contiguous()
                 value = value.contiguous()

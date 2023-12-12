@@ -447,6 +447,13 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
         if alibi is None:
             if self._use_sdpa and not output_attentions:
                 attn_output = F.scaled_dot_product_attention(
