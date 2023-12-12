@@ -23,7 +23,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibm/patchtst-base": "https://huggingface.co/ibm/patchtst-base/resolve/main/config.json",
+    "ibm/patchtst-etth1-pretrain": "https://huggingface.co/ibm/patchtst-etth1-pretrain/resolve/main/config.json",
     # See all PatchTST models at https://huggingface.co/ibm/models?filter=patchtst
 }
 
@@ -239,7 +239,9 @@ class PatchTSTConfig(PretrainedConfig):
         self.do_mask_input = do_mask_input
         self.mask_type = mask_type
         self.random_mask_ratio = random_mask_ratio  # for random masking
-        self.num_forecast_mask_patches = num_forecast_mask_patches  # for forecast masking
+        self.num_forecast_mask_patches = (
+            num_forecast_mask_patches  # for forecast masking
+        )
         self.channel_consistent_masking = channel_consistent_masking
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
