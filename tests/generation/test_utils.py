@@ -3170,9 +3170,9 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
 
         # Assistant model
-        assistant = AutoModelForSeq2SeqLM.from_pretrained(
-            "hf-internal-testing/tiny-random-BartForConditionalGeneration"
-        ).to(torch_device)
+        assistant = FakeBart.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
+            torch_device
+        )
 
         # If assisted generation passes model_kwargs correctly, should be same as previous
         outputs_assisted = model.generate(
