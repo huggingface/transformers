@@ -187,7 +187,7 @@ The model head refers to the last layer of a neural network that accepts the raw
 
   * [`GPT2ForSequenceClassification`] is a sequence classification head - a linear layer - on top of the base [`GPT2Model`].
   * [`ViTForImageClassification`] is an image classification head - a linear layer on top of the final hidden state of the `CLS` token - on top of the base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] ia a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
+  * [`Wav2Vec2ForCTC`] is a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
 
 ## I
 
@@ -232,9 +232,7 @@ is added for "RA" and "M":
 ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
 ```
 
-These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding
-the sentence to the tokenizer, which leverages the Rust implementation of [🤗
-Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
+These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding the sentence to the tokenizer, which leverages the Rust implementation of [🤗 Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
 
 ```python
 >>> inputs = tokenizer(sequence)

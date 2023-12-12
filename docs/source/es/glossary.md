@@ -161,31 +161,29 @@ Consulta el tutorial [Ajustar finamente un modelo preentrenado](https://huggingf
 
 ### head
 
-The model head refers to the last layer of a neural network that accepts the raw hidden states and projects them onto a different dimension. There is a different model head for each task. For example:
+La cabecera del modelo se refiere a la última capa de una red neuronal que acepta los estados ocultos crudos y los proyecta en una dimensión diferente. Hay una cabecera de modelo diferente para cada tarea. Por ejemplo:
 
-  * [`GPT2ForSequenceClassification`] is a sequence classification head - a linear layer - on top of the base [`GPT2Model`].
-  * [`ViTForImageClassification`] is an image classification head - a linear layer on top of the final hidden state of the `CLS` token - on top of the base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] ia a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
+  * [`GPT2ForSequenceClassification`] es una cabecera de clasificación de secuencias, es decir, una capa lineal, encima del modelo base [`GPT2Model`].
+  * [`ViTForImageClassification`] es una cabecera de clasificación de imágenes, es decir, una capa lineal encima del estado oculto final del token `CLS`, encima del modelo base [`ViTModel`].
+  * [`Wav2Vec2ForCTC`] es una cabecera de modelado de lenguaje con [CTC](#connectionist-temporal-classification-(CTC)) encima del modelo base [`Wav2Vec2Model`].
 
 ## I
 
 ### image patch
 
-Vision-based Transformers models split an image into smaller patches which are linearly embedded, and then passed as a sequence to the model. You can find the `patch_size` - or resolution - of the model in its configuration.
+Los modelos de Transformers basados en visión dividen una imagen en parches más pequeños que se incorporan linealmente y luego se pasan como una secuencia al modelo. Puedes encontrar el `patch_size` (o resolución del modelo) en su configuración.
 
 ### inference
 
-Inference is the process of evaluating a model on new data after training is complete. See the [Pipeline for inference](https://huggingface.co/docs/transformers/pipeline_tutorial) tutorial to learn how to perform inference with 🤗 Transformers.
+La inferencia es el proceso de evaluar un modelo en nuevos datos después de completar el entrenamiento. Consulta el tutorial [Pipeline for inference](https://huggingface.co/docs/transformers/pipeline_tutorial) para aprender cómo realizar inferencias con 🤗 Transformers.
 
 ### input IDs
 
-The input ids are often the only required parameters to be passed to the model as input. They are token indices,
-numerical representations of tokens building the sequences that will be used as input by the model.
+Los IDs de entrada a menudo son los únicos parámetros necesarios que se deben pasar al modelo como entrada. Son índices de tokens, representaciones numéricas de tokens que construyen las secuencias que se utilizarán como entrada por el modelo.
 
 <Youtube id="VFp38yj8h3A"/>
 
-Each tokenizer works differently but the underlying mechanism remains the same. Here's an example using the BERT
-tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenizer:
+Cada tokenizador funciona de manera diferente, pero el mecanismo subyacente sigue siendo el mismo. Aquí tienes un ejemplo utilizando el tokenizador BERT, que es un tokenizador [WordPiece](https://arxiv.org/pdf/1609.08144.pdf):
 
 ```python
 >>> from transformers import BertTokenizer
@@ -195,31 +193,27 @@ tokenizer, which is a [WordPiece](https://arxiv.org/pdf/1609.08144.pdf) tokenize
 >>> sequence = "A Titan RTX has 24GB of VRAM"
 ```
 
-The tokenizer takes care of splitting the sequence into tokens available in the tokenizer vocabulary.
+El tokenizador se encarga de dividir la secuencia en tokens disponibles en el vocabulario del tokenizador.
 
 ```python
 >>> tokenized_sequence = tokenizer.tokenize(sequence)
 ```
 
-The tokens are either words or subwords. Here for instance, "VRAM" wasn't in the model vocabulary, so it's been split
-in "V", "RA" and "M". To indicate those tokens are not separate words but parts of the same word, a double-hash prefix
-is added for "RA" and "M":
+Los tokens son palabras o sub palabras. Por ejemplo, "VRAM" no estaba en el vocabulario del modelo, así que se dividió
+en "V", "RA" y "M". Para indicar que estos tokens no son palabras separadas sino partes de la misma palabra, se añade un prefijo de doble almohadilla para "RA" y "M":
 
 ```python
 >>> print(tokenized_sequence)
 ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
 ```
 
-These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding
-the sentence to the tokenizer, which leverages the Rust implementation of [🤗
-Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
+Estos tokens luego se pueden convertir en IDs que son comprensibles por el modelo. Esto se puede hacer alimentando directamente la oración al tokenizador, que aprovecha la implementación en Rust de [🤗 Tokenizers](https://github.com/huggingface/tokenizers) para obtener un rendimiento óptimo.
 
 ```python
 >>> inputs = tokenizer(sequence)
 ```
 
-The tokenizer returns a dictionary with all the arguments necessary for its corresponding model to work properly. The
-token indices are under the key `input_ids`:
+El tokenizador devuelve un diccionario con todos los argumentos necesarios para que su modelo correspondiente funcione correctamente. Los índices de los tokens están bajo la clave `input_ids`:
 
 ```python
 >>> encoded_sequence = inputs["input_ids"]
@@ -227,23 +221,22 @@ token indices are under the key `input_ids`:
 [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102]
 ```
 
-Note that the tokenizer automatically adds "special tokens" (if the associated model relies on them) which are special
-IDs the model sometimes uses.
+Ten en cuenta que el tokenizador añade automáticamente "tokens especiales" (si el modelo asociado depende de ellos), que son IDs especiales que el modelo utiliza en ocasiones.
 
-If we decode the previous sequence of ids,
+Si descodificamos la secuencia anterior de IDs,
 
 ```python
 >>> decoded_sequence = tokenizer.decode(encoded_sequence)
 ```
 
-we will see
+Veremos
 
 ```python
 >>> print(decoded_sequence)
 [CLS] A Titan RTX has 24GB of VRAM [SEP]
 ```
 
-because this is the way a [`BertModel`] is going to expect its inputs.
+Porque esta es la forma en que un [`BertModel`] espera sus entradas.
 
 ## L
 
