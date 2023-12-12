@@ -1098,7 +1098,7 @@ class AutoConfig:
             try:
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
             except KeyError:
-                raise KeyError(f"The checkpoint you are trying to load has a model type of {config_dict['model_type']} "
+                raise KeyError(f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
                                "but Transformers does not recognize this architecture. This could be because of an "
                                "issue with the checkpoint, or because your version of Transformers is out of date.")
             return config_class.from_dict(config_dict, **unused_kwargs)
