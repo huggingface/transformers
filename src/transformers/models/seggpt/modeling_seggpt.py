@@ -94,9 +94,9 @@ class SegGptEncoderOutput(BaseModelOutput):
         attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
             *(batch_size, num_heads, seq_len, seq_len)*.
-        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_indicies` is set):
+        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.out_indicies` is set):
             Tuple of *torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*.
-            Each element in the Tuple corresponds to the output of the layer specified in `config.output_indicies`.
+            Each element in the Tuple corresponds to the output of the layer specified in `config.out_indicies`.
             Additionaly, each feature passes through a LayerNorm.
     """
 
@@ -546,7 +546,7 @@ class SegGptEncoder(nn.Module):
                     hidden_states[: hidden_states.shape[0] // 2] + hidden_states[hidden_states.shape[0] // 2 :]
                 ) * 0.5
 
-            if i in self.config.output_indicies:
+            if i in self.config.out_indicies:
                 intermediate_features.append(self.layernorm(hidden_states))
 
             if output_attentions:
@@ -628,7 +628,7 @@ class SegGptDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder_embed = nn.Linear(
-            config.hidden_size * len(config.output_indicies),
+            config.hidden_size * len(config.out_indicies),
             config.patch_size**2 * config.decoder_hidden_size,
             bias=True,
         )
