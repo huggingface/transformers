@@ -99,7 +99,7 @@ class DeciConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "deci_lm"
+    model_type = "deci"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
