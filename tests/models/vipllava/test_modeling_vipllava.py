@@ -41,7 +41,9 @@ if is_vision_available():
     from PIL import Image
 
 
+# Copied from transformers.tests.models.llava.test_modeling_llava.LlavaVisionText2TextModelTester with Llava->VipLlava
 class VipLlavaVisionText2TextModelTester:
+    # Ignore copy
     def __init__(
         self,
         parent,
@@ -149,6 +151,7 @@ class VipLlavaVisionText2TextModelTester:
 
 
 @require_torch
+# Copied from transformers.tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest with Llava->VipLlava
 class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Model tester for `VipLlavaForConditionalGeneration`.

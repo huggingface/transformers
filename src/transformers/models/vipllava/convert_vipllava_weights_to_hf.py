@@ -42,6 +42,7 @@ KEYS_TO_MODIFY_MAPPING = {
 }
 
 
+# Copied from transformers.models.llava.convert_llava_weights_to_hf.convert_state_dict_to_hf
 def convert_state_dict_to_hf(state_dict):
     new_state_dict = {}
     for key, value in state_dict.items():
