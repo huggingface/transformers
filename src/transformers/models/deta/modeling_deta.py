@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -1809,7 +1810,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        aux_loss = []
+        # TO DO: prettify
+        for i in range(outputs_class.size(1)):
+            aux_loss.append({"logits": outputs_class[:, i], "pred_boxes": outputs_coord[:, i]})
+        return aux_loss
 
     @add_start_docstrings_to_model_forward(DETA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetaObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -1936,14 +1941,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
-                outputs_class = self.class_embed(intermediate)
-                outputs_coord = self.bbox_embed(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
                 enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
-                outputs["enc_outputs"] = {"pred_logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
+                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
@@ -1953,6 +1955,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                aux_weight_dict.update({k + f"_enc": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
@@ -2192,7 +2195,7 @@ class DetaLoss(nn.Module):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
+        outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs" and k != "enc_outputs"}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         if self.assign_second_stage:
@@ -2204,10 +2207,13 @@ class DetaLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # (Niels): comment out function below, distributed training to be added
-        # if is_dist_avail_and_initialized():
-        #     torch.distributed.all_reduce(num_boxes)
+        if dist.is_available() or dist.is_initialized():
+            torch.distributed.all_reduce(num_boxes)
+            world_size = dist.get_world_size()
+        else:
+            world_size = 1
         # (Niels) in original implementation, num_boxes is divided by get_world_size()
-        num_boxes = torch.clamp(num_boxes, min=1).item()
+        num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
         losses = {}
@@ -2228,17 +2234,13 @@ class DetaLoss(nn.Module):
             enc_outputs = outputs["enc_outputs"]
             bin_targets = copy.deepcopy(targets)
             for bt in bin_targets:
-                bt["labels"] = torch.zeros_like(bt["labels"])
+                bt["class_labels"] = torch.zeros_like(bt["class_labels"])
             if self.assign_first_stage:
                 indices = self.stg1_assigner(enc_outputs, bin_targets)
             else:
                 indices = self.matcher(enc_outputs, bin_targets)
             for loss in self.losses:
-                kwargs = {}
-                if loss == "labels":
-                    # Logging is enabled only for the last layer
-                    kwargs["log"] = False
-                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes, **kwargs)
+                l_dict = self.get_loss(loss, enc_outputs, bin_targets, indices, num_boxes)
                 l_dict = {k + "_enc": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
