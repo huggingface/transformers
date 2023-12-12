@@ -50,6 +50,9 @@ class LogitsProcessor:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
 
+    @property
+    def pass_all_logits(self):
+        return getattr(self, "_pass_all_logits", False)
 
 class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
@@ -59,6 +62,10 @@ class LogitsWarper:
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
+
+    @property
+    def pass_all_logits(self):
+        return getattr(self, "_pass_all_logits", False)
 
 
 class LogitsProcessorList(list):
@@ -84,6 +91,9 @@ class LogitsProcessorList(list):
                 The processed prediction scores.
 
         """
+        if not any(processor.pass_all_logits for processor in self) and len(scores.shape) > 2:
+            scores = scores[:, -1, :]
+        
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
             if len(function_args) > 2:
@@ -95,6 +105,7 @@ class LogitsProcessorList(list):
                 scores = processor(input_ids, scores, **kwargs)
             else:
                 scores = processor(input_ids, scores)
+
         return scores
 
 
@@ -1604,10 +1615,15 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 class WhisperNoSpeechDetection(LogitsProcessor):
     r"""This processor can be used to detect silence when using Whisper."""
 
-    def __init__(self, no_speech_token: int, begin_index: int):
+    def __init__(self, no_speech_token: int, begin_index: int, begin_index_offset: int):
         self.no_speech_token = no_speech_token
         self.begin_index = begin_index
+        self.begin_index_offset = begin_index_offset
         self._no_speech_prob = [0.0]
+        self._has_run = False
+
+        # make sure we pass all logits
+        self._pass_all_logits = True
 
     @property
     def no_speech_prob(self):
@@ -1615,12 +1631,18 @@ class WhisperNoSpeechDetection(LogitsProcessor):
 
     def set_begin_index(self, begin_index):
         self.begin_index = begin_index
+        self._has_run = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        if input_ids.shape[1] == self.begin_index:
-            probs = scores.float().softmax(dim=-1)
+        no_speech_index = (self.begin_index - self.begin_index_offset)
+        if (input_ids.shape[1] >= no_speech_index) and not self._has_run:
+            no_speech_scores = scores[:, no_speech_index - 1]
+            probs = no_speech_scores.float().softmax(dim=-1)
             self._no_speech_prob = probs[:, self.no_speech_token]
+            self._has_run = True
+        
+        scores = scores[:, -1, :]
 
         return scores
 

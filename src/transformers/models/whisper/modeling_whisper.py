@@ -1965,11 +1965,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         self._set_forced_decoder_ids(task=task, language=language, prompt_ids=prompt_ids, generation_config=generation_config, config=self.config, kwargs=kwargs)
         self._set_num_frames(return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs)
 
-        # 4. Retrieve logits processors
-        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold)
-
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
+            # 4. Retrieve logits processors
+            logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold)
+
             outputs = super().generate(
                 input_features,
                 generation_config,
@@ -2003,6 +2003,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         max_frames, seek = self._retrieve_max_frames_and_seek(batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames)
         init_tokens = self._retrieve_init_tokens_from_forced_decoder_ids(generation_config=generation_config)
 
+        # 4. Retrieve logits processors
+        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, init_tokens=init_tokens)
+
         # 6.2 Preppare running variables, list for generation
         cur_bsz = batch_size
         current_segments = [[] for _ in range(batch_size)]
@@ -2030,6 +2033,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
             # 6.6 set max new tokens or max length
             max_new_tokens, max_length = self._get_max_new_tokens_and_length(config=self.config, decoder_input_ids=decoder_input_ids, generation_config=generation_config, kwargs=kwargs)
+            kwargs.pop("max_length", None)
+            kwargs.pop("max_new_tokens", None)
 
             # 6.7 Set current `begin_index` for all logit processors
             for proc in logits_processor:
@@ -2131,6 +2136,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         # TODO(PVP) only works for batch size = 1 currently
                         # Need to do before all other logit processors
                         no_speech_prob = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
+                        print("WATCH")
+                        print(no_speech_prob)
+                        print(logprobs)
                         if no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
                             print("Skip because of VAD")
                             needs_fallback[i] = False
@@ -2216,6 +2224,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_dict_in_generate is None:
             return_dict_in_generate = generation_config.return_dict_in_generate
 
+        generation_config.return_token_timestamps = return_token_timestamps
         if return_token_timestamps:
             return_dict_in_generate = True
             generation_config.output_attentions = True
@@ -2435,7 +2444,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         return init_tokens
 
     @staticmethod
-    def _retrieve_logit_processors(generation_config, logits_processor, no_speech_threshold):
+    def _retrieve_logit_processors(generation_config, logits_processor, no_speech_threshold, init_tokens=None):
         begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
@@ -2468,8 +2477,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             )
             generation_config.begin_suppress_tokens = None
 
-        if no_speech_threshold is not None:
-            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index)
+        if no_speech_threshold is not None and init_tokens is not None:
+            begin_index_offset = (len(init_tokens) - 1)
+            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index, begin_index_offset=begin_index_offset)
             logits_processor = (
                 [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
             )
@@ -2520,7 +2530,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
         decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
-        decoder_attention_mask = None
 
         # if condition_on_prev_tokens and len(current_segments[0]) > 0 and temperature < 0.5:
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
@@ -2534,7 +2543,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
-            kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
+            # kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
 
         
         return decoder_input_ids, kwargs
