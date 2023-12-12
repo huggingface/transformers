@@ -351,40 +351,40 @@ Un subcampo del aprendizaje automático que se centra en aprender representacion
 
 ### sampling rate
 
-A measurement in hertz of the number of samples (the audio signal) taken per second. The sampling rate is a result of discretizing a continuous signal such as speech.
+Una medida en hercios del número de muestras (la señal de audio) tomadas por segundo. La tasa de muestreo es el resultado de aproximar una señal continua como el habla.
 
 ### self-attention
 
-Each element of the input finds out which other elements of the input they should attend to.
+Cada elemento de la entrada averigua a cuáles otros elementos de la entrada debe prestar atención.
 
-### self-supervised learning 
+### self-supervised learning
 
-A category of machine learning techniques in which a model creates its own learning objective from unlabeled data. It differs from [unsupervised learning](#unsupervised-learning) and [supervised learning](#supervised-learning) in that the learning process is supervised, but not explicitly from the user. 
+Una categoría de técnicas de aprendizaje automático en la que un modelo crea su propio objetivo de aprendizaje a partir de datos no etiquetados. Difiere del [aprendizaje no supervisado](#unsupervised-learning) y del [aprendizaje supervisado](#supervised-learning) en que el proceso de aprendizaje está supervisado, pero no explícitamente por el usuario.
 
-One example of self-supervised learning is [masked language modeling](#masked-language-modeling-mlm), where a model is passed sentences with a proportion of its tokens removed and learns to predict the missing tokens.
+Un ejemplo de aprendizaje auto-supervisado es el [modelado de lenguaje enmascarado](#masked-language-modeling-mlm), donde un modelo recibe oraciones con una proporción de sus tokens eliminados y aprende a predecir los tokens faltantes.
 
 ### semi-supervised learning
 
-A broad category of machine learning training techniques that leverages a small amount of labeled data with a larger quantity of unlabeled data to improve the accuracy of a model, unlike [supervised learning](#supervised-learning) and [unsupervised learning](#unsupervised-learning).
+Una amplia categoría de técnicas de entrenamiento de aprendizaje automático que aprovecha una pequeña cantidad de datos etiquetados con una mayor cantidad de datos no etiquetados para mejorar la precisión de un modelo, a diferencia del [aprendizaje supervisado](#supervised-learning) y del [aprendizaje no supervisado](#unsupervised-learning).
 
-An example of a semi-supervised learning approach is "self-training", in which a model is trained on labeled data, and then used to make predictions on the unlabeled data. The portion of the unlabeled data that the model predicts with the most confidence gets added to the labeled dataset and used to retrain the model.
+Un ejemplo de un enfoque de aprendizaje semi-supervisado es "auto-entrenamiento", en el que un modelo se entrena con datos etiquetados y luego se utiliza para hacer predicciones sobre los datos no etiquetados. La porción de datos no etiquetados que el modelo predice con mayor confianza se agrega al conjunto de datos etiquetados y se utiliza para volver a entrenar el modelo.
 
 ### sequence-to-sequence (seq2seq)
 
-Models that generate a new sequence from an input, like translation models, or summarization models (such as
-[Bart](model_doc/bart) or [T5](model_doc/t5)).
+Modelos que generan una nueva secuencia a partir de una entrada, como modelos de traducción o modelos de resumen (como
+[Bart](model_doc/bart) o [T5](model_doc/t5)).
 
 ### Sharded DDP
 
-Another name for the foundational [ZeRO](#zero-redundancy-optimizer--zero-) concept as used by various other implementations of ZeRO.
+Otro nombre para el concepto fundamental de [ZeRO](#zero-redundancy-optimizer--zero-) utilizado por varias otras implementaciones de ZeRO.
 
 ### stride
 
-In [convolution](#convolution) or [pooling](#pooling), the stride refers to the distance the kernel is moved over a matrix. A stride of 1 means the kernel is moved one pixel over at a time, and a stride of 2 means the kernel is moved two pixels over at a time.
+En [convolución](#convolution) o [agrupación](#pooling), el paso (stride) se refiere a la distancia que recorre el núcleo sobre una matriz. Un paso de 1 significa que el núcleo se mueve un píxel a la vez, y un paso de 2 significa que el núcleo se mueve dos píxeles a la vez.
 
 ### supervised learning
 
-A form of model training that directly uses labeled data to correct and instruct model performance. Data is fed into the model being trained, and its predictions are compared to the known labels. The model updates its weights based on how incorrect its predictions were, and the process is repeated to optimize model performance.
+Una forma de entrenamiento de modelos que utiliza directamente datos etiquetados para corregir y dirigir el rendimiento del modelo. Los datos se introducen en el modelo en entrenamiento, y sus predicciones se comparan con las etiquetas conocidas. El modelo actualiza sus pesos en función de cuán incorrectas fueron sus predicciones, y el proceso se repite para optimizar el rendimiento del modelo.
 
 ## T
 
