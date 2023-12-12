@@ -471,6 +471,9 @@ class Mask2FormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            # eliminate infinite values in cost_matrix to avoid the error ``ValueError: cost matrix is infeasible``
+            cost_matrix = torch.minimum(cost_matrix, torch.tensor(1e10))
+            cost_matrix = torch.maximum(cost_matrix, torch.tensor(-1e10))
             # do the assigmented using the hungarian algorithm in scipy
             assigned_indices: Tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
