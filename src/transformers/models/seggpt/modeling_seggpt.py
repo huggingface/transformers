@@ -56,7 +56,7 @@ SEGGPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def patchify(self, tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
+def patchify(tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
     batch_size = tensor.shape[0]
     patch_height = tensor.shape[2] // patch_size
     patch_width = tensor.shape[3] // patch_size
@@ -68,7 +68,7 @@ def patchify(self, tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
     return tensor
 
 
-def unpatchify(self, tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
+def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> torch.Tensor:
     batch_size = tensor.shape[0]
     patch_size = int((tensor.shape[-1] / 3) ** 0.5)
     if patch_height * patch_width != tensor.shape[1]:
@@ -94,9 +94,9 @@ class SegGptEncoderOutput(BaseModelOutput):
         attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
             *(batch_size, num_heads, seq_len, seq_len)*.
-        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.encoder_output_indicies` is set):
+        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_indicies` is set):
             Tuple of *torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*.
-            Each element in the Tuple corresponds to the output of the layer specified in `config.encoder_output_indicies`.
+            Each element in the Tuple corresponds to the output of the layer specified in `config.output_indicies`.
             Additionaly, each feature passes through a LayerNorm.
     """
 
@@ -121,10 +121,10 @@ class SegGptImageSegmentationOutput(ModelOutput):
             *(batch_size, num_heads, seq_len, seq_len)*.
     """
 
-    loss: Optional[torch.FloatTensor] = None
     pred_masks: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    loss: Optional[torch.FloatTensor] = None
 
 
 class SegGptEmbeddings(nn.Module):
@@ -546,7 +546,7 @@ class SegGptEncoder(nn.Module):
                     hidden_states[: hidden_states.shape[0] // 2] + hidden_states[hidden_states.shape[0] // 2 :]
                 ) * 0.5
 
-            if i in self.config.encoder_output_indicies:
+            if i in self.config.output_indicies:
                 intermediate_features.append(self.layernorm(hidden_states))
 
             if output_attentions:
@@ -628,7 +628,7 @@ class SegGptDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.decoder_embed = nn.Linear(
-            config.hidden_size * len(config.encoder_output_indicies),
+            config.hidden_size * len(config.output_indicies),
             config.patch_size**2 * config.decoder_hidden_size,
             bias=True,
         )
@@ -769,7 +769,6 @@ class SegGptModel(SegGptPreTrainedModel):
 
         self.embeddings = SegGptEmbeddings(config)
         self.encoder = SegGptEncoder(config)
-        self.decoder = SegGptDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -799,10 +798,9 @@ class SegGptModel(SegGptPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SegGptImageSegmentationOutput,
+        output_type=SegGptEncoderOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
@@ -815,11 +813,8 @@ class SegGptModel(SegGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SegGptImageSegmentationOutput]:
+    ) -> Union[Tuple, SegGptEncoderOutput]:
         r"""
-        labels (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, `optional`):
-            Ground truth mask for input images.
-
         Returns:
 
         Examples:
@@ -843,8 +838,8 @@ class SegGptModel(SegGptPreTrainedModel):
 
         >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> list(outputs.pred_masks.shape)
-        [1, 3, 896, 448]
+        >>> list(outputs.last_hidden_state.shape)
+        [1, 56, 28, 1024]
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -883,30 +878,6 @@ class SegGptModel(SegGptPreTrainedModel):
         )
 
         return encoder_outputs
-
-
-class SegGptLoss(nn.Module):
-    def __init__(self, beta: float = 0.01):
-        super().__init__()
-        self.beta = beta
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        prompt_pixel_values: torch.FloatTensor,
-        pred_masks: torch.FloatTensor,
-        labels: torch.FloatTensor,
-        bool_masked_pos: torch.BoolTensor,
-    ):
-        patch_size = self.config.patch_size
-        mask = bool_masked_pos[:, :, None].repeat(1, 1, patch_size**2 * 3)
-        mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
-        # Changing dummy mask in prompt_pixel_values to labels values
-        prompt_pixel_values[:, :, prompt_pixel_values.shape[2] // 2 :, :] = labels
-        loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=0.01)
-        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
-
-        return loss
 
 
 class SegGptForImageSegmentation(SegGptPreTrainedModel):
@@ -964,7 +935,17 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         [1, 3, 896, 448]
         ```
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if bool_masked_pos is None:
+            num_patches = self.model.embeddings.patch_embeddings.num_patches
+            bool_masked_pos = torch.zeros(num_patches, dtype=torch.bool).to(pixel_values.device)
+            bool_masked_pos[num_patches // 2 :] = 1
+            bool_masked_pos = bool_masked_pos.unsqueeze(0)
 
         outputs = self.model(
             pixel_values=pixel_values,
@@ -984,11 +965,21 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fn = SegGptLoss(beta=self.config.beta)
+            loss_fn = SegGptLoss(self.config)
             loss = loss_fn(pixel_values, prompt_pixel_values, pred_masks, labels, bool_masked_pos)
 
         if not return_dict:
-            raise NotImplementedError("To do")
+            output = (pred_masks,)
+            if output_hidden_states:
+                output = output + (outputs[1],)
+
+            if output_attentions:
+                idx = 2 if output_hidden_states else 1
+                output = output + (outputs[idx],)
+
+            if loss is not None:
+                output = output + (loss,)
+            return output
 
         return SegGptImageSegmentationOutput(
             loss=loss,
@@ -999,9 +990,10 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
 
 class SegGptLoss(nn.Module):
-    def __init__(self, beta: float = 0.01):
+    def __init__(self, config):
         super().__init__()
-        self.beta = beta
+        self.beta = config.beta
+        self.config = config
 
     def forward(
         self,
@@ -1016,7 +1008,7 @@ class SegGptLoss(nn.Module):
         mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
         # Changing dummy mask in prompt_pixel_values to labels values
         prompt_pixel_values[:, :, prompt_pixel_values.shape[2] // 2 :, :] = labels
-        loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=0.01)
+        loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=self.beta)
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
 
         return loss

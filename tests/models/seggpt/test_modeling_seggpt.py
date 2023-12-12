@@ -54,7 +54,7 @@ class SegGptModelTester:
         image_size=30,
         patch_size=2,
         num_channels=3,
-        is_training=True,
+        is_training=False,
         use_labels=True,
         hidden_size=32,
         num_hidden_layers=2,
@@ -65,7 +65,7 @@ class SegGptModelTester:
         initializer_range=0.02,
         mlp_ratio=2.0,
         merge_index=0,
-        encoder_output_indicies=[1],
+        output_indicies=[1],
         pretrain_img_size=10,
         decoder_hidden_size=10,
     ):
@@ -85,7 +85,7 @@ class SegGptModelTester:
         self.initializer_range = initializer_range
         self.mlp_ratio = mlp_ratio
         self.merge_index = merge_index
-        self.encoder_output_indicies = encoder_output_indicies
+        self.output_indicies = output_indicies
         self.pretrain_img_size = pretrain_img_size
         self.decoder_hidden_size = decoder_hidden_size
 
@@ -121,7 +121,7 @@ class SegGptModelTester:
             initializer_range=self.initializer_range,
             mlp_ratio=self.mlp_ratio,
             merge_index=self.merge_index,
-            encoder_output_indicies=self.encoder_output_indicies,
+            output_indicies=self.output_indicies,
             pretrain_img_size=self.pretrain_img_size,
             decoder_hidden_size=self.decoder_hidden_size,
         )
@@ -281,7 +281,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_one_shot_inference(self):
-        model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
 
         image_processor = self.default_image_processor
 
@@ -354,7 +354,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_few_shot_inference(self):
-        model = SegGptModel.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
+        model = SegGptForImageSegmentation.from_pretrained("EduardoPacheco/seggpt-vit-large").to(torch_device)
         image_processor = self.default_image_processor
 
         images, masks = prepare_img()
