@@ -277,27 +277,27 @@ Un término genérico que se refiere a modelos de lenguaje de transformadores (G
 
 ### masked language modeling (MLM)
 
-A pretraining task where the model sees a corrupted version of the texts, usually done by
-masking some tokens randomly, and has to predict the original text.
+Una tarea de preentrenamiento en la que el modelo ve una versión corrupta de los textos, generalmente hecha
+al enmascarar algunos tokens al azar, y tiene que predecir el texto original.
 
 ### multimodal
 
-A task that combines texts with another kind of inputs (for instance images).
+Una tarea que combina textos con otro tipo de entradas (por ejemplo: imágenes).
 
 ## N
 
 ### Natural language generation (NLG)
 
-All tasks related to generating text (for instance, [Write With Transformers](https://transformer.huggingface.co/), translation).
+Todas las tareas relacionadas con la generación de texto (por ejemplo: [Escribe con Transformers](https://transformer.huggingface.co/) o traducción).
 
 ### Natural language processing (NLP)
 
-A generic way to say "deal with texts".
+Una forma genérica de decir "trabajar con textos".
 
 ### Natural language understanding (NLU)
 
-All tasks related to understanding what is in a text (for instance classifying the
-whole text, individual words).
+Todas las tareas relacionadas con entender lo que hay en un texto (por ejemplo: clasificar el
+texto completo o palabras individuales).
 
 ## P
 
