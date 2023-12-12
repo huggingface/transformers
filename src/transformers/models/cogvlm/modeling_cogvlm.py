@@ -685,6 +685,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
 
                 input_ids = torch.cat([vision_input_ids, input_ids[:,1:]], dim=1)
                 token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:,1:]], dim=1)
+                attention_mask = torch.tensor([1] * input_ids.shape[1]).repeat(batch_size, 1).to(input_ids.device)
 
                 print("Shape of input ids after concatenation:", input_ids.shape)
                 print("Shape of token type ids after concatenation:", token_type_ids.shape)
@@ -707,8 +708,17 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 inputs_embeds = self.embed_tokens(input_ids)
 
             if position_ids is None:
+                print("Position ids are None, setting them:")
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
+
+        print("---LLM forward----")
+        if input_ids is not None:
+            print("Shape of input_ids:", input_ids.shape)
+        print("Shape of token_type_ids:", token_type_ids.shape)
+        print("Shape of attention_mask:", attention_mask.shape)
+        if position_ids is not None:
+            print("Shape of position_ids:", position_ids.shape)
 
         return self.llm_forward(
             input_ids=input_ids,
@@ -978,13 +988,14 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
     ):
         # build position_ids if needed
         position_ids = kwargs.get("position_ids", None)
-        if position_ids is None:
-            position_ids = build_position_ids(token_type_ids, attention_mask)
+        # if position_ids is None:
+        #     position_ids = build_position_ids(token_type_ids, attention_mask)
 
         if past_key_values:
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
-            position_ids = position_ids[:, -1:]
+            if position_ids is not None:
+                position_ids = position_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -996,7 +1007,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
             {
                 "token_type_ids": token_type_ids,
                 "pixel_values": pixel_values,
-                "position_ids": position_ids,
+                # "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
