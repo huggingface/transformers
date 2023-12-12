@@ -390,33 +390,27 @@ Una forma de entrenamiento de modelos que utiliza directamente datos etiquetados
 
 ### Tensor Parallelism (TP)
 
-Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of 
-having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets 
-processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. 
-This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
-Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
+Técnica de paralelismo para entrenamiento en múltiples GPU en la que cada tensor se divide en múltiples fragmentos, de modo que en lugar de tener todo el tensor en una sola GPU, cada fragmento del tensor reside en su GPU designada. Los fragmentos se procesan por separado y en paralelo en diferentes GPU y los resultados se sincronizan al final del paso de procesamiento.Esto es lo que a veces se llama paralelismo horizontal, ya que la división ocurre a nivel horizontal.
+Obtén más información sobre el Paralelismo de Tensores [aquí](perf_train_gpu_many#tensor-parallelism).
 
 ### token
 
-A part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords) or a
-punctuation symbol.
+Parte de una oración, generalmente una palabra, pero también puede ser una sub-palabra (las palabras no comunes a menudo se dividen en sub-palabras) o un símbolo de puntuación.
 
 ### token Type IDs
 
-Some models' purpose is to do classification on pairs of sentences or question answering.
+Algunos modelos tienen como objetivo realizar clasificación en pares de oraciones o responder preguntas.
 
 <Youtube id="0u3ioSwev3s"/>
 
-These require two different sequences to be joined in a single "input_ids" entry, which usually is performed with the
-help of special tokens, such as the classifier (`[CLS]`) and separator (`[SEP]`) tokens. For example, the BERT model
-builds its two sequence input as such:
+Estos requieren que dos secuencias diferentes se unan en una única entrada "input_ids", lo cual generalmente se realiza con
+la ayuda de tokens especiales, como el token de clasificación (`[CLS]`) y el token separador (`[SEP]`). Por ejemplo, el modelo BERT construye sus dos secuencias de entrada de la siguiente manera:
 
 ```python
 >>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
 ```
 
-We can use our tokenizer to automatically generate such a sentence by passing the two sequences to `tokenizer` as two
-arguments (and not a list, like before) like this:
+Podemos utilizar nuestro tokenizador para generar automáticamente una oración de este tipo al pasar las dos secuencias a `tokenizer` como dos argumentos (y no como una lista, como antes) de la siguiente manera:
 
 ```python
 >>> from transformers import BertTokenizer
@@ -429,36 +423,33 @@ arguments (and not a list, like before) like this:
 >>> decoded = tokenizer.decode(encoded_dict["input_ids"])
 ```
 
-which will return:
+Que devolverá:
 
 ```python
 >>> print(decoded)
 [CLS] HuggingFace is based in NYC [SEP] Where is HuggingFace based? [SEP]
 ```
 
-This is enough for some models to understand where one sequence ends and where another begins. However, other models,
-such as BERT, also deploy token type IDs (also called segment IDs). They are represented as a binary mask identifying
-the two types of sequence in the model.
+Esto es suficiente para que algunos modelos comprendan dónde termina una secuencia y comienza otra. Sin embargo, otros modelos, como BERT, también utilizan identificadores de tipo de token (también llamados identificadores de segmento). Se representan como una máscara binaria que identifica los dos tipos de secuencia en el modelo.
 
-The tokenizer returns this mask as the "token_type_ids" entry:
+El tokenizador devuelve esta máscara como la entrada "token_type_ids":
 
 ```python
 >>> encoded_dict["token_type_ids"]
 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 ```
 
-The first sequence, the "context" used for the question, has all its tokens represented by a `0`, whereas the second
-sequence, corresponding to the "question", has all its tokens represented by a `1`.
+La primera secuencia, el "contexto" utilizado para la pregunta, tiene todos sus tokens representados por un `0`, mientras que la segunda secuencia, correspondiente a la "pregunta", tiene todos sus tokens representados por un `1`.
 
-Some models, like [`XLNetModel`] use an additional token represented by a `2`.
+Algunos modelos, como [`XLNetModel`], utilizan un token adicional representado por un `2`.
 
 ### transfer learning
 
-A technique that involves taking a pretrained model and adapting it to a dataset specific to your task. Instead of training a model from scratch, you can leverage knowledge obtained from an existing model as a starting point. This speeds up the learning process and reduces the amount of training data needed.
+Una técnica que implica tomar un modelo pre-entrenado y adaptarlo a un conjunto de datos específico para tu tarea. En lugar de entrenar un modelo desde cero, puedes aprovechar el conocimiento obtenido de un modelo existente como punto de partida. Esto acelera el proceso de aprendizaje y reduce la cantidad de datos de entrenamiento necesarios.
 
 ### transformer
 
-Self-attention based deep learning model architecture.
+Arquitectura de modelo de aprendizaje profundo basada en auto-atención (Self-attention).
 
 ## U
 
