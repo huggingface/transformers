@@ -155,7 +155,7 @@ Para modelos que utilizan la función [`apply_chunking_to_forward`], el `chunk_s
 
 El ajuste fino es una forma de transferencia de aprendizaje que implica tomar un modelo entrenado previamente, congelar sus pesos y reemplazar la capa de salida con una nueva [cabecera de modelo](#head) recién añadida. La cabecera del modelo se entrena en tu conjunto de datos objetivo.
 
-Consulta el tutorial [Ajustar finamente un modelo preentrenado](https://huggingface.co/docs/transformers/training) para obtener más detalles y aprende cómo ajustar finamente modelos con 🤗 Transformers.
+Consulta el tutorial [Ajustar finamente un modelo pre-entrenado](https://huggingface.co/docs/transformers/training) para obtener más detalles y aprende cómo ajustar finamente modelos con 🤗 Transformers.
 
 ## H
 
@@ -301,50 +301,41 @@ texto completo o palabras individuales).
 
 ## P
 
-### pipeline
+### Pipeline
 
-A pipeline in 🤗 Transformers is an abstraction referring to a series of steps that are executed in a specific order to preprocess and transform data and return a prediction from a model. Some example stages found in a pipeline might be data preprocessing, feature extraction, and normalization.
+Un pipeline en 🤗 Transformers es una abstracción que se refiere a una serie de pasos que se ejecutan en un orden específico para preprocesar y transformar datos y devolver una predicción de un modelo. Algunas etapas de ejemplo que se encuentran en un pipeline pueden ser el preprocesamiento de datos, la extracción de características y la normalización.
 
-For more details, see [Pipelines for inference](https://huggingface.co/docs/transformers/pipeline_tutorial).
+Para obtener más detalles, consulta [Pipelines para inferencia](https://huggingface.co/docs/transformers/pipeline_tutorial).
 
 ### PipelineParallel (PP)
 
-Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or 
-several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline 
-and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
+Técnica de paralelismo en la que el modelo se divide verticalmente (a nivel de capa) en varios GPU, de modo que solo una o varias capas del modelo se colocan en un solo GPU. Cada GPU procesa en paralelo diferentes etapas del pipeline y trabaja en un pequeño fragmento del lote. Obtén más información sobre cómo funciona PipelineParallel [aquí](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
 
 ### pixel values
 
-A tensor of the numerical representations of an image that is passed to a model. The pixel values have a shape of [`batch_size`, `num_channels`, `height`, `width`], and are generated from an image processor.
+Un tensor de las representaciones numéricas de una imagen que se pasa a un modelo. Los valores de píxeles tienen una forma de [`batch_size`, `num_channels`, `height`, `width`], y se generan a partir de un procesador de imágenes.
 
 ### pooling
 
-An operation that reduces a matrix into a smaller matrix, either by taking the maximum or average of the pooled dimension(s). Pooling layers are commonly found between convolutional layers to downsample the feature representation.
+Una operación que reduce una matriz a una matriz más pequeña, ya sea tomando el máximo o el promedio de la dimensión (o dimensiones) agrupada(s). Las capas de agrupación se encuentran comúnmente entre capas convolucionales para reducir la representación de características.
 
 ### position IDs
 
-Contrary to RNNs that have the position of each token embedded within them, transformers are unaware of the position of
-each token. Therefore, the position IDs (`position_ids`) are used by the model to identify each token's position in the
-list of tokens.
+A diferencia de las RNN que tienen la posición de cada token incrustada en ellas, los transformers no son conscientes de la posición de cada token. Por lo tanto, se utilizan los IDs de posición (`position_ids`) para que el modelo identifique la posición de cada token en la lista de tokens.
 
-They are an optional parameter. If no `position_ids` are passed to the model, the IDs are automatically created as
-absolute positional embeddings.
+Son un parámetro opcional. Si no se pasan `position_ids` al modelo, los IDs se crean automáticamente como embeddings de posición absolutas.
 
-Absolute positional embeddings are selected in the range `[0, config.max_position_embeddings - 1]`. Some models use
-other types of positional embeddings, such as sinusoidal position embeddings or relative position embeddings.
+Los embeddings de posición absolutas se seleccionan en el rango `[0, config.max_position_embeddings - 1]`. Algunos modelos utilizan otros tipos de embeddings de posición, como embeddings de posición sinusoidales o embeddings de posición relativas.
 
 ### preprocessing
 
-The task of preparing raw data into a format that can be easily consumed by machine learning models. For example, text is typically preprocessed by tokenization. To gain a better idea of what preprocessing looks like for other input types, check out the [Preprocess](https://huggingface.co/docs/transformers/preprocessing) tutorial.
+La tarea de preparar datos crudos en un formato que pueda ser fácilmente consumido por modelos de aprendizaje automático. Por ejemplo, el texto se preprocesa típicamente mediante la tokenización. Para tener una mejor idea de cómo es el preprocesamiento para otros tipos de entrada, consulta el tutorial [Pre-procesar](https://huggingface.co/docs/transformers/preprocessing).
 
 ### pretrained model
 
-A model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods involve a
-self-supervised objective, which can be reading the text and trying to predict the next word (see [causal language
-modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
-modeling](#masked-language-modeling-mlm)). 
+Un modelo que ha sido pre-entrenado en algunos datos (por ejemplo, toda Wikipedia). Los métodos de preentrenamiento involucran un objetivo auto-supervisado, que puede ser leer el texto e intentar predecir la siguiente palabra (ver [modelado de lenguaje causal](#causal-language-modeling)) o enmascarar algunas palabras e intentar predecirlas (ver [modelado de lenguaje enmascarado](#masked-language-modeling-mlm)).
 
-  Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
+Los modelos de habla y visión tienen sus propios objetivos de pre-entrenamiento. Por ejemplo, Wav2Vec2 es un modelo de habla pre-entrenado en una tarea contrastiva que requiere que el modelo identifique la representación de habla "verdadera" de un conjunto de representaciones de habla "falsas". Por otro lado, BEiT es un modelo de visión pre-entrenado en una tarea de modelado de imágenes enmascaradas que enmascara algunos de los parches de la imagen y requiere que el modelo prediga los parches enmascarados (similar al objetivo de modelado de lenguaje enmascarado).
 
 ## R
 
