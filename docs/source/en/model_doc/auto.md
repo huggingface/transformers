@@ -382,6 +382,14 @@ The following auto classes are available for the following multimodal tasks.
 
 The following auto classes are available for the following time series tasks.
 
+### AutoModelForTimeSeriesClassification
+
+[[autodoc]] AutoModelForTimeSeriesClassification
+
 ### AutoModelForTimeSeriesPrediction
 
 [[autodoc]] AutoModelForTimeSeriesPrediction
+
+### AutoModelForTimeSeriesRegression
+
+[[autodoc]] AutoModelForTimeSeriesRegression

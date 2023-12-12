@@ -286,6 +286,8 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("nezha", "NezhaForPreTraining"),
         ("nllb-moe", "NllbMoeForConditionalGeneration"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
+        ("patchtsmixer", "PatchTSMixerForPretraining"),
+        ("patchtst", "PatchTSTForPretraining"),
         ("retribert", "RetriBertModel"),
         ("roberta", "RobertaForMaskedLM"),
         ("roberta-prelayernorm", "RobertaPreLayerNormForMaskedLM"),
@@ -1559,12 +1561,30 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
 
 
+class AutoModelForTimeSeriesClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING
+
+
+AutoModelForTimeSeriesClassification = auto_class_update(
+    AutoModelForTimeSeriesClassification, head_doc="time series classification"
+)
+
+
 class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING
 
 
 AutoModelForTimeSeriesPrediction = auto_class_update(
     AutoModelForTimeSeriesPrediction, head_doc="time series prediction"
+)
+
+
+class AutoModelForTimeSeriesRegression(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
+
+
+AutoModelForTimeSeriesRegression = auto_class_update(
+    AutoModelForTimeSeriesRegression, head_doc="time series regression"
 )
 
 

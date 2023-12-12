@@ -1482,7 +1482,9 @@ else:
             "AutoModelForTextEncoding",
             "AutoModelForTextToSpectrogram",
             "AutoModelForTextToWaveform",
+            "AutoModelForTimeSeriesClassification",
             "AutoModelForTimeSeriesPrediction",
+            "AutoModelForTimeSeriesRegression",
             "AutoModelForTokenClassification",
             "AutoModelForUniversalSegmentation",
             "AutoModelForVideoClassification",
@@ -2588,7 +2590,12 @@ else:
         ]
     )
     _import_structure["models.mixtral"].extend(
-        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+        [
+            "MixtralForCausalLM",
+            "MixtralForSequenceClassification",
+            "MixtralModel",
+            "MixtralPreTrainedModel",
+        ]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -6115,7 +6122,9 @@ if TYPE_CHECKING:
             AutoModelForTextEncoding,
             AutoModelForTextToSpectrogram,
             AutoModelForTextToWaveform,
+            AutoModelForTimeSeriesClassification,
             AutoModelForTimeSeriesPrediction,
+            AutoModelForTimeSeriesRegression,
             AutoModelForTokenClassification,
             AutoModelForUniversalSegmentation,
             AutoModelForVideoClassification,
@@ -6896,7 +6905,12 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
