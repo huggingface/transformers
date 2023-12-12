@@ -22,20 +22,19 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "BAAI/SegGpt": "https://huggingface.co/BAAI/SegGpt/resolve/main/config.json",
+    "EduardoPacheco/seggpt-vit-large": "https://huggingface.co/EduardoPacheco/seggpt-vit-large/resolve/main/config.json",
 }
 
 
 class SegGptConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate an SegGpt
+    This is the configuration class to store the configuration of a [`SegGptModel`]. It is used to instantiate a SegGPT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the SegGpt
-    [google/seggpt-base-patch16-224](https://huggingface.co/google/seggpt-base-patch16-224) architecture.
+    defaults will yield a similar configuration to that of the SegGPT
+    [EduardoPacheco/seggpt-vit-large](https://huggingface.co/EduardoPacheco/seggpt-vit-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
@@ -86,10 +85,10 @@ class SegGptConfig(PretrainedConfig):
     ```python
     >>> from transformers import SegGptConfig, SegGptModel
 
-    >>> # Initializing a SegGpt seggpt-base-patch16-224 style configuration
+    >>> # Initializing a SegGPT seggpt-vit-large style configuration
     >>> configuration = SegGptConfig()
 
-    >>> # Initializing a model (with random weights) from the seggpt-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the seggpt-vit-large style configuration
     >>> model = SegGptModel(configuration)
 
     >>> # Accessing the model configuration
