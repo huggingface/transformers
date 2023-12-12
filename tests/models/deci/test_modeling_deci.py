@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Deci AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,13 @@
 """ Testing suite for the PyTorch Deci model. """
 
 
-import gc
 import tempfile
 import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, DeciConfig, is_torch_available
+from transformers import DeciConfig, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
-    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -33,6 +30,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -46,8 +44,8 @@ if is_torch_available():
         DeciModel,
     )
 
-
-class DeciModelTester:
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester with Llama->Deci
+class MistralModelTester:
     def __init__(
         self,
         parent,
@@ -100,6 +98,7 @@ class DeciModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -124,7 +123,7 @@ class DeciModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return DeciConfig(
+        return MistralConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -141,16 +140,18 @@ class DeciModelTester:
             pad_token_id=self.pad_token_id,
         )
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_model with Deci->Mistral
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = DeciModel(config=config)
+        model = MistralModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_model_as_decoder with Deci->Mistral
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -164,7 +165,7 @@ class DeciModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = DeciModel(config)
+        model = MistralModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -181,6 +182,7 @@ class DeciModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_for_causal_lm with Deci->Mistral
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -193,12 +195,13 @@ class DeciModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = DeciForCausalLM(config=config)
+        model = MistralForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_decoder_model_past_large_inputs with Deci->Mistral
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -213,7 +216,7 @@ class DeciModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = DeciForCausalLM(config=config)
+        model = MistralForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -261,6 +264,7 @@ class DeciModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -277,11 +281,86 @@ class DeciModelTester:
 
 
 @require_torch
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Deci
 class DeciModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeciModel, DeciForCausalLM, DeciForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (DeciForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": DeciModel,
+            "text-classification": DeciForSequenceClassification,
+            "text-generation": DeciForCausalLM,
+            "zero-shot": DeciForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_headmasking = False
     test_pruning = False
+
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
+    def setUp(self):
+        self.model_tester = DeciModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DeciConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_various_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_Deci_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        print(config)
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = DeciForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_Deci_sequence_classification_model_for_single_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = DeciForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_Deci_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = DeciForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
     @unittest.skip("Deci buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
@@ -377,70 +456,77 @@ class DeciModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Deci flash attention does not support right padding")
 
+    # Ignore copy
+    def test_load_balancing_loss(self):
+        r"""
+        Let's make sure we can actually compute the loss and do a backward on it.
+        """
+
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.output_router_logits = True
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        model = DeciForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask)
+        self.assertEqual(result.router_logits[0].shape, (91, config.num_experts_per_tok))
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(1, dtype=torch.float32))
+
 
 @require_torch
 class DeciIntegrationTest(unittest.TestCase):
     @slow
-    def test_model_7b_logits(self):
-        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = DeciForCausalLM.from_pretrained("deciai/Deci-7B-v0.1", device_map="auto")
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        with torch.no_grad():
-            out = model(input_ids).logits.cpu()
-        # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
-        # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([-5.8781, -5.8616, -0.1052, -4.7200, -5.8781, -5.8774, -5.8773, -5.8777, -5.8781, -5.8780, -5.8781, -5.8779, -1.0787,  1.7583, -5.8779, -5.8780, -5.8783, -5.8778, -5.8776, -5.8781, -5.8784, -5.8778, -5.8778, -5.8777, -5.8779, -5.8778, -5.8776, -5.8780, -5.8779, -5.8781])  # fmt: skip
-        print(out[0, 0, :30])
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-4, rtol=1e-4)
+    @require_torch_gpu
+    def test_small_model_logits(self):
+        model_id = "hf-internal-testing/Deci-tiny"
+        dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @slow
-    def test_model_7b_generation(self):
-        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
-        prompt = "My favourite condiment is "
-        tokenizer = AutoTokenizer.from_pretrained("deciai/Deci-7B-v0.1", use_fast=False)
-        model = DeciForCausalLM.from_pretrained("deciai/Deci-7B-v0.1", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
-
-        # greedy generation outputs
-        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
-
-    @require_bitsandbytes
-    @slow
-    @require_flash_attn
-    def test_model_7b_long_prompt(self):
-        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
-        # An input with 4097 tokens that is above the size of the sliding window
-        input_ids = [1] + [306, 338] * 2048
-        model = DeciForCausalLM.from_pretrained(
-            "deciai/Deci-7B-v0.1",
-            device_map="auto",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
+        model = DeciForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
         )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        # these logits have been obtained with the original megablocks impelmentation.
+        EXPECTED_LOGITS = torch.Tensor(
+            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
+        ).to(torch_device)
 
-        # Assisted generation
-        assistant_model = model
-        assistant_model.generation_config.num_assistant_tokens = 2
-        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
-        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
-        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+        with torch.no_grad():
+            logits = model(dummy_input).logits
 
-        del assistant_model
-        del model
-        backend_empty_cache(torch_device)
-        gc.collect()
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+
+    @slow
+    # @require_torch_gpu
+    def test_small_model_logits_batched(self):
+        model_id = "hf-internal-testing/Deci-tiny"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = DeciForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+
+        # TODO: might need to tweak it in case the logits do not match on our daily runners
+        EXPECTED_LOGITS_LEFT = torch.Tensor(
+            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
+        )
+
+        # logits[0, -3:, -3:].half()
+        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
+            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
+        )
+
+        # logits[1, -3:, -3:].half()
+        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
+            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
+        )
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+
+        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
