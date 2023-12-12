@@ -1430,7 +1430,7 @@ class PatchTSTClassificationHead(nn.Module):
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
             # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.max(dim=2)
+            pooled_embedding = embedding.max(dim=2).values
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # pooled_embedding: bs x num_channels * d_model
@@ -1602,7 +1602,7 @@ class PatchTSTPredictionHead(nn.Module):
                 pooled_embedding = embedding.mean(dim=2)
             elif self.pooling_type == "max":
                 # pooled_embedding: [bs x num_channels x d_model]
-                pooled_embedding = embedding.max(dim=2)
+                pooled_embedding = embedding.max(dim=2).values
             else:
                 # pooled_embedding: [bs x num_channels x num_patches x d_model]
                 pooled_embedding = embedding
@@ -1866,7 +1866,7 @@ class PatchTSTRegressionHead(nn.Module):
             pooled_embedding = embedding.mean(dim=2)
         elif self.pooling_type == "max":
             # pooled_embedding: [bs x num_channels x d_model]
-            pooled_embedding = embedding.max(dim=2)
+            pooled_embedding = embedding.max(dim=2).values
         else:
             raise ValueError(f"pooling operator {self.pooling_type} is not implemented yet")
         # flatten the input
