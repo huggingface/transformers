@@ -144,11 +144,9 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         # is different from default, we must rebuild the vocab
         from_slow = kwargs.pop("from_slow", None)
         from_slow = from_slow or str(pad_token) != "<pad>" or str(eos_token) != "</s>" or str(unk_token) != "<unk>"
-        
+
         kwargs.pop("added_tokens_decoder", {})
 
-        
-        
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
