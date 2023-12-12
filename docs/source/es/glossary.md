@@ -455,13 +455,10 @@ Arquitectura de modelo de aprendizaje profundo basada en auto-atención (Self-at
 
 ### unsupervised learning
 
-A form of model training in which data provided to the model is not labeled. Unsupervised learning techniques leverage statistical information of the data distribution to find patterns useful for the task at hand.
+Una forma de entrenamiento de modelos en la que los datos proporcionados al modelo no están etiquetados. Las técnicas de aprendizaje no supervisado aprovechan la información estadística de la distribución de datos para encontrar patrones útiles para la tarea en cuestión.
 
 ## Z
 
 ### Zero Redundancy Optimizer (ZeRO)
 
-Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensorparallel--tp-), 
-except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
-to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
-Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).
+Técnica de paralelismo que realiza la fragmentación de los tensores de manera algo similar a [TensorParallel](#tensor-parallelism-tp), excepto que todo el tensor se reconstruye a tiempo para una computación hacia adelante o hacia atrás, por lo tanto, el modelo no necesita ser modificado. Este método también admite diversas técnicas de descarga para compensar la memoria limitada de la GPU. Obtén más información sobre ZeRO [aquí](perf_train_gpu_many#zero-data-parallelism).

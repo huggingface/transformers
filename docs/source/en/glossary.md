@@ -516,7 +516,7 @@ A form of model training in which data provided to the model is not labeled. Uns
 
 ### Zero Redundancy Optimizer (ZeRO)
 
-Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensorparallel--tp-), 
+Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp), 
 except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
 to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
 Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).
