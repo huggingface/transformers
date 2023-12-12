@@ -4629,8 +4629,8 @@ class GenerationMixin:
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
             # NOTE: Unless otherwise stated, the variable names match those in the paper.
             if do_sample and candidate_logits is not None:
-                # Gets the probabilities from the logits. q_i and p_i denote the model and assistant (respectively)
-                # probabilities of the tokens selected by the assistant.
+                # Gets the probabilities from the logits. q_i and p_i denote the model and assistant probabilities of
+                # the tokens selected by the assistant, respectivelly.
                 q = candidate_logits.softmax(dim=-1)
                 q_i = q[
                     :,
@@ -4646,7 +4646,7 @@ class GenerationMixin:
                 probability_ratio = p_i / q_i
 
                 # When probability_ratio > 1 (i.e. q_i(x) < p_i(x)), keep the token. Otherwise reject with
-                # p = 1 - probability_ratio (= keep with p=probability_ratio). Keep all the tokens until the first
+                # p = 1 - probability_ratio (= keep with p = probability_ratio). Keep all the tokens until the first
                 # rejection
                 r_i = torch.rand_like(probability_ratio)
                 is_rejected = r_i > probability_ratio  # equivalent: is_accepted = r_i <= probability_ratio
