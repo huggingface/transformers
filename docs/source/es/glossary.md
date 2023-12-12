@@ -341,11 +341,11 @@ Los modelos de habla y visión tienen sus propios objetivos de pre-entrenamiento
 
 ### recurrent neural network (RNN)
 
-A type of model that uses a loop over a layer to process texts.
+Un tipo de modelo que utiliza un bucle sobre una capa para procesar textos.
 
 ### representation learning
 
-A subfield of machine learning which focuses on learning meaningful representations of raw data. Some examples of representation learning techniques include word embeddings, autoencoders, and Generative Adversarial Networks (GANs).
+Un subcampo del aprendizaje automático que se centra en aprender representaciones significativas de datos en bruto. Algunos ejemplos de técnicas de aprendizaje de representaciones incluyen embeddings de palabras, auto-encoders y Redes Generativas Adversarias (Generative Adversarial Networks, GANs).
 
 ## S
 
