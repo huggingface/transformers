@@ -4627,7 +4627,7 @@ class GenerationMixin:
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
-            # NOTE:Unless otherwise stated, the variable names match those in the paper.
+            # NOTE: Unless otherwise stated, the variable names match those in the paper.
             if do_sample and candidate_logits is not None:
                 # Gets the probabilities from the logits. q_i and p_i denote the model and assistant (respectively)
                 # probabilities of the tokens selected by the assistant.
