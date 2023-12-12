@@ -25,7 +25,6 @@ DECI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class DeciConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeciModel`]. It is used to instantiate an
@@ -84,7 +83,7 @@ class DeciConfig(PretrainedConfig):
             Sliding window attention window size. If not specified, will default to `4096`.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        num_key_value_heads_per_layer (`List[int]`, *optional*, defaults to `[4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4]`):
+        num_key_value_heads_per_layer (`List[int]`, *optional*, defaults to `(4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4)`):
             The number of key-value heads per layer.
 
     ```python
@@ -123,7 +122,40 @@ class DeciConfig(PretrainedConfig):
         rope_theta=10000.0,
         sliding_window=4096,
         attention_dropout=0.0,
-        num_key_value_heads_per_layer=(4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4),
+        num_key_value_heads_per_layer=(
+            4,
+            4,
+            4,
+            4,
+            4,
+            2,
+            2,
+            2,
+            2,
+            2,
+            4,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            2,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            4,
+        ),
         **kwargs,
     ):
         self.vocab_size = vocab_size

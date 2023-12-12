@@ -21,9 +21,9 @@ import warnings
 import torch
 
 from transformers import (
-    LlamaTokenizer,
     DeciConfig,
     DeciForCausalLM,
+    LlamaTokenizer,
 )
 
 

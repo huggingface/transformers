@@ -150,6 +150,13 @@ else:
                     "DebertaV2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "deci",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
@@ -235,13 +242,6 @@ else:
             ("mgp-str", ("MgpstrTokenizer", None)),
             (
                 "mistral",
-                (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "deci",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,

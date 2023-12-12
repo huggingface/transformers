@@ -333,6 +333,7 @@ _import_structure = {
         "DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DebertaV2Config",
     ],
+    "models.deci": ["DECI_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeciConfig"],
     "models.decision_transformer": [
         "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DecisionTransformerConfig",
@@ -595,7 +596,6 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
-    "models.deci": ["DECI_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeciConfig"],
     "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -1879,6 +1879,14 @@ else:
             "DebertaV2PreTrainedModel",
         ]
     )
+    _import_structure["models.deci"].extend(
+        [
+            "DeciForCausalLM",
+            "DeciForSequenceClassification",
+            "DeciModel",
+            "DeciPreTrainedModel",
+        ]
+    )
     _import_structure["models.decision_transformer"].extend(
         [
             "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2584,14 +2592,6 @@ else:
             "MistralForSequenceClassification",
             "MistralModel",
             "MistralPreTrainedModel",
-        ]
-    )
-    _import_structure["models.deci"].extend(
-        [
-            "DeciForCausalLM",
-            "DeciForSequenceClassification",
-            "DeciModel",
-            "DeciPreTrainedModel",
         ]
     )
     _import_structure["models.mixtral"].extend(
@@ -4995,6 +4995,7 @@ if TYPE_CHECKING:
         DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DebertaV2Config,
     )
+    from .models.deci import DECI_PRETRAINED_CONFIG_ARCHIVE_MAP, DeciConfig
     from .models.decision_transformer import (
         DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
@@ -5247,7 +5248,6 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
-    from .models.deci import DECI_PRETRAINED_CONFIG_ARCHIVE_MAP, DeciConfig
     from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6448,6 +6448,12 @@ if TYPE_CHECKING:
             DebertaV2Model,
             DebertaV2PreTrainedModel,
         )
+        from .models.deci import (
+            DeciForCausalLM,
+            DeciForSequenceClassification,
+            DeciModel,
+            DeciPreTrainedModel,
+        )
         from .models.decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DecisionTransformerGPT2Model,
@@ -7020,12 +7026,6 @@ if TYPE_CHECKING:
             MistralForSequenceClassification,
             MistralModel,
             MistralPreTrainedModel,
-        )
-        from .models.deci import (
-            DeciForCausalLM,
-            DeciForSequenceClassification,
-            DeciModel,
-            DeciPreTrainedModel,
         )
         from .models.mixtral import (
             MixtralForCausalLM,
