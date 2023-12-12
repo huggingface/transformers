@@ -355,7 +355,7 @@
     - isExpanded: false
       sections:
       - local: model_doc/decision_transformer
-        title: 意思決定トランスフォーマー
+        title: Decision Transformer
       title: 強化学習モデル
     - isExpanded: false
       sections:
