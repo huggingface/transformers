@@ -35,11 +35,7 @@ alt="描画" width="600"/>
 ## Usage tips
 
 
-<<<<<<< HEAD
  - トレーニング Deformable DETR は、元の [DETR](detr) モデルをトレーニングすることと同等です。デモ ノートブックについては、以下の [resources](#resources) セクションを参照してください。
-=======
- - Training Deformable DETR は、元の [DETR](detr) モデルをトレーニングすることと同等です。デモ ノートブックについては、以下の [resources](#resources) セクションを参照してください。
->>>>>>> 5210d662932dda6f9f67746723fa95118a502bae
 
 ## Resources
 
