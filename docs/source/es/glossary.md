@@ -83,7 +83,7 @@ Consulta [modelado de lenguaje causal](#causal-language-modeling) y [modelos de 
 
 ### backbone
 
-La columna vertebral, backbone en inglés, es la red (incrustaciones y capas) que produce los estados ocultos o características crudas. Normalmente, está conectado a una [cabecera](#head), que acepta las características como entrada para hacer una predicción. Por ejemplo, [`ViTModel`] es una columna vertebral sin una cabecera específica encima. Otros modelos también pueden usar [`VitModel`] como columna vertebral, como por ejemplo [DPT](model_doc/dpt).
+La columna vertebral, backbone en inglés, es la red (embeddings y layers) que produce los estados ocultos o características crudas. Normalmente, está conectado a una [cabecera](#head), que acepta las características como entrada para hacer una predicción. Por ejemplo, [`ViTModel`] es una columna vertebral sin una cabecera específica encima. Otros modelos también pueden usar [`VitModel`] como columna vertebral, como por ejemplo [DPT](model_doc/dpt).
 
 ## C
 
