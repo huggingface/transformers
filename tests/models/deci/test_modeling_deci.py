@@ -44,8 +44,9 @@ if is_torch_available():
         DeciModel,
     )
 
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester with Llama->Deci
-class MistralModelTester:
+
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester with Mistral->Deci
+class DeciModelTester:
     def __init__(
         self,
         parent,
@@ -98,7 +99,7 @@ class MistralModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.prepare_config_and_inputs
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -123,7 +124,7 @@ class MistralModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return MistralConfig(
+        return DeciConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -140,18 +141,18 @@ class MistralModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_model with Deci->Mistral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Deci
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MistralModel(config=config)
+        model = DeciModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_model_as_decoder with Deci->Mistral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->Deci
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -165,7 +166,7 @@ class MistralModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = MistralModel(config)
+        model = DeciModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -182,7 +183,7 @@ class MistralModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_for_causal_lm with Deci->Mistral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->Deci
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -195,13 +196,13 @@ class MistralModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = MistralForCausalLM(config=config)
+        model = DeciForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.create_and_check_decoder_model_past_large_inputs with Deci->Mistral
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->Deci
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -216,7 +217,7 @@ class MistralModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = MistralForCausalLM(config=config)
+        model = DeciForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -264,7 +265,7 @@ class MistralModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Copied from tests.models.llama.test_modeling_llama.DeciModelTester.prepare_config_and_inputs_for_common
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
