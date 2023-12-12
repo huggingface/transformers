@@ -136,6 +136,7 @@ from . import (
     megatron_gpt2,
     mgp_str,
     mistral,
+    deci,
     mixtral,
     mluke,
     mobilebert,
