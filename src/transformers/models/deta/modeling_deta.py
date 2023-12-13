@@ -106,7 +106,6 @@ class DetaDecoderOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModelOutput with DeformableDetr->Deta,Deformable DETR->DETA
 class DetaModelOutput(ModelOutput):
     """
     Base class for outputs of the Deformable DETR encoder-decoder model.
