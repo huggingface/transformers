@@ -150,14 +150,12 @@ class TFEsmContactPredictionHead(Layer):
         self.regression = Dense(1, use_bias=bias, activation="sigmoid", name="regression")
 
     def build(self, input_shape=None):
-        with tf.name_scope("regression"):
-            self.regression.build((None, self.in_features))
         if self.built:
             return
         self.built = True
         if getattr(self, "regression", None) is not None:
             with tf.name_scope(self.regression.name):
-                self.regression.build(self.in_features)
+                self.regression.build((None, self.in_features))
 
     def call(self, tokens, attentions):
         # remove eos token attentions
@@ -906,8 +904,6 @@ class TFEsmMainLayer(Layer):
         )
 
     def build(self, input_shape=None):
-        with tf.name_scope("contact_head"):
-            self.contact_head.build(input_shape)
         if self.built:
             return
         self.built = True
