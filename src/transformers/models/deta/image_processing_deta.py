@@ -34,6 +34,8 @@ from ...image_transforms import (
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
+    AnnotationFormat,
+    AnnotionFormat,  # noqa: F401
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -42,9 +44,8 @@ from ...image_utils import (
     is_batched,
     is_scaled_image,
     to_numpy_array,
-    valid_coco_detection_annotations,
-    valid_coco_panoptic_annotations,
     valid_images,
+    validate_annotations,
 )
 from ...utils import (
     is_flax_available,
@@ -57,7 +58,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from ...utils.generic import ExplicitEnum, TensorType
+from ...utils.generic import TensorType
 
 
 if is_torch_available():
@@ -73,13 +74,7 @@ if is_vision_available():
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-
-class AnnotionFormat(ExplicitEnum):
-    COCO_DETECTION = "coco_detection"
-    COCO_PANOPTIC = "coco_panoptic"
-
-
-SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION, AnnotionFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
 
 # Copied from transformers.models.detr.image_processing_detr.get_size_with_aspect_ratio
@@ -507,7 +502,7 @@ class DetaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        format: Union[str, AnnotionFormat] = AnnotionFormat.COCO_DETECTION,
+        format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -542,7 +537,7 @@ class DetaImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         target: Dict,
-        format: Optional[AnnotionFormat] = None,
+        format: Optional[AnnotationFormat] = None,
         return_segmentation_masks: bool = None,
         masks_path: Optional[Union[str, pathlib.Path]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -552,12 +547,12 @@ class DetaImageProcessor(BaseImageProcessor):
         """
         format = format if format is not None else self.format
 
-        if format == AnnotionFormat.COCO_DETECTION:
+        if format == AnnotationFormat.COCO_DETECTION:
             return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_detection_annotation(
                 image, target, return_segmentation_masks, input_data_format=input_data_format
             )
-        elif format == AnnotionFormat.COCO_PANOPTIC:
+        elif format == AnnotationFormat.COCO_PANOPTIC:
             return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
             target = prepare_coco_panoptic_annotation(
                 image,
@@ -789,7 +784,7 @@ class DetaImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
-        format: Optional[Union[str, AnnotionFormat]] = None,
+        format: Optional[Union[str, AnnotationFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -803,12 +798,12 @@ class DetaImageProcessor(BaseImageProcessor):
                 Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
                 from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             annotations (`List[Dict]` or `List[List[Dict]]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotionation is for object
+                List of annotations associated with the image or batch of images. If annotation is for object
                 detection, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
                   dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotionation is for segmentation, the annotations should be a dictionary with the following keys:
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
                 - "image_id" (`int`): The image id.
                 - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
                   An image can have no segments, in which case the list should be empty.
@@ -835,7 +830,7 @@ class DetaImageProcessor(BaseImageProcessor):
                 Standard deviation to use when normalizing the image.
             do_pad (`bool`, *optional*, defaults to self.do_pad):
                 Whether to pad the image.
-            format (`str` or `AnnotionFormat`, *optional*, defaults to self.format):
+            format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
             return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
                 Type of tensors to return. If `None`, will return the list of images.
@@ -894,28 +889,13 @@ class DetaImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        format = AnnotionFormat(format)
+        format = AnnotationFormat(format)
         if annotations is not None:
-            if format == AnnotionFormat.COCO_DETECTION and not valid_coco_detection_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO detection annotations. Annotations must a dict (single image) of list of dicts "
-                    "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
-                    "being a list of annotations in the COCO format."
-                )
-            elif format == AnnotionFormat.COCO_PANOPTIC and not valid_coco_panoptic_annotations(annotations):
-                raise ValueError(
-                    "Invalid COCO panoptic annotations. Annotations must a dict (single image) of list of dicts "
-                    "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
-                    "the latter being a list of annotations in the COCO format."
-                )
-            elif format not in SUPPORTED_ANNOTATION_FORMATS:
-                raise ValueError(
-                    f"Unsupported annotation format: {format} must be one of {SUPPORTED_ANNOTATION_FORMATS}"
-                )
+            validate_annotations(format, SUPPORTED_ANNOTATION_FORMATS, annotations)
 
         if (
             masks_path is not None
-            and format == AnnotionFormat.COCO_PANOPTIC
+            and format == AnnotationFormat.COCO_PANOPTIC
             and not isinstance(masks_path, (pathlib.Path, str))
         ):
             raise ValueError(
