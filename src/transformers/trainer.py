@@ -2382,7 +2382,7 @@ class Trainer:
             self._push_from_checkpoint(staging_output_dir)
 
         # Place checkpoint in final location after all saving is finished.
-        if staging_output_dir != output_dir:
+        if staging_output_dir != output_dir and self.args.should_save:
             os.rename(staging_output_dir, output_dir)
 
         # Maybe delete some older checkpoints.
