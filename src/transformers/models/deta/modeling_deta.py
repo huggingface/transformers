@@ -1816,7 +1816,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # as a dict having both a Tensor and a list.
         aux_loss = []
         # TO DO: prettify
-        for i in range(outputs_class.size(1)-1):
+        for i in range(outputs_class.size(1) - 1):
             aux_loss.append({"logits": outputs_class[:, i], "pred_boxes": outputs_coord[:, i]})
         return aux_loss
 
@@ -1952,7 +1952,11 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
                 enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
-                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord, "anchors":outputs.output_proposals.sigmoid()}
+                outputs_loss["enc_outputs"] = {
+                    "logits": outputs.enc_outputs_class,
+                    "pred_boxes": enc_outputs_coord,
+                    "anchors": outputs.output_proposals.sigmoid(),
+                }
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
