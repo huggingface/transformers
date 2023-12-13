@@ -16,21 +16,19 @@ rendered properly in your Markdown viewer.
 
 # Trainer
 
-The [`Trainer`] class provides an API for feature-complete training in PyTorch for most standard use cases. It's used in most of the [example scripts](https://github.com/huggingface/transformers/tree/main/examples).
+The [`Trainer`] class provides an API for feature-complete training in PyTorch, and it supports distributed training on multiple GPUs/TPUs, mixed precision for [NVIDIA GPUs](https://nvidia.github.io/apex/), [AMD GPUs](https://rocm.docs.amd.com/en/latest/rocm.html), and [`torch.amp`](https://pytorch.org/docs/stable/amp.html) for PyTorch. [`Trainer`] goes hand-in-hand with the [`TrainingArguments`] class, which offers a wide range of options to customize how a model is trained. Together, these two classes provide a complete training API.
 
-Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
-
-[`Trainer`] supports distributed training on multiple GPUs/TPUs, mixed precision for [NVIDIA GPUs](https://nvidia.github.io/apex/), [AMD GPUs](https://rocm.docs.amd.com/en/latest/rocm.html), and [`torch.amp`](https://pytorch.org/docs/stable/amp.html) for PyTorch.
+[`Seq2SeqTrainer`] and [`Seq2SeqTrainingArguments`] inherit from the [`Trainer`] and [`TrainingArgument`] classes and they're adapted for training models for sequence-to-sequence tasks such as summarization or translation.
 
 <Tip warning={true}>
 
 The [`Trainer`] class is optimized for 🤗 Transformers models and can have surprising behaviors
-when you use it on other models. When using it on your own model, make sure:
+when used with other models. When using it with your own model, make sure:
 
-- your model always return tuples or subclasses of [`~utils.ModelOutput`].
+- your model always return tuples or subclasses of [`~utils.ModelOutput`]
 - your model can compute the loss if a `labels` argument is provided and that loss is returned as the first
   element of the tuple (if your model returns tuples)
-- your model can accept multiple label arguments (use the `label_names` in your [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`.
+- your model can accept multiple label arguments (use `label_names` in [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`
 
 </Tip>
 

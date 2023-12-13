@@ -24,7 +24,7 @@ In addition to the [`Trainer`] class, Transformers also provides a [`Seq2SeqTrai
 
 <br>
 
-Feel free to check out the API reference for these other [`Trainer`]-type classes to learn more about when to use which one. In general, [`Trainer`] is the most versatile option and is appropriate for a broad spectrum of tasks. [`Seq2SeqTrainer`] is designed for sequence-to-sequence tasks, and [`~trl.SFTTrainer`] is designed for training language models.
+Feel free to check out the [API reference](./main_classes/trainer) for these other [`Trainer`]-type classes to learn more about when to use which one. In general, [`Trainer`] is the most versatile option and is appropriate for a broad spectrum of tasks. [`Seq2SeqTrainer`] is designed for sequence-to-sequence tasks and [`~trl.SFTTrainer`] is designed for training language models.
 
 </Tip>
 
@@ -37,11 +37,11 @@ This guide provides an overview of the [`Trainer`] class.
 1. perform a training step to calculate the loss
 2. calculate the gradients with the [`~accelerate.Accelerator.backward`] method
 3. update the weights based on the gradients
-4. repeat this process until you've reached a predetermined number of epochs and hopefully your model is better now than it was before!
+4. repeat this process until you've reached a predetermined number of epochs
 
 The [`Trainer`] class abstracts all of this code away so you don't have to worry about manually writing a training loop every time or if you're just getting started with PyTorch and training. You only need to provide the essential components required for training, such as a model and a dataset, and the [`Trainer`] class handles everything else.
 
-If you want to specify any training options or hyperparameters, you can find and specify them in the [`TrainingArguments`] class. For example, let's specify where to save the model in `output_dir` and push the model to the Hub after training with `push_to_hub=True`.
+If you want to specify any training options or hyperparameters, you can find them in the [`TrainingArguments`] class. For example, let's define where to save the model in `output_dir` and push the model to the Hub after training with `push_to_hub=True`.
 
 ```py
 from transformers import TrainingArguments
@@ -60,7 +60,9 @@ training_args = TrainingArguments(
 )
 ```
 
-Pass `training_args` to the [`Trainer`] along with a model, dataset, something to preprocess the dataset with depending on your data type(tokenizer, feature extractor, image processor), a data collator, and a function to compute the metrics you want to track during training.
+Pass `training_args` to the [`Trainer`] along with a model, dataset, something to preprocess the dataset with (depending on your data type it could be a tokenizer, feature extractor or image processor), a data collator, and a function to compute the metrics you want to track during training.
+
+Finally, call [`~Trainer.train`] to start training!
 
 ```py
 from transformers import Trainer
@@ -74,13 +76,13 @@ trainer = Trainer(
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
-```
 
-Finally, call [`~Trainer.train`] to start training!
+trainer.train()
+```
 
 ### Checkpoints
 
-The [`Trainer`] class saves your model checkpoints to the directory specified in the `output_dir` parameter of [`TrainingArguments`]. You'll find the checkpoints saved in a `checkpoint-000` subfolder where the numbers at the end correspond to the training step. Saving checkpoints are useful for resuming training later which you can set in the [`~Trainer.train`] method.
+The [`Trainer`] class saves your model checkpoints to the directory specified in the `output_dir` parameter of [`TrainingArguments`]. You'll find the checkpoints saved in a `checkpoint-000` subfolder where the numbers at the end correspond to the training step. Saving checkpoints are useful for resuming training later.
 
 ```py
 # resume from latest checkpoint
@@ -97,20 +99,20 @@ You can save your checkpoints (the optimizer state is not saved by default) to t
 
 When you resume training from a checkpoint, the [`Trainer`] tries to keep the Python, NumPy, and PyTorch RNG states the same as they were when the checkpoint was saved. But because PyTorch has various non-deterministic default settings, the RNG states aren't guaranteed to be the same. If you want to enable full determinism, take a look at the [Controlling sources of randomness](https://pytorch.org/docs/stable/notes/randomness#controlling-sources-of-randomness) guide to learn what you can enable to make your training fully deterministic. Keep in mind though that by making certain settings deterministic, training may be slower.
 
-## Customize the Trainer class
+## Customize the Trainer
 
 While the [`Trainer`] class is designed to be accessible and easy-to-use, it also offers a lot of customizability for more adventurous users. Many of the [`Trainer`]'s method can be subclassed and overridden to support the functionality you want, without having to rewrite the entire training loop from scratch to accommodate it. These methods include:
 
-- [`~Trainer.get_train_dataloader`] creates a training DataLoader
-- [`~Trainer.get_eval_dataloader`] creates an evaluation DataLoader
-- [`~Trainer.get_test_dataloader`] creates a test DataLoader
-- [`~Trainer.log`] logs information on the various objects that watch training
-- [`~Trainer.create_optimizer_and_scheduler`] creates an optimizer and learning rate scheduler if they weren't passed in the `__init__`; these can also be separately customized with [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] respectively
-- [`~Trainer.compute_loss`] computes the loss on a batch of training inputs
-- [`~Trainer.training_step`] performs the training step
-- [`~Trainer.prediction_step`] performs the prediction and test step
-- [`~Trainer.evaluate`] evaluates the model and returns the evaluation metrics
-- [`~Trainer.predict`] makes predictions (with metrics if labels are available) on the test set
+* [`~Trainer.get_train_dataloader`] creates a training DataLoader
+* [`~Trainer.get_eval_dataloader`] creates an evaluation DataLoader
+* [`~Trainer.get_test_dataloader`] creates a test DataLoader
+* [`~Trainer.log`] logs information on the various objects that watch training
+* [`~Trainer.create_optimizer_and_scheduler`] creates an optimizer and learning rate scheduler if they weren't passed in the `__init__`; these can also be separately customized with [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] respectively
+* [`~Trainer.compute_loss`] computes the loss on a batch of training inputs
+* [`~Trainer.training_step`] performs the training step
+* [`~Trainer.prediction_step`] performs the prediction and test step
+* [`~Trainer.evaluate`] evaluates the model and returns the evaluation metrics
+* [`~Trainer.predict`] makes predictions (with metrics if labels are available) on the test set
 
 For example, if you want to customize the [`~Trainer.compute_loss`] method to use a weighted loss instead.
 
@@ -150,7 +152,7 @@ class EarlyStoppingCallback(TrainerCallback):
             return {}
 ```
 
-Then you can pass the callback to the [`Trainer`] class.
+Then pass it to the [`Trainer`]'s `callback` parameter.
 
 ```py
 from transformers import Trainer
@@ -230,7 +232,7 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 
 ## NEFTune
 
-[NEFTune](https://hf.co/papers/2310.05914) is a technique that can improve performance by adding noise to the embedding vectors during training. To enable it in [`Trainer`], set the `neftune_noise_alpha` parameter to control how much noise is added in [`TrainingArguments`].
+[NEFTune](https://hf.co/papers/2310.05914) is a technique that can improve performance by adding noise to the embedding vectors during training. To enable it in [`Trainer`], set the `neftune_noise_alpha` parameter in [`TrainingArguments`] to control how much noise is added.
 
 ```py
 from transformers import TrainingArguments, Trainer
@@ -239,11 +241,11 @@ training_args = TrainingArguments(..., neftune_noise_alpha=0.1)
 trainer = Trainer(..., args=training_args)
 ```
 
-To avoid unexpected behavior, NEFTune is disabled after training to restore the original embedding layer.
+NEFTune is disabled after training to restore the original embedding layer to avoid any unexpected behavior.
 
 ## Accelerate and Trainer
 
-The [`Trainer`] class is powered by [Accelerate](https://hf.co/docs/accelerate), a library for easily training PyTorch models in distributed environments with support for integrations such as [Fully Sharded Data Parallel](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) and [DeepSpeed](https://www.deepspeed.ai/).
+The [`Trainer`] class is powered by [Accelerate](https://hf.co/docs/accelerate), a library for easily training PyTorch models in distributed environments with support for integrations such as [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) and [DeepSpeed](https://www.deepspeed.ai/).
 
 <Tip>
 
@@ -261,7 +263,7 @@ pip install accelerate --upgrade
 To use Accelerate with [`Trainer`], run the [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) command to set up training for your training environment. This command creates a `config_file.yaml` that'll be used when you launch your training script. For example, some example configurations you can setup are:
 
 <hfoptions id="config">
-<hfoption id="DDP multi-node multi-GPU">
+<hfoption id="DistributedDataParallel">
 
 ```yml
 compute_environment: LOCAL_MACHINE                                                                                             
@@ -284,7 +286,7 @@ use_cpu: false
 ```
 
 </hfoption>
-<hfoption id="FullyShardedDataParallel (FSDP)">
+<hfoption id="FSDP">
 
 ```yml
 compute_environment: LOCAL_MACHINE
