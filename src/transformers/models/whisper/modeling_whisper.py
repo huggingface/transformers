@@ -1965,11 +1965,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         self._set_forced_decoder_ids(task=task, language=language, prompt_ids=prompt_ids, generation_config=generation_config, config=self.config, kwargs=kwargs)
         self._set_num_frames(return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs)
 
+        # 4. Retrieve logits processors
+        num_start_tokens = len(generation_config.forced_decoder_ids) if generation_config.forced_decoder_ids is not None else 1
+        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, num_start_tokens=num_start_tokens, is_shortform=is_shortform)
+
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
-            # 4. Retrieve logits processors
-            logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold)
-
             outputs = super().generate(
                 input_features,
                 generation_config,
@@ -2002,9 +2003,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         max_frames, seek = self._retrieve_max_frames_and_seek(batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames)
         init_tokens = self._retrieve_init_tokens_from_forced_decoder_ids(generation_config=generation_config)
-
-        # 4. Retrieve logits processors
-        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, init_tokens=init_tokens)
 
         # 6.2 Preppare running variables, list for generation
         cur_bsz = batch_size
@@ -2442,7 +2440,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         return init_tokens
 
     @staticmethod
-    def _retrieve_logit_processors(generation_config, logits_processor, no_speech_threshold, init_tokens=None):
+    def _retrieve_logit_processors(generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform):
         begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
@@ -2475,8 +2473,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             )
             generation_config.begin_suppress_tokens = None
 
-        if no_speech_threshold is not None and init_tokens is not None:
-            begin_index_offset = (len(init_tokens) - 1)
+        if no_speech_threshold is not None and not is_shortform:
+            begin_index_offset = num_start_tokens - 1
             no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index, begin_index_offset=begin_index_offset)
             logits_processor = (
                 [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
@@ -2548,7 +2546,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     @staticmethod
     def _set_max_new_tokens_and_length(config, decoder_input_ids, generation_config, kwargs):
-        cut_off_length = config.max_target_positions // 2 - 1
+        num_initial_tokens = min(config.max_target_positions // 2 - 1, decoder_input_ids.shape[-1] - 1)
 
         passed_max_length = kwargs.pop("max_length", None)
         passed_max_new_tokens = kwargs.pop("max_new_tokens", None)
@@ -2561,14 +2559,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # Make sure we don't get larger than `max_length`
         if passed_max_length is not None and passed_max_new_tokens is None:
             max_length = min(
-                passed_max_length + cut_off_length + 1, config.max_target_positions
+                passed_max_length + num_initial_tokens, config.max_target_positions
             )
             logger.info(
                 f"Increase max_length from {passed_max_length} to {max_length} since input is conditioned on previous segment."
             )
         elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
             max_length = min(
-                generation_config.max_length + cut_off_length + 1, config.max_target_positions
+                generation_config.max_length + num_initial_tokens, config.max_target_positions
             )
             logger.info(
                 f"Increase max_length from {max_length_config} to {max_length} since input is conditioned on previous segment."
