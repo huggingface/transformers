@@ -64,7 +64,7 @@ class DetaModelTester:
         num_feature_levels=4,
         encoder_n_points=2,
         decoder_n_points=6,
-        two_stage=False,
+        two_stage=True,
     ):
         self.parent = parent
         self.batch_size = batch_size

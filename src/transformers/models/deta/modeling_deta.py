@@ -2220,7 +2220,7 @@ class DetaLoss(nn.Module):
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # (Niels): comment out function below, distributed training to be added
-        if dist.is_available() or dist.is_initialized():
+        if dist.is_available() and dist.is_initialized():
             torch.distributed.all_reduce(num_boxes)
             world_size = dist.get_world_size()
         else:
@@ -2665,6 +2665,7 @@ class DetaStage2Assigner(nn.Module):
         bs = len(targets)
         indices = []
         ious = []
+        print(outputs["init_reference"][0].shape)
         for b in range(bs):
             iou, _ = box_iou(
                 center_to_corners_format(targets[b]["boxes"]),
