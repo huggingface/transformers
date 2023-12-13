@@ -455,6 +455,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
         # True is the default normalization scheme when adding a token. Normalize -> don't strip the space.
+        # the issue now is that our slow tokenizer should NOT strip the space if we want to simulate sentencepiece token addition.
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
         with self.subTest("Slow edge case"):
