@@ -122,7 +122,7 @@ class SegGptModelTester:
             mlp_ratio=self.mlp_ratio,
             merge_index=self.merge_index,
             out_indicies=self.out_indicies,
-            pretrain_img_size=self.pretrain_img_size,
+            pretrain_image_size=self.pretrain_image_size,
             decoder_hidden_size=self.decoder_hidden_size,
         )
 

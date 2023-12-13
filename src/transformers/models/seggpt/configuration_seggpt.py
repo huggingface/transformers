@@ -63,6 +63,9 @@ class SegGptConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             The ratio of mlp hidden dim to embedding dim.
+        mlp_dim (`int`, *optional*):
+            The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
+            hidden_size`.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The drop path rate for the dropout layers.
         pretrain_image_size (`int`, *optional*, defaults to 224):
@@ -109,6 +112,7 @@ class SegGptConfig(PretrainedConfig):
         num_channels=3,
         qkv_bias=True,
         mlp_ratio=4.0,
+        mlp_dim=None,
         drop_path_rate=0.1,
         pretrain_image_size=224,
         decoder_hidden_size=64,
@@ -143,3 +147,4 @@ class SegGptConfig(PretrainedConfig):
         self.merge_index = merge_index
         self.out_indicies = out_indicies
         self.beta = beta
+        self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim

@@ -397,22 +397,18 @@ class SegGptAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.sam.modeling_sam.SamMLPBlock with SamMLPBlock->SegGptMlp
 class SegGptMlp(nn.Module):
     def __init__(self, config):
         super().__init__()
-        out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(config.hidden_size, hidden_features)
+        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
         self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.lin1(hidden_states)
         hidden_states = self.act(hidden_states)
-        hidden_states = self.drop(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.drop(hidden_states)
+        hidden_states = self.lin2(hidden_states)
         return hidden_states
 
 
