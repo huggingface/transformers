@@ -210,7 +210,7 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
-    # @slow
+    @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
         model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
