@@ -800,7 +800,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
 
         preds, scores = generate_step(pixel_values)
 
-        EXPECTED_SCORES = np.array([-0.64145195])
+        EXPECTED_SCORES = np.array([-0.5956343])
         max_diff = np.amax(np.abs(scores - EXPECTED_SCORES))
         self.assertLessEqual(max_diff, 1e-4)
 

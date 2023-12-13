@@ -49,8 +49,6 @@ class PatchTSMixerConfig(PretrainedConfig):
             non-overlapping patches.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for probabilistic forecast.
-
-
         d_model (`int`, *optional*, defaults to 8):
             Hidden dimension of the model. Recommended to set it as a multiple of patch_length (i.e. 2-5X of
             patch_len). Larger value indicates more complex model.
@@ -96,8 +94,6 @@ class PatchTSMixerConfig(PretrainedConfig):
             `PyTorch`. Setting it to `False` performs `PyTorch` weight initialization.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             A value added to the denominator for numerical stability of normalization.
-
-
         mask_type (`str`, *optional*, defaults to `"random"`):
             Type of masking to use for Masked Pretraining mode. Allowed values are "random", "forecast". In Random
             masking, points are masked randomly. In Forecast masking, points are masked towards the end.
@@ -116,9 +112,6 @@ class PatchTSMixerConfig(PretrainedConfig):
             across channels.
         unmasked_channel_indices (`list`, *optional*):
             Channels that are not masked during pretraining.
-
-
-
         head_dropout (`float`, *optional*, defaults to 0.2):
             The dropout probability the `PatchTSMixer` head.
         distribution_output (`string`, *optional*, defaults to `"student_t"`):

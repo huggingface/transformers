@@ -491,15 +491,18 @@ class OptFlashAttention2(OPTAttention):
         )
 
 
+OPT_ATTENTION_CLASSES = {
+    "eager": OPTAttention,
+    "flash_attention_2": OptFlashAttention2,
+}
+
+
 class OPTDecoderLayer(nn.Module):
     def __init__(self, config: OPTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        if not getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn = OPTAttention(config=config, is_decoder=True)
-        else:
-            self.self_attn = OptFlashAttention2(config=config, is_decoder=True)
+        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, is_decoder=True)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
@@ -732,6 +735,7 @@ class OPTDecoder(OPTPreTrainedModel):
             self.final_layer_norm = None
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -830,7 +834,7 @@ class OPTDecoder(OPTPreTrainedModel):
         mask_seq_length = past_key_values_length + seq_length
 
         # embed positions
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             attention_mask = (

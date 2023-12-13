@@ -487,6 +487,12 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
         )
 
 
+GPT_NEO_ATTENTION_CLASSES = {
+    "eager": GPTNeoSelfAttention,
+    "flash_attention_2": GPTNeoFlashAttention2,
+}
+
+
 class GPTNeoAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -495,11 +501,7 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type in ["global", "local"]:
-            self.attention = (
-                GPTNeoSelfAttention(config, self.attention_type)
-                if not getattr(config, "_flash_attn_2_enabled", False)
-                else GPTNeoFlashAttention2(config, self.attention_type)
-            )
+            self.attention = GPT_NEO_ATTENTION_CLASSES[config._attn_implementation](config, self.attention_type)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
@@ -718,6 +720,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(float(config.embed_dropout))
         self.h = nn.ModuleList([GPTNeoBlock(config, layer_id=i) for i in range(config.num_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.gradient_checkpointing = False
@@ -795,7 +798,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         hidden_states = inputs_embeds + position_embeds
 
         # Attention mask.
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
