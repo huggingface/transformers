@@ -750,21 +750,16 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         if self.built:
             return
         self.built = True
-        conv1_shape = [None, None, None, 1]
-        conv2_shape = [None, None, None, self.mask_input_channels]
-        conv3_shape = [None, None, None, self.mask_input_channels * 4]
-        layer_norm1_shape = [None, None, None, self.mask_input_channels]
-        layer_norm2_shape = [None, None, None, self.mask_input_channels * 4]
         with tf.name_scope("conv1"):
-            self.conv1.build(conv1_shape)
+            self.conv1.build([None, None, None, 1])
         with tf.name_scope("conv2"):
-            self.conv2.build(conv2_shape)
+            self.conv2.build([None, None, None, self.mask_input_channels])
         with tf.name_scope("conv3"):
-            self.conv3.build(conv3_shape)
+            self.conv3.build([None, None, None, self.mask_input_channels * 4])
         with tf.name_scope("layer_norm1"):
-            self.layer_norm1.build(layer_norm1_shape)
+            self.layer_norm1.build([None, None, None, self.mask_input_channels])
         with tf.name_scope("layer_norm2"):
-            self.layer_norm2.build(layer_norm2_shape)
+            self.layer_norm2.build([None, None, None, self.mask_input_channels * 4])
 
 
 class TFSamPromptEncoder(tf.keras.layers.Layer):
