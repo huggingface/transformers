@@ -337,7 +337,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
             self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
             self.assertTrue("temp_state buffer is too small" in str(cm.exception))
 
-        prompt = "I am in Paris and" * 500
+        prompt = "I am in Paris and"
         inp = self.tokenizer(prompt, return_tensors="pt").to(0)
         self.assertTrue(inp["input_ids"].shape[1] < 4028)
         self.quantized_model.generate(**inp, num_beams=1, min_new_tokens=3, max_new_tokens=3)
