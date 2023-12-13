@@ -751,7 +751,7 @@ class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 tf_inputs_dict[key] = self.prepare_pt_inputs_from_tf_inputs(value)
             elif isinstance(value, (list, tuple)):
                 tf_inputs_dict[key] = (self.prepare_pt_inputs_from_tf_inputs(iter_value) for iter_value in value)
-            elif type(value) == bool:
+            elif isinstance(value, bool):
                 tf_inputs_dict[key] = value
             elif key == "input_values":
                 tf_inputs_dict[key] = tf.convert_to_tensor(value.cpu().numpy(), dtype=tf.float32)

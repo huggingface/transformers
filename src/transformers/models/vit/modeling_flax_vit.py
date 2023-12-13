@@ -38,9 +38,10 @@ VIT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 

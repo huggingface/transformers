@@ -53,6 +53,7 @@ if is_torch_available():
         TypicalLogitsWarper,
         UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
+    from transformers.generation.logits_process import BarkEosPrioritizerLogitsProcessor
 
 
 @require_torch
@@ -609,6 +610,13 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
         )
 
+        def empty_prefix_allowed_tokens_fn(batch_id, inputs_ids):
+            return []
+
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(empty_prefix_allowed_tokens_fn, 1)
+
+        self.assertRaises(ValueError, prefix_constrained_logits_proc, input_ids, scores.clone())
+
     def test_hamming_diversity(self):
         vocab_size = 4
         num_beams = 2
@@ -691,7 +699,7 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.allclose(
                 scores,
                 torch.tensor(
-                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, float("-inf")]],
+                    [[0.0, 0.7, 0.8, 0.0], [0.1, torch.finfo(scores.dtype).max, 0.3, torch.finfo(scores.dtype).min]],
                     device=torch_device,
                 ),
                 atol=1e-6,
@@ -800,3 +808,19 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertAlmostEqual(out[0].item(), res[0].item())
         self.assertAlmostEqual(out[1].item(), res[1].item())
         self.assertAlmostEqual(out[2].item(), res[2].item())
+
+    def test_early_stop_processor(self):
+        input_ids = None
+        eos_token_id = 2
+        min_eos_p = 0.1  ## some small float
+
+        scores = self._get_uniform_logits(2, 4)
+        scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
+
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        actual_scores = esp(input_ids, scores)
+        expected_scores_list = [
+            scores[0].tolist(),
+            [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
+        ]
+        self.assertListEqual(actual_scores.tolist(), expected_scores_list)

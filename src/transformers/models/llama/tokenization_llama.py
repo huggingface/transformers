@@ -104,7 +104,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
-        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not to add spaces between special tokens.
@@ -149,23 +149,23 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        use_default_system_prompt=True,
+        use_default_system_prompt=False,
         spaces_between_special_tokens=False,
         legacy=None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
 
         if legacy is None:
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
+                " means, and thoroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True
@@ -423,10 +423,19 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
-        """
 
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present

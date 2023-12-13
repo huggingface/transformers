@@ -36,7 +36,10 @@ attention ideas from long-input transformers (ETC), and adopted pre-training str
 able to achieve state-of-the-art results on several summarization tasks and outperform the original T5 models on
 question answering tasks.*
 
-Tips:
+This model was contributed by [stancld](https://huggingface.co/stancld).
+The original code can be found [here](https://github.com/google-research/longt5).
+
+## Usage tips
 
 - [`LongT5ForConditionalGeneration`] is an extension of [`T5ForConditionalGeneration`] exchanging the traditional
 encoder *self-attention* layer with efficient either *local* attention or *transient-global* (*tglobal*) attention.
@@ -87,10 +90,8 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 >>> rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
 ```
 
-This model was contributed by [stancld](https://huggingface.co/stancld).
-The original code can be found [here](https://github.com/google-research/longt5).
 
-## Documentation resources
+## Resources
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)
@@ -98,6 +99,9 @@ The original code can be found [here](https://github.com/google-research/longt5)
 ## LongT5Config
 
 [[autodoc]] LongT5Config
+
+<frameworkcontent>
+<pt>
 
 ## LongT5Model
 
@@ -114,6 +118,9 @@ The original code can be found [here](https://github.com/google-research/longt5)
 [[autodoc]] LongT5EncoderModel
     - forward
 
+</pt>
+<jax>
+
 ## FlaxLongT5Model
 
 [[autodoc]] FlaxLongT5Model
@@ -127,3 +134,6 @@ The original code can be found [here](https://github.com/google-research/longt5)
     - __call__
     - encode
     - decode
+
+</jax>
+</frameworkcontent>

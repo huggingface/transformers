@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -75,38 +76,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
 class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
@@ -714,15 +683,11 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             # global keys (corresponding to 1st key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
                 :, :, :, :, :to_block_size
-            ].view(
-                bsz, n_heads, -1, to_block_size
-            )  # first_band_product
+            ].view(bsz, n_heads, -1, to_block_size)  # first_band_product
             # global keys (corresponding to last key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, -to_block_size:] = attn_weights[
                 :, :, :, :, -to_block_size:
-            ].view(
-                bsz, n_heads, -1, to_block_size
-            )  # last_band_product
+            ].view(bsz, n_heads, -1, to_block_size)  # last_band_product
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
                 # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
@@ -1205,7 +1170,7 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->BigBirdPegasusDecoder
+# Copied from transformers.models.bart.modeling_bart.BartAttention with BartConfig->BigBirdPegasusConfig, Bart->BigBirdPegasusDecoder
 class BigBirdPegasusDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1216,12 +1181,15 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[BigBirdPegasusConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -1230,6 +1198,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1609,10 +1578,6 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (BigBirdPegasusDecoder, BigBirdPegasusEncoder)):
-            module.gradient_checkpointing = value
-
     @property
     def dummy_inputs(self):
         pad_token = self.config.pad_token_id
@@ -1906,7 +1871,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         # expand attention_mask
         if self.attention_type == "original_full":
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
             blocked_encoder_mask = band_mask = from_mask = to_mask = None
         elif self.attention_type == "block_sparse":
             blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
@@ -1943,15 +1908,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
@@ -1960,6 +1918,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         to_mask,
                         blocked_encoder_mask,
                         blocked_encoder_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -2055,7 +2014,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.block_size`: {block_size}"
             )
@@ -2110,30 +2069,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
 
     def forward(
         self,
@@ -2239,14 +2174,16 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
@@ -2289,16 +2226,8 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -2306,6 +2235,8 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -2380,6 +2311,11 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         self.shared = value
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
+
+    def _tie_weights(self):
+        if self.config.tie_word_embeddings:
+            self._tie_or_clone_weights(self.encoder.embed_tokens, self.shared)
+            self._tie_or_clone_weights(self.decoder.embed_tokens, self.shared)
 
     def get_encoder(self):
         return self.encoder

@@ -148,9 +148,9 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         self.separate_vocabs = separate_vocabs
         self.encoder = load_json(vocab)
-        if unk_token not in self.encoder:
+        if str(unk_token) not in self.encoder:
             raise KeyError("<unk> token must be in the vocab")
-        assert pad_token in self.encoder
+        assert str(pad_token) in self.encoder
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)

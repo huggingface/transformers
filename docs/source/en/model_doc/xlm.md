@@ -46,7 +46,9 @@ obtain 34.3 BLEU on WMT'16 German-English, improving the previous state of the a
 machine translation, we obtain a new state of the art of 38.5 BLEU on WMT'16 Romanian-English, outperforming the
 previous best approach by more than 4 BLEU. Our code and pretrained models will be made publicly available.*
 
-Tips:
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/facebookresearch/XLM/).
+
+## Usage tips
 
 - XLM has many different checkpoints, which were trained using different objectives: CLM, MLM or TLM. Make sure to
   select the correct objective for your task (e.g. MLM checkpoints are not suitable for generation).
@@ -57,9 +59,7 @@ Tips:
     * Masked language modeling (MLM) which is like RoBERTa. One of the languages is selected for each training sample, and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages, with dynamic masking of the tokens.
     * A combination of MLM and translation language modeling (TLM). This consists of concatenating a sentence in two different languages, with random masking. To predict one of the masked tokens, the model can use both, the surrounding context in language 1 and the context given by language 2.
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/facebookresearch/XLM/).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -83,6 +83,9 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 ## XLM specific outputs
 
 [[autodoc]] models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput
+
+<frameworkcontent>
+<pt>
 
 ## XLMModel
 
@@ -119,6 +122,9 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] XLMForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFXLMModel
 
 [[autodoc]] TFXLMModel
@@ -148,3 +154,8 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] TFXLMForQuestionAnsweringSimple
     - call
+
+</tf>
+</frameworkcontent>
+
+

@@ -156,6 +156,14 @@ class Bnb4BitTest(Base4bitTest):
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
 
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.model_4bit.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.model_4bit.config._pre_quantization_dtype == torch.float16)
+
     def test_linear_are_4bit(self):
         r"""
         A simple test to check if the model conversion has been done correctly by checking on the
