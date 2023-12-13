@@ -469,18 +469,7 @@ class PatchTSMixerModelIntegrationTests(unittest.TestCase):
         )
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [[-0.9106]],
-                [[1.5326]],
-                [[-0.8245]],
-                [[0.7439]],
-                [[-0.7830]],
-                [[2.6256]],
-                [[-0.6485]],
-            ],
-            device=torch_device,
-        )
+        expected_slice = torch.tensor([[[[-0.9106]],[[1.5326]],[[-0.8245]],[[0.7439]],[[-0.7830]],[[2.6256]],[[-0.6485]],]],device=torch_device)  # fmt: skip
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     def test_forecasting_head(self):
