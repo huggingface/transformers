@@ -138,7 +138,9 @@ if is_torch_available():
             self.count += 1
 
             if torch.isinf(scores).all():
-                import ipdb; ipdb.set_trace()
+                import ipdb
+
+                ipdb.set_trace()
                 raise ValueError("Dummy logit processor is incorrectly set up. Scores should not be all inf.")
 
             return scores
@@ -1369,7 +1371,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         gen_kwargs = {
             "logits_processor": logits_processor,
             "return_segments": True,
-            "condition_on_prev_tokens": condition_on_prev_tokens
+            "condition_on_prev_tokens": condition_on_prev_tokens,
         }
 
         if condition_on_prev_tokens:
@@ -1480,6 +1482,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_longform_generate_multi_batch_cond_prev(self):
         self._check_longform_generate_multi_batch(condition_on_prev_tokens=True)
+
 
 @require_torch
 @require_torchaudio
@@ -2128,7 +2131,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         assert decoded == EXPECTED_TEXT
 
-
     @slow
     def test_whisper_longform_multi_batch(self):
         # fmt: off
@@ -2328,8 +2330,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         for i in range(num_samples):
-            import ipdb; ipdb.set_trace()
+            import ipdb
+
+            ipdb.set_trace()
             assert decoded_all[i] == EXPECTED_TEXT[i]
+
 
 def prepare_whisper_encoder_inputs_dict(config, input_features, head_mask=None):
     if head_mask is None:
