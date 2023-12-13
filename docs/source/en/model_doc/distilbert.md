@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 The DistilBERT model was proposed in the blog post [Smaller, faster, cheaper, lighter: Introducing DistilBERT, a
 distilled version of BERT](https://medium.com/huggingface/distilbert-8cf3380435b5), and the paper [DistilBERT, a
-distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/papers/1910.01108). DistilBERT is a
+distilled version of BERT: smaller, faster, cheaper and lighter](https://arxiv.org/abs/1910.01108). DistilBERT is a
 small, fast, cheap and light Transformer model trained by distilling BERT base. It has 40% less parameters than
 *bert-base-uncased*, runs 60% faster while preserving over 95% of BERT's performances as measured on the GLUE language
 understanding benchmark.
@@ -51,7 +51,10 @@ distillation and cosine-distance losses. Our smaller, faster and lighter model i
 demonstrate its capabilities for on-device computations in a proof-of-concept experiment and a comparative on-device
 study.*
 
-Tips:
+This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
+contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
+
+## Usage tips
 
 - DistilBERT doesn't have `token_type_ids`, you don't need to indicate which token belongs to which segment. Just
   separate your segments with the separation token `tokenizer.sep_token` (or `[SEP]`).
@@ -63,8 +66,6 @@ Tips:
     * predicting the masked tokens correctly (but no next-sentence objective)
     * a cosine similarity between the hidden states of the student and the teacher model
 
-This model was contributed by [victorsanh](https://huggingface.co/victorsanh). This model jax version was
-contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/huggingface/transformers/tree/main/examples/research_projects/distillation).
 
 ## Resources
 
@@ -132,6 +133,37 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - A blog post on how to [deploy DistilBERT with Amazon SageMaker](https://huggingface.co/blog/deploy-hugging-face-models-easily-with-amazon-sagemaker).
 - A blog post on how to [Deploy BERT with Hugging Face Transformers, Amazon SageMaker and Terraform module](https://www.philschmid.de/terraform-huggingface-amazon-sagemaker).
 
+
+## Combining DistilBERT and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16`)
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModel
+
+>>> device = "cuda" # the device to load the model onto
+
+>>> tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
+>>> model = AutoModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+
+>>> text = "Replace me by any text you'd like."
+
+>>> encoded_input = tokenizer(text, return_tensors='pt').to(device)
+>>> model.to(device)
+
+>>> output = model(**encoded_input)
+```
+
+
 ## DistilBertConfig
 
 [[autodoc]] DistilBertConfig
@@ -143,6 +175,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## DistilBertTokenizerFast
 
 [[autodoc]] DistilBertTokenizerFast
+
+<frameworkcontent>
+<pt>
 
 ## DistilBertModel
 
@@ -174,6 +209,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] DistilBertForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFDistilBertModel
 
 [[autodoc]] TFDistilBertModel
@@ -204,6 +242,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] TFDistilBertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxDistilBertModel
 
 [[autodoc]] FlaxDistilBertModel
@@ -233,3 +274,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxDistilBertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
+
+
+

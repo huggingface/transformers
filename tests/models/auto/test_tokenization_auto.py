@@ -424,6 +424,6 @@ class AutoTokenizerTest(unittest.TestCase):
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
-            self.assertEqual(counter.get_request_count, 0)
-            self.assertEqual(counter.head_request_count, 1)
-            self.assertEqual(counter.other_request_count, 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)

@@ -87,6 +87,7 @@ class LevitConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "levit"
 
     def __init__(

@@ -1304,20 +1304,15 @@ class LongformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, is_global_attn, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     is_index_masked,
                     is_index_global_attn,
+                    is_global_attn,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1438,10 +1433,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LongformerEncoder):
-            module.gradient_checkpointing = value
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -1607,7 +1598,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
             )
@@ -1926,7 +1917,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:
-            logger.info("Initializing global attention on CLS token...")
+            logger.warning_once("Initializing global attention on CLS token...")
             global_attention_mask = torch.zeros_like(input_ids)
             # global attention on cls token
             global_attention_mask[:, 0] = 1
@@ -2279,7 +2270,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on multiple choice...")
+            logger.warning_once("Initializing global attention on multiple choice...")
             # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(
                 [

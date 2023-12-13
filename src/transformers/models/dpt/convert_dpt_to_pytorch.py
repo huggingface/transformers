@@ -229,12 +229,14 @@ def convert_dpt_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
         if "ade" in checkpoint_url
         else torch.allclose(outputs[0, :3, :3], expected_slice)
     )
+    print("Looks ok!")
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model to {pytorch_dump_folder_path}")
-    model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving image processor to {pytorch_dump_folder_path}")
-    image_processor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+        print(f"Saving model to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
+        print(f"Saving image processor to {pytorch_dump_folder_path}")
+        image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print("Pushing model to hub...")
@@ -265,7 +267,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path",
         default=None,
         type=str,
-        required=True,
+        required=False,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
@@ -276,6 +278,7 @@ if __name__ == "__main__":
         "--model_name",
         default="dpt-large",
         type=str,
+        required=False,
         help="Name of the model, in case you're pushing to the hub.",
     )
 

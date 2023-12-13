@@ -1495,6 +1495,11 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
                         f"Unsupported language: {generation_config.language}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                     )
+                if language_token not in generation_config.lang_to_id:
+                    raise ValueError(
+                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                        "(You should just add it to the generation config)"
+                    )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:
                 forced_decoder_ids.append((1, None))  # automatically detect the language

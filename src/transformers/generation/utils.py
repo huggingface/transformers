@@ -24,6 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
+from ..cache_utils import Cache, DynamicCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -36,6 +37,13 @@ from ..models.auto import (
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+from .candidate_generator import (
+    AssistedCandidateGenerator,
+    CandidateGenerator,
+    _crop_past_key_values,
+    _prepare_attention_mask,
+    _prepare_token_type_ids,
+)
 from .configuration_utils import GenerationConfig
 from .logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
@@ -104,12 +112,20 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -140,6 +156,13 @@ class ContrastiveSearchEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -149,6 +172,7 @@ class ContrastiveSearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -169,15 +193,23 @@ class ContrastiveSearchDecoderOnlyOutput(ModelOutput):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is
-        passed or when `config.output_hidden_states=True`):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+            passed or when `config.output_hidden_states=True`): Tuple (one element for each generated token) of tuples
+            (one element for each layer of the decoder) of `torch.FloatTensor` of shape `(batch_size, generated_length,
+            hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -211,6 +243,13 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -220,6 +259,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -243,12 +283,20 @@ class SampleDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(num_return_sequences*batch_size, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
     scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -283,6 +331,13 @@ class SampleEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_return_sequences, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -292,6 +347,7 @@ class SampleEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -319,6 +375,13 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -327,6 +390,7 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -366,6 +430,13 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams*num_return_sequences, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -377,6 +448,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -404,6 +476,13 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -412,6 +491,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     beam_indices: Optional[torch.LongTensor] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 @dataclass
@@ -450,6 +530,13 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         decoder_hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `torch.FloatTensor` of shape `(batch_size*num_beams, generated_length, hidden_size)`.
+        past_key_values (`tuple(tuple(torch.FloatTensor)))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            NOTE: some models have a different `past_key_values` format, confirm with the model's documentation.
+            Usually a Tuple (one element for each layer of the decoder) of tuples (two elements, key tensor and value
+            tensor). The first Tuple is of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
     """
 
     sequences: torch.LongTensor = None
@@ -461,6 +548,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    past_key_values: Optional[Tuple[Tuple[Tuple[torch.FloatTensor]]]] = None
 
 
 GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoderOnlyOutput]
@@ -808,6 +896,28 @@ class GenerationMixin:
             f" enable beam search for {self.__class__}"
         )
 
+    def _get_candidate_generator(
+        self,
+        generation_config: GenerationConfig,
+        input_ids: torch.LongTensor,
+        inputs_tensor: torch.Tensor,
+        assistant_model: "PreTrainedModel",
+        logits_processor: LogitsProcessorList,
+        model_kwargs: Dict,
+    ) -> CandidateGenerator:
+        """
+        Returns the candidate generator to be used in `assisted_generation`
+        """
+        candidate_generator = AssistedCandidateGenerator(
+            input_ids=input_ids,
+            assistant_model=assistant_model,
+            logits_processor=logits_processor,
+            model_kwargs=model_kwargs,
+            inputs_tensor=inputs_tensor,
+            eos_token_id=generation_config.eos_token_id,
+        )
+        return candidate_generator
+
     def _get_logits_warper(
         self,
         generation_config: GenerationConfig,
@@ -820,11 +930,20 @@ class GenerationMixin:
         # instantiate warpers list
         warpers = LogitsProcessorList()
 
+        # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
+        # better score (i.e. keep len(list(generation_config.eos_token_id)) + 1)
+        if generation_config.num_beams > 1:
+            if isinstance(generation_config.eos_token_id, list):
+                min_tokens_to_keep = len(generation_config.eos_token_id) + 1
+            else:
+                min_tokens_to_keep = 2
+        else:
+            min_tokens_to_keep = 1
+
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
         if generation_config.temperature is not None and generation_config.temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(generation_config.temperature))
-        min_tokens_to_keep = 2 if generation_config.num_beams > 1 else 1
         if generation_config.top_k is not None and generation_config.top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=generation_config.top_k, min_tokens_to_keep=min_tokens_to_keep))
         if generation_config.top_p is not None and generation_config.top_p < 1.0:
@@ -942,16 +1061,9 @@ class GenerationMixin:
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if self.config.is_encoder_decoder:
-                processors.append(
-                    EncoderNoRepeatNGramLogitsProcessor(
-                        generation_config.encoder_no_repeat_ngram_size, encoder_input_ids
-                    )
-                )
-            else:
-                raise ValueError(
-                    "It's impossible to use `encoder_no_repeat_ngram_size` with decoder-only architecture"
-                )
+            processors.append(
+                EncoderNoRepeatNGramLogitsProcessor(generation_config.encoder_no_repeat_ngram_size, encoder_input_ids)
+            )
         if generation_config.bad_words_ids is not None:
             processors.append(
                 NoBadWordsLogitsProcessor(generation_config.bad_words_ids, generation_config.eos_token_id)
@@ -1128,9 +1240,10 @@ class GenerationMixin:
         ...     outputs.sequences, outputs.scores, outputs.beam_indices, normalize_logits=False
         ... )
         >>> # If you sum the generated tokens' scores and apply the length penalty, you'll get the sequence scores.
-        >>> # Tip: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
+        >>> # Tip 1: recomputing the scores is only guaranteed to match with `normalize_logits=False`. Depending on the
         >>> # use case, you might want to recompute it with `normalize_logits=True`.
-        >>> output_length = input_length + np.sum(transition_scores.numpy() < 0, axis=1)
+        >>> # Tip 2: the output length does NOT include the input length
+        >>> output_length = np.sum(transition_scores.numpy() < 0, axis=1)
         >>> length_penalty = model.generation_config.length_penalty
         >>> reconstructed_scores = transition_scores.sum(axis=1) / (output_length**length_penalty)
         >>> print(np.allclose(outputs.sequences_scores, reconstructed_scores))
@@ -1204,6 +1317,13 @@ class GenerationMixin:
 
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        # If a `Cache` instance is passed, checks whether the model is compatible with it
+        if isinstance(model_kwargs.get("past_key_values", None), Cache) and not self._supports_cache_class:
+            raise ValueError(
+                f"{self.__class__.__name__} does not support an instance of `Cache` as `past_key_values`. Please "
+                "check the model documentation for supported cache formats."
+            )
+
         # Excludes arguments that are handled before calling any model function
         if self.config.is_encoder_decoder:
             for key in ["decoder_input_ids"]:
@@ -1301,43 +1421,6 @@ class GenerationMixin:
                     UserWarning,
                 )
 
-    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], new_mask_length: int) -> Dict[str, Any]:
-        if self.config.is_encoder_decoder:
-            key = "decoder_attention_mask"
-        else:
-            key = "attention_mask"
-
-        if key not in model_kwargs:
-            return model_kwargs
-
-        mask = model_kwargs[key]
-        mask_extension_length = new_mask_length - mask.shape[1]
-
-        if mask_extension_length < 0:
-            raise ValueError("Cannot extend attention mask to a length less than it already is")
-
-        model_kwargs[key] = torch.cat(
-            [mask, mask.new_ones((mask.shape[0], mask_extension_length))],
-            dim=-1,
-        )
-
-        return model_kwargs
-
-    def _extend_token_type_ids(self, model_kwargs: Dict[str, Any], new_length: int) -> Dict[str, Any]:
-        if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
-            return model_kwargs
-
-        token_type_ids = model_kwargs["token_type_ids"]
-        final_token_type = token_type_ids[:, -1].unsqueeze(-1)
-        extension_length = new_length - token_type_ids.shape[1]
-        token_type_copies = final_token_type.repeat(1, extension_length)
-        model_kwargs["token_type_ids"] = torch.cat(
-            [model_kwargs["token_type_ids"], token_type_copies],
-            dim=-1,
-        )
-
-        return model_kwargs
-
     @torch.no_grad()
     def generate(
         self,
@@ -1388,7 +1471,9 @@ class GenerationMixin:
             stopping_criteria (`StoppingCriteriaList`, *optional*):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
-                generation config an error is thrown. This feature is intended for advanced users.
+                generation config an error is thrown. If your stopping criteria depends on the `scores` input, make
+                sure you pass `return_dict_in_generate=True, output_scores=True` to `generate`. This feature is
+                intended for advanced users.
             prefix_allowed_tokens_fn (`Callable[[int, torch.Tensor], List[int]]`, *optional*):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments: the batch ID `batch_id` and
@@ -1615,21 +1700,20 @@ class GenerationMixin:
             if not model_kwargs["use_cache"]:
                 raise ValueError("assisted generate requires `use_cache=True`")
 
-            # 11. If the assistant model is an encoder-decoder, prepare its encoder outputs
-            if assistant_model.config.is_encoder_decoder and "assistant_encoder_outputs" not in model_kwargs:
-                assistant_model_kwargs = copy.deepcopy(model_kwargs)
-                inputs_tensor, model_input_name, assistant_model_kwargs = assistant_model._prepare_model_inputs(
-                    inputs_tensor, assistant_model.generation_config.bos_token_id, assistant_model_kwargs
-                )
-                assistant_model_kwargs = assistant_model._prepare_encoder_decoder_kwargs_for_generation(
-                    inputs_tensor, assistant_model_kwargs, model_input_name
-                )
-                model_kwargs["assistant_encoder_outputs"] = assistant_model_kwargs["encoder_outputs"]
+            # 11. Get the candidate generator, given the parameterization
+            candidate_generator = self._get_candidate_generator(
+                generation_config=generation_config,
+                input_ids=input_ids,
+                inputs_tensor=inputs_tensor,
+                assistant_model=assistant_model,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
+            )
 
             # 12. run assisted generate
             return self.assisted_decoding(
                 input_ids,
-                assistant_model=assistant_model,
+                candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
                 logits_processor=logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
@@ -2122,8 +2206,8 @@ class GenerationMixin:
                         items.append(item.repeat_interleave(1, dim=0))
                     else:
                         items.append(item.repeat_interleave(top_k, dim=0))
-                new_key_values.append(items)
-            model_kwargs["past_key_values"] = new_key_values
+                new_key_values.append(tuple(items))
+            model_kwargs["past_key_values"] = tuple(new_key_values)
 
             if sequential:
                 all_outputs = {key: [] for key in outputs}  # defined in first loop iteration
@@ -2304,6 +2388,17 @@ class GenerationMixin:
             streamer.end()
 
         if return_dict_in_generate:
+            # Contrastive search works by forward looking at the next token, so we need to exclude it from
+            # `past_key_values` to be consistent with the other decoding methods
+            if model_kwargs.get("past_key_values") is not None:
+                past_key_values = []
+                for layer in model_kwargs["past_key_values"]:
+                    layer_past_key_values = []
+                    for item in layer:
+                        layer_past_key_values.append(item[..., :-1, :])
+                    past_key_values.append(tuple(layer_past_key_values))
+                model_kwargs["past_key_values"] = tuple(past_key_values)
+
             if self.config.is_encoder_decoder:
                 return ContrastiveSearchEncoderDecoderOutput(
                     sequences=input_ids,
@@ -2313,6 +2408,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return ContrastiveSearchDecoderOnlyOutput(
@@ -2320,6 +2416,7 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return input_ids
@@ -2572,6 +2669,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return GreedySearchDecoderOnlyOutput(
@@ -2579,6 +2677,7 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return input_ids
@@ -2716,7 +2815,7 @@ class GenerationMixin:
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -2854,6 +2953,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return SampleDecoderOnlyOutput(
@@ -2861,9 +2961,36 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return input_ids
+
+    def _temporary_reorder_cache(self, past_key_values, beam_idx):
+        """
+        Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
+
+        TODO: standardize cache formats and make all models compatible with `Cache`. It would remove the need
+        for this function, with `Cache.reorder_cache` being the sole remaining code path
+        """
+        model_class = self.__class__.__name__.lower()
+        # Exception 1: code path for models using the legacy cache format
+        if isinstance(past_key_values, (tuple, list)):
+            past_key_values = self._reorder_cache(past_key_values, beam_idx)
+        # Exception 2: models with different cache formats. These are limited to `DynamicCache` until their
+        # cache format is standardized, to avoid adding complexity to the codebase.
+        elif "bloom" in model_class or "gptbigcode" in model_class:
+            if not isinstance(past_key_values, DynamicCache):
+                raise ValueError(
+                    f"Using an unsupported cache format with {model_class}. Currently, it only supports the "
+                    "legacy tuple format or `DynamicCache`"
+                )
+            past_key_values = self._reorder_cache(past_key_values, beam_idx)
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        # Standard code path: use the `Cache.reorder_cache`
+        else:
+            past_key_values.reorder_cache(beam_idx)
+        return past_key_values
 
     def beam_search(
         self,
@@ -2993,7 +3120,7 @@ class GenerationMixin:
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -3049,6 +3176,8 @@ class GenerationMixin:
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         this_peer_finished = False  # used by synced_gpus only
+
+        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3123,6 +3252,7 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 beam_indices=beam_indices,
+                decoder_prompt_len=decoder_prompt_len,
             )
 
             beam_scores = beam_outputs["next_beam_scores"]
@@ -3135,7 +3265,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3158,6 +3290,7 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
             beam_indices=beam_indices,
+            decoder_prompt_len=decoder_prompt_len,
         )
 
         if return_dict_in_generate:
@@ -3175,6 +3308,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -3184,6 +3318,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return sequence_outputs["sequences"]
@@ -3329,7 +3464,7 @@ class GenerationMixin:
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -3375,6 +3510,8 @@ class GenerationMixin:
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         this_peer_finished = False  # used by synced_gpus only
+
+        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3406,18 +3543,15 @@ class GenerationMixin:
             )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
+            next_token_scores_processed = logits_warper(input_ids, next_token_scores_processed)
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
             )
-            # Note: logits warpers are intentionally applied after adding running beam scores. On some logits warpers
-            # (like top_p) this is indiferent, but on others (like temperature) it is not. For reference, see
-            # https://github.com/huggingface/transformers/pull/5420#discussion_r449779867
-            next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    scores += (logits_warper(input_ids, next_token_scores_processed),)
+                    scores += (next_token_scores_processed,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -3456,6 +3590,7 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 beam_indices=beam_indices,
+                decoder_prompt_len=decoder_prompt_len,
             )
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -3467,7 +3602,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -3490,6 +3627,7 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
             beam_indices=beam_indices,
+            decoder_prompt_len=decoder_prompt_len,
         )
 
         if return_dict_in_generate:
@@ -3507,6 +3645,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return BeamSampleDecoderOnlyOutput(
@@ -3516,6 +3655,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return sequence_outputs["sequences"]
@@ -3654,7 +3794,7 @@ class GenerationMixin:
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -3713,6 +3853,8 @@ class GenerationMixin:
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         this_peer_finished = False  # used by synced_gpus only
+
+        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3800,6 +3942,7 @@ class GenerationMixin:
                     eos_token_id=eos_token_id,
                     beam_indices=process_beam_indices,
                     group_index=beam_group_idx,
+                    decoder_prompt_len=decoder_prompt_len,
                 )
                 beam_scores[batch_group_indices] = beam_outputs["next_beam_scores"]
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -3846,7 +3989,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                model_kwargs["past_key_values"] = self._reorder_cache(
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], reordering_indices
                 )
 
@@ -3869,6 +4012,7 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
             beam_indices=final_beam_indices,
+            decoder_prompt_len=decoder_prompt_len,
         )
 
         if return_dict_in_generate:
@@ -3886,6 +4030,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -3895,6 +4040,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return sequence_outputs["sequences"]
@@ -4038,7 +4184,7 @@ class GenerationMixin:
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
-                " `stopping_criteria=StoppingCriteriaList(MaxLengthCriteria(max_length=max_length))` instead.",
+                " `stopping_criteria=StoppingCriteriaList([MaxLengthCriteria(max_length=max_length)])` instead.",
                 UserWarning,
             )
             stopping_criteria = validate_stopping_criteria(stopping_criteria, max_length)
@@ -4094,6 +4240,8 @@ class GenerationMixin:
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         this_peer_finished = False  # used by synced_gpus only
+
+        decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -4172,6 +4320,7 @@ class GenerationMixin:
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
                 beam_indices=beam_indices,
+                decoder_prompt_len=decoder_prompt_len,
             )
             beam_scores = beam_outputs["next_beam_scores"]
             beam_next_tokens = beam_outputs["next_beam_tokens"]
@@ -4182,7 +4331,9 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past_key_values"] is not None:
-                model_kwargs["past_key_values"] = self._reorder_cache(model_kwargs["past_key_values"], beam_idx)
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], beam_idx
+                )
 
             if return_dict_in_generate and output_scores:
                 beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
@@ -4205,6 +4356,7 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             max_length=stopping_criteria.max_length,
             beam_indices=beam_indices,
+            decoder_prompt_len=decoder_prompt_len,
         )
 
         if return_dict_in_generate:
@@ -4221,6 +4373,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return BeamSearchDecoderOnlyOutput(
@@ -4230,6 +4383,7 @@ class GenerationMixin:
                     beam_indices=sequence_outputs["beam_indices"],
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return sequence_outputs["sequences"]
@@ -4237,7 +4391,8 @@ class GenerationMixin:
     def assisted_decoding(
         self,
         input_ids: torch.LongTensor,
-        assistant_model: "PreTrainedModel",
+        assistant_model: Optional["PreTrainedModel"] = None,
+        candidate_generator: Optional["CandidateGenerator"] = None,
         do_sample: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
         logits_warper: Optional[LogitsProcessorList] = None,
@@ -4254,12 +4409,13 @@ class GenerationMixin:
     ):
         r"""
         Generates sequences of token ids for models with a language modeling head using **greedy decoding** or
-        **sample** (depending on `do_sample`), assisted by a smaller model. Can be used for text-decoder, text-to-text,
-        speech-to-text, and vision-to-text models.
+        **sample** (depending on `do_sample`), assisted by candidate sequences. Assisted generation is an example of a
+        candidate decoding strategy. Can be used for text-decoder, text-to-text, speech-to-text, and vision-to-text
+        models.
 
         <Tip warning={true}>
 
-        In most cases, you do not need to call [`~generation.GenerationMixin.assisted_decoding`] directly. Use
+        In most cases, you do not need to call [`~generation.GenerationMixin.candidate_decoding`] directly. Use
         generate() instead. For an overview of generation strategies and code examples, check the [following
         guide](../generation_strategies).
 
@@ -4268,6 +4424,9 @@ class GenerationMixin:
         Parameters:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
+            candidate_generator (`CandidateGenerator`, *optional*):
+                A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
+                more information, the documentation of [`CandidateGenerator`] should be read. Only one of `assistant_model` or `candidate_generator` should be passed as input to this function.
             assistant_model (`PreTrainedModel`, *optional*):
                 An assistant model that can be used to accelerate generation. The assistant model must have the exact
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
@@ -4350,15 +4509,23 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
-        # Assistant: initialize assistant-related variables
-        if hasattr(assistant_model, "num_assistant_tokens"):
+        # handling deprecated arguments
+        if (assistant_model is None) == (candidate_generator is None):
+            raise ValueError("One (and only one) of `assistant_model` and `candidate_generator` should be defined.")
+
+        if assistant_model is not None:
+            candidate_generator = AssistedCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
+                eos_token_id=eos_token_id,
+            )
             warnings.warn(
-                "Setting `num_assistant_tokens` via `assistant_model.num_assistant_tokens` is deprecated and will be removed in v.37. Make sure to set `num_assistant_tokens` via the generation_config instead.",
+                "Passing `assistant_model` to `assisted_decoding` is deprecated and will be removed in v4.38. "
+                "Pass the `candidate_generator` argument instead.",
                 FutureWarning,
             )
-            num_assistant_tokens = assistant_model.num_assistant_tokens
-        else:
-            num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -4402,15 +4569,6 @@ class GenerationMixin:
 
         # other auxiliary variables
         max_len = stopping_criteria[0].max_length
-        assistant_kv_indexing = (
-            1
-            if "bloom" in assistant_model.__class__.__name__.lower()
-            or (
-                assistant_model.config.architectures is not None
-                and "bloom" in assistant_model.config.architectures[0].lower()
-            )
-            else 0
-        )
 
         this_peer_finished = False  # used by synced_gpus only
         while True:
@@ -4424,62 +4582,18 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            # Assistant: main logic start
             cur_len = input_ids.shape[-1]
 
-            #  1. Forecast next N tokens using the assistant model. This `for` block can be replaced with a
-            # `.generate()` call if we decide to add `past_key_values` as a possible output of generate, as we
-            # need access to the assistant cache to secure strong speedups.
-            candidate_input_ids = input_ids
-            for _ in range(int(num_assistant_tokens)):
-                # 1.1. use the assistant model to obtain the next candidate logits
-                if "assistant_past_key_values" in model_kwargs:
-                    prev_seq_len = model_kwargs["assistant_past_key_values"][0][assistant_kv_indexing].shape[-2]
-                    # `new_token_len` can be 1 or 2 (next token in assistant + last token picked by the larger model)
-                    new_token_len = candidate_input_ids.shape[1] - prev_seq_len
-                    assist_inputs = candidate_input_ids[:, -new_token_len:]
-                    # TODO (joao): make it compatible with models that use unconventional fwd pass logic, like blip2
-                    if assistant_model.config.is_encoder_decoder:
-                        assistant_model_outputs = assistant_model(
-                            decoder_input_ids=assist_inputs,
-                            past_key_values=model_kwargs["assistant_past_key_values"],
-                            encoder_outputs=model_kwargs["assistant_encoder_outputs"],
-                        )
-                    else:
-                        assistant_model_outputs = assistant_model(
-                            assist_inputs,
-                            past_key_values=model_kwargs["assistant_past_key_values"],
-                        )
-                else:
-                    if assistant_model.config.is_encoder_decoder:
-                        assistant_model_outputs = assistant_model(
-                            decoder_input_ids=candidate_input_ids,
-                            encoder_outputs=model_kwargs["assistant_encoder_outputs"],
-                        )
-                    else:
-                        assistant_model_outputs = assistant_model(candidate_input_ids)
-
-                # 1.2. greedily select the next candidate token
-                model_kwargs["assistant_past_key_values"] = assistant_model_outputs.past_key_values
-                if len(logits_processor) > 0:
-                    assistant_model_outputs.logits[:, -1, :] = logits_processor(
-                        candidate_input_ids, assistant_model_outputs.logits[:, -1, :]
-                    )
-                new_token = assistant_model_outputs.logits[:, -1, :].argmax(dim=-1)
-                candidate_input_ids = torch.cat((candidate_input_ids, new_token[:, None]), dim=-1)
-
-                # 1.3. stop assistant generation on EOS
-                if eos_token_id_tensor is not None:
-                    last_assistant_token_is_eos = new_token.tile(eos_token_id_tensor.shape[0], 1)
-                    last_assistant_token_is_eos = (
-                        ~last_assistant_token_is_eos.ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0).bool()
-                    )
-                    if last_assistant_token_is_eos:
-                        break
-                else:
-                    last_assistant_token_is_eos = False
-
+            #  1. Fetch candidate sequences from a `CandidateGenerator`
+            candidate_input_ids = candidate_generator.get_candidates(input_ids)
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
+            last_assistant_token_is_eos = (
+                ~candidate_input_ids[:, -1]
+                .tile(eos_token_id_tensor.shape[0], 1)
+                .ne(eos_token_id_tensor.unsqueeze(1))
+                .prod(dim=0)
+                .bool()
+            )
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -4487,8 +4601,10 @@ class GenerationMixin:
 
             # 2.1. Prepare the model inputs
             candidate_kwargs = copy.copy(model_kwargs)
-            candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
-            candidate_kwargs = self._extend_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
+            candidate_kwargs = _prepare_attention_mask(
+                candidate_kwargs, candidate_input_ids.shape[1], self.config.is_encoder_decoder
+            )
+            candidate_kwargs = _prepare_token_type_ids(candidate_kwargs, candidate_input_ids.shape[1])
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
 
@@ -4540,20 +4656,10 @@ class GenerationMixin:
             # 5.3. Discard past key values relative to unused assistant tokens
             new_cache_size = new_cur_len - 1
             outputs.past_key_values = _crop_past_key_values(self, outputs.past_key_values, new_cache_size)
-            model_kwargs["assistant_past_key_values"] = _crop_past_key_values(
-                assistant_model, model_kwargs["assistant_past_key_values"], new_cache_size - 1
-            )  # the assistant does not have the token after the last match, hence the -1
 
-            # 6. Adjust the max number of assistant tokens to use in the next iteration. This is a simple heuristic,
-            # probably can be improved -- we want to balance the benefits of getting assistant tokens correct with the
-            # cost of forecasting incorrect assistant tokens.
-            if assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
-                if n_matches == int(num_assistant_tokens):
-                    num_assistant_tokens += 2.0
-                else:
-                    num_assistant_tokens = max(1.0, num_assistant_tokens - 1.0)
+            # 6. Update the candidate generation strategy if needed
+            candidate_generator.update_candidate_strategy(input_ids, new_logits, n_matches)
 
-            # Assistant: main logic end
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
@@ -4635,6 +4741,7 @@ class GenerationMixin:
                     decoder_attentions=decoder_attentions,
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
                 return GreedySearchDecoderOnlyOutput(
@@ -4642,57 +4749,10 @@ class GenerationMixin:
                     scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
+                    past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
             return input_ids
-
-
-def _crop_past_key_values(model, past_key_values, maximum_length):
-    """Crops the past key values up to a certain maximum length."""
-    new_past = []
-    if model.config.is_encoder_decoder:
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :maximum_length, :],
-                    past_key_values[idx][1][:, :, :maximum_length, :],
-                    past_key_values[idx][2],
-                    past_key_values[idx][3],
-                )
-            )
-        past_key_values = tuple(new_past)
-    # bloom is special
-    elif "bloom" in model.__class__.__name__.lower() or (
-        model.config.architectures is not None and "bloom" in model.config.architectures[0].lower()
-    ):
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :maximum_length],
-                    past_key_values[idx][1][:, :maximum_length, :],
-                )
-            )
-        past_key_values = tuple(new_past)
-    # gptbigcode is too
-    elif "gptbigcode" in model.__class__.__name__.lower() or (
-        model.config.architectures is not None and "gptbigcode" in model.config.architectures[0].lower()
-    ):
-        if model.config.multi_query:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :maximum_length, :]
-        else:
-            for idx in range(len(past_key_values)):
-                past_key_values[idx] = past_key_values[idx][:, :, :maximum_length, :]
-    else:
-        for idx in range(len(past_key_values)):
-            new_past.append(
-                (
-                    past_key_values[idx][0][:, :, :maximum_length, :],
-                    past_key_values[idx][1][:, :, :maximum_length, :],
-                )
-            )
-        past_key_values = tuple(new_past)
-    return past_key_values
 
 
 def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):

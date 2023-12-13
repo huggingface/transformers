@@ -64,8 +64,8 @@ pip install datasets
 
 次に、テキストをトークナイザに渡します：
 
-```python
->>> encoded_input = tokenizer("魔法使いの事には干渉しないでください、彼らは微妙で怒りっぽいです。")
+```py
+>>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
 >>> print(encoded_input)
 {'input_ids': [101, 2079, 2025, 19960, 10362, 1999, 1996, 3821, 1997, 16657, 1010, 2005, 2027, 2024, 11259, 1998, 4248, 2000, 4963, 1012, 102],
  'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -90,11 +90,11 @@ pip install datasets
 
 複数の文章を前処理する場合、トークナイザにリストとして渡してください：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "ピップ、セカンドブレックファーストのことを知っているかどうかはわからないと思うよ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_inputs = tokenizer(batch_sentences)
 >>> print(encoded_inputs)
@@ -116,11 +116,11 @@ pip install datasets
 
 バッチ内の短いシーケンスを最長のシーケンスに合わせるために、`padding`パラメータを`True`に設定します：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でもセカンドブレックファーストはどうなるの？",
-...     "セカンドブレックファーストについては知らないと思う、ピップ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True)
 >>> print(encoded_input)
@@ -143,11 +143,11 @@ pip install datasets
 
 モデルが受け入れる最大の長さにシーケンスを切り詰めるには、`truncation`パラメータを`True`に設定します：
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "セカンドブレックファーストについては知らないと思う、ピップ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True)
 >>> print(encoded_input)
@@ -177,11 +177,11 @@ pip install datasets
 <frameworkcontent>
 <pt>
 
-```python
+```py
 >>> batch_sentences = [
-...     "でも、セカンドブレックファーストはどうなるの？",
-...     "ピップ、セカンドブレックファーストについては知っていないと思うよ。",
-...     "イレブンジーズはどうなの？",
+...     "But what about second breakfast?",
+...     "Don't think he knows about second breakfast, Pip.",
+...     "What about elevensies?",
 ... ]
 >>> encoded_input = tokenizer(batch_sentences, padding=True, truncation=True, return_tensors="pt")
 >>> print(encoded_input)
@@ -227,7 +227,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 オーディオタスクの場合、データセットをモデル用に準備するために[特徴抽出器](main_classes/feature_extractor)が必要です。
 特徴抽出器は生のオーディオデータから特徴を抽出し、それらをテンソルに変換するために設計されています。
 
-[PolyAI/minds14](https://huggingface.co/datasets/PolyAI/minds14)データセットをロードして（データセットのロード方法の詳細については🤗 [Datasetsチュートリアル](https://huggingface.co/docs/datasets/load_hub.html)を参照）、
+[PolyAI/minds14](https://huggingface.co/datasets/PolyAI/minds14)データセットをロードして（データセットのロード方法の詳細については🤗 [Datasetsチュートリアル](https://huggingface.co/docs/datasets/load_hub)を参照）、
 オーディオデータセットで特徴抽出器をどのように使用できるかを確認してみましょう：
 
 ```python
@@ -349,7 +349,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 </Tip>
 
-コンピュータビジョンのデータセットで画像プロセッサを使用する方法を示すために、[food101](https://huggingface.co/datasets/food101)データセットをロードします（データセットのロード方法の詳細については🤗[Datasetsチュートリアル](https://huggingface.co/docs/datasets/load_hub.html)を参照）：
+コンピュータビジョンのデータセットで画像プロセッサを使用する方法を示すために、[food101](https://huggingface.co/datasets/food101)データセットをロードします（データセットのロード方法の詳細については🤗[Datasetsチュートリアル](https://huggingface.co/docs/datasets/load_hub)を参照）：
 
 <Tip>
 
@@ -363,7 +363,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-次に、🤗 Datasetsの [`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=image#datasets.Image) 機能で画像を見てみましょう：
+次に、🤗 Datasetsの [`Image`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) 機能で画像を見てみましょう：
 
 ```python
 >>> dataset[0]["image"]
@@ -419,7 +419,7 @@ AutoImageProcessorを[`AutoImageProcessor.from_pretrained`]を使用してロー
 画像を増強変換の一部として正規化したい場合は、`image_processor.image_mean` と `image_processor.image_std` の値を使用してください。
 </Tip>
 
-3. 次に、🤗 Datasetsの[`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform)を使用して、変換をリアルタイムで適用します：
+3. 次に、🤗 Datasetsの[`set_transform`](https://huggingface.co/docs/datasets/process#format-transform)を使用して、変換をリアルタイムで適用します：
 
 ```python
 >>> dataset.set_transform(transforms)
@@ -474,7 +474,7 @@ AutoImageProcessorを[`AutoImageProcessor.from_pretrained`]を使用してロー
 
 マルチモーダル入力を使用するタスクの場合、モデル用にデータセットを準備するための[プロセッサ](main_classes/processors)が必要です。プロセッサは、トークナイザや特徴量抽出器などの2つの処理オブジェクトを結合します。
 
-自動音声認識（ASR）のためのプロセッサの使用方法を示すために、[LJ Speech](https://huggingface.co/datasets/lj_speech)データセットをロードします（データセットのロード方法の詳細については🤗 [Datasets チュートリアル](https://huggingface.co/docs/datasets/load_hub.html)を参照）：
+自動音声認識（ASR）のためのプロセッサの使用方法を示すために、[LJ Speech](https://huggingface.co/datasets/lj_speech)データセットをロードします（データセットのロード方法の詳細については🤗 [Datasets チュートリアル](https://huggingface.co/docs/datasets/load_hub)を参照）：
 
 ```python
 >>> from datasets import load_dataset

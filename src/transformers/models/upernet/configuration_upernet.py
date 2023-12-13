@@ -69,6 +69,7 @@ class UperNetConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "upernet"
 
     def __init__(

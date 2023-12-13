@@ -18,13 +18,15 @@ import unittest
 from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
+    backend_empty_cache,
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -40,9 +42,7 @@ class FillMaskPipelineTests(unittest.TestCase):
         # clean-up as much as possible GPU memory occupied by PyTorch
         gc.collect()
         if is_torch_available():
-            import torch
-
-            torch.cuda.empty_cache()
+            backend_empty_cache(torch_device)
 
     @require_tf
     def test_small_model_tf(self):
@@ -148,9 +148,14 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_fp16_casting(self):
-        pipe = pipeline("fill-mask", model="hf-internal-testing/tiny-random-distilbert", device=0, framework="pt")
+        pipe = pipeline(
+            "fill-mask",
+            model="hf-internal-testing/tiny-random-distilbert",
+            device=torch_device,
+            framework="pt",
+        )
 
         # convert model to fp16
         pipe.model.half()
@@ -211,15 +216,24 @@ class FillMaskPipelineTests(unittest.TestCase):
             ],
         )
 
+        dummy_str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100
         outputs = unmasker(
-            "My name is <mask>" + "Lorem ipsum dolor sit amet, consectetur adipiscing elit," * 100,
+            "My name is <mask>" + dummy_str,
             tokenizer_kwargs={"truncation": True},
         )
+        simplified = nested_simplify(outputs, decimals=4)
         self.assertEqual(
-            nested_simplify(outputs, decimals=6),
+            [{"sequence": x["sequence"][:100]} for x in simplified],
             [
-                {"sequence": "My name is grouped", "score": 2.2e-05, "token": 38015, "token_str": " grouped"},
-                {"sequence": "My name is accuser", "score": 2.1e-05, "token": 25506, "token_str": " accuser"},
+                {"sequence": f"My name is,{dummy_str}"[:100]},
+                {"sequence": f"My name is:,{dummy_str}"[:100]},
+            ],
+        )
+        self.assertEqual(
+            [{k: x[k] for k in x if k != "sequence"} for x in simplified],
+            [
+                {"score": 0.2819, "token": 6, "token_str": ","},
+                {"score": 0.0954, "token": 46686, "token_str": ":,"},
             ],
         )
 

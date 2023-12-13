@@ -15,14 +15,14 @@
 """ Testing suite for the PyTorch ViT model. """
 
 
-import inspect
 import unittest
 
 from transformers import ViTConfig
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
+    require_torch_fp16,
     require_vision,
     slow,
     torch_device,
@@ -223,18 +223,6 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -316,7 +304,8 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_accelerate
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_fp16(self):
         r"""
         A small test to make sure that inference work in half precision without any problem.
