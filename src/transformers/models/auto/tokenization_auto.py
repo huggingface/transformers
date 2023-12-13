@@ -203,6 +203,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -234,6 +235,13 @@ else:
             ("mgp-str", ("MgpstrTokenizer", None)),
             (
                 "mistral",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "mixtral",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
@@ -341,6 +349,13 @@ else:
             ("rwkv", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "seamless_m4t",
+                (
+                    "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
+                    "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "seamless_m4t_v2",
                 (
                     "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,

@@ -21,6 +21,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -33,7 +34,7 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class BeitConfig(PretrainedConfig):
+class BeitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -84,8 +85,6 @@ class BeitConfig(PretrainedConfig):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
-        out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
-            Indices of the feature maps to use for semantic segmentation.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
@@ -100,6 +99,20 @@ class BeitConfig(PretrainedConfig):
             Whether to concatenate the output of the auxiliary head with the input before the classification layer.
         semantic_loss_ignore_index (`int`, *optional*, defaults to 255):
             The index that is ignored by the loss function of the semantic segmentation model.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
+        add_fpn (`bool`, *optional*, defaults to `False`):
+            Whether to add a FPN as part of the backbone. Only relevant for [`BeitBackbone`].
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`. Only relevant for [`BeitBackbone`].
 
     Example:
 
@@ -140,7 +153,6 @@ class BeitConfig(PretrainedConfig):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        out_indices=[3, 5, 7, 11],
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
@@ -148,6 +160,10 @@ class BeitConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
+        out_features=None,
+        out_indices=None,
+        add_fpn=False,
+        reshape_hidden_states=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -174,7 +190,6 @@ class BeitConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
         # decode head attributes (semantic segmentation)
-        self.out_indices = out_indices
         self.pool_scales = pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
@@ -183,6 +198,22 @@ class BeitConfig(PretrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+
+        # handle backwards compatibility
+        if "segmentation_indices" in kwargs:
+            logger.warning(
+                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
+                FutureWarning,
+            )
+            out_indices = kwargs.pop("segmentation_indices")
+
+        # backbone attributes
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+        self.add_fpn = add_fpn
+        self.reshape_hidden_states = reshape_hidden_states
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig

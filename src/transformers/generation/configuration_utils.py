@@ -63,6 +63,14 @@ class GenerationConfig(PushToHubMixin):
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
+    <Tip>
+
+    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    description of the possible manipulations, as well as examples of their usage.
+
+    </Tip>
+
     Arg:
         > Parameters that control the length of the output
 
@@ -495,6 +503,24 @@ class GenerationConfig(PushToHubMixin):
                 raise ValueError(
                     f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
                     f"({self.num_beams})."
+                )
+
+        # 5. check common issue: passing `generate` arguments inside the generation config
+        generate_arguments = (
+            "logits_processor",
+            "stopping_criteria",
+            "prefix_allowed_tokens_fn",
+            "synced_gpus",
+            "assistant_model",
+            "streamer",
+            "negative_prompt_ids",
+            "negative_prompt_attention_mask",
+        )
+        for arg in generate_arguments:
+            if hasattr(self, arg):
+                raise ValueError(
+                    f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
+                    "`generate()` (or a pipeline) directly."
                 )
 
     def save_pretrained(
