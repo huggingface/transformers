@@ -15,8 +15,11 @@
 
 import json
 import os
+import pathlib
 import tempfile
 
+from transformers import BatchFeature
+from transformers.image_utils import AnnotationFormat, AnnotionFormat
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -285,3 +288,81 @@ class ImageProcessingTestMixin:
         self.assertEqual(
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
+
+
+class AnnotationFormatTestMixin:
+    # this mixin adds a test to assert that usages of the
+    # to-be-deprecated `AnnotionFormat` continue to be
+    # supported for the time being
+
+    def test_processor_can_use_legacy_annotation_format(self):
+        image_processor_dict = self.image_processor_tester.prepare_image_processor_dict()
+        fixtures_path = pathlib.Path(__file__).parent / "fixtures" / "tests_samples" / "COCO"
+
+        with open(fixtures_path / "coco_annotations.txt", "r") as f:
+            detection_target = json.loads(f.read())
+
+        detection_annotations = {"image_id": 39769, "annotations": detection_target}
+
+        detection_params = {
+            "images": Image.open(fixtures_path / "000000039769.png"),
+            "annotations": detection_annotations,
+            "return_tensors": "pt",
+        }
+
+        with open(fixtures_path / "coco_panoptic_annotations.txt", "r") as f:
+            panoptic_target = json.loads(f.read())
+
+        panoptic_annotations = {"file_name": "000000039769.png", "image_id": 39769, "segments_info": panoptic_target}
+
+        masks_path = pathlib.Path(fixtures_path / "coco_panoptic")
+
+        panoptic_params = {
+            "images": Image.open(fixtures_path / "000000039769.png"),
+            "annotations": panoptic_annotations,
+            "return_tensors": "pt",
+            "masks_path": masks_path,
+        }
+
+        test_cases = [
+            ("coco_detection", detection_params),
+            ("coco_panoptic", panoptic_params),
+            (AnnotionFormat.COCO_DETECTION, detection_params),
+            (AnnotionFormat.COCO_PANOPTIC, panoptic_params),
+            (AnnotationFormat.COCO_DETECTION, detection_params),
+            (AnnotationFormat.COCO_PANOPTIC, panoptic_params),
+        ]
+
+        def _compare(a, b) -> None:
+            if isinstance(a, (dict, BatchFeature)):
+                self.assertEqual(a.keys(), b.keys())
+                for k, v in a.items():
+                    _compare(v, b[k])
+            elif isinstance(a, list):
+                self.assertEqual(len(a), len(b))
+                for idx in range(len(a)):
+                    _compare(a[idx], b[idx])
+            elif isinstance(a, torch.Tensor):
+                self.assertTrue(torch.allclose(a, b, atol=1e-3))
+            elif isinstance(a, str):
+                self.assertEqual(a, b)
+
+        for annotation_format, params in test_cases:
+            with self.subTest(annotation_format):
+                image_processor_params = {**image_processor_dict, **{"format": annotation_format}}
+                image_processor_first = self.image_processing_class(**image_processor_params)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    image_processor_first.save_pretrained(tmpdirname)
+                    image_processor_second = self.image_processing_class.from_pretrained(tmpdirname)
+
+                # check the 'format' key exists and that the dicts of the
+                # first and second processors are equal
+                self.assertIn("format", image_processor_first.to_dict().keys())
+                self.assertEqual(image_processor_second.to_dict(), image_processor_first.to_dict())
+
+                # perform encoding using both processors and compare
+                # the resulting BatchFeatures
+                first_encoding = image_processor_first(**params)
+                second_encoding = image_processor_second(**params)
+                _compare(first_encoding, second_encoding)

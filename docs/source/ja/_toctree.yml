@@ -31,9 +31,74 @@
 - sections:
   - isExpanded: false
     sections:
+    - local: tasks/sequence_classification
+      title: テキストの分類
+    - local: tasks/token_classification
+      title: トークンの分類
+    - local: tasks/question_answering
+      title: 質疑応答
+    - local: tasks/language_modeling
+      title: 因果言語モデリング
+    - local: tasks/masked_language_modeling
+      title: マスクされた言語モデリング
+    - local: tasks/translation
+      title: 翻訳
+    - local: tasks/summarization
+      title: 要約
+    - local: tasks/multiple_choice
+      title: 複数の選択肢
+    title: 自然言語処理
+  - isExpanded: false
+    sections:
+    - local: tasks/audio_classification
+      title: 音声の分類
+    - local: tasks/asr
+      title: 自動音声認識
+    title: オーディオ
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: 画像分類
+    - local: tasks/semantic_segmentation
+      title: セマンティックセグメンテーション
+    - local: tasks/video_classification
+      title: ビデオの分類
+    - local: tasks/object_detection
+      title: 物体検出
+    - local: tasks/zero_shot_object_detection
+      title: ゼロショット物体検出
+    - local: tasks/zero_shot_image_classification
+      title: ゼロショット画像分類
+    - local: tasks/monocular_depth_estimation
+      title: 深さの推定
+    - local: tasks/image_to_image
+      title: 画像から画像へ
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: コンピュータビジョンのための知識の蒸留
+    title: コンピュータビジョン
+  - isExpanded: false
+    sections:
+    - local: tasks/image_captioning
+      title: 画像のキャプション
+    - local: tasks/document_question_answering
+      title: 文書の質問への回答
+    - local: tasks/visual_question_answering
+      title: 視覚的な質問への回答
+    - local: tasks/text-to-speech
+      title: テキスト読み上げ
+    title: マルチモーダル
+  - isExpanded: false
+    sections:
     - local: generation_strategies
       title: 生成戦略をカスタマイズする
-    title: Generation
+    title: 世代
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: IDEFICS を使用したイメージ タスク
+    - local: tasks/prompting
+      title: LLM プロンプト ガイド
+    title: プロンプト
   title: Task Guides
 - sections:
   - local: fast_tokenizers
@@ -185,11 +250,70 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bart
+        title: BART
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
+      - local: model_doc/bert-generation
+        title: BertGeneration
+      - local: model_doc/bert-japanese
+        title: BertJapanese
+      - local: model_doc/bertweet
+        title: Bertweet
+      - local: model_doc/big_bird
+        title: BigBird
+      - local: model_doc/bigbird_pegasus
+        title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
+      - local: model_doc/blenderbot
+        title: Blenderbot
+      - local: model_doc/blenderbot-small
+        title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
       title: 文章モデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/beit
+        title: BEiT
+      - local: model_doc/bit
+        title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      title: ビジョンモデル
     - isExpanded: false
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
+      - local: model_doc/clap
+        title: CLAP
       title: 音声モデル
     - isExpanded: false
       sections:
@@ -197,6 +321,22 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       title: マルチモーダルモデル
     - isExpanded: false
       sections:

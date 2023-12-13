@@ -28,6 +28,7 @@ import random
 import re
 import shutil
 import sys
+import tempfile
 import time
 import warnings
 from collections.abc import Mapping
@@ -48,7 +49,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import create_repo, upload_folder
+from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -595,7 +596,6 @@ class Trainer:
         # returned to 0 every time flos need to be logged
         self.current_flos = 0
         self.hp_search_backend = None
-        self.use_tune_checkpoints = False
         default_label_names = find_labels(self.model.__class__)
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.can_return_loss = can_return_loss(self.model.__class__)
@@ -650,38 +650,38 @@ class Trainer:
 
     def add_callback(self, callback):
         """
-        Add a callback to the current list of [`~transformer.TrainerCallback`].
+        Add a callback to the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will instantiate a member of that class.
         """
         self.callback_handler.add_callback(callback)
 
     def pop_callback(self, callback):
         """
-        Remove a callback from the current list of [`~transformer.TrainerCallback`] and returns it.
+        Remove a callback from the current list of [`~transformers.TrainerCallback`] and returns it.
 
         If the callback is not found, returns `None` (and no error is raised).
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will pop the first member of that class found in the list of callbacks.
 
         Returns:
-            [`~transformer.TrainerCallback`]: The callback removed, if found.
+            [`~transformers.TrainerCallback`]: The callback removed, if found.
         """
         return self.callback_handler.pop_callback(callback)
 
     def remove_callback(self, callback):
         """
-        Remove a callback from the current list of [`~transformer.TrainerCallback`].
+        Remove a callback from the current list of [`~transformers.TrainerCallback`].
 
         Args:
-           callback (`type` or [`~transformer.TrainerCallback`]):
-               A [`~transformer.TrainerCallback`] class or an instance of a [`~transformer.TrainerCallback`]. In the
+           callback (`type` or [`~transformers.TrainerCallback`]):
+               A [`~transformers.TrainerCallback`] class or an instance of a [`~transformers.TrainerCallback`]. In the
                first case, will remove the first member of that class found in the list of callbacks.
         """
         self.callback_handler.remove_callback(callback)
@@ -695,7 +695,10 @@ class Trainer:
     def _set_signature_columns_if_needed(self):
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
-            signature = inspect.signature(self.model.forward)
+            model_to_inspect = self.model
+            if is_peft_available() and isinstance(self.model, PeftModel):
+                model_to_inspect = self.model.get_base_model()
+            signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
@@ -793,6 +796,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(train_dataset, torch.utils.data.IterableDataset):
@@ -850,6 +854,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
@@ -881,6 +886,7 @@ class Trainer:
             "collate_fn": data_collator,
             "num_workers": self.args.dataloader_num_workers,
             "pin_memory": self.args.dataloader_pin_memory,
+            "persistent_workers": self.args.dataloader_persistent_workers,
         }
 
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
@@ -1111,7 +1117,7 @@ class Trainer:
                 optimizer=self.optimizer if optimizer is None else optimizer,
                 num_warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 num_training_steps=num_training_steps,
-                **self.args.lr_scheduler_kwargs,
+                scheduler_specific_kwargs=self.args.lr_scheduler_kwargs,
             )
             self._created_lr_scheduler = True
         return self.lr_scheduler
@@ -1198,7 +1204,8 @@ class Trainer:
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
         if self.hp_search_backend is None or trial is None:
             return
-        self.objective = self.compute_objective(metrics.copy())
+        metrics = metrics.copy()
+        self.objective = self.compute_objective(metrics)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
@@ -1208,24 +1215,23 @@ class Trainer:
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
-            from ray import tune
+            import ray.train
 
-            if self.control.should_save:
-                self._tune_save_checkpoint()
-            tune.report(objective=self.objective, **metrics)
+            with tempfile.TemporaryDirectory() as temp_checkpoint_dir:
+                checkpoint = None
+                if self.control.should_save:
+                    self._tune_save_checkpoint(checkpoint_dir=temp_checkpoint_dir)
+                    checkpoint = ray.train.Checkpoint.from_directory(temp_checkpoint_dir)
+                metrics["objective"] = self.objective
+                ray.train.report(metrics, checkpoint=checkpoint)
 
-    def _tune_save_checkpoint(self):
-        from ray import tune
-
-        if not self.use_tune_checkpoints:
-            return
-        with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
-            output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
-            self.save_model(output_dir, _internal_call=True)
-            if self.args.should_save:
-                self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+    def _tune_save_checkpoint(self, checkpoint_dir: str):
+        output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
+        self.save_model(output_dir, _internal_call=True)
+        if self.args.should_save:
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
 
     def call_model_init(self, trial=None):
         model_init_argcount = number_of_arguments(self.model_init)
@@ -1504,6 +1510,10 @@ class Trainer:
             and not self.is_fsdp_enabled
         ):
             self._load_from_checkpoint(resume_from_checkpoint)
+            # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
+            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            if state.train_batch_size is not None:
+                self._train_batch_size = state.train_batch_size
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
@@ -1539,6 +1549,8 @@ class Trainer:
     ):
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
+        if self.args.auto_find_batch_size:
+            self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1595,7 +1607,7 @@ class Trainer:
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
                     "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torch.distributed.launch)."
+                    " (torchrun or torch.distributed.launch (deprecated))."
                 )
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
@@ -1615,6 +1627,7 @@ class Trainer:
 
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
+        self.state.train_batch_size = self._train_batch_size
 
         # Compute absolute values for logging, eval, and save if given as ratio
         if args.logging_steps is not None:
@@ -1994,9 +2007,9 @@ class Trainer:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
                 run_id = trial.number
             elif self.hp_search_backend == HPSearchBackend.RAY:
-                from ray import tune
+                import ray.train
 
-                run_id = tune.get_trial_id()
+                run_id = ray.train.get_context().get_trial_id()
             elif self.hp_search_backend == HPSearchBackend.SIGOPT:
                 run_id = trial.id
             elif self.hp_search_backend == HPSearchBackend.WANDB:
@@ -2329,13 +2342,21 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        self.save_model(output_dir, _internal_call=True)
+        if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
+            logger.warning(
+                f"Checkpoint destination directory {output_dir} already exists and is non-empty."
+                "Saving will proceed but saved results may be invalid."
+            )
+            staging_output_dir = output_dir
+        else:
+            staging_output_dir = os.path.join(run_dir, f"tmp-{checkpoint_folder}")
+        self.save_model(staging_output_dir, _internal_call=True)
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
-            self._save_optimizer_and_scheduler(output_dir)
+            self._save_optimizer_and_scheduler(staging_output_dir)
             # Save RNG state
-            self._save_rng_state(output_dir)
+            self._save_rng_state(staging_output_dir)
 
         # Determine the new best metric / best model checkpoint
         if metrics is not None and self.args.metric_for_best_model is not None:
@@ -2355,10 +2376,14 @@ class Trainer:
 
         # Save the Trainer state
         if self.args.should_save:
-            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
+            self.state.save_to_json(os.path.join(staging_output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
-            self._push_from_checkpoint(output_dir)
+            self._push_from_checkpoint(staging_output_dir)
+
+        # Place checkpoint in final location after all saving is finished.
+        if staging_output_dir != output_dir:
+            os.rename(staging_output_dir, output_dir)
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
@@ -2831,7 +2856,7 @@ class Trainer:
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(
+                unwrap_model(self.model).to("cpu").save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
                     state_dict=self.model.state_dict(),
@@ -2839,10 +2864,12 @@ class Trainer:
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict()
+                state_dict = self.model.state_dict().to("cpu")
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
+            self.model.to("cpu").save_pretrained(
+                output_dir, is_main_process=self.args.should_save, save_function=xm.save
+            )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
@@ -3489,6 +3516,12 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+        model_card_filepath = os.path.join(self.args.output_dir, "README.md")
+        is_peft_library = False
+        if os.path.exists(model_card_filepath):
+            library_name = ModelCard.load(model_card_filepath).data.get("library_name")
+            is_peft_library = library_name == "peft"
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -3502,8 +3535,11 @@ class Trainer:
             dataset_args=dataset_args,
         )
         model_card = training_summary.to_model_card()
-        with open(os.path.join(self.args.output_dir, "README.md"), "w") as f:
+        with open(model_card_filepath, "w") as f:
             f.write(model_card)
+
+        if is_peft_library:
+            unwrap_model(self.model).create_or_update_model_card(self.args.output_dir)
 
     def _push_from_checkpoint(self, checkpoint_folder):
         # Only push from one node.
