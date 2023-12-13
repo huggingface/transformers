@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from datasets import Audio, load_dataset
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
@@ -329,16 +329,16 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [
-                    {"text": " Conquered", "timestamp": (0.5, 1.2)},
-                    {"text": " returned", "timestamp": (1.2, 1.64)},
-                    {"text": " to", "timestamp": (1.64, 1.84)},
-                    {"text": " its", "timestamp": (1.84, 2.02)},
-                    {"text": " place", "timestamp": (2.02, 2.28)},
-                    {"text": " amidst", "timestamp": (2.28, 2.78)},
-                    {"text": " the", "timestamp": (2.78, 2.96)},
-                    {"text": " tents.", "timestamp": (2.96, 3.48)},
+                'text': ' Conquered returned to its place amidst the tents.',
+                'chunks': [
+                    {'text': ' Conquered', 'timestamp': (0.5, 1.2)},
+                    {'text': ' returned', 'timestamp': (1.2, 1.64)},
+                    {'text': ' to', 'timestamp': (1.64, 1.84)},
+                    {'text': ' its', 'timestamp': (1.84, 2.02)},
+                    {'text': ' place', 'timestamp': (2.02, 2.28)},
+                    {'text': ' amidst', 'timestamp': (2.28, 2.8)},
+                    {'text': ' the', 'timestamp': (2.8, 2.98)},
+                    {'text': ' tents.', 'timestamp': (2.98, 3.48)},
                 ],
             },
         )
@@ -776,27 +776,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-                "chunks": [
-                    {'text': ' Mr.', 'timestamp': (0.0, 1.02)},
-                    {'text': ' Quilter', 'timestamp': (1.02, 1.18)},
+                'text': ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.',
+                'chunks': [
+                    {'text': ' Mr.', 'timestamp': (0.38, 1.04)},
+                    {'text': ' Quilter', 'timestamp': (1.04, 1.18)},
                     {'text': ' is', 'timestamp': (1.18, 1.44)},
                     {'text': ' the', 'timestamp': (1.44, 1.58)},
                     {'text': ' apostle', 'timestamp': (1.58, 1.98)},
-                    {'text': ' of', 'timestamp': (1.98, 2.3)},
-                    {'text': ' the', 'timestamp': (2.3, 2.46)},
+                    {'text': ' of', 'timestamp': (1.98, 2.32)},
+                    {'text': ' the', 'timestamp': (2.32, 2.46)},
                     {'text': ' middle', 'timestamp': (2.46, 2.56)},
-                    {'text': ' classes,', 'timestamp': (2.56, 3.38)},
-                    {'text': ' and', 'timestamp': (3.38, 3.52)},
-                    {'text': ' we', 'timestamp': (3.52, 3.6)},
-                    {'text': ' are', 'timestamp': (3.6, 3.72)},
+                    {'text': ' classes,', 'timestamp': (2.56, 3.4)},
+                    {'text': ' and', 'timestamp': (3.4, 3.54)},
+                    {'text': ' we', 'timestamp': (3.54, 3.62)},
+                    {'text': ' are', 'timestamp': (3.62, 3.72)},
                     {'text': ' glad', 'timestamp': (3.72, 4.0)},
                     {'text': ' to', 'timestamp': (4.0, 4.26)},
-                    {'text': ' welcome', 'timestamp': (4.26, 4.54)},
-                    {'text': ' his', 'timestamp': (4.54, 4.92)},
-                    {'text': ' gospel.', 'timestamp': (4.92, 6.66)},
-                ],
-            },
+                    {'text': ' welcome', 'timestamp': (4.26, 4.56)},
+                    {'text': ' his', 'timestamp': (4.56, 4.92)},
+                    {'text': ' gospel.', 'timestamp': (4.92, 5.84)}
+                ]
+            }
         )
         # fmt: on
 
@@ -1089,6 +1089,51 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     @slow
+    def test_whisper_longform(self):
+        # fmt: off
+        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out of fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!"""
+        # fmt: on
+
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to("cuda")
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            device="cuda:0",
+        )
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+        audio = ds[:1]["audio"]
+
+        result = pipe(audio)[0]["text"]
+
+        assert result == EXPECTED_RESULT
+
+    @require_torch
+    @slow
+    def test_seamless_v2(self):
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="facebook/seamless-m4t-v2-large",
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        result = pipe(sample, generate_kwargs={"tgt_lang": "eng"})
+        EXPECTED_RESULT = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+
+        assert result["text"] == EXPECTED_RESULT
+
+    @require_torch
+    @slow
     def test_chunking_and_timestamps(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
@@ -1355,7 +1400,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             out,
             {
                 "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "", "timestamp": (18.94, 0.02)},
                     {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
                 ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",

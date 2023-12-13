@@ -269,7 +269,7 @@ def main():
             token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if raw_datasets["train"] is not None:
         column_names = raw_datasets["train"].column_names

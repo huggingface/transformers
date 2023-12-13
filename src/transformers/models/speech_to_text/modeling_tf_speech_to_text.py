@@ -1460,3 +1460,9 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def tf_to_pt_weight_rename(self, tf_weight):
+        if tf_weight == "lm_head.weight":
+            return tf_weight, "model.decoder.embed_tokens.weight"
+        else:
+            return (tf_weight,)

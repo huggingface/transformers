@@ -38,7 +38,9 @@ from transformers import (
     AutoTokenizer,
     IntervalStrategy,
     PretrainedConfig,
+    TrainerCallback,
     TrainingArguments,
+    get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
     logging,
 )
@@ -78,7 +80,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -643,6 +646,33 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertFalse(torch.allclose(trainer.model.b, b))
         self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
+    def test_lr_scheduler_kwargs(self):
+        # test scheduler kwargs passed via TrainingArguments
+        train_dataset = RegressionDataset()
+        model = RegressionModel()
+        num_steps, num_warmup_steps = 10, 2
+        extra_kwargs = {"power": 5.0, "lr_end": 1e-5}  # Non-default arguments
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="polynomial",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+
+        # Checking that the scheduler was created
+        self.assertIsNotNone(trainer.lr_scheduler)
+
+        # Checking that the correct args were passed
+        sched1 = trainer.lr_scheduler
+        sched2 = get_polynomial_decay_schedule_with_warmup(
+            trainer.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_steps, **extra_kwargs
+        )
+        self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
+        self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
+
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
@@ -672,7 +702,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             def log(self, logs):
                 # the LR is computed after metrics and does not exist for the first epoch
                 if hasattr(self.lr_scheduler, "_last_lr"):
-                    logs["learning_rate"] = self.lr_scheduler._last_lr
+                    logs["learning_rate"] = self.lr_scheduler._last_lr[0]
                 super().log(logs)
 
         train_dataset = RegressionDataset(length=64)
@@ -702,14 +732,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             if loss > best_loss:
                 bad_epochs += 1
                 if bad_epochs > patience:
-                    self.assertLess(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
+                    self.assertLess(logs[i + 1]["learning_rate"], log["learning_rate"])
                     just_decreased = True
                     bad_epochs = 0
             else:
                 best_loss = loss
                 bad_epochs = 0
             if not just_decreased:
-                self.assertEqual(logs[i + 1]["learning_rate"][0], log["learning_rate"][0])
+                self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
 
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
@@ -1282,6 +1312,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
+    def test_save_checkpoints_is_atomic(self):
+        class UnsaveableTokenizer(PreTrainedTokenizerBase):
+            def save_pretrained(self, *args, **kwargs):
+                raise OSError("simulated file write error")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            # Attach unsaveable tokenizer to partially fail checkpointing
+            trainer.tokenizer = UnsaveableTokenizer()
+            with self.assertRaises(OSError) as _context:
+                trainer.train()
+            assert get_last_checkpoint(tmpdir) is None
+
     @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
@@ -1503,6 +1546,41 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         testargs[-1] = "1"
         with patch.object(sys, "argv", testargs):
             run_glue.main()
+
+    def test_auto_batch_size_with_resume_from_checkpoint(self):
+        train_dataset = RegressionDataset(length=128)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        class MockCudaOOMCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                # simulate OOM on the first step
+                if state.train_batch_size >= 16:
+                    raise RuntimeError("CUDA out of memory.")
+
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+        trainer.train()
+        # After `auto_find_batch_size` is ran we should now be at 8
+        self.assertEqual(trainer._train_batch_size, 8)
+
+        # We can then make a new Trainer
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        # Check we are at 16 to start
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
+        trainer.train(resume_from_checkpoint=True)
+        # We should be back to 8 again, picking up based upon the last ran Trainer
+        self.assertEqual(trainer._train_batch_size, 8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):

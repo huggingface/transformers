@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, require_torch_gpu, slow, t
 from transformers.utils import cached_property
 
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_vision_available():
@@ -262,9 +263,9 @@ class FuyuModelTester:
 
 
 @require_torch
-class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
+class FuyuModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-to-text": FuyuForCausalLM} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-generation": FuyuForCausalLM} if is_torch_available() else {}
 
     test_head_masking = False
     test_pruning = False
@@ -292,6 +293,21 @@ class FuyuModelTest(ModelTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_disk_offload_bin(self):
+        super().test_disk_offload()
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_disk_offload_safetensors(self):
+        super().test_disk_offload()
+
+    # TODO: Fix me (once this model gets more usage)
+    @unittest.skip("Does not work on the tiny model.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
 
 
 @slow

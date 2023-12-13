@@ -277,7 +277,7 @@ def main():
             # Loading a dataset from local json files
             raw_datasets = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Labels
     label_list = raw_datasets["train"].features["label"].names
