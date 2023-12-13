@@ -167,7 +167,6 @@ class DetaModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrObjectDetectionOutput with DeformableDetr->Deta
 class DetaObjectDetectionOutput(ModelOutput):
     """
     Output type of [`DetaForObjectDetection`].
@@ -226,6 +225,8 @@ class DetaObjectDetectionOutput(ModelOutput):
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        output_proposals (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Logits of proposal bounding boxes coordinates in the gen_encoder_output_proposals.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -245,6 +246,7 @@ class DetaObjectDetectionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional = None
     enc_outputs_coord_logits: Optional = None
+    output_proposals: Optional[torch.FloatTensor] = None
 
 
 def _get_clones(module, N):
@@ -1996,6 +1998,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=outputs.enc_outputs_class,
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            output_proposals=outputs.output_proposals,
         )
 
         return dict_outputs
