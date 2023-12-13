@@ -66,7 +66,7 @@ class SegGptModelTester:
         mlp_ratio=2.0,
         merge_index=0,
         out_indicies=[1],
-        pretrain_img_size=10,
+        pretrain_image_size=10,
         decoder_hidden_size=10,
     ):
         self.parent = parent
@@ -86,7 +86,7 @@ class SegGptModelTester:
         self.mlp_ratio = mlp_ratio
         self.merge_index = merge_index
         self.out_indicies = out_indicies
-        self.pretrain_img_size = pretrain_img_size
+        self.pretrain_image_size = pretrain_image_size
         self.decoder_hidden_size = decoder_hidden_size
 
         # in SegGpt, the seq length equals the number of patches (we don't use the [CLS] token)

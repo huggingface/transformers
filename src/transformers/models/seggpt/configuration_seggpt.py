@@ -14,13 +14,8 @@
 # limitations under the License.
 """ SegGpt model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -58,7 +53,7 @@ class SegGptConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to `[896, 448]`):
+        image_size (`List[int]`, *optional*, defaults to `[896, 448]`):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
@@ -70,11 +65,11 @@ class SegGptConfig(PretrainedConfig):
             The ratio of mlp hidden dim to embedding dim.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The drop path rate for the dropout layers.
-        pretrain_img_size (`int`, *optional*, defaults to 224):
+        pretrain_image_size (`int`, *optional*, defaults to 224):
             The pretrained size of the absolute position embeddings.
         decoder_hidden_size (`int`, *optional*, defaults to 64):
             Hidden size for decoder.
-        use_rel_pos (`bool`, *optional*, defaults to `True`):
+        use_relative_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use relative position encoding in the Attention
         merge_index (`int`, *optional*, defaults to 2):
             The index of the encoder layer to merge the embeddings.
@@ -115,9 +110,9 @@ class SegGptConfig(PretrainedConfig):
         qkv_bias=True,
         mlp_ratio=4.0,
         drop_path_rate=0.1,
-        pretrain_img_size=224,
+        pretrain_image_size=224,
         decoder_hidden_size=64,
-        use_rel_pos=True,
+        use_relative_position_embeddings=True,
         merge_index=2,
         out_indicies=[5, 11, 17, 23],
         beta=0.01,
@@ -138,9 +133,9 @@ class SegGptConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.mlp_ratio = mlp_ratio
         self.drop_path_rate = drop_path_rate
-        self.pretrain_img_size = pretrain_img_size
+        self.pretrain_image_size = pretrain_image_size
         self.decoder_hidden_size = decoder_hidden_size
-        self.use_rel_pos = use_rel_pos
+        self.use_relative_position_embeddings = use_relative_position_embeddings
         if merge_index > min(out_indicies):
             raise ValueError(
                 f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {out_indicies=}"
@@ -148,19 +143,3 @@ class SegGptConfig(PretrainedConfig):
         self.merge_index = merge_index
         self.out_indicies = out_indicies
         self.beta = beta
-
-
-class SegGptOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4

@@ -144,7 +144,7 @@ class SegGptEmbeddings(nn.Module):
 
         self.patch_embeddings = SegGptPatchEmbeddings(config)
 
-        num_positions = (config.pretrain_img_size // config.patch_size) ** 2 + 1
+        num_positions = (config.pretrain_image_size // config.patch_size) ** 2 + 1
         self.position_embeddings = nn.Parameter(torch.randn(1, num_positions, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
@@ -268,8 +268,8 @@ class SegGptAttention(nn.Module):
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
 
-        self.use_rel_pos = config.use_rel_pos
-        if self.use_rel_pos:
+        self.use_relative_position_embeddings = config.use_relative_position_embeddings
+        if self.use_relative_position_embeddings:
             if input_size is None:
                 raise ValueError("Input size must be provided if using relative positional encoding.")
 
@@ -367,7 +367,7 @@ class SegGptAttention(nn.Module):
 
         attn_weights = (query * self.scale) @ key.transpose(-2, -1)
 
-        if self.use_rel_pos:
+        if self.use_relative_position_embeddings:
             attn_weights = self.add_decomposed_rel_pos(
                 attn_weights, query, self.rel_pos_h, self.rel_pos_w, (height, width), (height, width)
             )

@@ -417,13 +417,13 @@ class SegGptImageProcessor(BaseImageProcessor):
             `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
             in the batch as predicted by the model.
         """
-        masks = outputs.pred_masks  # B x C x 2*H x W
-        # Take predicted mask as input and prompt are concatenated in the H dimension
-        masks = masks[:, :, masks.shape[2] // 2 :, :]  # B x C x H x W
+        masks = outputs.pred_masks  # batch_size x num_channels x 2*height x width
+        # Take predicted mask as input and prompt are concatenated in the height dimension
+        masks = masks[:, :, masks.shape[2] // 2 :, :]  # batch_size x num_channels x height x width
         # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
         masks = (masks.permute(0, 2, 3, 1) * torch.tensor(self.image_std) + torch.tensor(self.image_mean)).permute(
             0, 3, 1, 2
-        )  # B x C x H x W
+        )  # batch_size x num_channels x height x width
 
         results = []
 
