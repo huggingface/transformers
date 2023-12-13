@@ -2803,9 +2803,7 @@ class Trainer:
             output_dir = self.args.output_dir
 
         if is_torch_tpu_available():
-            model = copy.deepcopy(self.model)
-            model.to("cpu")
-            self._save_tpu(model, output_dir)
+            self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
@@ -2845,9 +2843,11 @@ class Trainer:
         if self.args.push_to_hub and not _internal_call:
             self.push_to_hub(commit_message="Model save")
 
-    def _save_tpu(self, model, output_dir: Optional[str] = None):
+    def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         logger.info(f"Saving model checkpoint to {output_dir}")
+        model = copy.deepcopy(self.model)
+        model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
