@@ -17,19 +17,12 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_flax_available,
-    is_sentencepiece_available,
-    is_tf_available,
-    is_tokenizers_available,
     is_torch_available,
 )
 
-
 _import_structure = {
-    "configuration_switch_transformers": [
-        "SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SwitchTransformersConfig",
-        "SwitchTransformersOnnxConfig",
+    "configuration_sigma_moe": [
+        "SigmaMoEConfiguration",
     ]
 }
 
@@ -39,22 +32,15 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_switch_transformers"] = [
-        "SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SwitchTransformersEncoderModel",
-        "SwitchTransformersForConditionalGeneration",
-        "SwitchTransformersModel",
-        "SwitchTransformersPreTrainedModel",
-        "SwitchTransformersTop1Router",
-        "SwitchTransformersSparseMLP",
+    _import_structure["modeling_sigma_moe"] = [
+        "SigmaMoEFeedForwardLayer",
+        "SigmaMoETransformerLayer",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_switch_transformers import (
-        SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SwitchTransformersConfig,
-        SwitchTransformersOnnxConfig,
+    from .configuration_sigma_moe import (
+        SigmaMoEConfiguration,
     )
 
     try:
@@ -63,14 +49,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_switch_transformers import (
-            SWITCH_TRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SwitchTransformersEncoderModel,
-            SwitchTransformersForConditionalGeneration,
-            SwitchTransformersModel,
-            SwitchTransformersPreTrainedModel,
-            SwitchTransformersSparseMLP,
-            SwitchTransformersTop1Router,
+        from .modeling_sigma_moe import (
+            SigmaMoEFeedForwardLayer,
+            SigmaMoETransformerLayer,
         )
 
 

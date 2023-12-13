@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../moe_layer"
+		},
+		{
+			"path": "../moe"
+		}
+	],
+	"settings": {}
+}
