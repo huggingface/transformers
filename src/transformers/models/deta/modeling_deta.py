@@ -1734,7 +1734,7 @@ class DetaModel(DetaPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs + output_proposals
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
 
             return tuple_outputs
 
@@ -1810,7 +1810,6 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         self.post_init()
 
     @torch.jit.unused
-    # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection._set_aux_loss
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
@@ -1963,7 +1962,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
                     aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                aux_weight_dict.update({k + f"_enc": v for k, v in weight_dict.items()})
+                aux_weight_dict.update({k + "_enc": v for k, v in weight_dict.items()})
                 weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
