@@ -94,6 +94,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         inputs_tensor: Optional[torch.Tensor] = None,
         eos_token_id: Optional[Union[int, List[int]]] = None,
     ):
+        # Make sure all data at the same device as assistant model
+        device = assistant_model.device
+        input_ids = input_ids.to(device)
+        inputs_tensor = inputs_tensor.to(device)
+
         self.assistant_model = assistant_model
 
         # Prepare the number of candidate tokens
@@ -111,7 +116,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         assistant_kwargs = {}
         for key, value in model_kwargs.items():  # deepcopy crashes if we attempt to copy encoder outputs with grads
             if key not in ("encoder_outputs", "assistant_encoder_outputs"):
-                assistant_kwargs[key] = value.detach() if isinstance(value, torch.Tensor) else copy.deepcopy(value)
+                assistant_kwargs[key] = (
+                    value.detach().to(device) if isinstance(value, torch.Tensor) else copy.deepcopy(value)
+                )
 
         if "assistant_encoder_outputs" in model_kwargs:
             assistant_kwargs["encoder_outputs"] = model_kwargs["assistant_encoder_outputs"]
