@@ -54,6 +54,7 @@ class LogitsProcessor:
     def pass_all_logits(self):
         return getattr(self, "_pass_all_logits", False)
 
+
 class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
 
@@ -93,7 +94,7 @@ class LogitsProcessorList(list):
         """
         if not any(processor.pass_all_logits for processor in self) and len(scores.shape) > 2:
             scores = scores[:, -1, :]
-        
+
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
             if len(function_args) > 2:
@@ -1824,7 +1825,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     """
 
     def __init__(
-            self, generate_config, begin_index: Optional[int] = None, _detect_timestamp_from_logprob: Optional[bool] = None 
+        self, generate_config, begin_index: Optional[int] = None, _detect_timestamp_from_logprob: Optional[bool] = None
     ):  # support for the kwargs
         self.no_timestamps_token_id = generate_config.no_timestamps_token_id
         self.timestamp_begin = generate_config.no_timestamps_token_id + 1
@@ -1837,9 +1838,11 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             else getattr(generate_config, "_detect_timestamp_from_logprob", True)
         )
 
-        num_forced_ids = len(generate_config.forced_decoder_ids) if generate_config.forced_decoder_ids is not None else 0
+        num_forced_ids = (
+            len(generate_config.forced_decoder_ids) if generate_config.forced_decoder_ids is not None else 0
+        )
         self.begin_index = begin_index or (num_forced_ids + 1)
-            
+
         self.max_initial_timestamp_index = getattr(generate_config, "max_initial_timestamp_index", None)
         # TODO(Patrick): Make sure that official models have max_initial_timestamp_index set to 50
         # self.max_initial_timestamp_index = 50
@@ -1929,7 +1932,7 @@ class WhisperNoSpeechDetection(LogitsProcessor):
             no_speech_scores = scores[:, no_speech_index]
             probs = no_speech_scores.float().softmax(dim=-1)
             self._no_speech_prob = probs[:, self.no_speech_token]
-        
+
         scores = scores[:, -1, :]
 
         return scores
