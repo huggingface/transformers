@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
-from .configurationencoderdecoder import EncoderDecoderConfig
+from .configuration_encoder_decoder import EncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -176,7 +176,7 @@ class EncoderDecoderModel(PreTrainedModel):
     """
 
     config_class = EncoderDecoderConfig
-    base_model_prefix = "encoderdecoder"
+    base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
@@ -274,9 +274,11 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
+
     @property
     def output_embeddings(self):
         return self.decoder.get_output_embeddings()
+
     @output_embeddings.setter
     def output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
@@ -383,7 +385,7 @@ class EncoderDecoderModel(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
-    def fromencoderdecoder_pretrained(
+    def from_encoder_decoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
@@ -444,7 +446,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> from transformers import EncoderDecoderModel
 
         >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-        >>> model = EncoderDecoderModel.fromencoderdecoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2bert")
         >>> # load fine-tuned model
@@ -522,14 +524,14 @@ class EncoderDecoderModel(PreTrainedModel):
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `isdecoder` and `add_cross_attention` of `decoder_config` "
-                    "passed to `.fromencoderdecoder_pretrained(...)` are set to `True` or do not pass a "
+                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
                     "`decoder_config` to `.fromencoderdecoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargsdecoder)
 
         # instantiate config with corresponding kwargs
-        config = EncoderDecoderConfig.fromencoderdecoder_configs(encoder.config, decoder.config, **kwargs)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
     @add_start_docstrings_to_model_forward(ENCODERdecoder_INPUTS_DOCSTRING)
