@@ -161,6 +161,7 @@ class DetaConfig(PretrainedConfig):
         two_stage_num_proposals=300,
         with_box_refine=True,
         assign_first_stage=True,
+        assign_second_stage=True,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -208,6 +209,7 @@ class DetaConfig(PretrainedConfig):
         self.two_stage_num_proposals = two_stage_num_proposals
         self.with_box_refine = with_box_refine
         self.assign_first_stage = assign_first_stage
+        self.assign_second_stage = assign_second_stage
         if two_stage is True and with_box_refine is False:
             raise ValueError("If two_stage is True, with_box_refine must be True.")
         # Hungarian matcher

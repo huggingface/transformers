@@ -148,6 +148,8 @@ class DetaModelOutput(ModelOutput):
             foreground and background).
         enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
             Logits of predicted bounding boxes coordinates in the first stage.
+        output_proposals (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
+            Logits of proposal bounding boxes coordinates in the gen_encoder_output_proposals.
     """
 
     init_reference_points: torch.FloatTensor = None
@@ -162,6 +164,7 @@ class DetaModelOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    output_proposals: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1633,6 +1636,7 @@ class DetaModel(DetaPreTrainedModel):
         batch_size, _, num_channels = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_logits = None
+        output_proposals = None
         if self.config.two_stage:
             object_query_embedding, output_proposals, level_ids = self.gen_encoder_output_proposals(
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
@@ -1730,7 +1734,7 @@ class DetaModel(DetaPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs + output_proposals
 
             return tuple_outputs
 
@@ -1747,6 +1751,7 @@ class DetaModel(DetaPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
+            output_proposals=output_proposals,
         )
 
 
@@ -1812,7 +1817,7 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # as a dict having both a Tensor and a list.
         aux_loss = []
         # TO DO: prettify
-        for i in range(outputs_class.size(1)):
+        for i in range(outputs_class.size(1)-1):
             aux_loss.append({"logits": outputs_class[:, i], "pred_boxes": outputs_coord[:, i]})
         return aux_loss
 
@@ -1934,18 +1939,21 @@ class DetaForObjectDetection(DetaPreTrainedModel):
                 focal_alpha=self.config.focal_alpha,
                 losses=losses,
                 num_queries=self.config.num_queries,
+                assign_first_stage=self.config.assign_first_stage,
+                assign_second_stage=self.config.assign_second_stage,
             )
             criterion.to(logits.device)
             # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
+            outputs_loss["init_reference"] = init_reference
             if self.config.auxiliary_loss:
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
             if self.config.two_stage:
                 enc_outputs_coord = outputs.enc_outputs_coord_logits.sigmoid()
-                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord}
+                outputs_loss["enc_outputs"] = {"logits": outputs.enc_outputs_class, "pred_boxes": enc_outputs_coord, "anchors":outputs.output_proposals.sigmoid()}
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
@@ -2664,7 +2672,7 @@ class DetaStage2Assigner(nn.Module):
                 sampled_idxs,
                 sampled_gt_classes,
             ) = self._sample_proposals(  # list of sampled proposal_ids, sampled_id -> [0, num_classes)+[bg_label]
-                matched_idxs, matched_labels, targets[b]["labels"]
+                matched_idxs, matched_labels, targets[b]["class_labels"]
             )
             pos_pr_inds = sampled_idxs[sampled_gt_classes != self.bg_label]
             pos_gt_inds = matched_idxs[pos_pr_inds]
@@ -2729,7 +2737,7 @@ class DetaStage1Assigner(nn.Module):
             )  # proposal_id -> highest_iou_gt_id, proposal_id -> [1 if iou > 0.7, 0 if iou < 0.3, -1 ow]
             matched_labels = self._subsample_labels(matched_labels)
 
-            all_pr_inds = torch.arange(len(anchors))
+            all_pr_inds = torch.arange(len(anchors), device=matched_labels.device)
             pos_pr_inds = all_pr_inds[matched_labels == 1]
             pos_gt_inds = matched_idxs[pos_pr_inds]
             pos_pr_inds, pos_gt_inds = self.postprocess_indices(pos_pr_inds, pos_gt_inds, iou)
