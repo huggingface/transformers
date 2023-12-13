@@ -1909,6 +1909,9 @@ class Mask4DTestBase(unittest.TestCase):
         return input_0, input_1, mask_1, position_ids_1
 
 
+@require_torch
+@require_torch_gpu
+@slow
 class Mask4DTestFP32(Mask4DTestBase):
     model_dtype = torch.float32
 
@@ -1959,6 +1962,9 @@ class Mask4DTestFP32(Mask4DTestBase):
         )
 
 
+@require_torch
+@require_torch_gpu
+@slow
 class Mask4DTestFP16(Mask4DTestBase):
     model_dtype = torch.float16
 
