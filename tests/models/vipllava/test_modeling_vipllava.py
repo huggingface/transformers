@@ -198,16 +198,19 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_small_model_integration_test(self):
-        from transformers import pipeline
-
         model_id = "llava-hf/vip-llava-7b-hf"
-        pipe = pipeline("image-to-text", model=model_id, model_kwargs={"load_in_4bit": True})
+
+        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
 
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
-        outputs = pipe(image, prompt=prompt, generate_kwargs={"max_new_tokens": 10})
+        inputs = processor(prompt, image, return_tensors="pt").to(torch_device, torch.float16)
+
+        outputs = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_OUTPUT = "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
-        self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
+        self.assertEqual(processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT)
