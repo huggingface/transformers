@@ -454,7 +454,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             )  # fmt: skip
 
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
-        # True is the default normalization schene when adding a token
+        # True is the default normalization scheme when adding a token. Normalize -> don't strip the space.
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
         with self.subTest("Slow edge case"):
@@ -467,6 +467,16 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 fast_tokenizer.tokenize(edge_case),
                 ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
             )  # fmt: skip
+            
+            
+        fast_tokenizer.add_tokens(AddedToken("<new_token_test_2>", rstrip=False, lstrip=False, normalized=False))
+        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_2>!"
+        with self.subTest("Fast edge case"):
+            self.assertEqual(
+                fast_tokenizer.tokenize(edge_case),
+                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_2>", "!"],
+            )  # fmt: skip 
+            
 
         hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
         with self.subTest("Slow hard edge case"):
