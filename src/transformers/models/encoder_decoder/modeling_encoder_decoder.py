@@ -266,19 +266,15 @@ class EncoderDecoderModel(PreTrainedModel):
                 self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
 
-    @property
     def getencoder(self):
         return self.encoder
 
-    @property
     def getdecoder(self):
         return self.decoder
 
-    @property
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
-    @property
     def output_embeddings(self):
         return self.decoder.get_output_embeddings()
 

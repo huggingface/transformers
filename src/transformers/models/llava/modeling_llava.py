@@ -244,7 +244,6 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    @property
     def output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
