@@ -381,9 +381,9 @@ class GPTQConfig(QuantizationConfigMixin):
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
         modules_in_block_to_quantize (`List[List[str]]`, *optional*):
-            List list of module names to quantize in the block specified. This argument is useful to exclude certain linear modules from being quantized.
+            List of list of module names to quantize in the specified block. This argument is useful to exclude certain linear modules from being quantized.
             The block to quantize can be specified by setting `block_name_to_quantize`. We will quantize each list sequentially. If not set, we will quantize all linear layers.
-            Example: `inside_layer_modules=[["self_attention.query_key_value"], ["mlp.dense_h_to_4h"]]`
+            Example: `modules_in_block_to_quantize =[["self_attention.query_key_value"], ["mlp.dense_h_to_4h"]]`
     """
 
     def __init__(
