@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel, AutoModelForCausalLM
-from .configuration_encoder_decoder import EncoderDecoderConfig
+from .configurationencoderdecoder import EncoderDecoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -46,7 +46,7 @@ DEPRECATION_WARNING = (
     " labels, no need to pass them yourself anymore."
 )
 
-ENCODER_DECODER_START_DOCSTRING = r"""
+ENCODERdecoder_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
     [`~AutoModel.from_pretrained`] function and the decoder is loaded via [`~AutoModelForCausalLM.from_pretrained`]
@@ -75,7 +75,7 @@ ENCODER_DECODER_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-ENCODER_DECODER_INPUTS_DOCSTRING = r"""
+ENCODERdecoder_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -166,7 +166,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-@add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
+@add_start_docstrings(ENCODERdecoder_START_DOCSTRING)
 class EncoderDecoderModel(PreTrainedModel):
     r"""
     [`EncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
@@ -176,7 +176,7 @@ class EncoderDecoderModel(PreTrainedModel):
     """
 
     config_class = EncoderDecoderConfig
-    base_model_prefix = "encoder_decoder"
+    base_model_prefix = "encoderdecoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
@@ -189,7 +189,7 @@ class EncoderDecoderModel(PreTrainedModel):
         if config is None and (encoder is None or decoder is None):
             raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
-            config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
+            config = EncoderDecoderConfig.fromencoderdecoder_configs(encoder.config, decoder.config)
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
@@ -216,38 +216,38 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
-        self._encoder = encoder
-        self._decoder = decoder
+        self.encoder = encoder
+        self.decoder = decoder
 
-        if self._encoder.config.to_dict() != self.config.encoder.to_dict():
+        if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
-                f"Config of the encoder: {self._encoder.__class__} is overwritten by shared encoder config:"
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
                 f" {self.config.encoder}"
             )
-        if self._decoder.config.to_dict() != self.config.decoder.to_dict():
+        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
-                f"Config of the decoder: {self._decoder.__class__} is overwritten by shared decoder config:"
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
                 f" {self.config.decoder}"
             )
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        self._encoder.config = self.config.encoder
-        self._decoder.config = self.config.decoder
+        self.encoder.config = self.config.encoder
+        self.decoder.config = self.config.decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
         if (
-            self._encoder.config.hidden_size != self._decoder.config.hidden_size
-            and self._decoder.config.cross_attention_hidden_size is None
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
         ):
-            self.enc_to_dec_proj = nn.Linear(self._encoder.config.hidden_size, self._decoder.config.hidden_size)
+            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
 
-        if self._encoder.get_output_embeddings() is not None:
+        if self.encoder.get_output_embeddings() is not None:
             raise ValueError(
-                f"The encoder {self._encoder} should not have a LM Head. Please use a model without LM Head"
+                f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-        decoder_signature = set(inspect.signature(self._decoder.forward).parameters.keys())
+        decoder_signature = set(inspect.signature(self.decoder.forward).parameters.keys())
         if "encoder_hidden_states" not in decoder_signature:
             raise ValueError(
                 "The selected decoder is not prepared for the encoder hidden states to be passed. Please see the "
@@ -259,32 +259,32 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def tie_weights(self):
         # tie encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
+        if self.config.tieencoderdecoder:
             # tie encoder and decoder base model
-            decoder_base_model_prefix = self._decoder.base_model_prefix
-            self._tie_encoder_decoder_weights(
-                self._encoder, self._decoder._modules[decoder_base_model_prefix], self._decoder.base_model_prefix
+            decoder_base_model_prefix = self.decoder.base_model_prefix
+            self._tieencoderdecoder_weights(
+                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
 
     @property
-    def get_encoder(self):
-        return self._encoder
+    def getencoder(self):
+        return self.encoder
 
     @property
-    def get_decoder(self):
-        return self._decoder
+    def getdecoder(self):
+        return self.decoder
 
     @property
     def get_input_embeddings(self):
-        return self._encoder.get_input_embeddings()
+        return self.encoder.get_input_embeddings()
 
     @property
     def output_embeddings(self):
-        return self._decoder.get_output_embeddings()
+        return self.decoder.get_output_embeddings()
 
     @output_embeddings.setter
     def output_embeddings(self, new_embeddings):
-        return self._decoder.set_output_embeddings(new_embeddings)
+        return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -328,18 +328,18 @@ class EncoderDecoderModel(PreTrainedModel):
             for v in decoder.trainable_variables + decoder.non_trainable_variables:
                 decoder_variables["/".join(v.name.split("/")[1:])] = v
 
-            _encoder_variables = {}
+            encoder_variables = {}
             for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
-                _encoder_variables["/".join(v.name.split("/")[2:])] = v
-            _decoder_variables = {}
+                encoder_variables["/".join(v.name.split("/")[2:])] = v
+            decoder_variables = {}
             for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
-                _decoder_variables["/".join(v.name.split("/")[2:])] = v
+                decoder_variables["/".join(v.name.split("/")[2:])] = v
 
             # assign weight values to `encoder` and `decoder` from `_tf_model`
             for name, v in encoder_variables.items():
-                v.assign(_encoder_variables[name])
+                v.assign(encoder_variables[name])
             for name, v in decoder_variables.items():
-                v.assign(_decoder_variables[name])
+                v.assign(decoder_variables[name])
 
             tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -365,7 +365,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 del tf_model
                 gc.collect()
 
-                model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+                model = EncoderDecoderModel.fromencoderdecoder_pretrained(
                     encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
                 )
                 # This is only for copying some specific attributes of this particular model.
@@ -388,7 +388,7 @@ class EncoderDecoderModel(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
-    def from_encoder_decoder_pretrained(
+    def fromencoderdecoder_pretrained(
         cls,
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
@@ -449,31 +449,31 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> from transformers import EncoderDecoderModel
 
         >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
+        >>> model = EncoderDecoderModel.fromencoderdecoder_pretrained("bert-base-uncased", "bert-base-uncased")
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./bert2bert")
         >>> # load fine-tuned model
         >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
         ```"""
 
-        kwargs_encoder = {
+        kwargsencoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
         }
 
-        kwargs_decoder = {
+        kwargsdecoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargs_encoder.keys():
+        for key in kwargsencoder.keys():
             del kwargs["encoder_" + key]
-        for key in kwargs_decoder.keys():
+        for key in kwargsdecoder.keys():
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
-        # by the value of the flag `is_decoder` that we need to set correctly.
-        encoder = kwargs_encoder.pop("model", None)
+        # by the value of the flag `isdecoder` that we need to set correctly.
+        encoder = kwargsencoder.pop("model", None)
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
@@ -481,24 +481,24 @@ class EncoderDecoderModel(PreTrainedModel):
                     "to be defined."
                 )
 
-            if "config" not in kwargs_encoder:
-                encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
-                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
+            if "config" not in kwargsencoder:
+                encoder_config, kwargsencoder = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path, **kwargsencoder, return_unused_kwargs=True
                 )
 
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+                if encoder_config.isdecoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
                     )
-                    encoder_config.is_decoder = False
+                    encoder_config.isdecoder = False
                     encoder_config.add_cross_attention = False
 
-                kwargs_encoder["config"] = encoder_config
+                kwargsencoder["config"] = encoder_config
 
-            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargsencoder)
 
-        decoder = kwargs_decoder.pop("model", None)
+        decoder = kwargsdecoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
                 raise ValueError(
@@ -506,38 +506,38 @@ class EncoderDecoderModel(PreTrainedModel):
                     "to be defined."
                 )
 
-            if "config" not in kwargs_decoder:
-                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
-                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
+            if "config" not in kwargsdecoder:
+                decoder_config, kwargsdecoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargsdecoder, return_unused_kwargs=True
                 )
 
-                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                if decoder_config.isdecoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
                         f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
                         f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
-                    decoder_config.is_decoder = True
+                    decoder_config.isdecoder = True
                     decoder_config.add_cross_attention = True
 
-                kwargs_decoder["config"] = decoder_config
+                kwargsdecoder["config"] = decoder_config
 
-            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+            if kwargsdecoder["config"].isdecoder is False or kwargsdecoder["config"].add_cross_attention is False:
                 logger.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
-                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                    "make sure that the attributes `isdecoder` and `add_cross_attention` of `decoder_config` "
+                    "passed to `.fromencoderdecoder_pretrained(...)` are set to `True` or do not pass a "
+                    "`decoder_config` to `.fromencoderdecoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargsdecoder)
 
         # instantiate config with corresponding kwargs
-        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+        config = EncoderDecoderConfig.fromencoderdecoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ENCODERdecoder_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -566,7 +566,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+        >>> model = EncoderDecoderModel.fromencoderdecoder_pretrained(
         ...     "bert-base-uncased", "bert-base-uncased"
         ... )  # initialize Bert2Bert from pre-trained checkpoints
 
@@ -589,21 +589,21 @@ class EncoderDecoderModel(PreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargsencoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
-        kwargs_decoder = {
+        kwargsdecoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
         if encoder_outputs is None:
-            encoder_outputs = self._encoder(
+            encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                **kwargs_encoder,
+                **kwargsencoder,
             )
         elif isinstance(encoder_outputs, tuple):
             encoder_outputs = BaseModelOutput(*encoder_outputs)
@@ -612,8 +612,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # optionally project encoder_hidden_states
         if (
-            self._encoder.config.hidden_size != self._decoder.config.hidden_size
-            and self._decoder.config.cross_attention_hidden_size is None
+            self.encoder.config.hidden_size != self.decoder.config.hidden_size
+            and self.decoder.config.cross_attention_hidden_size is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
@@ -625,7 +625,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 decoder_attention_mask = decoder_input_ids.new_tensor(decoder_input_ids != self.config.pad_token_id)
 
         # Decode
-        decoder_outputs = self._decoder(
+        decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -636,7 +636,7 @@ class EncoderDecoderModel(PreTrainedModel):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
-            **kwargs_decoder,
+            **kwargsdecoder,
         )
 
         # Compute loss independent from decoder (as some shift the logits inside them)
@@ -645,7 +645,7 @@ class EncoderDecoderModel(PreTrainedModel):
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self._decoder.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             if loss is not None:
@@ -665,13 +665,13 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+    def preparedecoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
-        decoder_inputs = self._decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
+        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
             "attention_mask": attention_mask,
@@ -692,4 +692,4 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
-        return self._decoder._reorder_cache(past_key_values, beam_idx)
+        return self.decoder._reorder_cache(past_key_values, beam_idx)
