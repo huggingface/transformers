@@ -14,34 +14,57 @@
 # limitations under the License.
 
 
-import copy
-import tempfile
-import unittest
-
-from transformers.models.sigma_moe import SigmaMoEConfiguration, SigmaMoEFeedForwardLayer, SigmaMoETransformerLayer
+from transformers.models.sigma_moe import (
+    SigmaMoEConfiguration,
+    SigmaMoEFeedForwardLayer,
+    SigmaMoEDecoderLayer,
+)
 
 if __name__ == "__main__":
     import torch
+
     bs = 5
     seq_len = 128
     d_model = 256
 
     config = SigmaMoEConfiguration(
+        vocab_size=51200,
         d_model=d_model,
         d_ff=1024,
+        num_hidden_layers=2,
+        num_attention_heads=8,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
+        attention_dropout=0.0,
+        max_position_embeddings=2048,
+        initializer_range=0.02,
+        layer_norm_eps=1e-5,
+        use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=10000.0,
+        rope_scaling=None,
+        partial_rotary_factor=0.5,
+        qk_layernorm=False,
         n_experts=8,
         expert_size=128,
         top_k_experts=2,
-        dropout=0.0,
+        moe_dropout=0.0,
         selection_mode="sigmoid",
         activation_after_topk=False,
         activation="relu",
-        bias=False,
+        moe_bias=False,
         v_dim=None,
         sinkhorn_n_iters=3,
         expert_dropout=0.0,
         weight_std_scale=1.0,
     )
-    ff = SigmaMoEFeedForwardLayer(config, is_sparse=True)
-    x = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
-    ff(x)
+    # ff = SigmaMoEFeedForwardLayer(config, is_sparse=True)
+    # x = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
+    # ff(x)
+
+    decoder_layer = SigmaMoEDecoderLayer(config, is_sparse=True, layer_idx=0)
+    tgt_len = 128
+    src_len = 128
+    hidden_states = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
+    mask = torch.tril(torch.ones((bs, 1, tgt_len, src_len), device=torch.device("cpu")))
+    decoder_layer(hidden_states, mask)

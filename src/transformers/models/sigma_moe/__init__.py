@@ -34,7 +34,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_sigma_moe"] = [
         "SigmaMoEFeedForwardLayer",
-        "SigmaMoETransformerLayer",
+        "SigmaMoEDecoderLayer",
     ]
 
 
@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_sigma_moe import (
             SigmaMoEFeedForwardLayer,
-            SigmaMoETransformerLayer,
+            SigmaMoEDecoderLayer,
         )
 
 
