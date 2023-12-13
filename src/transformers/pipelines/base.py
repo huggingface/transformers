@@ -770,6 +770,7 @@ class Pipeline(_ScikitCompat):
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
+        torch_compile: bool = False,
         **kwargs,
     ):
         if framework is None:
@@ -795,6 +796,11 @@ class Pipeline(_ScikitCompat):
         # We shouldn't call `model.to()` for models loaded with accelerate
         if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
             self.model.to(device)
+
+        if self.framework == "pt" and torch_compile:
+            self.model = torch.compile(self.model)
+            if hasattr(self.model, "generate"):
+                self.model.generate = torch.compile(self.model.generate)
 
         if device is None:
             if hf_device_map is not None:
