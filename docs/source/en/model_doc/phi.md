@@ -111,7 +111,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
 >>> # define the model and tokenizer and push the model and tokens to the GPU.
->>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev", torch_dtype=torch.float16, use_flash_attention_2=True).to("cuda")
+>>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
 >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
 
 >>> # feel free to change the prompt to your liking.

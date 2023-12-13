@@ -75,6 +75,8 @@
 - sections:
   - local: philosophy
     title: Filosofía
+  - local: pad_truncation
+    title: Relleno y truncamiento
   - local: bertology
     title: BERTología
   - local: perplexity

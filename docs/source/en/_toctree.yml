@@ -218,6 +218,8 @@
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
+    - local: main_classes/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -396,6 +398,8 @@
         title: MegatronGPT2
       - local: model_doc/mistral
         title: Mistral
+      - local: model_doc/mixtral
+        title: Mixtral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -737,6 +741,8 @@
         title: TVP
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder
