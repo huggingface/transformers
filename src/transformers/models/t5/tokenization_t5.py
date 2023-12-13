@@ -151,6 +151,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=None,
+        add_dummy_prefix_space=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
@@ -197,6 +198,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy = True
 
         self.legacy = legacy
+        self.add_dummy_prefix_space = add_dummy_prefix_space
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
@@ -209,6 +211,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
+            add_dummy_prefix_space=add_dummy_prefix_space,
             **kwargs,
         )
 
@@ -371,7 +374,6 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
@@ -380,7 +382,10 @@ class T5Tokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        if self.add_dummy_prefix_space:
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text.replace(SPIECE_UNDERLINE, " "), add_special_tokens=add_special_tokens, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
