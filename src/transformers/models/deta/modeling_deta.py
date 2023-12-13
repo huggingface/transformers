@@ -2665,7 +2665,6 @@ class DetaStage2Assigner(nn.Module):
         bs = len(targets)
         indices = []
         ious = []
-        print(outputs["init_reference"][0].shape)
         for b in range(bs):
             iou, _ = box_iou(
                 center_to_corners_format(targets[b]["boxes"]),
