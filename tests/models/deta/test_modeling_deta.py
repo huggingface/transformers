@@ -65,6 +65,8 @@ class DetaModelTester:
         encoder_n_points=2,
         decoder_n_points=6,
         two_stage=True,
+        assign_first_stage=True,
+        assign_second_stage=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +88,8 @@ class DetaModelTester:
         self.encoder_n_points = encoder_n_points
         self.decoder_n_points = decoder_n_points
         self.two_stage = two_stage
+        self.assign_first_stage = assign_first_stage
+        self.assign_second_stage = assign_second_stage
 
         # we also set the expected seq length for both encoder and decoder
         self.encoder_seq_length = (
@@ -96,7 +100,7 @@ class DetaModelTester:
         )
         self.decoder_seq_length = self.num_queries
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs(self, model_class_name):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         pixel_mask = torch.ones([self.batch_size, self.image_size, self.image_size], device=torch_device)
@@ -114,10 +118,10 @@ class DetaModelTester:
                 target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
-        config = self.get_config()
+        config = self.get_config(model_class_name)
         return config, pixel_values, pixel_mask, labels
 
-    def get_config(self):
+    def get_config(self, model_class_name):
         resnet_config = ResNetConfig(
             num_channels=3,
             embeddings_size=10,
@@ -128,6 +132,9 @@ class DetaModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
+        two_stage = True if model_class_name == "DetaForObjectDetection" else False
+        assign_first_stage = True if model_class_name == "DetaForObjectDetection" else False
+        assign_second_stage = True if model_class_name == "DetaForObjectDetection" else False
         return DetaConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -143,12 +150,14 @@ class DetaModelTester:
             num_feature_levels=self.num_feature_levels,
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
-            two_stage=self.two_stage,
+            two_stage=two_stage,
+            assign_first_stage=assign_first_stage,
+            assign_second_stage=assign_second_stage,
             backbone_config=resnet_config,
         )
 
-    def prepare_config_and_inputs_for_common(self):
-        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
+    def prepare_config_and_inputs_for_common(self, model_class_name="DetaModel"):
+        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs(model_class_name)
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
 
@@ -267,19 +276,19 @@ class DetaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester.check_config_can_be_init_without_params()
 
     def test_deta_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class_name="DetaModel")
         self.model_tester.create_and_check_deta_model(*config_and_inputs)
 
     def test_deta_freeze_backbone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class_name="DetaModel")
         self.model_tester.create_and_check_deta_freeze_backbone(*config_and_inputs)
 
     def test_deta_unfreeze_backbone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class_name="DetaModel")
         self.model_tester.create_and_check_deta_unfreeze_backbone(*config_and_inputs)
 
     def test_deta_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(model_class_name="DetaForObjectDetection")
         self.model_tester.create_and_check_deta_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="DETA does not use inputs_embeds")
