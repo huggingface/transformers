@@ -216,38 +216,38 @@ class EncoderDecoderModel(PreTrainedModel):
 
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
-        self.encoder = encoder
-        self.decoder = decoder
+        self._encoder = encoder
+        self._decoder = decoder
 
-        if self.encoder.config.to_dict() != self.config.encoder.to_dict():
+        if self._encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
-                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+                f"Config of the encoder: {self._encoder.__class__} is overwritten by shared encoder config:"
                 f" {self.config.encoder}"
             )
-        if self.decoder.config.to_dict() != self.config.decoder.to_dict():
+        if self._decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f"Config of the decoder: {self._decoder.__class__} is overwritten by shared decoder config:"
                 f" {self.config.decoder}"
             )
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        self.encoder.config = self.config.encoder
-        self.decoder.config = self.config.decoder
+        self._encoder.config = self.config.encoder
+        self._decoder.config = self.config.decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
         if (
-            self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            self._encoder.config.hidden_size != self._decoder.config.hidden_size
+            and self._decoder.config.cross_attention_hidden_size is None
         ):
-            self.enc_to_dec_proj = nn.Linear(self.encoder.config.hidden_size, self.decoder.config.hidden_size)
+            self.enc_to_dec_proj = nn.Linear(self._encoder.config.hidden_size, self._decoder.config.hidden_size)
 
-        if self.encoder.get_output_embeddings() is not None:
+        if self._encoder.get_output_embeddings() is not None:
             raise ValueError(
-                f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
+                f"The encoder {self._encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-        decoder_signature = set(inspect.signature(self.decoder.forward).parameters.keys())
+        decoder_signature = set(inspect.signature(self._decoder.forward).parameters.keys())
         if "encoder_hidden_states" not in decoder_signature:
             raise ValueError(
                 "The selected decoder is not prepared for the encoder hidden states to be passed. Please see the "
@@ -261,25 +261,30 @@ class EncoderDecoderModel(PreTrainedModel):
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
+            decoder_base_model_prefix = self._decoder.base_model_prefix
             self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
+                self._encoder, self._decoder._modules[decoder_base_model_prefix], self._decoder.base_model_prefix
             )
-
+    
+    @property
     def get_encoder(self):
-        return self.encoder
-
+        return self._encoder
+    
+    @property
     def get_decoder(self):
-        return self.decoder
-
+        return self._decoder
+    
+    @property
     def get_input_embeddings(self):
-        return self.encoder.get_input_embeddings()
-
-    def get_output_embeddings(self):
-        return self.decoder.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        return self.decoder.set_output_embeddings(new_embeddings)
+        return self._encoder.get_input_embeddings()
+    
+    @property
+    def output_embeddings(self):
+        return self._decoder.get_output_embeddings()
+    
+    @output_embeddings.setter
+    def output_embeddings(self, new_embeddings):
+        return self._decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -591,7 +596,7 @@ class EncoderDecoderModel(PreTrainedModel):
         }
 
         if encoder_outputs is None:
-            encoder_outputs = self.encoder(
+            encoder_outputs = self._encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 inputs_embeds=inputs_embeds,
@@ -607,8 +612,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # optionally project encoder_hidden_states
         if (
-            self.encoder.config.hidden_size != self.decoder.config.hidden_size
-            and self.decoder.config.cross_attention_hidden_size is None
+            self._encoder.config.hidden_size != self._decoder.config.hidden_size
+            and self._decoder.config.cross_attention_hidden_size is None
         ):
             encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
 
@@ -620,7 +625,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 decoder_attention_mask = decoder_input_ids.new_tensor(decoder_input_ids != self.config.pad_token_id)
 
         # Decode
-        decoder_outputs = self.decoder(
+        decoder_outputs = self._decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -640,7 +645,7 @@ class EncoderDecoderModel(PreTrainedModel):
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self._decoder.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             if loss is not None:
@@ -666,7 +671,7 @@ class EncoderDecoderModel(PreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
+        decoder_inputs = self._decoder.prepare_inputs_for_generation(input_ids, past_key_values=past_key_values)
         decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
         input_dict = {
             "attention_mask": attention_mask,
@@ -687,4 +692,4 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past_key_values, beam_idx)
+        return self._decoder._reorder_cache(past_key_values, beam_idx)
