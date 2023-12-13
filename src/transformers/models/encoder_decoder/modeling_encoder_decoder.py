@@ -232,8 +232,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        self._encoder.config = self.config.encoder
-        self._decoder.config = self.config.decoder
+        self._encoder.config = self.config._encoder
+        self._decoder.config = self.config._decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
         if (
