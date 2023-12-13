@@ -513,7 +513,7 @@ class SpmConverter(Converter):
         _normalizers = [
             normalizers.Strip(left=False, right=True),
             normalizers.Replace(Regex(" {2,}"), "▁"),
-        ]  # fmt: skip
+        ]
         if not precompiled_charsmap:
             return normalizers.Sequence(_normalizers)
         else:
