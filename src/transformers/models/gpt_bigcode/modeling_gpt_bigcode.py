@@ -532,23 +532,36 @@ class GPTBigCodeSdpaAttention(GPTBigCodeAttention):
         if self.multi_query:
             query_length = query_shape[1]
 
-            # NOTE: Maybe there is better than this?
+            # SDPA requires the dimension [..., sequence_length, head_dim].
             query = query.view(batch_size, query_length, self.num_heads, self.head_dim).transpose(1, 2)
 
             # Without these unsqueeze, SDPA complains as the query and key/value have a different number of dimensions.
             key = key.unsqueeze(1)
             value = value.unsqueeze(1)
 
-            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to mem-efficient attention
-            # and flash attention (No available kernel.  Aborting execution.) from the shapes
+            # Although these expand are not numerically useful, PyTorch 2.1 can not dispatch to memory-efficient backend
+            # and flash attention backend (No available kernel.  Aborting execution.) from the shapes
             # query = [batch_size, num_heads, query_length, head_dim]
             # key = [batch_size, 1, past_length, head_dim]
             # value = [batch_size, 1, past_length, head_dim]
-            # which is unfortunate. Hopefully can be improved in the future. These expand should not be too expansive as they do not do memory copy.
-            key = key.expand(-1, self.num_heads, -1, -1)
-            value = value.expand(-1, self.num_heads, -1, -1)
+            #
+            # so we could do:
+            #
+            # key = key.expand(-1, self.num_heads, -1, -1)
+            # value = value.expand(-1, self.num_heads, -1, -1)
+            #
+            # However SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+            # so we always dispatch to the math path: https://github.com/pytorch/pytorch/issues/112577.
+            # Arguably we could still do expand + contiguous when `query.device.type == "cuda"` in order to dispatch on memory-efficient
+            # backend, but it feels very hacky.
         else:
             query_length = query_shape[-1]
+
+            # See the comment above.
+            if query.device.type == "cuda" and attention_mask is not None:
+                query = query.contiguous()
+                key = key.contiguous()
+                value = value.contiguous()
 
         sdpa_result = torch.nn.functional.scaled_dot_product_attention(
             query,
