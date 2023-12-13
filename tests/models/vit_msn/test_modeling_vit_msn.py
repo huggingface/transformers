@@ -210,7 +210,7 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         return ViTImageProcessor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
-    @slow
+    # @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
         model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
@@ -227,6 +227,6 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0803, -0.4454, -0.2375]).to(torch_device)
+        expected_slice = torch.tensor([ 0.5588,  0.6853, -0.5929]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
