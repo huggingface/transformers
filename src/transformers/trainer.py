@@ -2382,6 +2382,9 @@ class Trainer:
             self._push_from_checkpoint(staging_output_dir)
 
         # Place checkpoint in final location after all saving is finished.
+        # First wait for everyone to finish writing
+        self.args.distributed_state.wait_for_everyone()
+        # Then go through the rewriting process starting on process 0
         if staging_output_dir != output_dir:
             with self.args.main_process_first(desc="Renaming model checkpoint folder to true location"):
                 if os.path.exists(staging_output_dir):
