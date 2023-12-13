@@ -280,10 +280,10 @@ class GPTQTestActOrderExllama(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
-    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
-    revision = "gptq-4bit-128g-actorder_True"
-    input_text = "Hello my name is"
+    EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
+    # 4bit + act_order + 128g
+    model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+    input_text = "Hello, how are you ?"
 
     @classmethod
     def setUpClass(cls):
@@ -293,7 +293,6 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, max_input_length=4028)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            revision=cls.revision,
             torch_dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,
@@ -356,10 +355,10 @@ class GPTQTestExllamaV2(unittest.TestCase):
     """
 
     EXPECTED_OUTPUTS = set()
-    EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
-    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
-    revision = "gptq-4bit-128g-actorder_True"
-    input_text = "Hello my name is"
+    EXPECTED_OUTPUTS.add("Hello, how are you ? I'm doing good, thanks for asking.")
+    # 4bit + act_order + 128g
+    model_name = "hf-internal-testing/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+    input_text = "Hello, how are you ?"
 
     @classmethod
     def setUpClass(cls):
@@ -369,7 +368,6 @@ class GPTQTestExllamaV2(unittest.TestCase):
         cls.quantization_config = GPTQConfig(bits=4, exllama_config={"version": 2})
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.model_name,
-            revision=cls.revision,
             torch_dtype=torch.float16,
             device_map={"": 0},
             quantization_config=cls.quantization_config,
