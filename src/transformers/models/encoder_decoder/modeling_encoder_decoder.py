@@ -189,7 +189,7 @@ class EncoderDecoderModel(PreTrainedModel):
         if config is None and (encoder is None or decoder is None):
             raise ValueError("Either a configuration or an encoder and a decoder has to be provided.")
         if config is None:
-            config = EncoderDecoderConfig.fromencoderdecoder_configs(encoder.config, decoder.config)
+            config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
             if not isinstance(config, self.config_class):
                 raise ValueError(f"Config: {config} has to be of type {self.config_class}")
@@ -362,7 +362,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 del tf_model
                 gc.collect()
 
-                model = EncoderDecoderModel.fromencoderdecoder_pretrained(
+                model = EncoderDecoderModel.from_encoder_decoder_pretrained(
                     encoder_dir, decoder_dir, encoder_from_tf=True, decoder_from_tf=True
                 )
                 # This is only for copying some specific attributes of this particular model.
@@ -525,7 +525,7 @@ class EncoderDecoderModel(PreTrainedModel):
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
                     "make sure that the attributes `isdecoder` and `add_cross_attention` of `decoder_config` "
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    "`decoder_config` to `.fromencoderdecoder_pretrained(...)`"
+                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargsdecoder)
@@ -563,7 +563,7 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> import torch
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = EncoderDecoderModel.fromencoderdecoder_pretrained(
+        >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "bert-base-uncased", "bert-base-uncased"
         ... )  # initialize Bert2Bert from pre-trained checkpoints
 
