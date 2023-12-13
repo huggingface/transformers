@@ -226,7 +226,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -275,7 +277,11 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
-                expected_arg_names = ["past_values", "target_values", "past_observed_mask"]
+                expected_arg_names = [
+                    "past_values",
+                    "target_values",
+                    "past_observed_mask",
+                ]
             else:
                 expected_arg_names = [
                     "past_values",
@@ -323,7 +329,15 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-0.0173]], [[-1.0379]], [[-0.1030]], [[0.3642]], [[0.1601]], [[-1.3136]], [[0.8780]]],
+            [
+                [[-0.0173]],
+                [[-1.0379]],
+                [[-0.1030]],
+                [[0.3642]],
+                [[0.1601]],
+                [[-1.3136]],
+                [[0.8780]],
+            ],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
@@ -368,7 +382,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
 
     def test_regression_generation(self):
         model = PatchTSTForRegression.from_pretrained("namctin/patchtst_etth1_regression").to(torch_device)
-        batch = prepare_batch(file="test-batch.pt")
+        batch = prepare_batch(repo_id="ibm/patchtst-etth1-test-data", file="regression_batch.pt")
 
         torch.manual_seed(0)
         with torch.no_grad():

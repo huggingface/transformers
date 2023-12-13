@@ -1899,11 +1899,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             self.distribution_output = None
         else:
             if config.distribution_output == "student_t":
-                self.distribution_output = StudentTOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = StudentTOutput(dim=config.num_targets)
             elif config.distribution_output == "normal":
-                self.distribution_output = NormalOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NormalOutput(dim=config.num_targets)
             elif config.distribution_output == "negative_binomial":
-                self.distribution_output = NegativeBinomialOutput(dim=config.prediction_length * config.num_targets)
+                self.distribution_output = NegativeBinomialOutput(dim=config.num_targets)
             else:
                 raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
@@ -1982,6 +1982,7 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
                 loss = loss(y_hat, target_values)
 
         if not return_dict:
+            # hidden_states, attentions, mask
             outputs = (y_hat,) + model_output[1:-3]
             outputs = (loss,) + outputs if loss is not None else outputs
             return outputs
