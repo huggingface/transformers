@@ -38,7 +38,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
-    torch_device
+    torch_device,
 )
 
 
@@ -521,7 +521,6 @@ class Bnb4BitGPT2Test(Bnb4BitTest):
 class BaseSerializationTest(unittest.TestCase):
     model_name = "facebook/opt-125m"
     input_text = "Mars colonists' favorite meals are"
-
 
     def tearDown(self):
         gc.collect()
