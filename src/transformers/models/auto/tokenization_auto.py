@@ -395,6 +395,7 @@ else:
                 ),
             ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("vits", ("VitsTokenizer", None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),

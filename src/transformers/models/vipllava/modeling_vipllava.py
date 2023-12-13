@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Llava model."""
+""" PyTorch VipLlava model."""
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -31,26 +31,24 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_llava import LlavaConfig
+from .configuration_vipllava import VipLlavaConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "LlavaConfig"
+_CONFIG_FOR_DOC = "VipLlavaConfig"
 
-LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "llava-hf/llava-1.5-7b-hf",
-    "llava-hf/llava-1.5-13b-hf",
-    "llava-hf/bakLlava-v1-hf",
-    # See all Llava models at https://huggingface.co/models?filter=llava
+VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "llava-hf/vip-llava-7b-hf",
+    # See all VipLlava models at https://huggingface.co/models?filter=vipllava
 ]
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->Llava
-class LlavaCausalLMOutputWithPast(ModelOutput):
+# Copied from transformers.models.idefics.modeling_idefics.IdeficsCausalLMOutputWithPast with Idefics->VipLlava
+class VipLlavaCausalLMOutputWithPast(ModelOutput):
     """
-    Base class for Llava causal language model (or autoregressive) outputs.
+    Base class for VipLlava causal language model (or autoregressive) outputs.
 
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -89,22 +87,30 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class LlavaMultiModalProjector(nn.Module):
-    def __init__(self, config: LlavaConfig):
+class VipLlavaMultiModalProjector(nn.Module):
+    def __init__(self, config: VipLlavaConfig):
         super().__init__()
+        self.projector_layernorm = nn.LayerNorm(
+            len(config.vision_feature_layers) * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
+        )
 
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_1 = nn.Linear(
+            len(config.vision_feature_layers) * config.vision_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=True,
+        )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
 
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
+    def forward(self, hidden_states):
+        hidden_states = self.projector_layernorm(hidden_states)
+        hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
 
 
-LLAVA_START_DOCSTRING = r"""
+VIPLLAVA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -114,7 +120,7 @@ LLAVA_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`LlavaConfig`] or [`LlavaVisionConfig`]):
+        config ([`VipLlavaConfig`] or [`VipLlavaVisionConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -122,20 +128,21 @@ LLAVA_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    LLAVA_START_DOCSTRING,
+    "The bare VipLlava Model outputting raw hidden-states without any specific head on top.",
+    VIPLLAVA_START_DOCSTRING,
 )
-class LlavaPreTrainedModel(PreTrainedModel):
-    config_class = LlavaConfig
+# Copied from transformers.models.llava.modeling_llava.LlavaPreTrainedModel with Llava->VipLlava,llava->vipllava
+class VipLlavaPreTrainedModel(PreTrainedModel):
+    config_class = VipLlavaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlavaVisionAttention"]
+    _no_split_modules = ["VipLlavaVisionAttention"]
     _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
-        # important: this ported version of Llava isn't meant for training from scratch - only
+        # important: this ported version of VipLlava isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/llava should serve for that purpose
+        # https://github.com/haotian-liu/LLaVA/tree/main/vipllava should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
@@ -155,7 +162,7 @@ class LlavaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-LLAVA_INPUTS_DOCSTRING = r"""
+VIPLLAVA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -222,15 +229,16 @@ LLAVA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The LLAVA model which consists of a vision backbone and a language model.""",
-    LLAVA_START_DOCSTRING,
+    """The VIPLLAVA model which consists of a vision backbone and a language model.""",
+    VIPLLAVA_START_DOCSTRING,
 )
-class LlavaForConditionalGeneration(LlavaPreTrainedModel):
-    def __init__(self, config: LlavaConfig):
+# Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration with LLAVA->VIPLLAVA,Llava->VipLlava
+class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
+    def __init__(self, config: VipLlavaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
-        self.multi_modal_projector = LlavaMultiModalProjector(config)
+        self.multi_modal_projector = VipLlavaMultiModalProjector(config)
         self.vocab_size = config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(
             config.text_config, attn_implementation=config._attn_implementation
@@ -328,8 +336,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
         return final_embedding, final_attention_mask, position_ids
 
-    @add_start_docstrings_to_model_forward(LLAVA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=LlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -338,14 +347,13 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layers: Optional[List[int]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
+    ) -> Union[Tuple, VipLlavaCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -360,21 +368,21 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
+        >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-        >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vipllava-7b-hf")
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/vipllava-7b-hf")
 
-        >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
-        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=text, images=image, return_tensors="pt")
 
         >>> # Generate
-        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> generate_ids = model.generate(**inputs, max_new_tokens=20)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "There seems to be a stop sign"
+        "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on a green surface, with a red ball in its paw."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -382,13 +390,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
+        vision_feature_layers = (
+            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
 
         if inputs_embeds is None:
@@ -398,19 +401,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             # 2. Merge text and images
             if pixel_values is not None and input_ids.shape[1] != 1:
                 image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
-                # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
-                selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
+                # For VIP-llava, the image features are computed this way
+                # We select the features from index 1: for the layers -2, -5, -8, -11 and 6
+                image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+                image_features = torch.cat(image_features, dim=-1)
 
-                if vision_feature_select_strategy == "default":
-                    selected_image_feature = selected_image_feature[:, 1:]
-                elif vision_feature_select_strategy == "full":
-                    selected_image_feature = selected_image_feature
-                else:
-                    raise ValueError(
-                        f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}"
-                    )
-
-                image_features = self.multi_modal_projector(selected_image_feature)
+                image_features = self.multi_modal_projector(image_features)
                 inputs_embeds, attention_mask, position_ids = self._merge_input_ids_with_image_features(
                     image_features, inputs_embeds, input_ids, attention_mask, position_ids
                 )
@@ -472,7 +468,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return LlavaCausalLMOutputWithPast(
+        return VipLlavaCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
