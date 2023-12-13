@@ -203,7 +203,6 @@ class DPTImageProcessor(BaseImageProcessor):
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
 
-        print("Keep aspect ratio:", keep_aspect_ratio)
         output_size = get_resize_output_image_size(
             image,
             output_size=(size["height"], size["width"]),
