@@ -1854,6 +1854,7 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
+@require_torch
 @require_torch_gpu
 @slow
 class Mask4DTestBase(unittest.TestCase):
@@ -1908,8 +1909,6 @@ class Mask4DTestBase(unittest.TestCase):
         return input_0, input_1, mask_1, position_ids_1
 
 
-@require_torch_gpu
-@slow
 class Mask4DTestFP32(Mask4DTestBase):
     model_dtype = torch.float32
 
@@ -1945,8 +1944,6 @@ class Mask4DTestFP32(Mask4DTestBase):
             logits_1_last_tokens,
         )
 
-    @require_torch_gpu
-    @slow
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
