@@ -23,7 +23,7 @@ Lili Chen, Kevin Lu, Aravind Rajeswaran, Kimin Lee, Aditya Grover, Michael Laski
 
 論文の要約は次のとおりです。
 
-※強化学習（RL）をシーケンスモデリング問題として抽象化するフレームワークを紹介します。
+*強化学習（RL）をシーケンスモデリング問題として抽象化するフレームワークを紹介します。
 これにより、Transformer アーキテクチャのシンプルさとスケーラビリティ、および関連する進歩を活用できるようになります。
  GPT-x や BERT などの言語モデリングで。特に、Decision Transformer というアーキテクチャを紹介します。
  RL の問題を条件付きシーケンス モデリングとして投げかけます。値関数に適合する以前の RL アプローチとは異なり、
