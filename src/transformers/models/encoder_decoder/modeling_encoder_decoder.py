@@ -232,8 +232,8 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
-        self._encoder.config = self.config._encoder
-        self._decoder.config = self.config._decoder
+        self._encoder.config = self.config.encoder
+        self._decoder.config = self.config.decoder
 
         # encoder outputs might need to be projected to different dimension for decoder
         if (
@@ -265,23 +265,23 @@ class EncoderDecoderModel(PreTrainedModel):
             self._tie_encoder_decoder_weights(
                 self._encoder, self._decoder._modules[decoder_base_model_prefix], self._decoder.base_model_prefix
             )
-    
+
     @property
     def get_encoder(self):
         return self._encoder
-    
+
     @property
     def get_decoder(self):
         return self._decoder
-    
+
     @property
     def get_input_embeddings(self):
         return self._encoder.get_input_embeddings()
-    
+
     @property
     def output_embeddings(self):
         return self._decoder.get_output_embeddings()
-    
+
     @output_embeddings.setter
     def output_embeddings(self, new_embeddings):
         return self._decoder.set_output_embeddings(new_embeddings)
