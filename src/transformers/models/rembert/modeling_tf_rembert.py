@@ -273,13 +273,13 @@ class TFRemBertSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->RemBert
@@ -307,7 +307,7 @@ class TFRemBertSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -392,7 +392,7 @@ class TFRemBertIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->RemBert
@@ -420,7 +420,7 @@ class TFRemBertOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -611,7 +611,7 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "embedding_hidden_mapping_in", None) is not None:
             with tf.name_scope(self.embedding_hidden_mapping_in.name):
-                self.embedding_hidden_mapping_in.build(self.config.input_embedding_size)
+                self.embedding_hidden_mapping_in.build([None, None, self.config.input_embedding_size])
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
                 with tf.name_scope(layer.name):
@@ -645,7 +645,7 @@ class TFRemBertPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
@@ -679,7 +679,7 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, self.config.output_embedding_size])
@@ -1418,7 +1418,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
                 self.rembert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1526,7 +1526,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
                 self.rembert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1611,7 +1611,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
                 self.rembert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1710,4 +1710,4 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
                 self.rembert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

@@ -352,16 +352,16 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.config.hidden_size)
+                self.q_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.config.hidden_size)
+                self.k_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.config.hidden_size)
+                self.v_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
-                self.proj.build(self.config.hidden_size)
+                self.proj.build([None, None, self.config.hidden_size])
 
 
 class TFGroupViTTokenAssign(tf.keras.layers.Layer):
@@ -529,7 +529,7 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
 
 
 # Adapted from transformers.vit.modeling_tf_vit.TFViTEmbeddings
@@ -835,10 +835,10 @@ class TFGroupViTMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.hidden_size)
+                self.fc1.build([None, None, self.hidden_size])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.intermediate_size)
+                self.fc2.build([None, None, self.intermediate_size])
 
 
 class TFGroupViTMixerMLP(TFGroupViTMLP):
@@ -960,16 +960,16 @@ class TFGroupViTAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPEncoderLayer with CLIP->GroupViT
@@ -1499,18 +1499,18 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
                 self.vision_model.build(None)
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection[0].name):
-                self.visual_projection[0].build(self.vision_embed_dim)
+                self.visual_projection[0].build([None, None, None, self.vision_embed_dim])
             with tf.name_scope(self.visual_projection[1].name):
                 self.visual_projection[1].build((None, self.projection_intermediate_dim))
             with tf.name_scope(self.visual_projection[3].name):
-                self.visual_projection[3].build(self.projection_intermediate_dim)
+                self.visual_projection[3].build([None, None, None, self.projection_intermediate_dim])
         if getattr(self, "text_projection", None) is not None:
             with tf.name_scope(self.text_projection[0].name):
-                self.text_projection[0].build(self.text_embed_dim)
+                self.text_projection[0].build([None, None, None, self.text_embed_dim])
             with tf.name_scope(self.text_projection[1].name):
                 self.text_projection[1].build((None, self.projection_intermediate_dim))
             with tf.name_scope(self.text_projection[3].name):
-                self.text_projection[3].build(self.projection_intermediate_dim)
+                self.text_projection[3].build([None, None, None, self.projection_intermediate_dim])
 
     @unpack_inputs
     def get_text_features(

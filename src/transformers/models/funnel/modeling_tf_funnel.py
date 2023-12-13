@@ -437,16 +437,16 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_head", None) is not None:
             with tf.name_scope(self.q_head.name):
-                self.q_head.build(d_model)
+                self.q_head.build([None, None, d_model])
         if getattr(self, "k_head", None) is not None:
             with tf.name_scope(self.k_head.name):
-                self.k_head.build(d_model)
+                self.k_head.build([None, None, d_model])
         if getattr(self, "v_head", None) is not None:
             with tf.name_scope(self.v_head.name):
-                self.v_head.build(d_model)
+                self.v_head.build([None, None, d_model])
         if getattr(self, "post_proj", None) is not None:
             with tf.name_scope(self.post_proj.name):
-                self.post_proj.build(n_head * d_head)
+                self.post_proj.build([None, None, n_head * d_head])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, d_model])
@@ -596,10 +596,10 @@ class TFFunnelPositionwiseFFN(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "linear_1", None) is not None:
             with tf.name_scope(self.linear_1.name):
-                self.linear_1.build(self.config.d_model)
+                self.linear_1.build([None, None, self.config.d_model])
         if getattr(self, "linear_2", None) is not None:
             with tf.name_scope(self.linear_2.name):
-                self.linear_2.build(self.config.d_inner)
+                self.linear_2.build([None, None, self.config.d_inner])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.config.d_model])
@@ -1011,10 +1011,10 @@ class TFFunnelDiscriminatorPredictions(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.d_model)
+                self.dense.build([None, None, self.config.d_model])
         if getattr(self, "dense_prediction", None) is not None:
             with tf.name_scope(self.dense_prediction.name):
-                self.dense_prediction.build(self.config.d_model)
+                self.dense_prediction.build([None, None, self.config.d_model])
 
 
 class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
@@ -1076,10 +1076,10 @@ class TFFunnelClassificationHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "linear_hidden", None) is not None:
             with tf.name_scope(self.linear_hidden.name):
-                self.linear_hidden.build(self.config.d_model)
+                self.linear_hidden.build([None, None, self.config.d_model])
         if getattr(self, "linear_out", None) is not None:
             with tf.name_scope(self.linear_out.name):
-                self.linear_out.build(self.config.d_model)
+                self.linear_out.build([None, None, self.config.d_model])
 
 
 class TFFunnelPreTrainedModel(TFPreTrainedModel):
@@ -1773,7 +1773,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
                 self.funnel.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1878,4 +1878,4 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
                 self.funnel.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

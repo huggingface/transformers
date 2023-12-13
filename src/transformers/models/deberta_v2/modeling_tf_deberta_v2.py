@@ -84,7 +84,7 @@ class TFDebertaV2ContextPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.pooler_hidden_size)
+                self.dense.build([None, None, self.config.pooler_hidden_size])
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -175,7 +175,7 @@ class TFDebertaV2SelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -260,7 +260,7 @@ class TFDebertaV2Intermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaOutput with Deberta->DebertaV2
@@ -288,7 +288,7 @@ class TFDebertaV2Output(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -904,13 +904,13 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query_proj", None) is not None:
             with tf.name_scope(self.query_proj.name):
-                self.query_proj.build(self.config.hidden_size)
+                self.query_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "key_proj", None) is not None:
             with tf.name_scope(self.key_proj.name):
-                self.key_proj.build(self.config.hidden_size)
+                self.key_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "value_proj", None) is not None:
             with tf.name_scope(self.value_proj.name):
-                self.value_proj.build(self.config.hidden_size)
+                self.value_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -919,10 +919,10 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
                 self.pos_dropout.build(None)
         if getattr(self, "pos_key_proj", None) is not None:
             with tf.name_scope(self.pos_key_proj.name):
-                self.pos_key_proj.build(self.config.hidden_size)
+                self.pos_key_proj.build([None, None, self.config.hidden_size])
         if getattr(self, "pos_query_proj", None) is not None:
             with tf.name_scope(self.pos_query_proj.name):
-                self.pos_query_proj.build(self.config.hidden_size)
+                self.pos_query_proj.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.deberta.modeling_tf_deberta.TFDebertaEmbeddings Deberta->DebertaV2
@@ -987,7 +987,7 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
                 self.dropout.build(None)
         if getattr(self, "embed_proj", None) is not None:
             with tf.name_scope(self.embed_proj.name):
-                self.embed_proj.build(self.embedding_size)
+                self.embed_proj.build([None, None, self.embedding_size])
 
     def call(
         self,
@@ -1078,7 +1078,7 @@ class TFDebertaV2PredictionHeadTransform(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.embedding_size])
@@ -1577,7 +1577,7 @@ class TFDebertaV2ForSequenceClassification(TFDebertaV2PreTrainedModel, TFSequenc
                 self.dropout.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.output_dim)
+                self.classifier.build([None, None, self.output_dim])
 
 
 @add_start_docstrings(
@@ -1661,7 +1661,7 @@ class TFDebertaV2ForTokenClassification(TFDebertaV2PreTrainedModel, TFTokenClass
                 self.deberta.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1759,7 +1759,7 @@ class TFDebertaV2ForQuestionAnswering(TFDebertaV2PreTrainedModel, TFQuestionAnsw
                 self.deberta.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1873,4 +1873,4 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
                 self.pooler.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.output_dim)
+                self.classifier.build([None, None, self.output_dim])

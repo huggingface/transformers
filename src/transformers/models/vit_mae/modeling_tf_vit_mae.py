@@ -363,7 +363,7 @@ class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->ViTMAE
@@ -448,13 +448,13 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->ViTMAE
@@ -485,7 +485,7 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->ViTMAE
@@ -555,7 +555,7 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with ViT->ViTMAE
@@ -582,7 +582,7 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->ViTMAE
@@ -996,13 +996,13 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "decoder_embed", None) is not None:
             with tf.name_scope(self.decoder_embed.name):
-                self.decoder_embed.build(self.config.hidden_size)
+                self.decoder_embed.build([None, None, self.config.hidden_size])
         if getattr(self, "decoder_norm", None) is not None:
             with tf.name_scope(self.decoder_norm.name):
                 self.decoder_norm.build([None, None, self.config.decoder_hidden_size])
         if getattr(self, "decoder_pred", None) is not None:
             with tf.name_scope(self.decoder_pred.name):
-                self.decoder_pred.build(self.config.decoder_hidden_size)
+                self.decoder_pred.build([None, None, self.config.decoder_hidden_size])
         if getattr(self, "decoder_layers", None) is not None:
             for layer in self.decoder_layers:
                 with tf.name_scope(layer.name):

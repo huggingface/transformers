@@ -144,7 +144,7 @@ class TFMobileBertIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.true_hidden_size)
+                self.dense.build([None, None, self.config.true_hidden_size])
 
 
 class TFLayerNorm(tf.keras.layers.LayerNormalization):
@@ -222,7 +222,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "embedding_transformation", None) is not None:
             with tf.name_scope(self.embedding_transformation.name):
-                self.embedding_transformation.build(self.embedded_input_size)
+                self.embedding_transformation.build([None, None, self.embedded_input_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -361,14 +361,20 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.true_hidden_size)
+                self.query.build([None, None, self.config.true_hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.true_hidden_size)
+                self.key.build([None, None, self.config.true_hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
                 self.value.build(
-                    self.config.true_hidden_size if self.config.use_bottleneck_attention else self.config.hidden_size
+                    [
+                        None,
+                        None,
+                        self.config.true_hidden_size
+                        if self.config.use_bottleneck_attention
+                        else self.config.hidden_size,
+                    ]
                 )
 
 
@@ -399,7 +405,7 @@ class TFMobileBertSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.true_hidden_size)
+                self.dense.build([None, None, self.config.true_hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -467,7 +473,7 @@ class TFOutputBottleneck(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.true_hidden_size)
+                self.dense.build([None, None, self.config.true_hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -505,7 +511,7 @@ class TFMobileBertOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -534,7 +540,7 @@ class TFBottleneckLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -607,7 +613,7 @@ class TFFFNOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -798,7 +804,7 @@ class TFMobileBertPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
@@ -826,7 +832,7 @@ class TFMobileBertPredictionHeadTransform(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build(None)
@@ -1444,7 +1450,7 @@ class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "seq_relationship", None) is not None:
             with tf.name_scope(self.seq_relationship.name):
-                self.seq_relationship.build(self.config.hidden_size)
+                self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1639,7 +1645,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
                 self.mobilebert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1750,7 +1756,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
                 self.mobilebert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1863,7 +1869,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
                 self.mobilebert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1964,4 +1970,4 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
                 self.mobilebert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])

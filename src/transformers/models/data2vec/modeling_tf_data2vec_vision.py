@@ -259,7 +259,7 @@ class TFData2VecVisionPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
 
 
 class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
@@ -364,13 +364,13 @@ class TFData2VecVisionSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
         if getattr(self, "relative_position_bias", None) is not None:
             with tf.name_scope(self.relative_position_bias.name):
                 self.relative_position_bias.build(None)
@@ -403,7 +403,7 @@ class TFData2VecVisionSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFData2VecVisionAttention(tf.keras.layers.Layer):
@@ -477,7 +477,7 @@ class TFData2VecVisionIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFData2VecVisionOutput(tf.keras.layers.Layer):
@@ -502,7 +502,7 @@ class TFData2VecVisionOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
 
 
 class TFData2VecVisionLayer(tf.keras.layers.Layer):
@@ -1115,7 +1115,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
                 self.data2vec_vision.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
@@ -1162,7 +1162,7 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_channels)
+                self.conv.build([None, None, None, self.in_channels])
         if getattr(self, "bn", None) is not None:
             with tf.name_scope(self.bn.name):
                 self.bn.build((None, None, None, self.out_channels))
@@ -1434,7 +1434,7 @@ class TFData2VecVisionUperHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.channels)
+                self.classifier.build([None, None, None, self.channels])
         if getattr(self, "psp_modules", None) is not None:
             with tf.name_scope(self.psp_modules.name):
                 self.psp_modules.build(None)
@@ -1535,7 +1535,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.channels)
+                self.classifier.build([None, None, None, self.channels])
         if getattr(self, "conv_cat", None) is not None:
             with tf.name_scope(self.conv_cat.name):
                 self.conv_cat.build(None)

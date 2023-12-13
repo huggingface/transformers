@@ -174,7 +174,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
-                self.patch_embedding.build(self.config.num_channels)
+                self.patch_embedding.build([None, None, None, self.config.num_channels])
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         """`pixel_values` is expected to be of NCHW format."""
@@ -363,16 +363,16 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 class TFCLIPMLP(tf.keras.layers.Layer):
@@ -405,10 +405,10 @@ class TFCLIPMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.config.hidden_size)
+                self.fc1.build([None, None, self.config.hidden_size])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.intermediate_size)
+                self.fc2.build([None, None, self.config.intermediate_size])
 
 
 class TFCLIPEncoderLayer(tf.keras.layers.Layer):
@@ -888,10 +888,10 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
                 self.vision_model.build(None)
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection.name):
-                self.visual_projection.build(self.vision_embed_dim)
+                self.visual_projection.build([None, None, self.vision_embed_dim])
         if getattr(self, "text_projection", None) is not None:
             with tf.name_scope(self.text_projection.name):
-                self.text_projection.build(self.text_embed_dim)
+                self.text_projection.build([None, None, self.text_embed_dim])
 
     @unpack_inputs
     def get_text_features(

@@ -274,7 +274,7 @@ class TFBlipVisionEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
-                self.patch_embedding.build(3)
+                self.patch_embedding.build([None, None, None, 3])
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # Input is channels-first, we transpose. PyTorch transposes after the conv because PyTorch
@@ -427,10 +427,10 @@ class TFBlipAttention(tf.keras.layers.Layer):
                 self.dropout.build(None)
         if getattr(self, "qkv", None) is not None:
             with tf.name_scope(self.qkv.name):
-                self.qkv.build(self.embed_dim)
+                self.qkv.build([None, None, self.embed_dim])
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.embed_dim)
+                self.projection.build([None, None, self.embed_dim])
 
 
 class TFBlipMLP(tf.keras.layers.Layer):
@@ -462,10 +462,10 @@ class TFBlipMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.config.hidden_size)
+                self.fc1.build([None, None, self.config.hidden_size])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.intermediate_size)
+                self.fc2.build([None, None, self.config.intermediate_size])
 
 
 class TFBlipEncoderLayer(tf.keras.layers.Layer):
@@ -860,10 +860,10 @@ class TFBlipMainLayer(tf.keras.layers.Layer):
                 self.vision_model.build(None)
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection.name):
-                self.visual_projection.build(self.vision_embed_dim)
+                self.visual_projection.build([None, None, self.vision_embed_dim])
         if getattr(self, "text_projection", None) is not None:
             with tf.name_scope(self.text_projection.name):
-                self.text_projection.build(self.text_embed_dim)
+                self.text_projection.build([None, None, self.text_embed_dim])
 
     @unpack_inputs
     def call(
@@ -1693,10 +1693,10 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
                 self.text_encoder.build(None)
         if getattr(self, "vision_proj", None) is not None:
             with tf.name_scope(self.vision_proj.name):
-                self.vision_proj.build(self.config.vision_config.hidden_size)
+                self.vision_proj.build([None, None, self.config.vision_config.hidden_size])
         if getattr(self, "text_proj", None) is not None:
             with tf.name_scope(self.text_proj.name):
-                self.text_proj.build(self.config.text_config.hidden_size)
+                self.text_proj.build([None, None, self.config.text_config.hidden_size])
         if getattr(self, "itm_head", None) is not None:
             with tf.name_scope(self.itm_head.name):
-                self.itm_head.build(self.config.text_config.hidden_size)
+                self.itm_head.build([None, None, self.config.text_config.hidden_size])

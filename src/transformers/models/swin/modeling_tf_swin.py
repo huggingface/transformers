@@ -400,7 +400,7 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
 
 
 class TFSwinPatchMerging(tf.keras.layers.Layer):
@@ -470,7 +470,7 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "reduction", None) is not None:
             with tf.name_scope(self.reduction.name):
-                self.reduction.build(4 * self.dim)
+                self.reduction.build([None, None, 4 * self.dim])
         if getattr(self, "norm", None) is not None:
             with tf.name_scope(self.norm.name):
                 self.norm.build([None, None, 4 * self.dim])
@@ -559,13 +559,13 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.all_head_size)
+                self.query.build([None, None, self.all_head_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.all_head_size)
+                self.key.build([None, None, self.all_head_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.all_head_size)
+                self.value.build([None, None, self.all_head_size])
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
         new_x_shape = shape_list(x)[:-1] + [self.num_attention_heads, self.attention_head_size]
@@ -654,7 +654,7 @@ class TFSwinSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.dim)
+                self.dense.build([None, None, self.dim])
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -720,7 +720,7 @@ class TFSwinIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.dim)
+                self.dense.build([None, None, self.dim])
 
 
 class TFSwinOutput(tf.keras.layers.Layer):
@@ -742,7 +742,7 @@ class TFSwinOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(int(self.config.mlp_ratio * self.dim))
+                self.dense.build([None, None, int(self.config.mlp_ratio * self.dim)])
 
 
 class TFSwinLayer(tf.keras.layers.Layer):
@@ -1422,7 +1422,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv2d", None) is not None:
             with tf.name_scope(self.conv2d.name):
-                self.conv2d.build(self.config.hidden_size)
+                self.conv2d.build([None, None, None, self.config.hidden_size])
         if getattr(self, "pixel_shuffle", None) is not None:
             with tf.name_scope(self.pixel_shuffle.name):
                 self.pixel_shuffle.build(None)
@@ -1633,4 +1633,4 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
         if getattr(self, "classifier", None) is not None:
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
-                    self.classifier.build(self.swin.num_features)
+                    self.classifier.build([None, None, self.swin.num_features])

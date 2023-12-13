@@ -107,7 +107,7 @@ class TFSegformerOverlapPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
-                self.proj.build(self.num_channels)
+                self.proj.build([None, None, None, self.num_channels])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.hidden_size])
@@ -215,16 +215,16 @@ class TFSegformerEfficientSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.hidden_size)
+                self.query.build([None, None, self.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.hidden_size)
+                self.key.build([None, None, self.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.hidden_size)
+                self.value.build([None, None, self.hidden_size])
         if getattr(self, "sr", None) is not None:
             with tf.name_scope(self.sr.name):
-                self.sr.build(self.hidden_size)
+                self.sr.build([None, None, None, self.hidden_size])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.hidden_size])
@@ -248,7 +248,7 @@ class TFSegformerSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.hidden_size)
+                self.dense.build([None, None, self.hidden_size])
 
 
 class TFSegformerAttention(tf.keras.layers.Layer):
@@ -317,7 +317,7 @@ class TFSegformerDWConv(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "depthwise_convolution", None) is not None:
             with tf.name_scope(self.depthwise_convolution.name):
-                self.depthwise_convolution.build(self.dim)
+                self.depthwise_convolution.build([None, None, None, self.dim])
 
 
 class TFSegformerMixFFN(tf.keras.layers.Layer):
@@ -357,13 +357,13 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense1", None) is not None:
             with tf.name_scope(self.dense1.name):
-                self.dense1.build(self.in_features)
+                self.dense1.build([None, None, self.in_features])
         if getattr(self, "depthwise_convolution", None) is not None:
             with tf.name_scope(self.depthwise_convolution.name):
                 self.depthwise_convolution.build(None)
         if getattr(self, "dense2", None) is not None:
             with tf.name_scope(self.dense2.name):
-                self.dense2.build(self.hidden_features)
+                self.dense2.build([None, None, self.hidden_features])
 
 
 class TFSegformerLayer(tf.keras.layers.Layer):
@@ -809,7 +809,7 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
                 self.segformer.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_sizes[-1])
+                self.classifier.build([None, None, self.config.hidden_sizes[-1]])
 
 
 class TFSegformerMLP(tf.keras.layers.Layer):
@@ -836,7 +836,7 @@ class TFSegformerMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
-                self.proj.build(self.input_dim)
+                self.proj.build([None, None, self.input_dim])
 
 
 class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
@@ -899,13 +899,15 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
         self.built = True
         if getattr(self, "linear_fuse", None) is not None:
             with tf.name_scope(self.linear_fuse.name):
-                self.linear_fuse.build(self.config.decoder_hidden_size * self.config.num_encoder_blocks)
+                self.linear_fuse.build(
+                    [None, None, None, self.config.decoder_hidden_size * self.config.num_encoder_blocks]
+                )
         if getattr(self, "batch_norm", None) is not None:
             with tf.name_scope(self.batch_norm.name):
                 self.batch_norm.build([None, None, None, self.config.decoder_hidden_size])
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.decoder_hidden_size)
+                self.classifier.build([None, None, None, self.config.decoder_hidden_size])
         if getattr(self, "mlps", None) is not None:
             for layer in self.mlps:
                 with tf.name_scope(layer.name):

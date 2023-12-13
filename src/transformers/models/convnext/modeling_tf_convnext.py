@@ -108,7 +108,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "patch_embeddings", None) is not None:
             with tf.name_scope(self.patch_embeddings.name):
-                self.patch_embeddings.build(self.config.num_channels)
+                self.patch_embeddings.build([None, None, None, self.config.num_channels])
         if getattr(self, "layernorm", None) is not None:
             with tf.name_scope(self.layernorm.name):
                 self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
@@ -185,16 +185,16 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dwconv", None) is not None:
             with tf.name_scope(self.dwconv.name):
-                self.dwconv.build(self.dim)
+                self.dwconv.build([None, None, None, self.dim])
         if getattr(self, "layernorm", None) is not None:
             with tf.name_scope(self.layernorm.name):
                 self.layernorm.build([None, None, None, self.dim])
         if getattr(self, "pwconv1", None) is not None:
             with tf.name_scope(self.pwconv1.name):
-                self.pwconv1.build(self.dim)
+                self.pwconv1.build([None, None, self.dim])
         if getattr(self, "pwconv2", None) is not None:
             with tf.name_scope(self.pwconv2.name):
-                self.pwconv2.build(4 * self.dim)
+                self.pwconv2.build([None, None, 4 * self.dim])
         if getattr(self, "drop_path", None) is not None:
             with tf.name_scope(self.drop_path.name):
                 self.drop_path.build(None)
@@ -298,7 +298,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
             with tf.name_scope(self.downsampling_layer[0].name):
                 self.downsampling_layer[0].build([None, None, None, self.in_channels])
             with tf.name_scope(self.downsampling_layer[1].name):
-                self.downsampling_layer[1].build(self.in_channels)
+                self.downsampling_layer[1].build([None, None, None, self.in_channels])
 
 
 class TFConvNextEncoder(tf.keras.layers.Layer):
@@ -663,4 +663,4 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         if getattr(self, "classifier", None) is not None:
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
-                    self.classifier.build(self.config.hidden_sizes[-1])
+                    self.classifier.build([None, None, self.config.hidden_sizes[-1]])

@@ -439,13 +439,13 @@ class TFEsmSelfAttention(Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
         if getattr(self, "rotary_embeddings", None) is not None:
             with tf.name_scope(self.rotary_embeddings.name):
                 self.rotary_embeddings.build(None)
@@ -472,7 +472,7 @@ class TFEsmSelfOutput(Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmAttention(Layer):
@@ -550,7 +550,7 @@ class TFEsmIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmOutput(Layer):
@@ -574,7 +574,7 @@ class TFEsmOutput(Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
 
 
 class TFEsmLayer(Layer):
@@ -800,7 +800,7 @@ class TFEsmPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmPreTrainedModel(TFPreTrainedModel):
@@ -1318,13 +1318,13 @@ class TFEsmLMHead(Layer):
         self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.config.hidden_size])
         if getattr(self, "decoder", None) is not None and not self.config.tie_word_embeddings:
             with tf.name_scope(self.decoder.name):
-                self.decoder.build(self.config.hidden_size)
+                self.decoder.build([None, None, self.config.hidden_size])
 
     def get_bias(self):
         return {"bias": self.bias}
@@ -1512,7 +1512,7 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
                 self.esm.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 class TFEsmClassificationHead(Layer):
@@ -1549,10 +1549,10 @@ class TFEsmClassificationHead(Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.config.hidden_size)
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):

@@ -156,7 +156,7 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
 
 
 class TFSamMLPBlock(tf.keras.layers.Layer):
@@ -179,10 +179,10 @@ class TFSamMLPBlock(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "lin1", None) is not None:
             with tf.name_scope(self.lin1.name):
-                self.lin1.build(self.config.hidden_size)
+                self.lin1.build([None, None, self.config.hidden_size])
         if getattr(self, "lin2", None) is not None:
             with tf.name_scope(self.lin2.name):
-                self.lin2.build(self.config.mlp_dim)
+                self.lin2.build([None, None, self.config.mlp_dim])
 
 
 class TFSamLayerNorm(tf.keras.layers.Layer):
@@ -283,16 +283,16 @@ class TFSamAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.hidden_size)
+                self.q_proj.build([None, None, self.hidden_size])
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.hidden_size)
+                self.k_proj.build([None, None, self.hidden_size])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.hidden_size)
+                self.v_proj.build([None, None, self.hidden_size])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.internal_dim)
+                self.out_proj.build([None, None, self.internal_dim])
 
 
 class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
@@ -527,14 +527,14 @@ class TFSamFeedForward(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "proj_in", None) is not None:
             with tf.name_scope(self.proj_in.name):
-                self.proj_in.build(self.input_dim)
+                self.proj_in.build([None, None, self.input_dim])
         if getattr(self, "proj_out", None) is not None:
             with tf.name_scope(self.proj_out.name):
-                self.proj_out.build(self.hidden_dim)
+                self.proj_out.build([None, None, self.hidden_dim])
         if getattr(self, "layers", None) is not None:
             for layer in self.layers:
                 with tf.name_scope(layer.name):
-                    layer.build(self.hidden_dim)
+                    layer.build([None, None, self.hidden_dim])
 
 
 class TFSamMaskDecoder(tf.keras.layers.Layer):
@@ -946,10 +946,10 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "qkv", None) is not None:
             with tf.name_scope(self.qkv.name):
-                self.qkv.build(self.config.hidden_size)
+                self.qkv.build([None, None, self.config.hidden_size])
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
-                self.proj.build(self.config.hidden_size)
+                self.proj.build([None, None, self.config.hidden_size])
 
     def get_rel_pos(self, q_size: int, k_size: int, rel_pos: tf.Tensor) -> tf.Tensor:
         """
@@ -1199,13 +1199,13 @@ class TFSamVisionNeck(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv1", None) is not None:
             with tf.name_scope(self.conv1.name):
-                self.conv1.build(self.config.hidden_size)
+                self.conv1.build([None, None, None, self.config.hidden_size])
         if getattr(self, "layer_norm1", None) is not None:
             with tf.name_scope(self.layer_norm1.name):
                 self.layer_norm1.build(None)
         if getattr(self, "conv2", None) is not None:
             with tf.name_scope(self.conv2.name):
-                self.conv2.build(self.config.output_channels)
+                self.conv2.build([None, None, None, self.config.output_channels])
         if getattr(self, "layer_norm2", None) is not None:
             with tf.name_scope(self.layer_norm2.name):
                 self.layer_norm2.build(None)

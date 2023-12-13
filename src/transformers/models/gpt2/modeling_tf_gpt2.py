@@ -213,13 +213,13 @@ class TFAttention(tf.keras.layers.Layer):
             c_attn_shape = 3 * self.embed_dim
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(self.embed_dim)
+                self.c_proj.build([None, None, self.embed_dim])
         if getattr(self, "c_attn", None) is not None:
             with tf.name_scope(self.c_attn.name):
-                self.c_attn.build(c_attn_shape)
+                self.c_attn.build([None, None, c_attn_shape])
         if getattr(self, "q_attn", None) is not None:
             with tf.name_scope(self.q_attn.name):
-                self.q_attn.build(self.embed_dim)
+                self.q_attn.build([None, None, self.embed_dim])
 
 
 class TFMLP(tf.keras.layers.Layer):
@@ -245,10 +245,10 @@ class TFMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_fc", None) is not None:
             with tf.name_scope(self.c_fc.name):
-                self.c_fc.build(self.intermediate_size)
+                self.c_fc.build([None, None, self.intermediate_size])
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(self.embed_dim)
+                self.c_proj.build([None, None, self.embed_dim])
 
 
 class TFBlock(tf.keras.layers.Layer):
@@ -1237,7 +1237,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         self.built = True
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
-                self.score.build(self.config.n_embd)
+                self.score.build([None, None, self.config.n_embd])
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)

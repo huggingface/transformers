@@ -91,7 +91,7 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "convolution", None) is not None:
             with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.in_channels)
+                self.convolution.build([None, None, None, self.in_channels])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, None, self.out_channels])
@@ -161,7 +161,7 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "convolution", None) is not None:
             with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.in_channels)
+                self.convolution.build([None, None, None, self.in_channels])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, None, self.out_channels])
@@ -199,9 +199,9 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
                 self.pooler.build((None, None, None, None))
         if getattr(self, "attention", None) is not None:
             with tf.name_scope(self.attention[0].name):
-                self.attention[0].build(self.in_channels)
+                self.attention[0].build([None, None, None, self.in_channels])
             with tf.name_scope(self.attention[1].name):
-                self.attention[1].build(self.reduced_channels)
+                self.attention[1].build([None, None, None, self.reduced_channels])
 
 
 class TFRegNetXLayer(tf.keras.layers.Layer):
@@ -603,4 +603,4 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
                 self.regnet.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier[1].name):
-                self.classifier[1].build(self.config.hidden_sizes[-1])
+                self.classifier[1].build([None, None, None, self.config.hidden_sizes[-1]])

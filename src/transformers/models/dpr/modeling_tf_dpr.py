@@ -293,10 +293,10 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.encoder.embeddings_size)
+                self.qa_outputs.build([None, None, self.encoder.embeddings_size])
         if getattr(self, "qa_classifier", None) is not None:
             with tf.name_scope(self.qa_classifier.name):
-                self.qa_classifier.build(self.encoder.embeddings_size)
+                self.qa_classifier.build([None, None, self.encoder.embeddings_size])
 
 
 class TFDPRSpanPredictor(TFPreTrainedModel):

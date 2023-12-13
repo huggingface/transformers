@@ -372,10 +372,10 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
                 self.layer_norm.build([None, None, self.config.d_model])
         if getattr(self, "layer_1", None) is not None:
             with tf.name_scope(self.layer_1.name):
-                self.layer_1.build(self.config.d_model)
+                self.layer_1.build([None, None, self.config.d_model])
         if getattr(self, "layer_2", None) is not None:
             with tf.name_scope(self.layer_2.name):
-                self.layer_2.build(self.config.d_inner)
+                self.layer_2.build([None, None, self.config.d_inner])
 
 
 class TFXLNetLayer(tf.keras.layers.Layer):
@@ -1498,7 +1498,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
                 self.sequence_summary.build(None)
         if getattr(self, "logits_proj", None) is not None:
             with tf.name_scope(self.logits_proj.name):
-                self.logits_proj.build(self.config.d_model)
+                self.logits_proj.build([None, None, self.config.d_model])
 
 
 @add_start_docstrings(
@@ -1614,7 +1614,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
                 self.sequence_summary.build(None)
         if getattr(self, "logits_proj", None) is not None:
             with tf.name_scope(self.logits_proj.name):
-                self.logits_proj.build(self.config.d_model)
+                self.logits_proj.build([None, None, self.config.d_model])
 
 
 @add_start_docstrings(
@@ -1706,7 +1706,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
                 self.transformer.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1812,4 +1812,4 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
                 self.transformer.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

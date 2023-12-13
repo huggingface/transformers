@@ -224,16 +224,16 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_lin", None) is not None:
             with tf.name_scope(self.q_lin.name):
-                self.q_lin.build(self.config.dim)
+                self.q_lin.build([None, None, self.config.dim])
         if getattr(self, "k_lin", None) is not None:
             with tf.name_scope(self.k_lin.name):
-                self.k_lin.build(self.config.dim)
+                self.k_lin.build([None, None, self.config.dim])
         if getattr(self, "v_lin", None) is not None:
             with tf.name_scope(self.v_lin.name):
-                self.v_lin.build(self.config.dim)
+                self.v_lin.build([None, None, self.config.dim])
         if getattr(self, "out_lin", None) is not None:
             with tf.name_scope(self.out_lin.name):
-                self.out_lin.build(self.config.dim)
+                self.out_lin.build([None, None, self.config.dim])
 
 
 class TFFFN(tf.keras.layers.Layer):
@@ -262,10 +262,10 @@ class TFFFN(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "lin1", None) is not None:
             with tf.name_scope(self.lin1.name):
-                self.lin1.build(self.config.dim)
+                self.lin1.build([None, None, self.config.dim])
         if getattr(self, "lin2", None) is not None:
             with tf.name_scope(self.lin2.name):
-                self.lin2.build(self.config.hidden_dim)
+                self.lin2.build([None, None, self.config.hidden_dim])
 
 
 class TFTransformerBlock(tf.keras.layers.Layer):
@@ -757,7 +757,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
                 self.distilbert.build(None)
         if getattr(self, "vocab_transform", None) is not None:
             with tf.name_scope(self.vocab_transform.name):
-                self.vocab_transform.build(self.config.dim)
+                self.vocab_transform.build([None, None, self.config.dim])
         if getattr(self, "vocab_layer_norm", None) is not None:
             with tf.name_scope(self.vocab_layer_norm.name):
                 self.vocab_layer_norm.build([None, None, self.config.dim])
@@ -854,10 +854,10 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
                 self.distilbert.build(None)
         if getattr(self, "pre_classifier", None) is not None:
             with tf.name_scope(self.pre_classifier.name):
-                self.pre_classifier.build(self.config.dim)
+                self.pre_classifier.build([None, None, self.config.dim])
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.dim)
+                self.classifier.build([None, None, self.config.dim])
 
 
 @add_start_docstrings(
@@ -937,7 +937,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
                 self.distilbert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1043,10 +1043,10 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
                 self.distilbert.build(None)
         if getattr(self, "pre_classifier", None) is not None:
             with tf.name_scope(self.pre_classifier.name):
-                self.pre_classifier.build(self.config.dim)
+                self.pre_classifier.build([None, None, self.config.dim])
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.dim)
+                self.classifier.build([None, None, self.config.dim])
 
 
 @add_start_docstrings(
@@ -1142,4 +1142,4 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
                 self.distilbert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.dim)
+                self.qa_outputs.build([None, None, self.config.dim])

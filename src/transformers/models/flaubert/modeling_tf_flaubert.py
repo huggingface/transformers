@@ -398,16 +398,16 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_lin", None) is not None:
             with tf.name_scope(self.q_lin.name):
-                self.q_lin.build(self.dim)
+                self.q_lin.build([None, None, self.dim])
         if getattr(self, "k_lin", None) is not None:
             with tf.name_scope(self.k_lin.name):
-                self.k_lin.build(self.dim)
+                self.k_lin.build([None, None, self.dim])
         if getattr(self, "v_lin", None) is not None:
             with tf.name_scope(self.v_lin.name):
-                self.v_lin.build(self.dim)
+                self.v_lin.build([None, None, self.dim])
         if getattr(self, "out_lin", None) is not None:
             with tf.name_scope(self.out_lin.name):
-                self.out_lin.build(self.dim)
+                self.out_lin.build([None, None, self.dim])
 
 
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMTransformerFFN
@@ -436,10 +436,10 @@ class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "lin1", None) is not None:
             with tf.name_scope(self.lin1.name):
-                self.lin1.build(self.in_dim)
+                self.lin1.build([None, None, self.in_dim])
         if getattr(self, "lin2", None) is not None:
             with tf.name_scope(self.lin2.name):
-                self.lin2.build(self.dim_hidden)
+                self.lin2.build([None, None, self.dim_hidden])
 
 
 @keras_serializable
@@ -1103,7 +1103,7 @@ class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestion
                 self.transformer.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1196,7 +1196,7 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
                 self.transformer.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1333,4 +1333,4 @@ class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLos
                 self.sequence_summary.build(None)
         if getattr(self, "logits_proj", None) is not None:
             with tf.name_scope(self.logits_proj.name):
-                self.logits_proj.build(self.config.num_labels)
+                self.logits_proj.build([None, None, self.config.num_labels])

@@ -192,7 +192,7 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.num_channels)
+                self.projection.build([None, None, None, self.num_channels])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, self.embed_dim])
@@ -229,7 +229,7 @@ class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "convolution", None) is not None:
             with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.embed_dim)
+                self.convolution.build([None, None, None, self.embed_dim])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, None, self.embed_dim])
@@ -415,13 +415,13 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
                 self.convolution_projection_value.build(None)
         if getattr(self, "projection_query", None) is not None:
             with tf.name_scope(self.projection_query.name):
-                self.projection_query.build(self.embed_dim)
+                self.projection_query.build([None, None, self.embed_dim])
         if getattr(self, "projection_key", None) is not None:
             with tf.name_scope(self.projection_key.name):
-                self.projection_key.build(self.embed_dim)
+                self.projection_key.build([None, None, self.embed_dim])
         if getattr(self, "projection_value", None) is not None:
             with tf.name_scope(self.projection_value.name):
-                self.projection_value.build(self.embed_dim)
+                self.projection_value.build([None, None, self.embed_dim])
 
 
 class TFCvtSelfOutput(tf.keras.layers.Layer):
@@ -446,7 +446,7 @@ class TFCvtSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.embed_dim)
+                self.dense.build([None, None, self.embed_dim])
 
 
 class TFCvtAttention(tf.keras.layers.Layer):
@@ -530,7 +530,7 @@ class TFCvtIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.embed_dim)
+                self.dense.build([None, None, self.embed_dim])
 
 
 class TFCvtOutput(tf.keras.layers.Layer):
@@ -559,7 +559,7 @@ class TFCvtOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(int(self.embed_dim * self.mlp_ratio))
+                self.dense.build([None, None, int(self.embed_dim * self.mlp_ratio)])
 
 
 class TFCvtLayer(tf.keras.layers.Layer):
@@ -1100,4 +1100,4 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         if getattr(self, "classifier", None) is not None:
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
-                    self.classifier.build(self.config.embed_dim[-1])
+                    self.classifier.build([None, None, self.config.embed_dim[-1]])

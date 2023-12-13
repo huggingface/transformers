@@ -205,22 +205,22 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
         if getattr(self, "query_global", None) is not None:
             with tf.name_scope(self.query_global.name):
-                self.query_global.build(self.config.hidden_size)
+                self.query_global.build([None, None, self.config.hidden_size])
         if getattr(self, "key_global", None) is not None:
             with tf.name_scope(self.key_global.name):
-                self.key_global.build(self.config.hidden_size)
+                self.key_global.build([None, None, self.config.hidden_size])
         if getattr(self, "value_global", None) is not None:
             with tf.name_scope(self.value_global.name):
-                self.value_global.build(self.config.hidden_size)
+                self.value_global.build([None, None, self.config.hidden_size])
 
     def call(
         self,
@@ -1034,7 +1034,7 @@ class TFLEDEncoderAttention(tf.keras.layers.Layer):
                 self.longformer_self_attn.build(None)
         if getattr(self, "output_dense", None) is not None:
             with tf.name_scope(self.output_dense.name):
-                self.output_dense.build(self.config.d_model)
+                self.output_dense.build([None, None, self.config.d_model])
 
 
 class TFLEDDecoderAttention(tf.keras.layers.Layer):
@@ -1193,16 +1193,16 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 class TFLEDEncoderLayer(tf.keras.layers.Layer):
@@ -1276,10 +1276,10 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
                 self.self_attn_layer_norm.build([None, None, self.embed_dim])
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
+                self.fc1.build([None, None, self.embed_dim])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.encoder_ffn_dim)
+                self.fc2.build([None, None, self.config.encoder_ffn_dim])
         if getattr(self, "final_layer_norm", None) is not None:
             with tf.name_scope(self.final_layer_norm.name):
                 self.final_layer_norm.build([None, None, self.embed_dim])
@@ -1412,10 +1412,10 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
                 self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
+                self.fc1.build([None, None, self.embed_dim])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.decoder_ffn_dim)
+                self.fc2.build([None, None, self.config.decoder_ffn_dim])
         if getattr(self, "final_layer_norm", None) is not None:
             with tf.name_scope(self.final_layer_norm.name):
                 self.final_layer_norm.build([None, None, self.embed_dim])

@@ -104,7 +104,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "proj", None) is not None:
             with tf.name_scope(self.proj.name):
-                self.proj.build(self.config.num_channels)
+                self.proj.build([None, None, None, self.config.num_channels])
 
 
 class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
@@ -418,13 +418,13 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
 
 
 # Copied from models.roberta.modeling_tf_roberta.TFRobertaSelfOutput
@@ -452,7 +452,7 @@ class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -526,7 +526,7 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from models.roberta.modeling_tf_bert.TFRobertaOutput
@@ -554,7 +554,7 @@ class TFLayoutLMv3Output(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -768,13 +768,13 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "rel_pos_bias", None) is not None:
             with tf.name_scope(self.rel_pos_bias.name):
-                self.rel_pos_bias.build(self.rel_pos_bins)
+                self.rel_pos_bias.build([None, None, self.rel_pos_bins])
         if getattr(self, "rel_pos_x_bias", None) is not None:
             with tf.name_scope(self.rel_pos_x_bias.name):
-                self.rel_pos_x_bias.build(self.rel_2d_pos_bins)
+                self.rel_pos_x_bias.build([None, None, self.rel_2d_pos_bins])
         if getattr(self, "rel_pos_y_bias", None) is not None:
             with tf.name_scope(self.rel_pos_y_bias.name):
-                self.rel_pos_y_bias.build(self.rel_2d_pos_bins)
+                self.rel_pos_y_bias.build([None, None, self.rel_2d_pos_bins])
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
                 with tf.name_scope(layer.name):
@@ -1379,13 +1379,13 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.config.hidden_size)
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1637,7 +1637,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
                 self.dropout.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(

@@ -125,10 +125,10 @@ class TFT5DenseActDense(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "wi", None) is not None:
             with tf.name_scope(self.wi.name):
-                self.wi.build(self.config.d_model)
+                self.wi.build([None, None, self.config.d_model])
         if getattr(self, "wo", None) is not None:
             with tf.name_scope(self.wo.name):
-                self.wo.build(self.config.d_ff)
+                self.wo.build([None, None, self.config.d_ff])
 
 
 class TFT5DenseGatedActDense(tf.keras.layers.Layer):
@@ -167,13 +167,13 @@ class TFT5DenseGatedActDense(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "wi_0", None) is not None:
             with tf.name_scope(self.wi_0.name):
-                self.wi_0.build(self.config.d_model)
+                self.wi_0.build([None, None, self.config.d_model])
         if getattr(self, "wi_1", None) is not None:
             with tf.name_scope(self.wi_1.name):
-                self.wi_1.build(self.config.d_model)
+                self.wi_1.build([None, None, self.config.d_model])
         if getattr(self, "wo", None) is not None:
             with tf.name_scope(self.wo.name):
-                self.wo.build(self.config.d_ff)
+                self.wo.build([None, None, self.config.d_ff])
 
 
 class TFT5LayerFF(tf.keras.layers.Layer):
@@ -269,16 +269,16 @@ class TFT5Attention(tf.keras.layers.Layer):
                 )
         if getattr(self, "q", None) is not None:
             with tf.name_scope(self.q.name):
-                self.q.build(self.d_model)
+                self.q.build([None, None, self.d_model])
         if getattr(self, "k", None) is not None:
             with tf.name_scope(self.k.name):
-                self.k.build(self.d_model)
+                self.k.build([None, None, self.d_model])
         if getattr(self, "v", None) is not None:
             with tf.name_scope(self.v.name):
-                self.v.build(self.d_model)
+                self.v.build([None, None, self.d_model])
         if getattr(self, "o", None) is not None:
             with tf.name_scope(self.o.name):
-                self.o.build(self.inner_dim)
+                self.o.build([None, None, self.inner_dim])
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -1593,7 +1593,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 self.decoder.build(None)
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.config.d_model)
+                self.lm_head.build([None, None, self.config.d_model])
 
 
 @add_start_docstrings(

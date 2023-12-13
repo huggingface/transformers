@@ -173,7 +173,7 @@ class TFConv1dSubsampler(tf.keras.layers.Layer):
         if getattr(self, "conv_layers", None) is not None:
             for i, layer in enumerate(self.conv_layers):
                 with tf.name_scope(layer.name):
-                    layer.build(self.in_channels if i == 0 else self.mid_channels // 2)
+                    layer.build([None, None, self.in_channels] if i == 0 else [None, None, self.mid_channels // 2])
 
 
 class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
@@ -394,16 +394,16 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
@@ -473,10 +473,10 @@ class TFSpeech2TextEncoderLayer(tf.keras.layers.Layer):
                 self.self_attn_layer_norm.build([None, None, self.embed_dim])
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
+                self.fc1.build([None, None, self.embed_dim])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.encoder_ffn_dim)
+                self.fc2.build([None, None, self.config.encoder_ffn_dim])
         if getattr(self, "final_layer_norm", None) is not None:
             with tf.name_scope(self.final_layer_norm.name):
                 self.final_layer_norm.build([None, None, self.embed_dim])
@@ -612,10 +612,10 @@ class TFSpeech2TextDecoderLayer(tf.keras.layers.Layer):
                 self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(self.embed_dim)
+                self.fc1.build([None, None, self.embed_dim])
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(self.config.decoder_ffn_dim)
+                self.fc2.build([None, None, self.config.decoder_ffn_dim])
         if getattr(self, "final_layer_norm", None) is not None:
             with tf.name_scope(self.final_layer_norm.name):
                 self.final_layer_norm.build([None, None, self.embed_dim])
@@ -1600,7 +1600,7 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
                 self.model.build(None)
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.config.d_model)
+                self.lm_head.build([None, None, self.config.d_model])
 
     def tf_to_pt_weight_rename(self, tf_weight):
         if tf_weight == "lm_head.weight":

@@ -148,16 +148,16 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "Wq", None) is not None:
             with tf.name_scope(self.Wq.name):
-                self.Wq.build(self.d_model_size)
+                self.Wq.build([None, None, self.d_model_size])
         if getattr(self, "Wk", None) is not None:
             with tf.name_scope(self.Wk.name):
-                self.Wk.build(self.d_model_size)
+                self.Wk.build([None, None, self.d_model_size])
         if getattr(self, "Wv", None) is not None:
             with tf.name_scope(self.Wv.name):
-                self.Wv.build(self.d_model_size)
+                self.Wv.build([None, None, self.d_model_size])
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.d_model_size)
+                self.dense.build([None, None, self.d_model_size])
 
 
 class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
@@ -181,10 +181,10 @@ class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense_0", None) is not None:
             with tf.name_scope(self.dense_0.name):
-                self.dense_0.build(self.d_model_size)
+                self.dense_0.build([None, None, self.d_model_size])
         if getattr(self, "dense_2", None) is not None:
             with tf.name_scope(self.dense_2.name):
-                self.dense_2.build(self.dff)
+                self.dense_2.build([None, None, self.dff])
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
@@ -926,7 +926,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         self.built = True
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.n_embd)
+                self.classifier.build([None, None, self.config.n_embd])
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)

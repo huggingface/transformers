@@ -309,22 +309,22 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
         if getattr(self, "key_conv_attn_layer", None) is not None:
             with tf.name_scope(self.key_conv_attn_layer.name):
-                self.key_conv_attn_layer.build(self.config.hidden_size)
+                self.key_conv_attn_layer.build([None, None, self.config.hidden_size])
         if getattr(self, "conv_kernel_layer", None) is not None:
             with tf.name_scope(self.conv_kernel_layer.name):
-                self.conv_kernel_layer.build(self.all_head_size)
+                self.conv_kernel_layer.build([None, None, self.all_head_size])
         if getattr(self, "conv_out_layer", None) is not None:
             with tf.name_scope(self.conv_out_layer.name):
-                self.conv_out_layer.build(self.config.hidden_size)
+                self.conv_out_layer.build([None, None, self.config.hidden_size])
 
 
 class TFConvBertSelfOutput(tf.keras.layers.Layer):
@@ -351,7 +351,7 @@ class TFConvBertSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -455,7 +455,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFConvBertOutput(tf.keras.layers.Layer):
@@ -494,7 +494,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
 
 
 class TFConvBertLayer(tf.keras.layers.Layer):
@@ -612,7 +612,7 @@ class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -736,7 +736,7 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "embeddings_project", None) is not None:
             with tf.name_scope(self.embeddings_project.name):
-                self.embeddings_project.build(self.config.embedding_size)
+                self.embeddings_project.build([None, None, self.config.embedding_size])
 
 
 class TFConvBertPreTrainedModel(TFPreTrainedModel):
@@ -962,7 +962,7 @@ class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
                 self.LayerNorm.build([None, None, self.config.embedding_size])
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top.""", CONVBERT_START_DOCSTRING)
@@ -1093,10 +1093,10 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.config.hidden_size)
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1283,7 +1283,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
                 self.sequence_summary.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1370,7 +1370,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
                 self.convbert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1468,4 +1468,4 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
                 self.convbert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

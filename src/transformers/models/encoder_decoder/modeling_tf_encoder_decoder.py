@@ -657,7 +657,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         self.built = True
         if getattr(self, "enc_to_dec_proj", None) is not None:
             with tf.name_scope(self.enc_to_dec_proj.name):
-                self.enc_to_dec_proj.build(self.encoder.config.hidden_size)
+                self.enc_to_dec_proj.build([None, None, self.encoder.config.hidden_size])
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)

@@ -319,16 +319,16 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.config.hidden_size)
+                self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.config.hidden_size)
+                self.value.build([None, None, self.config.hidden_size])
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -392,10 +392,10 @@ class TFAlbertLayer(tf.keras.layers.Layer):
                 self.attention.build(None)
         if getattr(self, "ffn", None) is not None:
             with tf.name_scope(self.ffn.name):
-                self.ffn.build(self.config.hidden_size)
+                self.ffn.build([None, None, self.config.hidden_size])
         if getattr(self, "ffn_output", None) is not None:
             with tf.name_scope(self.ffn_output.name):
-                self.ffn_output.build(self.config.intermediate_size)
+                self.ffn_output.build([None, None, self.config.intermediate_size])
         if getattr(self, "full_layer_layer_norm", None) is not None:
             with tf.name_scope(self.full_layer_layer_norm.name):
                 self.full_layer_layer_norm.build([None, None, self.config.hidden_size])
@@ -517,7 +517,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "embedding_hidden_mapping_in", None) is not None:
             with tf.name_scope(self.embedding_hidden_mapping_in.name):
-                self.embedding_hidden_mapping_in.build(self.config.embedding_size)
+                self.embedding_hidden_mapping_in.build([None, None, self.config.embedding_size])
         if getattr(self, "albert_layer_groups", None) is not None:
             for layer in self.albert_layer_groups:
                 with tf.name_scope(layer.name):
@@ -565,7 +565,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.embedding_size])
@@ -736,7 +736,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
                 self.encoder.build(None)
         if getattr(self, "pooler", None) is not None:
             with tf.name_scope(self.pooler.name):
-                self.pooler.build(self.config.hidden_size)
+                self.pooler.build([None, None, self.config.hidden_size])
 
 
 @dataclass
@@ -1056,7 +1056,7 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING)
@@ -1257,7 +1257,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
                 self.albert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1352,7 +1352,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
                 self.albert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1459,7 +1459,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
                 self.albert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1571,4 +1571,4 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
                 self.albert.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])

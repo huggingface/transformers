@@ -160,10 +160,10 @@ class TFAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_attn", None) is not None:
             with tf.name_scope(self.c_attn.name):
-                self.c_attn.build(self.n_state * 3)
+                self.c_attn.build([None, None, self.n_state * 3])
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(self.n_state)
+                self.c_proj.build([None, None, self.n_state])
 
 
 class TFMLP(tf.keras.layers.Layer):
@@ -189,10 +189,10 @@ class TFMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "c_fc", None) is not None:
             with tf.name_scope(self.c_fc.name):
-                self.c_fc.build(self.n_state)
+                self.c_fc.build([None, None, self.n_state])
         if getattr(self, "c_proj", None) is not None:
             with tf.name_scope(self.c_proj.name):
-                self.c_proj.build(self.nx)
+                self.c_proj.build([None, None, self.nx])
 
 
 class TFBlock(tf.keras.layers.Layer):
@@ -935,7 +935,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
         self.built = True
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
-                self.score.build(self.config.n_embd)
+                self.score.build([None, None, self.config.n_embd])
         if getattr(self, "transformer", None) is not None:
             with tf.name_scope(self.transformer.name):
                 self.transformer.build(None)

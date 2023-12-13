@@ -89,7 +89,7 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_channels)
+                self.conv.build([None, None, None, self.in_channels])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, None, self.out_channels])
@@ -165,7 +165,7 @@ class TFResNetShortCut(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "convolution", None) is not None:
             with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.in_channels)
+                self.convolution.build([None, None, None, self.in_channels])
         if getattr(self, "normalization", None) is not None:
             with tf.name_scope(self.normalization.name):
                 self.normalization.build([None, None, None, self.out_channels])
@@ -589,4 +589,4 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
                 self.resnet.build(None)
         if getattr(self, "classifier_layer", None) is not None:
             with tf.name_scope(self.classifier_layer.name):
-                self.classifier_layer.build(self.config.hidden_sizes[-1])
+                self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])

@@ -151,7 +151,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "convolution", None) is not None:
             with tf.name_scope(self.convolution.name):
-                self.convolution.build(self.in_channels)
+                self.convolution.build([None, None, None, self.in_channels])
         if getattr(self, "normalization", None) is not None:
             if hasattr(self.normalization, "name"):
                 with tf.name_scope(self.normalization.name):
@@ -319,13 +319,13 @@ class TFMobileViTSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.hidden_size)
+                self.query.build([None, None, self.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.hidden_size)
+                self.key.build([None, None, self.hidden_size])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.hidden_size)
+                self.value.build([None, None, self.hidden_size])
 
 
 class TFMobileViTSelfOutput(tf.keras.layers.Layer):
@@ -346,7 +346,7 @@ class TFMobileViTSelfOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.hidden_size)
+                self.dense.build([None, None, self.hidden_size])
 
 
 class TFMobileViTAttention(tf.keras.layers.Layer):
@@ -396,7 +396,7 @@ class TFMobileViTIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.hidden_size)
+                self.dense.build([None, None, self.hidden_size])
 
 
 class TFMobileViTOutput(tf.keras.layers.Layer):
@@ -418,7 +418,7 @@ class TFMobileViTOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.intermediate_size)
+                self.dense.build([None, None, self.intermediate_size])
 
 
 class TFMobileViTTransformerLayer(tf.keras.layers.Layer):
@@ -1093,7 +1093,7 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
         if getattr(self, "classifier", None) is not None:
             if hasattr(self.classifier, "name"):
                 with tf.name_scope(self.classifier.name):
-                    self.classifier.build(self.config.neck_hidden_sizes[-1])
+                    self.classifier.build([None, None, self.config.neck_hidden_sizes[-1]])
 
 
 class TFMobileViTASPPPooling(tf.keras.layers.Layer):

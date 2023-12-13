@@ -470,7 +470,7 @@ class TFHubertNoLayerNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2LayerNormConvLayer with Wav2Vec2->Hubert
@@ -502,7 +502,7 @@ class TFHubertLayerNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.out_conv_dim])
@@ -537,7 +537,7 @@ class TFHubertGroupNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.out_conv_dim])
@@ -570,7 +570,7 @@ class TFHubertPositionalConvEmbedding(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.config.hidden_size)
+                self.conv.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2SamePadLayer with Wav2Vec2->Hubert
@@ -660,7 +660,7 @@ class TFHubertFeatureProjection(tf.keras.layers.Layer):
                 self.layer_norm.build([None, None, self.config.conv_dim[-1]])
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.config.conv_dim[-1])
+                self.projection.build([None, None, self.config.conv_dim[-1]])
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFHubert
@@ -822,16 +822,16 @@ class TFHubertAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2FeedForward with Wav2Vec2->Hubert
@@ -873,10 +873,10 @@ class TFHubertFeedForward(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "intermediate_dense", None) is not None:
             with tf.name_scope(self.intermediate_dense.name):
-                self.intermediate_dense.build(self.config.hidden_size)
+                self.intermediate_dense.build([None, None, self.config.hidden_size])
         if getattr(self, "output_dense", None) is not None:
             with tf.name_scope(self.output_dense.name):
-                self.output_dense.build(self.config.intermediate_size)
+                self.output_dense.build([None, None, self.config.intermediate_size])
 
 
 # Copied from transformers.models.wav2vec2.modeling_tf_wav2vec2.TFWav2Vec2EncoderLayer with Wav2Vec2->Hubert
@@ -1678,4 +1678,4 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
                 self.hubert.build(None)
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.output_hidden_size)
+                self.lm_head.build([None, None, self.output_hidden_size])

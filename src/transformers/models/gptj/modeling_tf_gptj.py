@@ -273,16 +273,16 @@ class TFGPTJAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 class TFGPTJMLP(tf.keras.layers.Layer):
@@ -315,10 +315,10 @@ class TFGPTJMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "fc_in", None) is not None:
             with tf.name_scope(self.fc_in.name):
-                self.fc_in.build(self.embed_dim)
+                self.fc_in.build([None, None, self.embed_dim])
         if getattr(self, "fc_out", None) is not None:
             with tf.name_scope(self.fc_out.name):
-                self.fc_out.build(self.intermediate_size)
+                self.fc_out.build([None, None, self.intermediate_size])
 
 
 class TFGPTJBlock(tf.keras.layers.Layer):
@@ -863,7 +863,7 @@ class TFGPTJForCausalLM(TFGPTJPreTrainedModel, TFCausalLanguageModelingLoss):
                 self.transformer.build(None)
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.config.n_embd)
+                self.lm_head.build([None, None, self.config.n_embd])
 
 
 @add_start_docstrings(
@@ -997,7 +997,7 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
                 self.transformer.build(None)
         if getattr(self, "score", None) is not None:
             with tf.name_scope(self.score.name):
-                self.score.build(self.config.n_embd)
+                self.score.build([None, None, self.config.n_embd])
 
 
 @add_start_docstrings(
@@ -1100,4 +1100,4 @@ class TFGPTJForQuestionAnswering(TFGPTJPreTrainedModel, TFQuestionAnsweringLoss)
                 self.transformer.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

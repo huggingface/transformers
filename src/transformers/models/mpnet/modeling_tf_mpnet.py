@@ -186,7 +186,7 @@ class TFMPNetPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFMPNetSelfAttention(tf.keras.layers.Layer):
@@ -268,16 +268,16 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "q", None) is not None:
             with tf.name_scope(self.q.name):
-                self.q.build(self.config.hidden_size)
+                self.q.build([None, None, self.config.hidden_size])
         if getattr(self, "k", None) is not None:
             with tf.name_scope(self.k.name):
-                self.k.build(self.config.hidden_size)
+                self.k.build([None, None, self.config.hidden_size])
         if getattr(self, "v", None) is not None:
             with tf.name_scope(self.v.name):
-                self.v.build(self.config.hidden_size)
+                self.v.build([None, None, self.config.hidden_size])
         if getattr(self, "o", None) is not None:
             with tf.name_scope(self.o.name):
-                self.o.build(self.config.hidden_size)
+                self.o.build([None, None, self.config.hidden_size])
 
 
 class TFMPNetAttention(tf.keras.layers.Layer):
@@ -339,7 +339,7 @@ class TFMPNetIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->MPNet
@@ -367,7 +367,7 @@ class TFMPNetOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -826,7 +826,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.config.hidden_size])
@@ -973,10 +973,10 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.config.hidden_size)
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1157,7 +1157,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
                 self.mpnet.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1243,7 +1243,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
                 self.mpnet.build(None)
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.hidden_size)
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1342,4 +1342,4 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
                 self.mpnet.build(None)
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
-                self.qa_outputs.build(self.config.hidden_size)
+                self.qa_outputs.build([None, None, self.config.hidden_size])

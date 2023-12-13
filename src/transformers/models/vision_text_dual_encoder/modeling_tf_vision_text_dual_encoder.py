@@ -232,10 +232,10 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection.name):
-                self.visual_projection.build(self.vision_embed_dim)
+                self.visual_projection.build([None, None, self.vision_embed_dim])
         if getattr(self, "text_projection", None) is not None:
             with tf.name_scope(self.text_projection.name):
-                self.text_projection.build(self.text_embed_dim)
+                self.text_projection.build([None, None, self.text_embed_dim])
         with tf.name_scope(self.vision_model.name):
             self.vision_model.build(None)
         with tf.name_scope(self.text_model.name):

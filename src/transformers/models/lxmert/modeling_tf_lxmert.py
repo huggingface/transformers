@@ -196,13 +196,13 @@ class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "visn_fc", None) is not None:
             with tf.name_scope(self.visn_fc.name):
-                self.visn_fc.build(self.feat_dim)
+                self.visn_fc.build([None, None, self.feat_dim])
         if getattr(self, "visn_layer_norm", None) is not None:
             with tf.name_scope(self.visn_layer_norm.name):
                 self.visn_layer_norm.build([None, None, self.config.hidden_size])
         if getattr(self, "box_fc", None) is not None:
             with tf.name_scope(self.box_fc.name):
-                self.box_fc.build(self.pos_dim)
+                self.box_fc.build([None, None, self.pos_dim])
         if getattr(self, "box_layer_norm", None) is not None:
             with tf.name_scope(self.box_layer_norm.name):
                 self.box_layer_norm.build([None, None, self.config.hidden_size])
@@ -361,13 +361,13 @@ class TFLxmertAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "query", None) is not None:
             with tf.name_scope(self.query.name):
-                self.query.build(self.config.hidden_size)
+                self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
             with tf.name_scope(self.key.name):
-                self.key.build(self.ctx_dim)
+                self.key.build([None, None, self.ctx_dim])
         if getattr(self, "value", None) is not None:
             with tf.name_scope(self.value.name):
-                self.value.build(self.ctx_dim)
+                self.value.build([None, None, self.ctx_dim])
 
 
 class TFLxmertIntermediate(tf.keras.layers.Layer):
@@ -395,7 +395,7 @@ class TFLxmertIntermediate(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertOutput(tf.keras.layers.Layer):
@@ -423,7 +423,7 @@ class TFLxmertOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.intermediate_size)
+                self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -453,7 +453,7 @@ class TFLxmertAttentionOutput(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -1169,7 +1169,7 @@ class TFLxmertPooler(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Lxmert
@@ -1204,7 +1204,7 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.config.hidden_size)
+                self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
@@ -1306,7 +1306,7 @@ class TFLxmertPreTrainingHeads(tf.keras.layers.Layer):
                 self.predictions.build(None)
         if getattr(self, "seq_relationship", None) is not None:
             with tf.name_scope(self.seq_relationship.name):
-                self.seq_relationship.build(self.config.hidden_size)
+                self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
@@ -1341,13 +1341,13 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "dense", None) is not None:
             with tf.name_scope(self.dense.name):
-                self.dense.build(self.hid_dim)
+                self.dense.build([None, None, self.hid_dim])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, self.hid_dim * 2])
         if getattr(self, "dense_1", None) is not None:
             with tf.name_scope(self.dense_1.name):
-                self.dense_1.build(self.hid_dim * 2)
+                self.dense_1.build([None, None, self.hid_dim * 2])
 
 
 class TFLxmertVisualObjHead(tf.keras.layers.Layer):
@@ -1394,7 +1394,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
         if getattr(self, "decoder_dict", None) is not None:
             for layer in self.decoder_dict.values():
                 with tf.name_scope(layer.name):
-                    layer.build(self.config.hidden_size)
+                    layer.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings("""Lxmert Model with a `language modeling` head on top.""", LXMERT_START_DOCSTRING)

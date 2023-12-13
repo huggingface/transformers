@@ -503,7 +503,7 @@ class TFWav2Vec2NoLayerNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
 
 
 class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
@@ -534,7 +534,7 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.out_conv_dim])
@@ -570,7 +570,7 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.in_conv_dim)
+                self.conv.build([None, None, self.in_conv_dim])
         if getattr(self, "layer_norm", None) is not None:
             with tf.name_scope(self.layer_norm.name):
                 self.layer_norm.build([None, None, self.out_conv_dim])
@@ -602,7 +602,7 @@ class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "conv", None) is not None:
             with tf.name_scope(self.conv.name):
-                self.conv.build(self.config.hidden_size)
+                self.conv.build([None, None, self.config.hidden_size])
 
 
 class TFWav2Vec2SamePadLayer(tf.keras.layers.Layer):
@@ -649,7 +649,7 @@ class TFWav2Vec2FeatureEncoder(tf.keras.layers.Layer):
         if getattr(self, "conv_layers", None) is not None:
             for conv_layer in self.conv_layers:
                 with tf.name_scope(conv_layer.name):
-                    conv_layer.build(input_shape)
+                    conv_layer.build(None)
 
 
 class TFWav2Vec2FeatureExtractor(TFWav2Vec2FeatureEncoder):
@@ -692,7 +692,7 @@ class TFWav2Vec2FeatureProjection(tf.keras.layers.Layer):
                 self.layer_norm.build([None, None, self.config.conv_dim[-1]])
         if getattr(self, "projection", None) is not None:
             with tf.name_scope(self.projection.name):
-                self.projection.build(self.config.conv_dim[-1])
+                self.projection.build([None, None, self.config.conv_dim[-1]])
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFWav2Vec2
@@ -854,16 +854,16 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(self.embed_dim)
+                self.k_proj.build([None, None, self.embed_dim])
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(self.embed_dim)
+                self.q_proj.build([None, None, self.embed_dim])
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(self.embed_dim)
+                self.v_proj.build([None, None, self.embed_dim])
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(self.embed_dim)
+                self.out_proj.build([None, None, self.embed_dim])
 
 
 class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
@@ -904,10 +904,10 @@ class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "intermediate_dense", None) is not None:
             with tf.name_scope(self.intermediate_dense.name):
-                self.intermediate_dense.build(self.config.hidden_size)
+                self.intermediate_dense.build([None, None, self.config.hidden_size])
         if getattr(self, "output_dense", None) is not None:
             with tf.name_scope(self.output_dense.name):
-                self.output_dense.build(self.config.intermediate_size)
+                self.output_dense.build([None, None, self.config.intermediate_size])
 
 
 class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
@@ -1753,7 +1753,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
                 self.wav2vec2.build(None)
         if getattr(self, "lm_head", None) is not None:
             with tf.name_scope(self.lm_head.name):
-                self.lm_head.build(self.output_hidden_size)
+                self.lm_head.build([None, None, self.output_hidden_size])
 
 
 class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
@@ -1862,7 +1862,7 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
                 self.wav2vec2.build(None)
         if getattr(self, "projector", None) is not None:
             with tf.name_scope(self.projector.name):
-                self.projector.build(self.config.hidden_size)
+                self.projector.build([None, None, self.config.hidden_size])
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
-                self.classifier.build(self.config.classifier_proj_size)
+                self.classifier.build([None, None, self.config.classifier_proj_size])
