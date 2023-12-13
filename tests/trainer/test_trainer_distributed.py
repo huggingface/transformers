@@ -234,6 +234,7 @@ if __name__ == "__main__":
         if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
+        trainer.args.eval_accumulation_steps = None
 
     # Check that saving does indeed work with temp dir rotation
     # If this fails, will see a FileNotFoundError
