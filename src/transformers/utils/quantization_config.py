@@ -383,10 +383,9 @@ class GPTQConfig(QuantizationConfigMixin):
         modules_in_block_to_quantize (`List[List[str]]`, *optional*):
             List of list of module names to quantize in the specified block. This argument is useful to exclude certain linear modules from being quantized.
             The block to quantize can be specified by setting `block_name_to_quantize`. We will quantize each list sequentially. If not set, we will quantize all linear layers.
-            Example: `modules_in_block_to_quantize =[["self_attention.query_key_value"], ["mlp.dense_h_to_4h"]]`. In this example, we will first quantize `self_attention.query_key_value`.
-            Then, we will quantize `mlp.dense_h_to_4h` layer with `self_attention.query_key_value` quantized. This way, we will get better results since it reflects
-            the real input `mlp.dense_h_to_4h` will get when the model is quantized. We can also do `modules_in_block_to_quantize =[["self_attention.query_key_value", "mlp.dense_h_to_4h"]]`
-            to simultaneously quantize the layers but this will result in reduced quality.
+            Example: `modules_in_block_to_quantize =[["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"], ["self_attn.o_proj"]]`.
+            In this example, we will first quantize the q,k,v layers simultaneously since they are independent. Then, we will quantize `self_attn.o_proj` layer with the q,k,v layers quantized.
+            This way, we will get better results since it reflects the real input `self_attn.o_proj` will get when the model is quantized.
     """
 
     def __init__(
