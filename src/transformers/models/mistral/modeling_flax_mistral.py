@@ -622,7 +622,6 @@ class FlaxMistralModule(nn.Module):
         input_ids: jnp.ndarray = None,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        inputs_embeds: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -635,20 +634,7 @@ class FlaxMistralModule(nn.Module):
         )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape
-        elif inputs_embeds is not None:
-            batch_size, seq_length, _ = inputs_embeds.shape
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
+        inputs_embeds = self.embed_tokens(input_ids.astype("i4"))
         hidden_states = inputs_embeds
 
         # decoder layers
@@ -719,7 +705,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
-        inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -736,7 +721,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
             attention_mask=attention_mask,
             position_ids=position_ids,
             deterministic=deterministic,
-            inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -769,7 +753,7 @@ class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForCausalLMModule
 
     def prepare_inputs_for_generation(
-        self, input_ids, max_length, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, input_ids, max_length, past_key_values=None, attention_mask=None, **kwargs
     ):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
@@ -823,7 +807,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
-        inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -836,7 +819,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             attention_mask=attention_mask,
             position_ids=position_ids,
             deterministic=deterministic,
-            inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
