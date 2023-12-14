@@ -610,7 +610,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @is_flaky()  # TODO (yoach): investigate why this is flaky
+    @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
 
