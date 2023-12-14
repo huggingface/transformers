@@ -33,6 +33,11 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_sigma_moe"] = [
+        "SigmaMoEPreTrainedModel",
+        "SigmaMoEModel",
+        "SigmaMoEForCausalLM",
+        "SigmaMoEForSequenceClassification",
+        "SigmaMoEForTokenClassification",
         "SigmaMoEFeedForwardLayer",
         "SigmaMoEDecoderLayer",
     ]
@@ -50,6 +55,11 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_sigma_moe import (
+            SigmaMoEPreTrainedModel,
+            SigmaMoEModel,
+            SigmaMoEForCausalLM,
+            SigmaMoEForSequenceClassification,
+            SigmaMoEForTokenClassification,
             SigmaMoEFeedForwardLayer,
             SigmaMoEDecoderLayer,
         )

@@ -1,3 +1,4 @@
+import math
 from ...configuration_utils import PretrainedConfig
 from ...activations import ACT2FN
 
@@ -34,8 +35,8 @@ class SigmaMoEConfiguration(PretrainedConfig):
         sinkhorn_n_iters: int,
         expert_dropout: float,
         weight_std_scale: float,
-        bos_token_id: int = 1,
-        eos_token_id: int = 2,
+        routing_regularization: float = 0.001,
+        num_sparse_hidden_layers: int = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -69,11 +70,23 @@ class SigmaMoEConfiguration(PretrainedConfig):
         self.sinkhorn_n_iters = sinkhorn_n_iters
         self.expert_dropout = expert_dropout
         self.weight_std_scale = weight_std_scale
+        self.routing_regularization = routing_regularization
+        self.num_sparse_hidden_layers = (
+            self.num_hidden_layers
+            if num_sparse_hidden_layers is None
+            else num_sparse_hidden_layers
+        )
+        if self.num_sparse_hidden_layers > 0:
+            self.sparse_step = math.ceil(
+                self.num_hidden_layers / self.num_sparse_hidden_layers
+            )
+        else:
+            # this will create no sparse layers
+            self.sparse_step = -1
+
         self._rope_scaling_validation()
 
         super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )

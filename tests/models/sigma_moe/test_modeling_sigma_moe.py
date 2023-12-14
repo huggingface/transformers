@@ -18,6 +18,10 @@ from transformers.models.sigma_moe import (
     SigmaMoEConfiguration,
     SigmaMoEFeedForwardLayer,
     SigmaMoEDecoderLayer,
+    SigmaMoEModel,
+    SigmaMoEForCausalLM,
+    SigmaMoEForSequenceClassification,
+    SigmaMoEForTokenClassification
 )
 
 if __name__ == "__main__":
@@ -62,9 +66,22 @@ if __name__ == "__main__":
     # x = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
     # ff(x)
 
-    decoder_layer = SigmaMoEDecoderLayer(config, is_sparse=True, layer_idx=0)
-    tgt_len = 128
-    src_len = 128
-    hidden_states = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
-    mask = torch.tril(torch.ones((bs, 1, tgt_len, src_len), device=torch.device("cpu")))
-    decoder_layer(hidden_states, mask)
+    # decoder_layer = SigmaMoEDecoderLayer(config, is_sparse=True, layer_idx=0)
+    # tgt_len = 128
+    # src_len = 128
+    # hidden_states = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
+    # mask = torch.tril(torch.ones((bs, 1, tgt_len, src_len), device=torch.device("cpu")))
+    # decoder_layer(hidden_states, mask)
+
+    # model = SigmaMoEModel(config)
+    # xx = model(input_ids=torch.randint(0, 51200, (bs, seq_len)), return_dict=True)
+
+    # model = SigmaMoEForCausalLM(config)
+    # input_ids = torch.randint(0, 51200, (bs, seq_len))
+    # xx = model(input_ids=input_ids, return_dict=True, labels=input_ids)
+
+    config.num_labels = 2
+    model = SigmaMoEForSequenceClassification(config)
+    input_ids = torch.randint(0, 51200, (bs, seq_len))
+    labels = torch.randint(0, 2, (bs,))
+    xx = model(input_ids=input_ids, return_dict=True, labels=labels)
