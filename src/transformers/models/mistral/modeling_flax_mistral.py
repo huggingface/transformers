@@ -363,62 +363,44 @@ class FlaxMistralAttention(nn.Module):
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaDecoderLayer with Llama->Mistral
 class FlaxMistralDecoderLayer(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        config = self.config
-        self.hidden_size = config.hidden_size
-        self.self_attn = FlaxMistralAttention(config=config, dtype=self.dtype)
-        self.mlp = FlaxMistralMLP(config, dtype=self.dtype)
-        self.input_layernorm = FlaxMistralRMSNorm(config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxMistralRMSNorm(config, dtype=self.dtype)
+        self.input_layernorm = FlaxMistralRMSNorm(self.config, dtype=self.dtype)
+        self.self_attn = FlaxMistralAttention(self.config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxMistralRMSNorm(self.config, dtype=self.dtype)
+        self.mlp = FlaxMistralMLP(self.config, dtype=self.dtype)
 
     def __call__(
         self,
-        hidden_states: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
+        hidden_states,
+        attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
-        output_attentions: Optional[bool] = False,
-        init_cache: Optional[bool] = False,
-    ) -> Tuple[jnp.ndarray, Optional[Tuple[jnp.ndarray, jnp.ndarray]]]:
-        """
-        Args:
-            hidden_states (`jnp.ndarray`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`jnp.ndarray`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            init_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-        """
-
+        init_cache: bool = False,
+        output_attentions: bool = False,
+    ):
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
         outputs = self.self_attn(
-            hidden_states=hidden_states,
+            hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             deterministic=deterministic,
-            output_attentions=output_attentions,
             init_cache=init_cache,
+            output_attentions=output_attentions,
         )
         # residual connection
         attn_output = outputs[0]
         hidden_states = residual + attn_output
 
-        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+        # residual connection
         hidden_states = residual + hidden_states
 
         return (hidden_states,) + outputs[1:]
