@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Flax Mistral model."""
-from typing import Any, List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -22,7 +22,6 @@ import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
-from flax.linen.initializers import ones
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
@@ -124,6 +123,7 @@ MISTRAL_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRMSNorm with Llama->Mistral
 class FlaxMistralRMSNorm(nn.Module):
@@ -551,6 +551,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaLayerCollection with Llama->Mistral
 class FlaxMistralLayerCollection(nn.Module):
     config: MistralConfig
@@ -613,7 +614,9 @@ class FlaxMistralModule(nn.Module):
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
-        self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype ,embedding_init=embedding_init)
+        self.embed_tokens = nn.Embed(
+            self.config.vocab_size, self.config.hidden_size, dtype=self.dtype, embedding_init=embedding_init
+        )
         self.layers = FlaxMistralLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxMistralRMSNorm(self.config, dtype=self.dtype)
 
