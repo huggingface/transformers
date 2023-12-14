@@ -51,6 +51,7 @@ from ...modeling_tf_utils import (
     get_initializer,
     keras_serializable,
     unpack_inputs,
+    name_scope,
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
@@ -157,32 +158,28 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
-        with tf.name_scope("word_embeddings"):
-            self.weight = self.add_weight(
-                name="weight",
-                shape=[self.config.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        self.weight = self.add_weight(
+            name="word_embeddings.weight",
+            shape=[self.config.vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
+        self.token_type_embeddings = self.add_weight(
+            name="token_type_embeddings.weight",
+            shape=[self.config.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
-        with tf.name_scope("token_type_embeddings"):
-            self.token_type_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.config.type_vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-
-        with tf.name_scope("position_embeddings"):
-            self.position_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        self.position_embeddings = self.add_weight(
+            name="position_embeddings.weight",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
         if self.built:
             return
         self.built = True
         if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
+            with name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def call(
@@ -348,13 +345,13 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "query", None) is not None:
-            with tf.name_scope(self.query.name):
+            with name_scope(self.query.name):
                 self.query.build([None, None, self.config.hidden_size])
         if getattr(self, "key", None) is not None:
-            with tf.name_scope(self.key.name):
+            with name_scope(self.key.name):
                 self.key.build([None, None, self.config.hidden_size])
         if getattr(self, "value", None) is not None:
-            with tf.name_scope(self.value.name):
+            with name_scope(self.value.name):
                 self.value.build([None, None, self.config.hidden_size])
 
 
@@ -381,10 +378,10 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
+            with name_scope(self.dense.name):
                 self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
+            with name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
@@ -432,10 +429,10 @@ class TFBertAttention(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "self_attention", None) is not None:
-            with tf.name_scope(self.self_attention.name):
+            with name_scope(self.self_attention.name):
                 self.self_attention.build(None)
         if getattr(self, "dense_output", None) is not None:
-            with tf.name_scope(self.dense_output.name):
+            with name_scope(self.dense_output.name):
                 self.dense_output.build(None)
 
 
@@ -464,7 +461,7 @@ class TFBertIntermediate(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
+            with name_scope(self.dense.name):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
@@ -491,10 +488,10 @@ class TFBertOutput(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
+            with name_scope(self.dense.name):
                 self.dense.build([None, None, self.config.intermediate_size])
         if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
+            with name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
@@ -588,16 +585,16 @@ class TFBertLayer(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "attention", None) is not None:
-            with tf.name_scope(self.attention.name):
+            with name_scope(self.attention.name):
                 self.attention.build(None)
         if getattr(self, "intermediate", None) is not None:
-            with tf.name_scope(self.intermediate.name):
+            with name_scope(self.intermediate.name):
                 self.intermediate.build(None)
         if getattr(self, "bert_output", None) is not None:
-            with tf.name_scope(self.bert_output.name):
+            with name_scope(self.bert_output.name):
                 self.bert_output.build(None)
         if getattr(self, "crossattention", None) is not None:
-            with tf.name_scope(self.crossattention.name):
+            with name_scope(self.crossattention.name):
                 self.crossattention.build(None)
 
 
@@ -675,7 +672,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
-                with tf.name_scope(layer.name):
+                with name_scope(layer.name):
                     layer.build(None)
 
 
@@ -704,7 +701,7 @@ class TFBertPooler(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
+            with name_scope(self.dense.name):
                 self.dense.build([None, None, self.config.hidden_size])
 
 
@@ -738,10 +735,10 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "dense", None) is not None:
-            with tf.name_scope(self.dense.name):
+            with name_scope(self.dense.name):
                 self.dense.build([None, None, self.config.hidden_size])
         if getattr(self, "LayerNorm", None) is not None:
-            with tf.name_scope(self.LayerNorm.name):
+            with name_scope(self.LayerNorm.name):
                 self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
@@ -765,7 +762,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "transform", None) is not None:
-            with tf.name_scope(self.transform.name):
+            with name_scope(self.transform.name):
                 self.transform.build(None)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
@@ -809,7 +806,7 @@ class TFBertMLMHead(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "predictions", None) is not None:
-            with tf.name_scope(self.predictions.name):
+            with name_scope(self.predictions.name):
                 self.predictions.build(None)
 
 
@@ -834,7 +831,7 @@ class TFBertNSPHead(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "seq_relationship", None) is not None:
-            with tf.name_scope(self.seq_relationship.name):
+            with name_scope(self.seq_relationship.name):
                 self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
@@ -1029,13 +1026,13 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             return
         self.built = True
         if getattr(self, "embeddings", None) is not None:
-            with tf.name_scope(self.embeddings.name):
+            with name_scope(self.embeddings.name):
                 self.embeddings.build(None)
         if getattr(self, "encoder", None) is not None:
-            with tf.name_scope(self.encoder.name):
+            with name_scope(self.encoder.name):
                 self.encoder.build(None)
         if getattr(self, "pooler", None) is not None:
-            with tf.name_scope(self.pooler.name):
+            with name_scope(self.pooler.name):
                 self.pooler.build(None)
 
 
@@ -1255,7 +1252,7 @@ class TFBertModel(TFBertPreTrainedModel):
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
 
 
@@ -1375,13 +1372,13 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "nsp", None) is not None:
-            with tf.name_scope(self.nsp.name):
+            with name_scope(self.nsp.name):
                 self.nsp.build(None)
         if getattr(self, "mlm", None) is not None:
-            with tf.name_scope(self.mlm.name):
+            with name_scope(self.mlm.name):
                 self.mlm.build(None)
 
 
@@ -1475,10 +1472,10 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "mlm", None) is not None:
-            with tf.name_scope(self.mlm.name):
+            with name_scope(self.mlm.name):
                 self.mlm.build(None)
 
 
@@ -1611,10 +1608,10 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "mlm", None) is not None:
-            with tf.name_scope(self.mlm.name):
+            with name_scope(self.mlm.name):
                 self.mlm.build(None)
 
 
@@ -1704,10 +1701,10 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "nsp", None) is not None:
-            with tf.name_scope(self.nsp.name):
+            with name_scope(self.nsp.name):
                 self.nsp.build(None)
 
 
@@ -1802,10 +1799,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
+            with name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
 
@@ -1913,10 +1910,10 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
+            with name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
 
@@ -2015,10 +2012,10 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "classifier", None) is not None:
-            with tf.name_scope(self.classifier.name):
+            with name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_size])
 
 
@@ -2129,8 +2126,8 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             return
         self.built = True
         if getattr(self, "bert", None) is not None:
-            with tf.name_scope(self.bert.name):
+            with name_scope(self.bert.name):
                 self.bert.build(None)
         if getattr(self, "qa_outputs", None) is not None:
-            with tf.name_scope(self.qa_outputs.name):
+            with name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])

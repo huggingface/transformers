@@ -28,6 +28,7 @@ import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from contextlib import nullcontext
 
 import h5py
 import numpy as np
@@ -987,15 +988,25 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
-        weight_names = [strip_model_name_and_prefix(w.name, _prefix=_prefix) for w in model.weights]
+        weight_names = []
+        keras_3_mode = any([hasattr(w, "path") for w in model.weights])
+        for w in model.weights:
+            if keras_3_mode:
+                weight_names.append(strip_model_name_and_prefix(w.path, _prefix=_prefix))
+            else:
+                weight_names.append(strip_model_name_and_prefix(w.name, _prefix=_prefix))
         loaded_weight_names = list(safetensors_archive.keys())
+        if keras_3_mode:
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
         # Find the unexpected layers from the high level list of layers
         unexpected_layers = list(set(loaded_weight_names) - set(weight_names))
 
         for weight in model.weights:
-            weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
+            if keras_3_mode:
+                weight_name = strip_model_name_and_prefix(weight.path, _prefix=_prefix)
+            else:
+                weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
             if weight_name in loaded_weight_names:
                 weight_value = safetensors_archive.get_tensor(weight_name)
                 # Check if the shape of the current weight and the one from the H5 file are different
@@ -3469,3 +3480,10 @@ def get_initializer(initializer_range: float = 0.02) -> tf.keras.initializers.Tr
         `tf.keras.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
+
+
+if hasattr(tf.keras, "name_scope"):
+    # Keras 3 compatibility check - we use tf.name_scope in Keras 2
+    name_scope = nullcontext
+else:
+    name_scope = tf.name_scope
