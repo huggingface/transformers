@@ -391,7 +391,6 @@ class FlaxMistralDecoderLayer(nn.Module):
             init_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(jnp.ndarray)`, *optional*): cached past key and value projection states
         """
 
         residual = hidden_states
@@ -528,7 +527,6 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             position_ids=jnp.array(position_ids, dtype="i4"),
             init_cache=init_cache,
-            past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -569,7 +567,6 @@ class FlaxMistralLayerCollection(nn.Module):
         hidden_states: jnp.ndarray = None,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[List[jnp.ndarray]] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -624,7 +621,6 @@ class FlaxMistralModule(nn.Module):
         input_ids: jnp.ndarray = None,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[List[jnp.ndarray]] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -660,7 +656,6 @@ class FlaxMistralModule(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -720,7 +715,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
         input_ids: jnp.ndarray = None,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[List[jnp.ndarray]] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -737,7 +731,6 @@ class FlaxMistralForCausalLMModule(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -824,7 +817,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
-        past_key_values: Optional[List[jnp.ndarray]] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -837,7 +829,6 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
