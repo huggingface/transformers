@@ -439,6 +439,7 @@ class MixtralFlashAttention2(MixtralAttention):
             if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window:
                 slicing_tokens = 1 - self.config.sliding_window
 
+                breakpoint()
                 past_key = past_key_value[0]
                 past_value = past_key_value[1]
 
