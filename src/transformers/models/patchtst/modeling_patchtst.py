@@ -1974,6 +1974,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         if target_values is not None:
             if self.distribution_output:
                 distribution = self.distribution_output.distribution(y_hat)
+                # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
+                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
                 loss = nll(distribution, target_values)
                 # take average of the loss
                 loss = weighted_average(loss)
@@ -2031,5 +2033,5 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         # get samples: list of [bs x num_targets]
         samples = [distribution.sample() for _ in range(num_parallel_samples)]
         # samples: [bs x num_samples x num_targets]
-        samples = torch.stack(samples, dim=1)
+        samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSTOutput(sequences=samples)
