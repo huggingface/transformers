@@ -752,18 +752,18 @@ class FlaxMistralForCausalLMModule(nn.Module):
     """,
     MISTRAL_START_DOCSTRING,
 )
+
+# Copied from transformers.models.gptj.modeling_flax_gptj.FlaxGPTJForCausalLM with GPTJ->Mistral
 class FlaxMistralForCausalLM(FlaxMistralPreTrainedModel):
     module_class = FlaxMistralForCausalLMModule
 
-    def prepare_inputs_for_generation(
-        self, input_ids, max_length, past_key_values=None, attention_mask=None, **kwargs
-    ):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
         past_key_values = self.init_cache(batch_size, max_length)
         # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
-        # But since Llama uses a causal mask, those positions are masked anyways.
+        # But since Mistral uses a causal mask, those positions are masked anyways.
         # Thus we can create a single static attention_mask here, which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
