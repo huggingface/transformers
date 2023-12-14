@@ -2959,8 +2959,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
             # Please see: https://github.com/huggingface/transformers/issues/28038
             config = copy.deepcopy(config)
-            if getattr(config, "_attn_implementation", "eager") != kwargs.get("attn_implementation", None):
-                config._attn_implementation = kwargs.pop("attn_implementation", None)
+            
+            # Overwrite `config._attn_implementation` by the one from the kwargs --> in auto-factory 
+            # we pop attn_implementation from the kwargs
+            if getattr(config, "_attn_implementation", None) != kwargs.get("attn_implementation", None):
+                config._attn_implementation = kwargs.get("attn_implementation", None)
             model_kwargs = kwargs
 
         quantizer = None
