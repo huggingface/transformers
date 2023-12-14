@@ -1320,7 +1320,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
     """
     def __init__(self, config: CLIPConfig):
         super().__init__(config)
-        self.clip = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+        self.vision_model = CLIPVisionTransformer(config)
         self.num_labels = num_labels
         self.classifier = nn.Linear(self.config.projection_dim, config.num_labels)
 
