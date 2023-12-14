@@ -445,7 +445,6 @@ class MixtralFlashAttention2(MixtralAttention):
 
                 past_key = past_key[:, :, slicing_tokens:, :].contiguous()
                 past_value = past_value[:, :, slicing_tokens:, :].contiguous()
-                breakpoint()
 
                 if past_key.shape[-2] != self.config.sliding_window - 1:
                     raise ValueError(
