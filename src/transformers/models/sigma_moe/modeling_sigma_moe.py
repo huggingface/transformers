@@ -44,6 +44,17 @@ else:
     from .cpu_src.moe_layer import MoE
 
 
+def _get_router_loss(config: SigmaMoEConfiguration, reg_losses: Tuple):
+    # router loss is the sum of all reg losses
+    no_none = [x for x in reg_losses if x is not None]
+    if len(no_none) == 0:
+        return 0.0
+    else:
+        if config.routing_regularization is None:
+            raise ValueError("Got reg losses but no routing regularization is None. Set routing_regularization in config to non-None value.")
+    return config.routing_regularization * sum(no_none)
+
+
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
@@ -212,13 +223,11 @@ class SigmaMoEDenseActDense(torch.nn.Module):
         super().__init__()
         self.wi = torch.nn.Linear(config.d_model, config.d_ff, bias=config.moe_bias)
         self.wo = torch.nn.Linear(config.d_ff, config.d_model, bias=config.moe_bias)
-        self.dropout = torch.nn.Dropout(config.moe_dropout)
         self.act = ACT2FN[config.activation]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
         hidden_states = self.act(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
@@ -262,7 +271,7 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
             hidden_states, reg_loss = self.ff(hidden_states)
         else:
             hidden_states = self.ff(hidden_states)
-            reg_loss = None
+            reg_loss = torch.tensor(0.0, device=hidden_states.device)
         return hidden_states, reg_loss
 
 
@@ -1227,8 +1236,8 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
             return_dict if return_dict is not None else self.config.use_return_dict
         )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
+        # decoder model_outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        model_outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1240,7 +1249,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = model_outputs[0]
         logits = self.lm_head(hidden_states)
         logits = logits.float()
 
@@ -1259,19 +1268,19 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
 
             self.config: SigmaMoEConfiguration
             if self.config.routing_regularization is not None:
-                loss += self.config.routing_regularization * sum(outputs[-1])
+                loss += _get_router_loss(self.config, model_outputs[-1])
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + model_outputs[1:]
             return (loss,) + output if loss is not None else output
 
         return SigmaMoECausalLMOutputWithPast(
             loss=loss,
             logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            all_reg_losses=outputs.all_reg_losses,
+            past_key_values=model_outputs.past_key_values,
+            hidden_states=model_outputs.hidden_states,
+            attentions=model_outputs.attentions,
+            all_reg_losses=model_outputs.all_reg_losses,
         )
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
@@ -1477,7 +1486,7 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
 
             # during fine-tuning, one can still regularize the routing
             if self.config.routing_regularization is not None:
-                loss += self.config.routing_regularization * sum(model_outputs[-1])
+                loss += _get_router_loss(self.config, model_outputs[-1])
 
         if not return_dict:
             output = (pooled_logits,) + model_outputs[1:]
@@ -1577,7 +1586,7 @@ class SigmaMoEForTokenClassification(SigmaMoEPreTrainedModel):
             )
             self.config: SigmaMoEConfiguration
             if self.config.routing_regularization is not None:
-                loss += self.config.routing_regularization * sum(model_outputs[-1])
+                loss += _get_router_loss(self.config, model_outputs[-1])
 
         if not return_dict:
             output = (logits,) + model_outputs[2:]

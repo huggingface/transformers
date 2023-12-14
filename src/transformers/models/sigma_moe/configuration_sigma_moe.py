@@ -1,40 +1,39 @@
 import math
 from ...configuration_utils import PretrainedConfig
-from ...activations import ACT2FN
 
 
 class SigmaMoEConfiguration(PretrainedConfig):
     def __init__(
         self,
-        vocab_size: int,
-        d_model: int,
-        d_ff: int,
-        num_hidden_layers: int,
-        num_attention_heads: int,
-        resid_pdrop: float,
-        embd_pdrop: float,
-        attention_dropout: float,
-        activation: str,
-        max_position_embeddings: float,
-        initializer_range: float,
-        layer_norm_eps: float,
-        use_cache: bool,
-        tie_word_embeddings: bool,
-        rope_theta: float,
-        rope_scaling: float,
-        partial_rotary_factor: float,
-        qk_layernorm: bool,
-        n_experts: int,
-        expert_size: int,
-        top_k_experts: int,
-        moe_dropout: float,
-        selection_mode: str,
-        activation_after_topk: bool,
-        moe_bias: bool,
-        v_dim: int,
-        sinkhorn_n_iters: int,
-        expert_dropout: float,
-        weight_std_scale: float,
+        vocab_size: int = 51200,
+        d_model: int = 768,
+        d_ff: int = 3072,
+        num_hidden_layers: int = 12,
+        num_attention_heads: int = 8,
+        max_position_embeddings: float = 2048,
+        n_experts: int = 8,
+        expert_size: int = 128,
+        top_k_experts: int = 2,
+        moe_dropout: float = 0.0,
+        selection_mode: str = "sigmoid",
+        activation_after_topk: bool = False,
+        moe_bias: bool = False,
+        v_dim: int = None,
+        sinkhorn_n_iters: int = 3,
+        expert_dropout: float = 0.0,
+        weight_std_scale: float = 1.0,
+        resid_pdrop: float = 0.0,
+        embd_pdrop: float = 0.0,
+        attention_dropout: float = 0.0,
+        activation: str = "gelu_new",
+        initializer_range: float = 0.02,
+        layer_norm_eps: float = 1e-5,
+        use_cache: bool = True,
+        tie_word_embeddings: bool = False,
+        rope_theta: float = 10000.0,
+        rope_scaling: float = None,
+        partial_rotary_factor: float = 0.5,
+        qk_layernorm: bool = False,
         routing_regularization: float = 0.001,
         num_sparse_hidden_layers: int = None,
         **kwargs,
@@ -47,7 +46,7 @@ class SigmaMoEConfiguration(PretrainedConfig):
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attention_dropout = attention_dropout
-        self.activation = ACT2FN[activation]
+        self.activation = activation
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps

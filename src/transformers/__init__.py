@@ -681,6 +681,7 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
+    "models.sigma_moe": ["SigmaMoEConfiguration"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2876,6 +2877,15 @@ else:
             "PhiForTokenClassification",
             "PhiModel",
             "PhiPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sigma_moe"].extend(
+        [
+            "SigmaMoEForCausalLM",
+            "SigmaMoEForSequenceClassification",
+            "SigmaMoEForTokenClassification",
+            "SigmaMoEModel",
+            "SigmaMoEPreTrainedModel",
         ]
     )
     _import_structure["models.pix2struct"].extend(
@@ -5342,6 +5352,7 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
+    from .models.sigma_moe import SigmaMoEConfiguration
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7263,6 +7274,13 @@ if TYPE_CHECKING:
             PhiForTokenClassification,
             PhiModel,
             PhiPreTrainedModel,
+        )
+        from .models.sigma_moe import (
+            SigmaMoEForCausalLM,
+            SigmaMoEForSequenceClassification,
+            SigmaMoEForTokenClassification,
+            SigmaMoEModel,
+            SigmaMoEPreTrainedModel,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
