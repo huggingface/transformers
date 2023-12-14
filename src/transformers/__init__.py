@@ -743,6 +743,14 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.efficientsam": [
+        "EFFICIENTSAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "EfficientSamConfig",
+        "EfficientSamMaskDecoderConfig",
+       
+        "EfficientSamPromptEncoderConfig",
+        "EfficientSamVisionConfig",
+    ],
     "models.seamless_m4t": [
         "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SeamlessM4TConfig",
@@ -3085,6 +3093,13 @@ else:
             "SamPreTrainedModel",
         ]
     )
+    _import_structure["models.efficientsam"].extend(
+        [
+            "EFFICIENTSAM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EfficientSamModel",
+            "EfficientSamPreTrainedModel",
+        ]
+    )
     _import_structure["models.seamless_m4t"].extend(
         [
             "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5404,6 +5419,14 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.efficientsam import (
+        EFFICIENTSAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        EfficientSamConfig,
+        EfficientSamMaskDecoderConfig,
+       
+        EfficientSamPromptEncoderConfig,
+        EfficientSamVisionConfig,
+    )
     from .models.seamless_m4t import (
         SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SeamlessM4TConfig,
@@ -7432,6 +7455,11 @@ if TYPE_CHECKING:
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,
             SamModel,
             SamPreTrainedModel,
+        )
+        from .models.efficientsam import (
+            EFFICIENTSAM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EfficientSamModel,
+            EfficientSamPreTrainedModel,
         )
 
         # PyTorch model imports

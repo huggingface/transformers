@@ -96,6 +96,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("regnet", "ConvNextImageProcessor"),
         ("resnet", "ConvNextImageProcessor"),
         ("sam", "SamImageProcessor"),
+        ("efficientsam", "EfficientSamImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
         ("swiftformer", "ViTImageProcessor"),
         ("swin", "ViTImageProcessor"),

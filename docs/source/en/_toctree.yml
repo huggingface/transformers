@@ -685,6 +685,8 @@
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/efficientsam
+        title: EfficientSam
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/git

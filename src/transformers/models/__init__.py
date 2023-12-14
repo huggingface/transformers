@@ -187,6 +187,7 @@ from . import (
     roformer,
     rwkv,
     sam,
+    efficientsam,
     seamless_m4t,
     seamless_m4t_v2,
     segformer,
