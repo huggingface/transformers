@@ -360,11 +360,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, AutoTokenizer, LlavaForConditionalGeneration
+        >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
         >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
         >>> processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
         >>> prompt = "<image>\nUSER: What's the content of the image?\nASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -374,8 +373,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "There seems to be a stop sign"
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
