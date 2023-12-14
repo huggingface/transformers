@@ -148,6 +148,7 @@ class DetaModelTester:
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
+            two_stage_num_proposals=self.two_stage_num_proposals,
             num_labels=self.num_labels,
             num_feature_levels=self.num_feature_levels,
             encoder_n_points=self.encoder_n_points,
