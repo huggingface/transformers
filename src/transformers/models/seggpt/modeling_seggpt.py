@@ -32,10 +32,10 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_seggpt import SegGptConfig
 
@@ -792,12 +792,7 @@ class SegGptModel(SegGptPreTrainedModel):
         return pixel_values, prompt_pixel_values
 
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SegGptEncoderOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-    )
+    @replace_return_docstrings(output_type=SegGptEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -833,6 +828,7 @@ class SegGptModel(SegGptPreTrainedModel):
         >>> image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
 
         >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
+
         >>> outputs = model(**inputs)
         >>> list(outputs.last_hidden_state.shape)
         [1, 56, 28, 1024]
@@ -876,6 +872,10 @@ class SegGptModel(SegGptPreTrainedModel):
         return encoder_outputs
 
 
+@add_start_docstrings(
+    "SegGpt model with a decoder on top for one-shot image segmentation.",
+    SEGGPT_START_DOCSTRING,
+)
 class SegGptForImageSegmentation(SegGptPreTrainedModel):
     def __init__(self, config: SegGptConfig):
         super().__init__(config)
@@ -887,6 +887,8 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SegGptImageSegmentationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
