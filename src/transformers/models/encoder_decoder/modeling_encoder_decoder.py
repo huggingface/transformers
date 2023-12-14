@@ -46,7 +46,7 @@ DEPRECATION_WARNING = (
     " labels, no need to pass them yourself anymore."
 )
 
-ENCODERdecoder_START_DOCSTRING = r"""
+ENCODER_DECODER_START_DOCSTRING = r"""
     This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
     [`~AutoModel.from_pretrained`] function and the decoder is loaded via [`~AutoModelForCausalLM.from_pretrained`]
@@ -75,7 +75,7 @@ ENCODERdecoder_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-ENCODERdecoder_INPUTS_DOCSTRING = r"""
+ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -166,7 +166,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
-@add_start_docstrings(ENCODERdecoder_START_DOCSTRING)
+@add_start_docstrings(ENCODER_DECODER_START_DOCSTRING)
 class EncoderDecoderModel(PreTrainedModel):
     r"""
     [`EncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with one
@@ -325,18 +325,18 @@ class EncoderDecoderModel(PreTrainedModel):
             for v in decoder.trainable_variables + decoder.non_trainable_variables:
                 decoder_variables["/".join(v.name.split("/")[1:])] = v
 
-            encoder_variables = {}
+            _encoder_variables = {}
             for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
-                encoder_variables["/".join(v.name.split("/")[2:])] = v
-            decoder_variables = {}
+                _encoder_variables["/".join(v.name.split("/")[2:])] = v
+            _decoder_variables = {}
             for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
-                decoder_variables["/".join(v.name.split("/")[2:])] = v
+                _decoder_variables["/".join(v.name.split("/")[2:])] = v
 
             # assign weight values to `encoder` and `decoder` from `_tf_model`
             for name, v in encoder_variables.items():
-                v.assign(encoder_variables[name])
+                v.assign(_encoder_variables[name])
             for name, v in decoder_variables.items():
-                v.assign(decoder_variables[name])
+                v.assign(_decoder_variables[name])
 
             tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -453,24 +453,24 @@ class EncoderDecoderModel(PreTrainedModel):
         >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
         ```"""
 
-        kwargsencoder = {
+        kwargs_encoder = {
             argument[len("encoder_") :]: value for argument, value in kwargs.items() if argument.startswith("encoder_")
         }
 
-        kwargsdecoder = {
+        kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
         # remove encoder, decoder kwargs from kwargs
-        for key in kwargsencoder.keys():
+        for key in kwargs_encoder.keys():
             del kwargs["encoder_" + key]
-        for key in kwargsdecoder.keys():
+        for key in kwargs_decoder.keys():
             del kwargs["decoder_" + key]
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
         # by the value of the flag `is_decoder` that we need to set correctly.
-        encoder = kwargsencoder.pop("model", None)
+        encoder = kwargs_encoder.pop("model", None)
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
@@ -478,9 +478,9 @@ class EncoderDecoderModel(PreTrainedModel):
                     "to be defined."
                 )
 
-            if "config" not in kwargsencoder:
-                encoder_config, kwargsencoder = AutoConfig.from_pretrained(
-                    encoder_pretrained_model_name_or_path, **kwargsencoder, return_unused_kwargs=True
+            if "config" not in kwargs_encoder:
+                encoder_config, kwargs_encoder = AutoConfig.from_pretrained(
+                    encoder_pretrained_model_name_or_path, **kwargs_encoder, return_unused_kwargs=True
                 )
 
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
@@ -491,11 +491,11 @@ class EncoderDecoderModel(PreTrainedModel):
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
 
-                kwargsencoder["config"] = encoder_config
+                kwargs_encoder["config"] = encoder_config
 
-            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargsencoder)
+            encoder = AutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
 
-        decoder = kwargsdecoder.pop("model", None)
+        decoder = kwargs_decoder.pop("model", None)
         if decoder is None:
             if decoder_pretrained_model_name_or_path is None:
                 raise ValueError(
@@ -503,9 +503,9 @@ class EncoderDecoderModel(PreTrainedModel):
                     "to be defined."
                 )
 
-            if "config" not in kwargsdecoder:
-                decoder_config, kwargsdecoder = AutoConfig.from_pretrained(
-                    decoder_pretrained_model_name_or_path, **kwargsdecoder, return_unused_kwargs=True
+            if "config" not in kwargs_decoder:
+                decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
+                    decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
                 )
 
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
@@ -517,9 +517,9 @@ class EncoderDecoderModel(PreTrainedModel):
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
 
-                kwargsdecoder["config"] = decoder_config
+                kwargs_decoder["config"] = decoder_config
 
-            if kwargsdecoder["config"].is_decoder is False or kwargsdecoder["config"].add_cross_attention is False:
+            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
                 logger.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
@@ -528,13 +528,13 @@ class EncoderDecoderModel(PreTrainedModel):
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
 
-            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargsdecoder)
+            decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
         config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
         return cls(encoder=encoder, decoder=decoder, config=config)
 
-    @add_start_docstrings_to_model_forward(ENCODERdecoder_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(ENCODER_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -586,9 +586,9 @@ class EncoderDecoderModel(PreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        kwargsencoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
+        kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
-        kwargsdecoder = {
+        kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
@@ -600,7 +600,7 @@ class EncoderDecoderModel(PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                **kwargsencoder,
+                **kwargs_encoder,
             )
         elif isinstance(encoder_outputs, tuple):
             encoder_outputs = BaseModelOutput(*encoder_outputs)
@@ -633,7 +633,7 @@ class EncoderDecoderModel(PreTrainedModel):
             use_cache=use_cache,
             past_key_values=past_key_values,
             return_dict=return_dict,
-            **kwargsdecoder,
+            **kwargs_decoder,
         )
 
         # Compute loss independent from decoder (as some shift the logits inside them)
@@ -662,7 +662,7 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def preparedecoder_input_ids_from_labels(self, labels: torch.Tensor):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     def prepare_inputs_for_generation(
