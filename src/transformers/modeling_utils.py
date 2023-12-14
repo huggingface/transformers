@@ -2955,13 +2955,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 **kwargs,
             )
         else:
-            model_kwargs = kwargs
-
             # In case one passes a config to `from_pretrained` + "attn_implementation"
             # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
             # Please see: https://github.com/huggingface/transformers/issues/28038
-            if config is not None:
-                config._attn_implementation = model_kwargs.pop("attn_implementation", None)
+            config = copy.deepcopy(config)
+            config._attn_implementation = kwargs.get("attn_implementation", None)
+            model_kwargs = kwargs
 
         quantizer = None
         quantization_method_from_config = None

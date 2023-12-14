@@ -538,6 +538,8 @@ class _BaseAutoModelClass:
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
+            if kwargs_orig.get("attn_implementation", None) is not None:
+                kwargs["attn_implementation"] = kwargs_orig["attn_implementation"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
