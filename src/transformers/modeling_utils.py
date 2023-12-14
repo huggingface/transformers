@@ -2217,7 +2217,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Checks if the model has been loaded in 8-bit
         if (
             getattr(self, "is_loaded_in_8bit", False)
-            and getattr(self, "is_8bit_serializable", False)
+            and not getattr(self, "is_8bit_serializable", False)
             and not _hf_peft_config_loaded
         ):
             raise NotImplementedError(
