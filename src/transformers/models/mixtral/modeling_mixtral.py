@@ -437,7 +437,11 @@ class MixtralFlashAttention2(MixtralAttention):
         if past_key_value is not None:
             # Activate slicing cache only if the config has a value `sliding_windows` attribute
             cache_has_contents = past_key_value.get_seq_length(self.layer_idx) > 0
-            if getattr(self.config, "sliding_window", None) is not None and kv_seq_len > self.config.sliding_window and cache_has_contents:
+            if (
+                getattr(self.config, "sliding_window", None) is not None
+                and kv_seq_len > self.config.sliding_window
+                and cache_has_contents
+            ):
                 slicing_tokens = 1 - self.config.sliding_window
 
                 past_key = past_key_value[self.layer_idx][0]
