@@ -1823,6 +1823,16 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    def test_error_no_flash_available_with_config(self):
+        with self.assertRaises(ValueError) as cm:
+            config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", config=config, attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
     def test_error_wrong_attn_implementation(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
