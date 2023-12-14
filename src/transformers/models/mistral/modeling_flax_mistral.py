@@ -821,7 +821,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
 
     def __call__(
         self,
-        input_ids: jnp.ndarray = None,
+        input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         past_key_values: Optional[List[jnp.ndarray]] = None,
@@ -846,11 +846,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
+        batch_size = input_ids.shape[0]
 
         if self.config.pad_token_id is None:
             sequence_lengths = -1
