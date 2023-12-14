@@ -280,6 +280,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [VAN](model_doc/van)                           |       ✅        |         ❌         |      ❌      |
 |                      [VideoMAE](model_doc/videomae)                      |       ✅        |         ❌         |      ❌      |
 |                          [ViLT](model_doc/vilt)                          |       ✅        |         ❌         |      ❌      |
+|                      [VipLlava](model_doc/vipllava)                      |       ✅        |         ❌         |      ❌      |
 |        [Vision Encoder decoder](model_doc/vision-encoder-decoder)        |       ✅        |         ✅         |      ✅      |
 |       [VisionTextDualEncoder](model_doc/vision-text-dual-encoder)        |       ✅        |         ✅         |      ✅      |
 |                   [VisualBERT](model_doc/visual_bert)                    |       ✅        |         ❌         |      ❌      |

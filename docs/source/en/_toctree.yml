@@ -741,6 +741,8 @@
         title: TVP
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder
