@@ -57,6 +57,7 @@ class DetaModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         num_queries=12,
+        two_stage_num_proposals=12,
         num_channels=3,
         image_size=224,
         n_targets=8,
@@ -80,6 +81,7 @@ class DetaModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.num_queries = num_queries
+        self.two_stage_num_proposals = two_stage_num_proposals
         self.num_channels = num_channels
         self.image_size = image_size
         self.n_targets = n_targets
@@ -199,14 +201,14 @@ class DetaModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.two_stage_num_proposals, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.two_stage_num_proposals, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.two_stage_num_proposals, self.num_labels))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.two_stage_num_proposals, 4))
 
 
 @require_torchvision
