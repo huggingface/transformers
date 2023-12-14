@@ -614,7 +614,8 @@ class FlaxMistralModule(nn.Module):
     def setup(self):
         self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
-        self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype)
+        embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
+        self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype ,embedding_init=embedding_init)
         self.layers = FlaxMistralLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxMistralRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype)
 
