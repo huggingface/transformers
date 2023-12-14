@@ -28,7 +28,7 @@ class SigmaMoEConfiguration(PretrainedConfig):
         activation: str = "gelu_new",
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-5,
-        use_cache: bool = True,
+        use_cache: bool = False,
         tie_word_embeddings: bool = False,
         rope_theta: float = 10000.0,
         rope_scaling: float = None,
