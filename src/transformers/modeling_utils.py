@@ -2218,7 +2218,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             getattr(self, "is_loaded_in_8bit", False)
             and getattr(self, "is_8bit_serializable", False)
-            and version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.2")
         ):
             raise NotImplementedError(
                 "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
