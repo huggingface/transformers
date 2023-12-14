@@ -611,9 +611,9 @@ class DeciSdpaAttention(DeciAttention):
 
 
 LLAMA_ATTENTION_CLASSES = {
-    "eager": LlamaAttention,
-    "flash_attention_2": LlamaFlashAttention2,
-    "sdpa": LlamaSdpaAttention,
+    "eager": DeciAttention,
+    "flash_attention_2":DeciFlashAttention2,
+    "sdpa": DeciSdpaAttention,
 }
 
 
