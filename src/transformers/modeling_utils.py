@@ -2225,10 +2225,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        # TODO: update bnb version in the statement. 0.41 is a temporary value to enable testing
         if (
             getattr(self, "is_loaded_in_4bit", False)
-            and getattr(self, "is_4bit_serializable", False)
+            and not getattr(self, "is_4bit_serializable", False)
             and not _hf_peft_config_loaded
         ):
             raise NotImplementedError(
@@ -3554,6 +3553,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
+            model.is_4bit_serializable = is_4bit_serializable
 
         if load_in_8bit and torch_dtype is None:
             logger.warning(
