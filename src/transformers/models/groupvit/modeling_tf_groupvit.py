@@ -271,6 +271,7 @@ class TFGroupViTCrossAttentionLayer(tf.keras.layers.Layer):
         self.norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="norm2")
         self.mlp = TFGroupViTMLP(config, name="mlp")
         self.norm_post = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="norm_post")
+        self.config = config
 
     def call(self, query: tf.Tensor, key: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = query
@@ -278,6 +279,23 @@ class TFGroupViTCrossAttentionLayer(tf.keras.layers.Layer):
         x = x + self.mlp(self.norm2(x))
         x = self.norm_post(x)
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attn", None) is not None:
+            with tf.name_scope(self.attn.name):
+                self.attn.build(None)
+        if getattr(self, "norm2", None) is not None:
+            with tf.name_scope(self.norm2.name):
+                self.norm2.build([None, None, self.config.hidden_size])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "norm_post", None) is not None:
+            with tf.name_scope(self.norm_post.name):
+                self.norm_post.build([None, None, self.config.hidden_size])
 
 
 class TFGroupViTAssignAttention(tf.keras.layers.Layer):
@@ -290,6 +308,7 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
         self.v_proj = tf.keras.layers.Dense(config.hidden_size, name="v_proj")
         self.proj = tf.keras.layers.Dense(config.hidden_size, name="proj")
         self.assign_eps = config.assign_eps
+        self.config = config
 
     def get_attn(self, attn: tf.Tensor, gumbel: bool = True, hard: bool = True, training: bool = False) -> tf.Tensor:
         if gumbel and training:
@@ -327,6 +346,23 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
 
         return out, soft_attn
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.config.hidden_size])
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.config.hidden_size])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.config.hidden_size])
+        if getattr(self, "proj", None) is not None:
+            with tf.name_scope(self.proj.name):
+                self.proj.build([None, None, self.config.hidden_size])
+
 
 class TFGroupViTTokenAssign(tf.keras.layers.Layer):
     def __init__(self, config: GroupViTVisionConfig, num_group_token: int, num_output_group: int, **kwargs):
@@ -353,6 +389,7 @@ class TFGroupViTTokenAssign(tf.keras.layers.Layer):
         self.mlp_channels = TFGroupViTMLP(
             config, config.hidden_size, channels_dim, config.hidden_size, name="mlp_channels"
         )
+        self.config = config
 
     def project_group_token(self, group_tokens: tf.Tensor) -> tf.Tensor:
         """
@@ -385,6 +422,35 @@ class TFGroupViTTokenAssign(tf.keras.layers.Layer):
         new_image_tokens = new_image_tokens + self.mlp_channels(self.norm_new_x(new_image_tokens))
 
         return new_image_tokens, attention
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "norm_tokens", None) is not None:
+            with tf.name_scope(self.norm_tokens.name):
+                self.norm_tokens.build([None, None, self.config.hidden_size])
+        if getattr(self, "mlp_inter", None) is not None:
+            with tf.name_scope(self.mlp_inter.name):
+                self.mlp_inter.build(None)
+        if getattr(self, "norm_post_tokens", None) is not None:
+            with tf.name_scope(self.norm_post_tokens.name):
+                self.norm_post_tokens.build([None, None, self.config.hidden_size])
+        if getattr(self, "norm_x", None) is not None:
+            with tf.name_scope(self.norm_x.name):
+                self.norm_x.build([None, None, self.config.hidden_size])
+        if getattr(self, "pre_assign_attn", None) is not None:
+            with tf.name_scope(self.pre_assign_attn.name):
+                self.pre_assign_attn.build(None)
+        if getattr(self, "assign", None) is not None:
+            with tf.name_scope(self.assign.name):
+                self.assign.build(None)
+        if getattr(self, "norm_new_x", None) is not None:
+            with tf.name_scope(self.norm_new_x.name):
+                self.norm_new_x.build([None, None, self.config.hidden_size])
+        if getattr(self, "mlp_channels", None) is not None:
+            with tf.name_scope(self.mlp_channels.name):
+                self.mlp_channels.build(None)
 
 
 # Adapted from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->GroupViT
@@ -457,6 +523,14 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
 
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, None, self.num_channels])
+
 
 # Adapted from transformers.vit.modeling_tf_vit.TFViTEmbeddings
 class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
@@ -473,7 +547,7 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.config = config
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.add_weight(
             shape=(1, num_patches, self.config.hidden_size),
@@ -482,7 +556,18 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
             name="position_embeddings",
         )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build(None)
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, self.config.hidden_size])
 
     def interpolate_pos_encoding(self, embeddings, height, width) -> tf.Tensor:
         """
@@ -626,7 +711,7 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         else:
             self.group_projector = None
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         if self.num_group_token > 0:
             self.group_token = self.add_weight(
                 shape=(1, self.num_group_token, self.config.hidden_size),
@@ -636,7 +721,22 @@ class TFGroupViTStage(tf.keras.layers.Layer):
             )
         else:
             self.group_token = None
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "downsample", None) is not None:
+            with tf.name_scope(self.downsample.name):
+                self.downsample.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if getattr(self, "group_projector", None) is not None:
+            with tf.name_scope(self.group_projector[0].name):
+                self.group_projector[0].build([None, None, self.config.hidden_size])
+            with tf.name_scope(self.group_projector[1].name):
+                self.group_projector[1].build(None)
 
     @property
     def with_group_token(self):
@@ -720,12 +820,25 @@ class TFGroupViTMLP(tf.keras.layers.Layer):
         output_size = output_size if output_size is not None else hidden_size
         self.fc1 = tf.keras.layers.Dense(intermediate_size, name="fc1")
         self.fc2 = tf.keras.layers.Dense(output_size, name="fc2")
+        self.intermediate_size = intermediate_size
+        self.hidden_size = hidden_size
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.hidden_size])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.intermediate_size])
 
 
 class TFGroupViTMixerMLP(TFGroupViTMLP):
@@ -841,6 +954,23 @@ class TFGroupViTAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPEncoderLayer with CLIP->GroupViT
 class TFGroupViTEncoderLayer(tf.keras.layers.Layer):
@@ -894,6 +1024,23 @@ class TFGroupViTEncoderLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build([None, None, self.embed_dim])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build([None, None, self.embed_dim])
+
 
 # Adapted from transformers.models.clip.modeling_tf_clip.TFGroupViTTextEncoder
 class TFGroupViTTextEncoder(tf.keras.layers.Layer):
@@ -938,6 +1085,15 @@ class TFGroupViTTextEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
@@ -990,6 +1146,15 @@ class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_groupings
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "stages", None) is not None:
+            for layer in self.stages:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder
 class TFGroupViTTextTransformer(tf.keras.layers.Layer):
@@ -1004,6 +1169,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -1094,6 +1260,20 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
 
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 # Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPVisionTransformer
 class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
@@ -1103,6 +1283,7 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
         self.embeddings = TFGroupViTVisionEmbeddings(config, name="embeddings")
         self.encoder = TFGroupViTVisionEncoder(config, name="encoder")
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -1136,6 +1317,20 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, self.embed_dim])
 
 
 @keras_serializable
@@ -1186,6 +1381,14 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
 
         return text_model_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "text_model", None) is not None:
+            with tf.name_scope(self.text_model.name):
+                self.text_model.build(None)
+
 
 @keras_serializable
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPVisionMainLayer with CLIP->GroupViT
@@ -1221,6 +1424,14 @@ class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
         )
 
         return vision_model_outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
 
 
 @keras_serializable
@@ -1269,7 +1480,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             tf.keras.layers.Dense(self.projection_dim, name="text_projection.3"),
         ]
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         self.logit_scale = self.add_weight(
             shape=(1,),
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
@@ -1277,7 +1488,29 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             name="logit_scale",
         )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "text_model", None) is not None:
+            with tf.name_scope(self.text_model.name):
+                self.text_model.build(None)
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "visual_projection", None) is not None:
+            with tf.name_scope(self.visual_projection[0].name):
+                self.visual_projection[0].build([None, None, None, self.vision_embed_dim])
+            with tf.name_scope(self.visual_projection[1].name):
+                self.visual_projection[1].build((None, self.projection_intermediate_dim))
+            with tf.name_scope(self.visual_projection[3].name):
+                self.visual_projection[3].build([None, None, None, self.projection_intermediate_dim])
+        if getattr(self, "text_projection", None) is not None:
+            with tf.name_scope(self.text_projection[0].name):
+                self.text_projection[0].build([None, None, None, self.text_embed_dim])
+            with tf.name_scope(self.text_projection[1].name):
+                self.text_projection[1].build((None, self.projection_intermediate_dim))
+            with tf.name_scope(self.text_projection[3].name):
+                self.text_projection[3].build([None, None, None, self.projection_intermediate_dim])
 
     @unpack_inputs
     def get_text_features(
@@ -1669,6 +1902,14 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "groupvit", None) is not None:
+            with tf.name_scope(self.groupvit.name):
+                self.groupvit.build(None)
+
 
 class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTVisionConfig
@@ -1722,6 +1963,14 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         )
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "groupvit", None) is not None:
+            with tf.name_scope(self.groupvit.name):
+                self.groupvit.build(None)
 
 
 @add_start_docstrings(GROUPVIT_START_DOCSTRING)
@@ -1879,3 +2128,11 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         # TensorFlow cannot trace through nested dataclasses. Reference:
         # https://github.com/huggingface/transformers/pull/16886
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "groupvit", None) is not None:
+            with tf.name_scope(self.groupvit.name):
+                self.groupvit.build(None)

@@ -40,7 +40,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -291,6 +290,23 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartEncoderLayer with Bart->BlenderbotSmall
 class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
@@ -307,6 +323,7 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -348,6 +365,26 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
 
         return hidden_states, self_attn_weights
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.encoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoderLayer with Bart->BlenderbotSmall
 class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
@@ -377,6 +414,7 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -457,6 +495,32 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
             cross_attn_weights,
             present_key_value,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "encoder_attn", None) is not None:
+            with tf.name_scope(self.encoder_attn.name):
+                self.encoder_attn.build(None)
+        if getattr(self, "encoder_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.encoder_attn_layer_norm.name):
+                self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.decoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 class TFBlenderbotSmallPreTrainedModel(TFPreTrainedModel):
@@ -646,6 +710,7 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
         )
         self.layers = [TFBlenderbotSmallEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        self.embed_dim = config.d_model
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -717,16 +782,8 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
         hidden_states = inputs_embeds + embed_pos
@@ -780,6 +837,21 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layernorm_embedding", None) is not None:
+            with tf.name_scope(self.layernorm_embedding.name):
+                self.layernorm_embedding.build([None, None, self.embed_dim])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @keras_serializable
@@ -917,16 +989,8 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
         past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         if input_shape[-1] > 1:
@@ -1013,6 +1077,21 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
                 cross_attentions=all_cross_attns,
             )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layernorm_embedding", None) is not None:
+            with tf.name_scope(self.layernorm_embedding.name):
+                self.layernorm_embedding.build([None, None, self.config.d_model])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @keras_serializable
@@ -1122,6 +1201,22 @@ class TFBlenderbotSmallMainLayer(tf.keras.layers.Layer):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
+            self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings(
     "The bare BLENDERBOT_SMALL Model outputting raw hidden-states without any specific head on top.",
@@ -1208,6 +1303,14 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
@@ -1413,3 +1516,14 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+        if getattr(self, "bias_layer", None) is not None:
+            with tf.name_scope(self.bias_layer.name):
+                self.bias_layer.build(None)
