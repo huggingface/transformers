@@ -125,19 +125,23 @@ MISTRAL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRMSNorm with Llama->Mistral
 class FlaxMistralRMSNorm(nn.Module):
-    hidden_size: int
-    eps: float = 1e-6
+    config: MistralConfig
     dtype: jnp.dtype = jnp.float32
-    weight_dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
-    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
-        weight = self.param("weight", ones, self.hidden_size, self.weight_dtype)
-        variance = (hidden_states**2).mean(-1, keepdims=True)
-        hidden_states = hidden_states * 1 / jnp.sqrt(variance + self.eps)
-        return weight * hidden_states
+    def setup(self):
+        self.epsilon = self.config.rms_norm_eps
+        self.weight = self.param("weight", lambda _, shape: jnp.ones(shape), self.config.hidden_size)
+
+    def __call__(self, hidden_states):
+        variance = jnp.asarray(hidden_states, dtype=jnp.float32)
+        variance = jnp.power(variance, 2)
+        variance = variance.mean(-1, keepdims=True)
+        # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
+        hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
+
+        return self.weight * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->Mistral
@@ -369,10 +373,8 @@ class FlaxMistralDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.self_attn = FlaxMistralAttention(config=config, dtype=self.dtype)
         self.mlp = FlaxMistralMLP(config, dtype=self.dtype)
-        self.input_layernorm = FlaxMistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxMistralRMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps, dtype=self.dtype
-        )
+        self.input_layernorm = FlaxMistralRMSNorm(config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxMistralRMSNorm(config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -613,7 +615,7 @@ class FlaxMistralModule(nn.Module):
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
         self.embed_tokens = nn.Embed(self.config.vocab_size, self.config.hidden_size, dtype=self.dtype ,embedding_init=embedding_init)
         self.layers = FlaxMistralLayerCollection(self.config, dtype=self.dtype)
-        self.norm = FlaxMistralRMSNorm(self.config.hidden_size, eps=self.config.rms_norm_eps, dtype=self.dtype)
+        self.norm = FlaxMistralRMSNorm(self.config, dtype=self.dtype)
 
     def __call__(
         self,
