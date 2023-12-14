@@ -2229,7 +2229,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if (
             getattr(self, "is_loaded_in_4bit", False)
             and getattr(self, "is_4bit_serializable", False)
-            and version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.41.3")
+            and not _hf_peft_config_loaded
         ):
             raise NotImplementedError(
                 "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
