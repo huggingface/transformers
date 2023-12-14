@@ -445,14 +445,13 @@ class MixtralFlashAttention2(MixtralAttention):
 
                 past_key = past_key[:, :, slicing_tokens:, :].contiguous()
                 past_value = past_value[:, :, slicing_tokens:, :].contiguous()
+                breakpoint()
 
                 if past_key.shape[-2] != self.config.sliding_window - 1:
                     raise ValueError(
                         f"past key must have a shape of (`batch_size, num_heads, self.config.sliding_window-1, head_dim`), got"
                         f" {past_key.shape}"
                     )
-
-                past_key_value = (past_key, past_value)
 
                 if attention_mask is not None:
                     attention_mask = attention_mask[:, slicing_tokens:]
