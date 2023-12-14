@@ -522,6 +522,7 @@ class DeciFlashAttention2(DeciAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
+
 # Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Deci
 class DeciSdpaAttention(DeciAttention):
     """
@@ -610,9 +611,9 @@ class DeciSdpaAttention(DeciAttention):
         return attn_output, None, past_key_value
 
 
-LLAMA_ATTENTION_CLASSES = {
+DECI_ATTENTION_CLASSES = {
     "eager": DeciAttention,
-    "flash_attention_2":DeciFlashAttention2,
+    "flash_attention_2": DeciFlashAttention2,
     "sdpa": DeciSdpaAttention,
 }
 
