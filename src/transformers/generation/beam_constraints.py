@@ -348,6 +348,88 @@ class DisjunctiveConstraint(Constraint):
         return new_constraint
 
 
+class InsertionConstraint(Constraint):
+    r"""
+    [Constraint] allowing the insertion of one or more tokens from a list of words into the output.
+
+    Args:
+    insert_from_list_of_words (List[int]):
+    The id of the tokens that can be inserted into the output.
+    insert_nothing_allowed: set this to True or False to enable or disable the insertion of nothing
+    """
+
+    def __init__(self, insert_from_list_of_words: List[int], insert_nothing_allowed=True):
+        super(Constraint, self).__init__()
+        if not isinstance(insert_from_list_of_words, list) or len(insert_from_list_of_words) == 0:
+            raise ValueError(
+                f"insert_from_list_of_words has to be a non-empty list, but is {insert_from_list_of_words}."
+            )
+        if any((not isinstance(token_id, int) or token_id < 0) for token_id in insert_from_list_of_words):
+            raise ValueError(
+                f"Each element in insert_from_list_of_words has to be a positive integer, but is {insert_from_list_of_words}."
+            )
+
+        self.insert_from_list_of_words = insert_from_list_of_words
+        self.seqlen = len(self.insert_from_list_of_words)
+        self.insert_nothing_allowed = insert_nothing_allowed
+        self.inserted_tokens = []  # the list of tokens that have been inserted
+        self.completed = False
+
+    def advance(self):
+        if self.completed:
+            return None
+        if self.insert_from_list_of_words:
+            return self.insert_from_list_of_words
+        elif self.insert_nothing_allowed:
+            return None
+
+    def does_advance(self, token_id: int):
+        if not isinstance(token_id, int):
+            raise ValueError(f"token_id has to be an int, but is {token_id} of type {type(token_id)}")
+        if self.completed:
+            return False
+
+        return token_id in self.insert_from_list_of_words
+
+    def update(self, token_id: int):
+        if not isinstance(token_id, int):
+            raise ValueError(f"token_id has to be an int, but is {token_id} of type {type(token_id)}")
+
+        stepped = False
+        completed = False
+        reset = False
+
+        if self.does_advance(token_id):
+            self.inserted_tokens.append(token_id)
+            stepped = True
+        elif self.insert_nothing_allowed and token_id is None:
+            stepped = False
+        else:
+            completed = True
+            self.completed = completed
+
+        return stepped, completed, reset
+
+    def reset(self):
+        self.completed = False
+        self.inserted_tokens = []
+
+    def remaining(self):
+        return self.seqlen
+
+    def copy(self, stateful=False):
+        new_constraint = InsertionConstraint(
+            self.insert_from_list_of_words, insert_nothing_allowed=self.insert_nothing_allowed
+        )
+
+        if stateful:
+            new_constraint.seq_len = self.seqlen
+            new_constraint.inserted_tokens = self.inserted_tokens
+            new_constraint.completed = self.completed
+
+        return new_constraint
+
+
 class ConstraintListState:
     r"""
     A class for beam scorers to track its progress through a list of constraints.
