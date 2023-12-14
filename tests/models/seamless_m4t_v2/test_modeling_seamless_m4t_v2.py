@@ -790,19 +790,16 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
 
         model.generation_config = generation_config
 
-    def prepare_text_input(self, is_rus=False):
+    def prepare_text_input(self, tgt_lang):
         config, inputs, decoder_input_ids, input_mask, lm_labels = self.text_model_tester.prepare_config_and_inputs()
 
         input_dict = {
             "input_ids": inputs,
             "attention_mask": input_mask,
-            "tgt_lang": "eng",
+            "tgt_lang": tgt_lang,
             "num_beams": 2,
             "do_sample": True,
         }
-
-        if is_rus:
-            input_dict["tgt_lang"] = "rus"
 
         return config, input_dict
 
@@ -847,7 +844,7 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         return output
 
     def test_generation_languages(self):
-        config, input_text_rus = self.prepare_text_input(is_rus=True)
+        config, input_text_rus = self.prepare_text_input(tgt_lang="rus")
 
         model = SeamlessM4Tv2Model(config=config)
         self.update_generation(model)
@@ -860,6 +857,11 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
 
         # make sure that generating text only works
         model.generate(**input_text_rus, generate_speech=False)
+
+        # make sure it works for languages supported by both output modalities
+        config, input_text_eng = self.prepare_text_input(tgt_lang="eng")
+        model.generate(**input_text_eng)
+        model.generate(**input_text_eng, generate_speech=False)
 
     def test_speech_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()

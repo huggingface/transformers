@@ -4596,9 +4596,9 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
         if tgt_lang is not None:
             # also accept __xxx__
             tgt_lang = tgt_lang.replace("__", "")
-            if generate_speech: 
+            if generate_speech:
                 keys_to_check = ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]
-            else: 
+            else:
                 keys_to_check = ["text_decoder_lang_to_code_id"]
             for key in keys_to_check:
                 lang_code_to_id = getattr(self.generation_config, key, None)
