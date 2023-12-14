@@ -416,21 +416,18 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     base_model_prefix = "model"
     module_class: nn.Module = None
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->Mistral
     def __init__(
         self,
         config: MistralConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
-        _input_shape: Tuple = (1, 1),
-        _seed: int = 0,
         _do_init: bool = True,
         **kwargs,
     ):
-        module = self.module_class(
-            config=config,
-            dtype=dtype,
-            **kwargs,
-        )
-        super().__init__(config, module, input_shape=_input_shape, seed=_seed, dtype=dtype, _do_init=_do_init)
+        module = self.module_class(config=config, dtype=dtype, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -440,9 +437,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        module_init_outputs = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)
-
-        random_params = module_init_outputs["params"]
+        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -454,7 +449,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         else:
             return freeze(random_params)
 
-    # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_cache    
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -465,8 +460,8 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
                 cache.
         """
         # init input variables to retrieve cache
-        input_ids = jnp.ones((batch_size, max_length), dtype="i4")
-        attention_mask = jnp.ones_like(input_ids, dtype="i4")
+        input_ids = jnp.ones((batch_size, max_length))
+        attention_mask = jnp.ones_like(input_ids)
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
@@ -474,18 +469,19 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__call__
     def __call__(
         self,
         input_ids,
         attention_mask=None,
         position_ids=None,
-        init_cache: bool = False,
         params: dict = None,
+        past_key_values: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        past_key_values: dict = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -493,16 +489,25 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
+        batch_size, sequence_length = input_ids.shape
+
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            if past_key_values is not None:
+                raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
+
+            position_ids = jnp.broadcast_to(jnp.arange(sequence_length)[None, :], (batch_size, sequence_length))
 
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            attention_mask = jnp.ones((batch_size, sequence_length))
 
         # Handle any PRNG if needed
         rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
         inputs = {"params": params or self.params}
 
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPTNeoAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -513,16 +518,17 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             inputs,
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
-            position_ids=jnp.array(position_ids, dtype="i4"),
-            init_cache=init_cache,
-            deterministic=not train,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            False,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
             rngs=rngs,
             mutable=mutable,
         )
 
+        # add updated cache to model output
         if past_key_values is not None and return_dict:
             outputs, past_key_values = outputs
             outputs["past_key_values"] = unfreeze(past_key_values["cache"])
