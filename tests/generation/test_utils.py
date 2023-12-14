@@ -3262,12 +3262,11 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
 
         # Check that passing encoder_outputs directly also works as expected
-        encoder_outputs = assistant.get_encoder()(input_ids)
+        encoder_outputs = model.get_encoder()(input_ids)
 
         outputs_assisted = model.generate(
             foo=True,
             assistant_model=assistant,
             encoder_outputs=encoder_outputs,
-            assistant_encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
