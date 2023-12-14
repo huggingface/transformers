@@ -2964,7 +2964,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # passes manually the config to `from_pretrained`.
             config = copy.deepcopy(config)
 
-            kwarg_attn_imp = kwargs.get("attn_implementation", None)
+            kwarg_attn_imp = kwargs.pop("attn_implementation", None)
             if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
