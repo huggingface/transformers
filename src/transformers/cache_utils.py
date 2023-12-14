@@ -65,6 +65,8 @@ class DynamicCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+        self.cross_attention_key_cache: List[torch.Tensor] = []
+        self.cross_attention_value_cache: List[torch.Tensor] = []
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
