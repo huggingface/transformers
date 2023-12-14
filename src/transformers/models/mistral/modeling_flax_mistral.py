@@ -296,6 +296,7 @@ class FlaxMistralAttention(nn.Module):
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         output_attentions: bool = False,
         init_cache: bool = False,
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
@@ -343,7 +344,8 @@ class FlaxMistralAttention(nn.Module):
             query_states,
             key_states,
             bias=attention_bias,
-            deterministic=True,
+            deterministic=deterministic,
+            dropout_rate=self.config.attention_dropout,
             dtype=attention_dtype,
         )
 
@@ -377,6 +379,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         output_attentions: Optional[bool] = False,
         init_cache: Optional[bool] = False,
     ) -> Tuple[jnp.ndarray, Optional[Tuple[jnp.ndarray, jnp.ndarray]]]:
@@ -402,6 +405,7 @@ class FlaxMistralDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            deterministic=deterministic,
             output_attentions=output_attentions,
             init_cache=init_cache,
         )
@@ -527,6 +531,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             position_ids=jnp.array(position_ids, dtype="i4"),
             init_cache=init_cache,
+            deterministic=not train,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -544,15 +549,8 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaLayerCollection with Llama->Mistral
 class FlaxMistralLayerCollection(nn.Module):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
-
-    Args:
-        config: MistralConfig
-    """
-
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -564,34 +562,35 @@ class FlaxMistralLayerCollection(nn.Module):
 
     def __call__(
         self,
-        hidden_states: jnp.ndarray = None,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
-        init_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Any:
-        all_hidden_states = () if output_hidden_states else None
+        hidden_states,
+        attention_mask=None,
+        position_ids=None,
+        deterministic: bool = True,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = False,
+    ):
         all_attentions = () if output_attentions else None
+        all_hidden_states = () if output_hidden_states else None
 
-        for idx, decoder_layer in enumerate(self.blocks):
+        for block in self.blocks:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            # past_key_value = past_key_values[idx] if past_key_values is not None else None
-            layer_outputs = decoder_layer(
+            layer_outputs = block(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                output_attentions=output_attentions,
+                deterministic=deterministic,
                 init_cache=init_cache,
+                output_attentions=output_attentions,
             )
-
             hidden_states = layer_outputs[0]
 
             if output_attentions:
                 all_attentions += (layer_outputs[1],)
 
+        # this contains possible `None` values - `FlaxMistralModule` will filter them out
         outputs = (hidden_states, all_hidden_states, all_attentions)
 
         return outputs
@@ -622,6 +621,7 @@ class FlaxMistralModule(nn.Module):
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         inputs_embeds: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -656,6 +656,7 @@ class FlaxMistralModule(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -715,6 +716,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
         input_ids: jnp.ndarray = None,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -731,6 +733,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            deterministic=deterministic,
             inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -817,6 +820,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
         input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
+        deterministic: bool = True,
         inputs_embeds: Optional[jnp.ndarray] = None,
         init_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -829,6 +833,7 @@ class FlaxMistralForSequenceClassificationModule(nn.Module):
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            deterministic=deterministic,
             inputs_embeds=inputs_embeds,
             init_cache=init_cache,
             output_attentions=output_attentions,
