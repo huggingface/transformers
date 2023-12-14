@@ -469,7 +469,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
         # Load and initialize the encoder and decoder
         # The distinction between encoder and decoder at the model level is made
-        # by the value of the flag `isdecoder` that we need to set correctly.
+        # by the value of the flag `is_decoder` that we need to set correctly.
         encoder = kwargsencoder.pop("model", None)
         if encoder is None:
             if encoder_pretrained_model_name_or_path is None:
@@ -483,12 +483,12 @@ class EncoderDecoderModel(PreTrainedModel):
                     encoder_pretrained_model_name_or_path, **kwargsencoder, return_unused_kwargs=True
                 )
 
-                if encoder_config.isdecoder is True or encoder_config.add_cross_attention is True:
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
                     )
-                    encoder_config.isdecoder = False
+                    encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
 
                 kwargsencoder["config"] = encoder_config
@@ -508,22 +508,22 @@ class EncoderDecoderModel(PreTrainedModel):
                     decoder_pretrained_model_name_or_path, **kwargsdecoder, return_unused_kwargs=True
                 )
 
-                if decoder_config.isdecoder is False or decoder_config.add_cross_attention is False:
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
                         f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
                         f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
                         f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
-                    decoder_config.isdecoder = True
+                    decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
 
                 kwargsdecoder["config"] = decoder_config
 
-            if kwargsdecoder["config"].isdecoder is False or kwargsdecoder["config"].add_cross_attention is False:
+            if kwargsdecoder["config"].is_decoder is False or kwargsdecoder["config"].add_cross_attention is False:
                 logger.warning(
                     f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
                     f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `isdecoder` and `add_cross_attention` of `decoder_config` "
+                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
                     "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
                     "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
                 )
