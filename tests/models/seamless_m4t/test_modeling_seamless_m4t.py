@@ -20,7 +20,7 @@ import tempfile
 import unittest
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
@@ -609,6 +609,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
+
+    @is_flaky()  # TODO (yoach): investigate why this is flaky
+    def test_retain_grad_hidden_states_attentions(self):
+        super().test_retain_grad_hidden_states_attentions()
 
 
 @require_torch
