@@ -55,6 +55,8 @@ KEYS_TO_MODIFY_MAPPING = {
     "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
     "blocks": "layers",
+    "fc1": "lin1",
+    "fc2": "lin2"
 }
 
 
@@ -91,30 +93,8 @@ def replace_keys(state_dict):
 def convert_efficientsam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_hub_id="ybelkada/segment-anything"):
     checkpoint_path = hf_hub_download(model_hub_id, f"checkpoints/{model_name}.pth")
 
-    if "efficientsam_vit_b" in model_name:
+    if "efficientsam_ti" in model_name:
         config = EfficientSamConfig()
-    elif "efficientsam_vit_l" in model_name:
-        vision_config = EfficientSamVisionConfig(
-            hidden_size=1024,
-            num_hidden_layers=24,
-            num_attention_heads=16,
-            global_attn_indexes=[5, 11, 17, 23],
-        )
-
-        config = EfficientSamConfig(
-            vision_config=vision_config,
-        )
-    elif "efficientsam_vit_h" in model_name:
-        vision_config = EfficientSamVisionConfig(
-            hidden_size=1280,
-            num_hidden_layers=32,
-            num_attention_heads=16,
-            global_attn_indexes=[7, 15, 23, 31],
-        )
-
-        config = EfficientSamConfig(
-            vision_config=vision_config,
-        )
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)
@@ -139,50 +119,14 @@ def convert_efficientsam_checkpoint(model_name, pytorch_dump_folder, push_to_hub
         output = hf_model(**inputs)
     scores = output.iou_scores.squeeze()
 
-    if model_name == "efficientsam_vit_h_4b8939":
-        assert scores[-1].item() == 0.579890251159668
-
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.9712603092193604
-
-        input_boxes = ((75, 275, 1725, 850),)
-
-        inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.8686015605926514
-
-        # Test with 2 points and 1 image.
-        input_points = [[[400, 650], [800, 650]]]
-        input_labels = [[1, 1]]
-
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.9936047792434692
-
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = ["efficientsam_vit_b_01ec64", "efficientsam_vit_h_4b8939", "efficientsam_vit_l_0b3195"]
+    choices = ["efficientsam_ti"]
     parser.add_argument(
         "--model_name",
-        default="efficientsam_vit_h_4b8939",
+        default="efficientsam_ti",
         choices=choices,
         type=str,
         help="Path to hf config.json of model to convert",

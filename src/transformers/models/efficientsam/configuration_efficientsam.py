@@ -146,13 +146,13 @@ class EfficientSamVisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 192):
             Dimensionality of the encoder layers and the pooler layer.
         output_channels (`int`, *optional*, defaults to 256):
             Dimensionality of the output channels in the Patch Encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 3):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input image.
@@ -189,10 +189,10 @@ class EfficientSamVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
+        hidden_size=192,
         output_channels=256,
         num_hidden_layers=12,
-        num_attention_heads=12,
+        num_attention_heads=3,
         num_channels=3,
         image_size=1024,
         patch_size=16,
