@@ -2957,6 +2957,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
+            # In case one passes a config to `from_pretrained` + "attn_implementation"
+            # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
+            # Please see: https://github.com/huggingface/transformers/issues/28038
+            if config is not None:
+                config._attn_implementation = model_kwargs.pop("attn_implementation", None)
+
         quantizer = None
         quantization_method_from_config = None
         if hasattr(config, "quantization_config"):
@@ -3441,6 +3447,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
+
         config = cls._autoset_attn_implementation(
             config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
         )
