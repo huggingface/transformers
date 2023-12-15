@@ -658,6 +658,12 @@ class GPTNeoXMLP(nn.Module):
         return hidden_states
 
 
+GPT_NEOX_ATTENTION_CLASSES = {
+    "eager": GPTNeoXAttention,
+    "flash_attention_2": GPTNeoXFlashAttention2,
+}
+
+
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -666,11 +672,7 @@ class GPTNeoXLayer(nn.Module):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout)
-        self.attention = (
-            GPTNeoXAttention(config)
-            if not getattr(config, "_flash_attn_2_enabled", False)
-            else GPTNeoXFlashAttention2(config)
-        )
+        self.attention = GPT_NEOX_ATTENTION_CLASSES[config._attn_implementation](config)
         self.mlp = GPTNeoXMLP(config)
 
     def forward(
@@ -785,6 +787,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([GPTNeoXLayer(config) for _ in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
 
@@ -861,7 +864,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
             attention_mask = attention_mask.view(batch_size, -1)
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # We create a 3D attention mask from a 2D tensor mask.

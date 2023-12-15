@@ -18,7 +18,7 @@
 import unittest
 
 from transformers import VitDetConfig
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import is_flaky, require_torch, torch_device
 from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
@@ -174,6 +174,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = VitDetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=VitDetConfig, has_text_modality=False, hidden_size=37)
+
+    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
+    def test_initialization(self):
+        super().test_initialization()
 
     # TODO: Fix me (once this model gets more usage)
     @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")

@@ -504,7 +504,7 @@ COCO 데이터 세트를 빌드하는 API는 데이터를 특정 형식으로 �
 ...         outputs = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
 
 ...         orig_target_sizes = torch.stack([target["orig_size"] for target in labels], dim=0)
-...         results = im_processor.post_process(outputs, orig_target_sizes)  # convert outputs of model to COCO api
+...         results = im_processor.post_process(outputs, orig_target_sizes)  # convert outputs of model to Pascal VOC format (xmin, ymin, xmax, ymax)
 
 ...         module.add(prediction=results, reference=labels)
 ...         del batch
