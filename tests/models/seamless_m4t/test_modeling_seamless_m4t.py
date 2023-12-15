@@ -610,7 +610,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @unittest.skip(reason="The speech encoder attentions are sometimes skipped resulting in None.")
+    @unittest.skip(
+        reason="In training model, the first speech encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
