@@ -38,7 +38,6 @@ from ...image_utils import (
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
     AnnotationType,
-    AnnotionFormat,  # noqa: F401
     ChannelDimension,
     ImageInput,
     PILImageResampling,

@@ -220,12 +220,26 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.visual_projection = Dense(self.projection_dim, use_bias=False, name="visual_projection")
         self.text_projection = Dense(self.projection_dim, use_bias=False, name="text_projection")
         self.logit_scale = None
+        self.config = config
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         # Build in the build() method to make sure the names are right
         initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
-        super().build(input_shape)
+
+        if getattr(self, "visual_projection", None) is not None:
+            with tf.name_scope(self.visual_projection.name):
+                self.visual_projection.build([None, None, self.vision_embed_dim])
+        if getattr(self, "text_projection", None) is not None:
+            with tf.name_scope(self.text_projection.name):
+                self.text_projection.build([None, None, self.text_embed_dim])
+        with tf.name_scope(self.vision_model.name):
+            self.vision_model.build(None)
+        with tf.name_scope(self.text_model.name):
+            self.text_model.build(None)
 
     def tf_to_pt_weight_rename(self, tf_weight):
         # Matt: The TF and PT weights don't align because our TF base classes have an extra layer compared to PT models
