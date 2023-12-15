@@ -1149,7 +1149,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
         self._set_save_spec(self.input_signature)
 
-
     def get_config(self):
         return self.config.to_dict()
 
