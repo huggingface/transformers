@@ -151,7 +151,7 @@
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: PyTorch training on Apple silicon
     - local: perf_hardware
       title: Custom hardware for training
     - local: hpo_train
