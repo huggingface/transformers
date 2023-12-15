@@ -556,11 +556,25 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
             hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
-                decoding. If `past_key_values` are used, the user can optionally input only the last
-                `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
-                `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+                Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+                blocks) that can be used to speed up sequential decoding. This typically consists in the
+                `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or
+                `config.use_cache=True`.
+
+                Two formats are allowed:
+                - a [`~cache_utils.Cache`] instance;
+                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. This is also known as
+                the legacy cache format.
+
+                The model will output the same cache format that is fed as input. If no `past_key_values` are passed,
+                the legacy cache format will be returned.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
@@ -638,11 +652,25 @@ class GPTSanJapaneseBlock(nn.Module):
             hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 if the model is configured as a decoder.
-            past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
-                decoding. If `past_key_values` are used, the user can optionally input only the last
-                `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
-                `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+                Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+                blocks) that can be used to speed up sequential decoding. This typically consists in the
+                `past_key_values` returned by the model at a previous stage of decoding, when `use_cache=True` or
+                `config.use_cache=True`.
+
+                Two formats are allowed:
+                - a [`~cache_utils.Cache`] instance;
+                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. This is also known as
+                the legacy cache format.
+
+                The model will output the same cache format that is fed as input. If no `past_key_values` are passed,
+                the legacy cache format will be returned.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
@@ -835,8 +863,20 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **not-prefix** input.
         spout (`torch.Tensor` of shape `(batch_size, config.d_spout)`):
                 This vector is transformed through an 8-layer FFN and can be used instead of `past_key_values`.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all

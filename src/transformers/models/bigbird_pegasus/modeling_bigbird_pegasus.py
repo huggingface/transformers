@@ -98,12 +98,24 @@ class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
 
 # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdSelfAttention with BigBird->BigBirdPegasus
 class BigBirdPegasusSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        config,
+        layer_idx: Optional[int] = None,
+    ):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
+            )
+
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will lead"
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -122,6 +134,42 @@ class BigBirdPegasusSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    def _prepare_key_values(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if past_key_value is not None and self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention:
+            if past_key_value is not None and past_key_value.has_cached_cross_attentions(self.layer_idx):
+                # reuse k,v, cross_attentions
+                key_states = past_key_value[self.layer_idx][2]
+                value_states = past_key_value[self.layer_idx][3]
+            else:
+                # compute cross attention k and v and cache them (if there is a cache)
+                key_states = self.transpose_for_scores(self.key(encoder_hidden_states))
+                value_states = self.transpose_for_scores(self.value(encoder_hidden_states))
+                if past_key_value is not None:
+                    past_key_value.update_cross_attention(key_states, value_states, self.layer_idx)
+        else:
+            # compute self attention k and v and cache them (if there is a cache)
+            key_states = self.transpose_for_scores(self.key(hidden_states))
+            value_states = self.transpose_for_scores(self.value(hidden_states))
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+
+        return key_states, value_states
+
     def forward(
         self,
         hidden_states,
@@ -138,36 +186,11 @@ class BigBirdPegasusSelfAttention(nn.Module):
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
         is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
+        if is_cross_attention:
             attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
 
+        key_layer, value_layer = self._prepare_key_values(hidden_states, encoder_hidden_states, past_key_value)
         query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
