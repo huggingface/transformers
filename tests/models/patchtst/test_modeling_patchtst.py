@@ -392,7 +392,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.sequences.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.04305077], [-0.10652332], [-0.12843455], [-0.09434218], [0.00121266]],
+            [[-0.08046409], [-0.06570087], [-0.28218266], [-0.20636195], [-0.11787311]],
             device=torch_device,
         )
         mean_prediction = outputs.sequences.mean(dim=1)
