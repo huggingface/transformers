@@ -66,6 +66,44 @@ masks = processor.image_processor.post_process_masks(
 scores = outputs.iou_scores
 ```
 
+Below is an example of how to create a training dataset containing images and segmentation maps (masks) using the SamProcessor:
+
+```python
+import datasets
+from transformers import SamProcessor
+
+class SamDataset(Dataset):
+    def __init__(self, dataset, processor, transform = None):
+        self.dataset = dataset
+        self.processor = processor
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        item = self.dataset[idx]
+        
+        if self.transform:
+            image = self.transform(item["pixel_values"])
+        else:
+            image = item["pixel_values"]
+        
+        mask = item["label"]
+
+        inputs = self.processor(image, segmentation_maps=mask, return_tensors="pt")
+        inputs = {k:v.squeeze(0) for k,v in inputs.items()} # remove batch dimension which the processor adds by default
+
+        return inputs
+
+    dataset = datasets.load_dataset("nvidia/segformer-b1-finetuned-cityscapes-1024-1024")
+    dataset = dataset.rename_columns({"image":"pixel_values", "annotation":"label"})
+
+    processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
+    
+    train_dataset = SamDataset(dataset=dataset, processor=processor)
+```
+
 Resources:
 
 - [Demo notebook](https://github.com/huggingface/notebooks/blob/main/examples/segment_anything.ipynb) for using the model.
