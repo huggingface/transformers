@@ -1850,6 +1850,21 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
+    def test_not_available_flash_with_config(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel",
+                config=config,
+                attn_implementation="flash_attention_2",
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():
             self.skipTest("This test requires torch<=2.0")
