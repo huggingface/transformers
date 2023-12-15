@@ -25,7 +25,6 @@ Uszkoreit, Neil Houlsby. It's the first paper that successfully trains a Transfo
 very good results compared to familiar convolutional architectures. ViT hybrid is a slight variant of the [plain Vision Transformer](vit),
 by leveraging a convolutional backbone (specifically, [BiT](bit)) whose features are used as initial "tokens" for the Transformer.
 
-
 The abstract from the paper is the following:
 
 *While the Transformer architecture has become the de-facto standard for natural language processing tasks, its
@@ -40,7 +39,6 @@ substantially fewer computational resources to train.*
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code (written in JAX) can be
 found [here](https://github.com/google-research/vision_transformer).
 
-
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViT Hybrid.
@@ -51,7 +49,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Image classification task guide](../tasks/image_classification)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
-
 
 ## ViTHybridConfig
 

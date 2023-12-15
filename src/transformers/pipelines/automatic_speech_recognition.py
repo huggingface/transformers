@@ -403,7 +403,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
             if self.type == "ctc" and return_timestamps not in ["char", "word"]:
                 raise ValueError(
-                    "CTC can either predict character level timestamps, or word level timestamps."
+                    "CTC can either predict character level timestamps, or word level timestamps. "
                     "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
                 )
             if self.type == "seq2seq_whisper" and return_timestamps == "char":
@@ -508,9 +508,19 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             ):
                 yield item
         else:
-            processed = self.feature_extractor(
-                inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
-            )
+            if self.type == "seq2seq_whisper" and inputs.shape[0] > self.feature_extractor.n_samples:
+                processed = self.feature_extractor(
+                    inputs,
+                    sampling_rate=self.feature_extractor.sampling_rate,
+                    truncation=False,
+                    padding="longest",
+                    return_tensors="pt",
+                )
+            else:
+                processed = self.feature_extractor(
+                    inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+                )
+
             if self.torch_dtype is not None:
                 processed = processed.to(dtype=self.torch_dtype)
             if stride is not None:
@@ -554,8 +564,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         else:
                             generate_kwargs["num_frames"] = stride[0][0] // self.feature_extractor.hop_length
 
+            if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
+                generate_kwargs["input_features"] = inputs
+            else:
+                generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
+
             tokens = self.model.generate(
-                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
                 attention_mask=attention_mask,
                 **generate_kwargs,
             )

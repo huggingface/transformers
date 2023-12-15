@@ -90,6 +90,7 @@ class GLPNConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "glpn"
 
     def __init__(

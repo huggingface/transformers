@@ -166,6 +166,7 @@ def load_pytorch_checkpoint_in_tf2_model(
     try:
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
+        from safetensors.torch import load_file as safe_load_file  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -182,7 +183,12 @@ def load_pytorch_checkpoint_in_tf2_model(
     for path in pytorch_checkpoint_path:
         pt_path = os.path.abspath(path)
         logger.info(f"Loading PyTorch weights from {pt_path}")
-        pt_state_dict.update(torch.load(pt_path, map_location="cpu"))
+        if pt_path.endswith(".safetensors"):
+            state_dict = safe_load_file(pt_path)
+        else:
+            state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
+
+        pt_state_dict.update(state_dict)
 
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
@@ -312,7 +318,14 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            name = tf_to_pt_weight_rename(name)
+            aliases = tf_to_pt_weight_rename(name)  # Is a tuple to account for possible name aliasing
+            for alias in aliases:  # The aliases are in priority order, take the first one that matches
+                if alias in tf_keys_to_pt_keys:
+                    name = alias
+                    break
+            else:
+                # If none of the aliases match, just use the first one (it'll be reported as missing)
+                name = aliases[0]
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:

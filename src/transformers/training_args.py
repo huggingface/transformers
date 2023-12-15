@@ -234,10 +234,12 @@ class TrainingArguments:
             the last epoch before stopping training).
         max_steps (`int`, *optional*, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
-            In case of using a finite iterable dataset the training may stop before reaching the set number of steps
-            when all data is exhausted
+            For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+            `max_steps` is reached.
         lr_scheduler_type (`str` or [`SchedulerType`], *optional*, defaults to `"linear"`):
             The scheduler type to use. See the documentation of [`SchedulerType`] for all possible values.
+        lr_scheduler_kwargs ('dict', *optional*, defaults to {}):
+            The extra arguments for the lr_scheduler. See the documentation of each scheduler for possible values.
         warmup_ratio (`float`, *optional*, defaults to 0.0):
             Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
         warmup_steps (`int`, *optional*, defaults to 0):
@@ -293,7 +295,7 @@ class TrainingArguments:
             `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
             alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
             checkpoints are saved: the last one and the best one (if they are different).
-        save_safetensors (`bool`, *optional*, defaults to `False`):
+        save_safetensors (`bool`, *optional*, defaults to `True`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
         save_on_each_node (`bool`, *optional*, defaults to `False`):
@@ -302,6 +304,11 @@ class TrainingArguments:
 
             This should not be activated when the different nodes use the same storage as the files will be saved with
             the same names for each node.
+        save_only_model (`bool`, *optional*, defaults to `False`):
+            When checkpointing, whether to only save the model, or also the optimizer, scheduler & rng state.
+            Note that when this is true, you won't be able to resume training from checkpoint.
+            This enables you to save storage by not storing the optimizer, scheduler & rng state.
+            You can only load the model using `from_pretrained` with this option set to `True`.
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -416,12 +423,14 @@ class TrainingArguments:
 
             - `"full_shard"`: Shard parameters, gradients and optimizer states.
             - `"shard_grad_op"`: Shard optimizer states and gradients.
+            - `"hybrid_shard"`: Apply `FULL_SHARD` within a node, and replicate parameters across nodes.
+            - `"hybrid_shard_zero2"`: Apply `SHARD_GRAD_OP` within a node, and replicate parameters across nodes.
             - `"offload"`: Offload parameters and gradients to CPUs (only compatible with `"full_shard"` and
               `"shard_grad_op"`).
             - `"auto_wrap"`: Automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`.
         fsdp_config (`str` or `dict`, *optional*):
             Config to be used with fsdp (Pytorch Distributed Parallel Training). The value is either a location of
-            deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
+            fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
                 - min_num_params (`int`, *optional*, defaults to `0`):
@@ -450,7 +459,7 @@ class TrainingArguments:
                     FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
                      If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
                      all-gathers.
-                - use_orig_params (`bool`, *optional*, defaults to `False`)
+                - use_orig_params (`bool`, *optional*, defaults to `True`)
                     If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
                     frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
                     refer this
@@ -458,6 +467,10 @@ class TrainingArguments:
                 - sync_module_states (`bool`, *optional*, defaults to `True`)
                     If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
                     ensure they are the same across all ranks after initialization
+                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
+                    If `"True"`, activation checkpointing is a technique to reduce memory usage by clearing activations of
+                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
+                    computation time for reduced memory usage.
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
                     and its API may evolve in the future.
@@ -470,10 +483,6 @@ class TrainingArguments:
                     Will use gradient checkpointing over each nested XLA FSDP wrapped layer. This setting can only be
                     used when the xla flag is set to true, and an auto wrapping policy is specified through
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
-                - activation_checkpointing (`bool`, *optional*, defaults to `False`):
-                    If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
-                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
-                    computation time for reduced memory usage.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
@@ -507,7 +516,7 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"flyte"`, `"mlflow"`, `"neptune"`,
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"neptune"`,
             `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
             integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
@@ -520,6 +529,10 @@ class TrainingArguments:
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
+        dataloader_persistent_workers (`bool`, *optional*, defaults to `False`):
+            If True, the data loader will not shut down the worker processes after a dataset has been consumed once.
+            This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will
+            increase RAM usage. Will default to `False`.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
@@ -572,6 +585,8 @@ class TrainingArguments:
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        gradient_checkpointing_kwargs (`dict`, *optional*, defaults to `None`):
+            Key word arguments to be passed to the `gradient_checkpointing_enable` method.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not the inputs will be passed to the `compute_metrics` function. This is intended for metrics
             that need inputs, predictions and references for scoring calculation in Metric class.
@@ -619,12 +634,31 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        split_batches (`bool`, *optional*):
+            Whether or not the accelerator should split the batches yielded by the dataloaders across the devices
+            during distributed training. If
+
+            set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it
+            must be a
+
+            round multiple of the number of processes you are using (such as GPUs).
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
 
             This will iterate over the entire training dataloader once beforehand,
 
             and will slow down the entire process.
+
+        include_num_input_tokens_seen (`bool`, *optional*):
+            Whether or not to track the number of input tokens seen throughout training.
+
+            May be slower in distributed training as gather operations must be called.
+
+        neftune_noise_alpha (`Optional[float]`):
+            If not `None`, this will activate NEFTune noise embeddings. This can drastically improve model performance
+            for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
+            [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
+            `PeftModel` from peft.
     """
 
     framework = "pt"
@@ -714,6 +748,14 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
+    lr_scheduler_kwargs: Optional[Dict] = field(
+        default_factory=dict,
+        metadata={
+            "help": (
+                "Extra parameters for the lr_scheduler such as {'num_cycles': 1} for the cosine with hard restarts"
+            )
+        },
+    )
     warmup_ratio: float = field(
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
     )
@@ -756,7 +798,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Log every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Log every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -770,7 +812,7 @@ class TrainingArguments:
         default=500,
         metadata={
             "help": (
-                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`."
+                "Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -790,7 +832,7 @@ class TrainingArguments:
         },
     )
     save_safetensors: Optional[bool] = field(
-        default=False,
+        default=True,
         metadata={
             "help": "Use safetensors saving and loading for state dicts instead of default torch.load and torch.save."
         },
@@ -801,6 +843,17 @@ class TrainingArguments:
             "help": (
                 "When doing multi-node distributed training, whether to save models and checkpoints on each node, or"
                 " only on the main one"
+            )
+        },
+    )
+    save_only_model: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "When checkpointing, whether to only save the model, or also the optimizer, scheduler & rng state."
+                "Note that when this is true, you won't be able to resume training from checkpoint."
+                "This enables you to save storage by not storing the optimizer, scheduler & rng state."
+                "You can only load the model using from_pretrained with this option set to True."
             )
         },
     )
@@ -923,7 +976,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`."
+                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`. "
                 "If smaller than 1, will be interpreted as ratio of total training steps."
             )
         },
@@ -1006,7 +1059,7 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a "
                 "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
@@ -1087,6 +1140,12 @@ class TrainingArguments:
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
+    dataloader_persistent_workers: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, the data loader will not shut down the worker processes after a dataset has been consumed once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will increase RAM usage."
+        },
+    )
     skip_memory_metrics: bool = field(
         default=True, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
@@ -1117,6 +1176,12 @@ class TrainingArguments:
         default=False,
         metadata={
             "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
+    gradient_checkpointing_kwargs: Optional[dict] = field(
+        default=None,
+        metadata={
+            "help": "Gradient checkpointing key word arguments such as `use_reentrant`. Will be passed to `torch.utils.checkpoint.checkpoint` through `model.gradient_checkpointing_enable`."
         },
     )
     include_inputs_for_metrics: bool = field(
@@ -1207,15 +1272,38 @@ class TrainingArguments:
     dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process "
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
+        },
+    )
+
+    split_batches: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether or not the accelerator should split the batches yielded by the dataloaders across the devices during distributed training. If"
+            "set to `True`, the actual batch size used will be the same on any kind of distributed processes, but it must be a"
+            "round multiple of the number of processes you are using (such as GPUs)."
         },
     )
 
     include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs` (tokens per second per device)."},
+    )
+
+    include_num_input_tokens_seen: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "If set to `True`, will track the number of input tokens seen throughout training. (May be slower in distributed training)"
+        },
+    )
+
+    neftune_noise_alpha: float = field(
+        default=None,
+        metadata={
+            "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+        },
     )
 
     def __post_init__(self):
@@ -1297,7 +1385,7 @@ class TrainingArguments:
                     if not (self.eval_steps < 1 and self.save_steps < 1):
                         raise ValueError(
                             "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
-                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps"
+                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps "
                             f"{self.save_steps} and eval_steps {self.eval_steps}."
                         )
                     # Work around floating point precision issues
@@ -1376,10 +1464,7 @@ class TrainingArguments:
 
         if self.bf16:
             if self.half_precision_backend == "apex":
-                raise ValueError(
-                    " `--half_precision_backend apex`: GPU bf16 is not supported by apex. Use"
-                    " `--half_precision_backend cuda_amp` instead"
-                )
+                raise ValueError(" `--half_precision_backend apex`: GPU bf16 is not supported by apex.")
 
         if self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU:
             if self.evaluation_strategy == IntervalStrategy.NO:
@@ -1613,7 +1698,7 @@ class TrainingArguments:
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
             os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
             os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
-            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "false")
+            os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "true")
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1658,6 +1743,9 @@ class TrainingArguments:
             mixed_precision = os.environ.get("ACCELERATE_MIXED_PRECISION", "no")
             self.deepspeed_plugin.set_mixed_precision(mixed_precision)
             self.deepspeed_plugin.set_deepspeed_weakref()
+
+        if self.use_cpu:
+            self.dataloader_pin_memory = False
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -1801,13 +1889,13 @@ class TrainingArguments:
         elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
             if "ACCELERATE_USE_XPU" not in os.environ:
                 os.environ["ACCELERATE_USE_XPU"] = "true"
-            self._n_gpu = torch.xpu.device_count()
+            self._n_gpu = 1
             device = torch.device("xpu:0")
             torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
-                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
+                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
                     "`mps` device will be used by default if available similar to the way `cuda` device is used."
                     "Therefore, no action from user is required. "
                 )
@@ -2124,9 +2212,9 @@ class TrainingArguments:
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
-                If set to a positive number, the total number of training steps to perform. Overrides
-                `num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
-                the set number of steps when all data is exhausted.
+                If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+                `max_steps` is reached.
             gradient_accumulation_steps (`int`, *optional*, defaults to 1):
                 Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -2178,7 +2266,7 @@ class TrainingArguments:
         jit_mode: bool = False,
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to evaluation.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"no"`):
@@ -2276,7 +2364,7 @@ class TrainingArguments:
         on_each_node: bool = False,
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to checkpoint saving.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
@@ -2329,7 +2417,7 @@ class TrainingArguments:
         replica_level: str = "passive",
     ):
         """
-        A method that regroups all arguments linked to the evaluation.
+        A method that regroups all arguments linked to logging.
 
         Args:
             strategy (`str` or [`~trainer_utils.IntervalStrategy`], *optional*, defaults to `"steps"`):
@@ -2345,10 +2433,11 @@ class TrainingArguments:
                 Logger log level to use on the main process. Possible choices are the log levels as strings: `"debug"`,
                 `"info"`, `"warning"`, `"error"` and `"critical"`, plus a `"passive"` level which doesn't set anything
                 and lets the application set the level.
-            report_to (`str` or `List[str]`, *optional*, defaults to `"none"`):
+            report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
                 The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-                `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"`,`"clearml"` and `"wandb"`. Use `"all"` to report
-                to all integrations installed, `"none"` for no integrations.
+                `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`,
+                `"neptune"`, `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed,
+                `"none"` for no integrations.
             first_step (`bool`, *optional*, defaults to `False`):
                 Whether to log and evaluate the first `global_step` or not.
             nan_inf_filter (`bool`, *optional*, defaults to `True`):
@@ -2530,9 +2619,9 @@ class TrainingArguments:
                 Total number of training epochs to perform (if not an integer, will perform the decimal part percents
                 of the last epoch before stopping training).
             max_steps (`int`, *optional*, defaults to -1):
-                If set to a positive number, the total number of training steps to perform. Overrides
-                `num_train_epochs`. In case of using a finite iterable dataset the training may stop before reaching
-                the set number of steps when all data is exhausted.
+                If set to a positive number, the total number of training steps to perform. Overrides `num_train_epochs`.
+                For a finite dataset, training is reiterated through the dataset (if all data is exhausted) until
+                `max_steps` is reached.
             warmup_ratio (`float`, *optional*, defaults to 0.0):
                 Ratio of total training steps used for a linear warmup from 0 to `learning_rate`.
             warmup_steps (`int`, *optional*, defaults to 0):
@@ -2564,6 +2653,7 @@ class TrainingArguments:
         drop_last: bool = False,
         num_workers: int = 0,
         pin_memory: bool = True,
+        persistent_workers: bool = False,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: Optional[int] = None,
@@ -2580,6 +2670,10 @@ class TrainingArguments:
                 the main process.
             pin_memory (`bool`, *optional*, defaults to `True`):
                 Whether you want to pin memory in data loaders or not. Will default to `True`.
+            persistent_workers (`bool`, *optional*, defaults to `False`):
+                If True, the data loader will not shut down the worker processes after a dataset has been consumed
+                once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training,
+                but will increase RAM usage. Will default to `False`.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2609,6 +2703,7 @@ class TrainingArguments:
         self.dataloader_drop_last = drop_last
         self.dataloader_num_workers = num_workers
         self.dataloader_pin_memory = pin_memory
+        self.dataloader_persistent_workers = persistent_workers
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed

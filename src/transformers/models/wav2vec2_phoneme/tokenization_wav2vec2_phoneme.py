@@ -155,6 +155,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
+
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -173,7 +174,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        vocab = dict(self.encoder)
+        vocab = dict(self.encoder.copy())
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -182,7 +183,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         to_add = []
         for token in new_tokens:
             if isinstance(token, str):
-                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalize=True))
+                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalized=True, special=special_tokens))
             else:
                 to_add.append(token)
 
@@ -288,7 +289,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         `str`: Word delimiter token. Log an error if used while not having been set.
         """
-        if self._word_delimiter_token is None and self.verbose:
+        if self._word_delimiter_token is None:
+            if self.verbose:
+                logger.error("Using word_delimiter_token, but it is not set yet.")
             return None
         return str(self._word_delimiter_token)
 
@@ -315,8 +318,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         """
         `str`: Word delimiter token. Log an error if used while not having been set.
         """
-        if self._phone_delimiter_token is None and self.verbose:
-            logger.error("Using phone_delimiter_token, but it is not set yet.")
+        if self._phone_delimiter_token is None:
+            if self.verbose:
+                logger.error("Using phone_delimiter_token, but it is not set yet.")
             return None
         return str(self._phone_delimiter_token)
 

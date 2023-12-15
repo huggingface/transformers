@@ -73,6 +73,7 @@ class UMT5Config(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
+
     model_type = "umt5"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -134,7 +135,7 @@ class UMT5Config(PretrainedConfig):
 
         if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
             raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
+                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer. "
                 "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
                 "'gated-gelu' or 'relu'"
             )

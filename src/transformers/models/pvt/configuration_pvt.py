@@ -97,6 +97,7 @@ class PvtConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "pvt"
 
     def __init__(

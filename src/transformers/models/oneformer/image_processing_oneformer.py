@@ -307,14 +307,16 @@ def get_oneformer_resize_output_image_size(
     Computes the output size given the desired size.
 
     Args:
-        input_image (`np.ndarray`):
+        image (`np.ndarray`):
             The input image.
-        size (`int`, `Tuple[int, int]`, `List[int]`, `Tuple[int]`):
+        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
             The size of the output image.
         max_size (`int`, *optional*):
             The maximum size of the output image.
         default_to_square (`bool`, *optional*, defaults to `True`):
             Whether to default to square if no size is provided.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
         `Tuple[int, int]`: The output size.
@@ -1165,6 +1167,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
+        device = masks_queries_logits.device
         batch_size = class_queries_logits.shape[0]
         num_queries = class_queries_logits.shape[1]
         num_classes = class_queries_logits.shape[-1] - 1
@@ -1175,7 +1178,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             # [Q, K]
             scores = torch.nn.functional.softmax(class_queries_logits[i], dim=-1)[:, :-1]
-            labels = torch.arange(num_classes).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
+            labels = torch.arange(num_classes, device=device).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
 
             # scores_per_image, topk_indices = scores.flatten(0, 1).topk(self.num_queries, sorted=False)
             scores_per_image, topk_indices = scores.flatten(0, 1).topk(num_queries, sorted=False)

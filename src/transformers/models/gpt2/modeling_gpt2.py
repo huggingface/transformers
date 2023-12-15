@@ -198,7 +198,7 @@ class GPT2Attention(nn.Module):
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
             attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
 
         if attention_mask is not None:
@@ -479,10 +479,6 @@ class GPT2PreTrainedModel(PreTrainedModel):
             if name == "c_proj.weight":
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                 p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPT2Model):
-            module.gradient_checkpointing = value
 
 
 @dataclass
@@ -877,22 +873,16 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache, output_attentions)
-
-                    return custom_forward
-
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                outputs = self._gradient_checkpointing_func(
+                    block.__call__,
                     hidden_states,
                     None,
                     attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    use_cache,
+                    output_attentions,
                 )
             else:
                 outputs = block(
@@ -1005,11 +995,20 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
+        # Omit tokens covered by past_key_values
         if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
             if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+                token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -1019,7 +1018,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
 
@@ -1038,6 +1037,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
                 "token_type_ids": token_type_ids,
             }
         )
+
         return model_inputs
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
@@ -1201,11 +1201,20 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
-        # only last token for inputs_ids if past is defined in kwargs
+        # Omit tokens covered by past_key_values
         if past_key_values:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = input_ids.shape[1] - 1
+
+            input_ids = input_ids[:, remove_prefix_length:]
             if token_type_ids is not None:
-                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+                token_type_ids = token_type_ids[:, -input_ids.shape[1] :]
 
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
@@ -1215,7 +1224,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -input_ids.shape[1] :]
         else:
             position_ids = None
 
@@ -1442,7 +1451,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
                     logits.device
                 )
             else:
@@ -1525,7 +1534,20 @@ class GPT2ForTokenClassification(GPT2PreTrainedModel):
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=0.25,
-        expected_output=["Lead", "Lead", "Lead", "Position", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead", "Lead"],
+        expected_output=[
+            "Lead",
+            "Lead",
+            "Lead",
+            "Position",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+            "Lead",
+        ],
     )
     # fmt: on
     def forward(
@@ -1604,7 +1626,6 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

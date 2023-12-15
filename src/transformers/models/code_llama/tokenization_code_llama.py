@@ -68,6 +68,11 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -78,23 +83,18 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
         prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
             Prefix token used for infilling.
-        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
-            Suffix token used for infilling.
         middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
             Middle token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
         eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        suffix_first (`bool`, *optional*, default to `False`):
+        suffix_first (`bool`, *optional*, defaults to `False`):
             Whether the input prompt and suffix should be formatted with the suffix first.
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -110,6 +110,14 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add an end of sequence token at the end of sequences.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to clean up the tokenization spaces.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
@@ -141,9 +149,9 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     ):
         requires_backends(self, "protobuf")
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
 
         self.use_default_system_prompt = use_default_system_prompt
         # mark tokens special to skip them
@@ -454,10 +462,19 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         The output should look something like:
 
-        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos> <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
         <bos>[INST] Prompt [/INST]
-        """
 
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         template = (
             "{% if messages[0]['role'] == 'system' %}"
             "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present

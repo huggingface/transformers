@@ -78,6 +78,7 @@ class MobileNetV1Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilenet_v1"
 
     def __init__(

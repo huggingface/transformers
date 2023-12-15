@@ -53,7 +53,7 @@ class TFBlenderbotSmallModelTester:
         intermediate_size=37,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -197,6 +197,11 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False
+
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return pipeline_test_casse_name in ("TextGenerationPipelineTests", "ConversationalPipelineTests")
 
     def setUp(self):
         self.model_tester = TFBlenderbotSmallModelTester(self)

@@ -348,22 +348,26 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         # 1. Init the parent class
-        super().__init__(**kwargs)
+
         self.tokens_trie = Trie()
 
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: Dict[int, AddedToken] = {}
-        # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
-        if "added_tokens_decoder" in kwargs:
-            # overwriting the class's added_tokens_decoder. This is the source of truth!
-            self._added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
 
+        # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
+        self._added_tokens_decoder.update(kwargs.pop("added_tokens_decoder", {}))
         self._added_tokens_encoder: Dict[str, int] = {k.content: v for v, k in self._added_tokens_decoder.items()}
+
+        # 4 init the parent class
+        super().__init__(**kwargs)
 
         # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        self._add_tokens(
+            [token for token in self.all_special_tokens_extended if token not in self._added_tokens_encoder],
+            special_tokens=True,
+        )
 
         self._decode_use_source_tokenizer = False
 
@@ -459,6 +463,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         added_tokens = 0
         if new_tokens is None:
             return added_tokens
+        # TODO this is fairly slow to improve!
         current_vocab = self.get_vocab().copy()
         new_idx = len(current_vocab)  # only call this once, len gives the last index + 1
         for token in new_tokens:
@@ -467,14 +472,21 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if str(token) == "":
                 continue
             if isinstance(token, str):
-                # for legacy AddedTokens strip left and right by default
-                # TODO this will be remove to have the same default behavior as rust
-                token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
-            if special_tokens:
-                token.special = True
+                if token in self._added_tokens_encoder:
+                    continue
+                else:
+                    # very important for fast and slow equivalence!
+                    is_special = token in self.all_special_tokens or special_tokens
+                    token = AddedToken(
+                        token, rstrip=False, lstrip=False, normalized=not is_special, special=is_special
+                    )
+            elif special_tokens:
+                # doing token.special=True changes the normalization! will fix in rust
+                # this is important and the only reason why the AddedTokens in each class are normalized by default
+                token.__setstate__({"special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
                 continue
-            if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+            if not token.special and token.normalized and getattr(self, "do_lower_case", False):
                 # Normalize if requested
                 token.content = token.content.lower()
             if token.content not in current_vocab:
@@ -550,7 +562,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             logger.warning(f"Keyword arguments {kwargs} not recognized.")
 
         if hasattr(self, "do_lower_case") and self.do_lower_case:
-            # convert non-special tokens to lowercase
+            # convert non-special tokens to lowercase. Might be super slow as well?
             escaped_special_toks = [re.escape(s_tok) for s_tok in (self.all_special_tokens)]
             escaped_special_toks += [
                 re.escape(s_tok.content)
@@ -564,7 +576,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             no_split_token = []
             tokens = [text]
         else:
-            no_split_token = set(self._added_tokens_encoder.keys())  # don't split on any of the added tokens
+            no_split_token = self._added_tokens_encoder.keys()  # don't split on any of the added tokens
             # "This is something<special_token_1>  else"
             tokens = self.tokens_trie.split(text)
 
@@ -588,7 +600,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     elif tok_extended.single_word and right and right[0] != " ":
                         tokens[i + 1] = token + tokens[i + 1]
                         tokens[i] = ""
-
                 else:
                     raise ValueError(
                         f"{tok_extended} cannot be tokenized because it was not properly added"

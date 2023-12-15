@@ -121,6 +121,7 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("clvp", ("ClvpTokenizer", None)),
             (
                 "code_llama",
                 (
@@ -161,6 +162,7 @@ else:
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
+            ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
@@ -181,6 +183,13 @@ else:
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("jukebox", ("JukeboxTokenizer", None)),
+            (
+                "kosmos-2",
+                (
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
@@ -194,6 +203,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -225,6 +235,13 @@ else:
             ("mgp-str", ("MgpstrTokenizer", None)),
             (
                 "mistral",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "mixtral",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
@@ -269,6 +286,7 @@ else:
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("openai-gpt", ("OpenAIGPTTokenizer", "OpenAIGPTTokenizerFast" if is_tokenizers_available() else None)),
             ("opt", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
+            ("owlv2", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("owlvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "pegasus",
@@ -298,6 +316,7 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("phi", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
             ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
@@ -328,6 +347,20 @@ else:
             ("roc_bert", ("RoCBertTokenizer", None)),
             ("roformer", ("RoFormerTokenizer", "RoFormerTokenizerFast" if is_tokenizers_available() else None)),
             ("rwkv", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "seamless_m4t",
+                (
+                    "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
+                    "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "seamless_m4t_v2",
+                (
+                    "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
+                    "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -353,6 +386,7 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "umt5",
                 (
@@ -361,6 +395,7 @@ else:
                 ),
             ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("vipllava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("vits", ("VitsTokenizer", None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
@@ -524,7 +559,8 @@ def get_tokenizer_config(
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -653,7 +689,8 @@ class AutoTokenizer:
         use_auth_token = kwargs.pop("use_auth_token", None)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if kwargs.get("token", None) is not None:
                 raise ValueError(

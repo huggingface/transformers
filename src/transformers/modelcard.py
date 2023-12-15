@@ -895,10 +895,10 @@ def extract_hyperparameters_from_trainer(trainer):
         hyperparameters["num_epochs"] = trainer.args.num_train_epochs
 
     if trainer.args.fp16:
-        if trainer.use_cuda_amp:
-            hyperparameters["mixed_precision_training"] = "Native AMP"
-        elif trainer.use_apex:
+        if trainer.use_apex:
             hyperparameters["mixed_precision_training"] = f"Apex, opt level {trainer.args.fp16_opt_level}"
+        else:
+            hyperparameters["mixed_precision_training"] = "Native AMP"
 
     if trainer.args.label_smoothing_factor != 0.0:
         hyperparameters["label_smoothing_factor"] = trainer.args.label_smoothing_factor

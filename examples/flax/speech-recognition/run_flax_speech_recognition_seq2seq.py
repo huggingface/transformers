@@ -60,7 +60,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.35.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
 
@@ -360,7 +360,7 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
 
 def create_learning_rate_fn(
     num_train_steps: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     warmup_fn = optax.linear_schedule(init_value=0.0, end_value=learning_rate, transition_steps=num_warmup_steps)
     decay_fn = optax.linear_schedule(
@@ -415,7 +415,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use `--overwrite_output_dir` to overcome."
         )
 
@@ -439,6 +439,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.train_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -448,6 +449,7 @@ def main():
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
             cache_dir=data_args.dataset_cache_dir,
+            num_proc=data_args.preprocessing_num_workers,
             token=True if model_args.use_auth_token else None,
         )
 
@@ -551,7 +553,7 @@ def main():
         prepare_dataset,
         remove_columns=next(iter(raw_datasets.values())).column_names,
         num_proc=num_workers,
-        desc="preprocess train dataset",
+        desc="preprocess train and eval dataset",
     )
 
     # filter training data with inputs longer than max_input_length
@@ -638,7 +640,7 @@ def main():
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
-        len(vectorized_datasets["train"]),
+        total_train_steps,
         training_args.warmup_steps,
         training_args.learning_rate,
     )

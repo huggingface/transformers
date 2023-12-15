@@ -104,6 +104,7 @@ class BigBirdConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "big_bird"
 
     def __init__(

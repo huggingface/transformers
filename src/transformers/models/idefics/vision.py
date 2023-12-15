@@ -115,8 +115,8 @@ class IdeficsVisionEmbeddings(nn.Module):
         fp32_upcasting = patch_pos_embed.dtype == torch.bfloat16
         if fp32_upcasting:
             logger.warning_once(
-                "Upcasting patch_pos_embed to fp32 for interpolation since `upsample_bicubic2d_out_frame` in nn.functional.interpolate"
-                "is not implemented for 'torch.bfloat16' dtype. This will result in a slight overhead"
+                "Upcasting patch_pos_embed to fp32 for interpolation since `upsample_bicubic2d_out_frame` in nn.functional.interpolate "
+                "is not implemented for 'torch.bfloat16' dtype. This will result in a slight overhead."
             )
             patch_pos_embed = patch_pos_embed.to(torch.float)
         patch_pos_embed = nn.functional.interpolate(
@@ -401,18 +401,12 @@ class IdeficsVisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(

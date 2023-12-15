@@ -139,8 +139,8 @@
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
-    - local: in_translation
-      title: (번역중) Instantiating a big model
+    - local: big_models
+      title: 대형 모델을 인스턴스화
     - local: debugging
       title: 디버깅
     - local: hpo_train
