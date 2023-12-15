@@ -2014,7 +2014,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.block_size`: {block_size}"
             )

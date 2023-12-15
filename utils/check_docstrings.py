@@ -233,6 +233,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxGPTJModel",
     "FlaxGPTNeoForCausalLM",
     "FlaxGPTNeoModel",
+    "FlaxLlamaForCausalLM",
+    "FlaxLlamaModel",
     "FlaxMBartForConditionalGeneration",
     "FlaxMBartForQuestionAnswering",
     "FlaxMBartForSequenceClassification",
