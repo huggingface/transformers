@@ -2224,6 +2224,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_token_timestamps:
             kwargs["output_attentions"] = True
             return_dict_in_generate = True
+            kwargs["output_scores"] = True
 
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -2555,22 +2556,49 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # of shape (batch size, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
-        if num_frames is not None:
-            weights = weights[..., : num_frames // 2]
 
-        # Normalize and smoothen the weights.
-        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-        weights = (weights - mean) / std
-        weights = _median_filter(weights, self.config.median_filter_width)
+        if "beam_indices" in generate_outputs:
+            # If beam search has been used, the output sequences can have been generated for more timesteps than their sequence_lengths
+            # Since the beam search strategy choose the most probable sequences at the end of the search
+            # In that case, we make sure that the weights have the right output_length
+            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            weights = weights[:, :, :weight_length]
 
-        # Average the different cross-attention heads.
-        matrix = weights.mean(dim=1)
+            # If beam indice is still -1, it means that the associated token id is EOS
+            beam_indices = generate_outputs.beam_indices[:, :weight_length]
+            beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
+
+            # Select the cross attention from the right beam for each output sequences
+            weights = torch.stack(
+                [
+                    torch.index_select(weights[:, :, i, :], dim=0, index=beam_indices[:, i])
+                    for i in range(beam_indices.shape[1])
+                ],
+                dim=2,
+            )
 
         timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+        batch_size = timestamps.shape[0]
+
+        if num_frames is not None:
+            # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
+            repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
+            num_frames = np.repeat(num_frames, repeat_time)
 
         # Perform dynamic time warping on each element of the batch.
-        for batch_idx in range(timestamps.shape[0]):
-            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
+        for batch_idx in range(batch_size):
+            if num_frames is not None:
+                matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
+
+            # Normalize and smoothen the weights.
+            std, mean = torch.std_mean(matrix, dim=0, keepdim=True, unbiased=False)
+            matrix = (matrix - mean) / std
+            matrix = _median_filter(matrix, self.config.median_filter_width)
+
+            # Average the different cross-attention heads.
+            matrix = matrix.mean(dim=0)
+
+            text_indices, time_indices = _dynamic_time_warping(-matrix.double().cpu().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
             timestamps[batch_idx, 1:] = torch.tensor(jump_times)

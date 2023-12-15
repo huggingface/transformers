@@ -562,7 +562,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         if isinstance(stride, tuple):
                             generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
                         else:
-                            generate_kwargs["num_frames"] = stride[0][0] // self.feature_extractor.hop_length
+                            generate_kwargs["num_frames"] = [s[0] // self.feature_extractor.hop_length for s in stride]
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs
