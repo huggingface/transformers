@@ -53,6 +53,7 @@ TF_REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class TFRegNetConvLayer(tf.keras.layers.Layer):
     def __init__(
         self,
+        in_channels: int,
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
@@ -75,12 +76,25 @@ class TFRegNetConvLayer(tf.keras.layers.Layer):
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.identity
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, hidden_state):
         hidden_state = self.convolution(self.padding(hidden_state))
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convolution", None) is not None:
+            with tf.name_scope(self.convolution.name):
+                self.convolution.build([None, None, None, self.in_channels])
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFRegNetEmbeddings(tf.keras.layers.Layer):
@@ -92,6 +106,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_channels = config.num_channels
         self.embedder = TFRegNetConvLayer(
+            in_channels=config.num_channels,
             out_channels=config.embedding_size,
             kernel_size=3,
             stride=2,
@@ -113,6 +128,14 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         hidden_state = self.embedder(pixel_values)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+
 
 class TFRegNetShortCut(tf.keras.layers.Layer):
     """
@@ -120,15 +143,28 @@ class TFRegNetShortCut(tf.keras.layers.Layer):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, out_channels: int, stride: int = 2, **kwargs):
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs):
         super().__init__(**kwargs)
         self.convolution = tf.keras.layers.Conv2D(
             filters=out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.normalization(self.convolution(inputs), training=training)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convolution", None) is not None:
+            with tf.name_scope(self.convolution.name):
+                self.convolution.build([None, None, None, self.in_channels])
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFRegNetSELayer(tf.keras.layers.Layer):
@@ -143,6 +179,8 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
             tf.keras.layers.Conv2D(filters=reduced_channels, kernel_size=1, activation="relu", name="attention.0"),
             tf.keras.layers.Conv2D(filters=in_channels, kernel_size=1, activation="sigmoid", name="attention.2"),
         ]
+        self.in_channels = in_channels
+        self.reduced_channels = reduced_channels
 
     def call(self, hidden_state):
         # [batch_size, h, w, num_channels] -> [batch_size, 1, 1, num_channels]
@@ -151,6 +189,19 @@ class TFRegNetSELayer(tf.keras.layers.Layer):
             pooled = layer_module(pooled)
         hidden_state = hidden_state * pooled
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build((None, None, None, None))
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention[0].name):
+                self.attention[0].build([None, None, None, self.in_channels])
+            with tf.name_scope(self.attention[1].name):
+                self.attention[1].build([None, None, None, self.reduced_channels])
 
 
 class TFRegNetXLayer(tf.keras.layers.Layer):
@@ -163,17 +214,17 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
         # `self.layers` instead of `self.layer` because that is a reserved argument.
         self.layers = [
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
             TFRegNetConvLayer(
-                out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
+                out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
             ),
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2"),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None, name="layer.2"),
         ]
         self.activation = ACT2FN[config.hidden_act]
 
@@ -185,6 +236,18 @@ class TFRegNetXLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFRegNetYLayer(tf.keras.layers.Layer):
@@ -197,17 +260,17 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         should_apply_shortcut = in_channels != out_channels or stride != 1
         groups = max(1, out_channels // config.groups_width)
         self.shortcut = (
-            TFRegNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFRegNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
         self.layers = [
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
+            TFRegNetConvLayer(in_channels, out_channels, kernel_size=1, activation=config.hidden_act, name="layer.0"),
             TFRegNetConvLayer(
-                out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
+                out_channels, out_channels, stride=stride, groups=groups, activation=config.hidden_act, name="layer.1"
             ),
             TFRegNetSELayer(out_channels, reduced_channels=int(round(in_channels / 4)), name="layer.2"),
-            TFRegNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.3"),
+            TFRegNetConvLayer(out_channels, out_channels, kernel_size=1, activation=None, name="layer.3"),
         ]
         self.activation = ACT2FN[config.hidden_act]
 
@@ -219,6 +282,18 @@ class TFRegNetYLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFRegNetStage(tf.keras.layers.Layer):
@@ -242,6 +317,15 @@ class TFRegNetStage(tf.keras.layers.Layer):
         for layer_module in self.layers:
             hidden_state = layer_module(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFRegNetEncoder(tf.keras.layers.Layer):
@@ -281,6 +365,14 @@ class TFRegNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
         return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        for stage in self.stages:
+            with tf.name_scope(stage.name):
+                stage.build(None)
 
 
 @keras_serializable
@@ -332,6 +424,20 @@ class TFRegNetMainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build((None, None, None, None))
 
 
 class TFRegNetPreTrainedModel(TFPreTrainedModel):
@@ -418,6 +524,14 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "regnet", None) is not None:
+            with tf.name_scope(self.regnet.name):
+                self.regnet.build(None)
+
 
 @add_start_docstrings(
     """
@@ -479,3 +593,14 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "regnet", None) is not None:
+            with tf.name_scope(self.regnet.name):
+                self.regnet.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier[1].name):
+                self.classifier[1].build([None, None, None, self.config.hidden_sizes[-1]])

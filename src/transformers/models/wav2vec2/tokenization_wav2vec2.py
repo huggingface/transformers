@@ -273,7 +273,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         to_add = []
         for token in new_tokens:
             if isinstance(token, str):
-                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalize=False))
+                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalized=False))
             else:
                 to_add.append(token)
 
