@@ -539,7 +539,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
 
 
-def set_initialized_submodules(model, state_dict_keys):
+def set_initialized_submodules(model, state_dict_keys, loaded=True):
     """
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
@@ -547,7 +547,7 @@ def set_initialized_submodules(model, state_dict_keys):
     for module_name, module in model.named_modules():
         loaded_keys = [k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")]
         if len(set(module.state_dict().keys()) - set(loaded_keys)) == 0:
-            module._is_hf_initialized = True
+            module._is_hf_initialized = loaded
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
@@ -3955,14 +3955,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
                         )
 
+        def checkpoint_key_to_model_key(key, remove_prefix_from_model, add_prefix_to_model):
+            model_key = _fix_key(key)
+            if remove_prefix_from_model:
+                # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
+                model_key = f"{prefix}.{key}"
+            elif add_prefix_to_model:
+                # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
+                model_key = key[len(prefix) + 1 :]
+
+            return model_key
+
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
-            if remove_prefix_from_model:
-                _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
-            elif add_prefix_to_model:
-                _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
-            else:
-                _loaded_keys = loaded_keys
+            _loaded_keys = [
+                checkpoint_key_to_model_key(k, remove_prefix_from_model, add_prefix_to_model) for k in loaded_keys
+            ]
             set_initialized_submodules(model, _loaded_keys)
             # This will only initialize submodules that are not marked as initialized by the line above.
             model.apply(model._initialize_weights)
@@ -4004,13 +4012,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # If the checkpoint is sharded, we may not have the key here.
                     if checkpoint_key not in state_dict:
                         continue
-                    model_key = checkpoint_key
-                    if remove_prefix_from_model:
-                        # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                        model_key = f"{prefix}.{checkpoint_key}"
-                    elif add_prefix_to_model:
-                        # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                        model_key = ".".join(checkpoint_key.split(".")[1:])
+                    model_key = checkpoint_key_to_model_key(
+                        checkpoint_key, remove_prefix_from_model, add_prefix_to_model
+                    )
 
                     if (
                         model_key in model_state_dict
@@ -4156,6 +4160,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Load back temporarily offloaded state dict
                 load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
+
+        if _fast_init:
+            mismatched_model_keys = [
+                checkpoint_key_to_model_key(k, remove_prefix_from_model, add_prefix_to_model) for k in mismatched_keys
+            ]
+            set_initialized_submodules(model, mismatched_model_keys, loaded=False)
+            # This will only initialize submodules that are re-marked as `not loaded` above due to mismatched
+            model.apply(model._initialize_weights)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
