@@ -4163,7 +4163,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _fast_init:
             mismatched_model_keys = [
-                checkpoint_key_to_model_key(x[0], remove_prefix_from_model, add_prefix_to_model) for x in mismatched_keys
+                checkpoint_key_to_model_key(x[0], remove_prefix_from_model, add_prefix_to_model)
+                for x in mismatched_keys
             ]
             set_initialized_submodules(model, mismatched_model_keys, loaded=False)
             # This will only initialize submodules that are re-marked as `not loaded` above due to mismatched
