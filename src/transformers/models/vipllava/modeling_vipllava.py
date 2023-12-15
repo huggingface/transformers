@@ -367,23 +367,26 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         Example:
 
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vipllava-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/vipllava-7b-hf")
+        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vip-llava-7b-hf", device_map="auto", torch_dtype=torch.float16)
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
-        >>> prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
+        >>> prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n{}###Assistant:"
+        >>> question = "Can you please describe this image?"
+        >>> prompt = prompt.format(question)
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+        >>> inputs = processor(text=text, images=image, return_tensors="pt").to(0, torch.float16)
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=20)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on a green surface, with a red ball in its paw."
+        >>> processor.decode(generate_ids[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
+        The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
