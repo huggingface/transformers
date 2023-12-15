@@ -91,7 +91,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -106,7 +106,12 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def create_position_ids_from_input_ids(self, input_ids):
         """
@@ -165,6 +170,7 @@ class TFMPNetPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -173,6 +179,14 @@ class TFMPNetPooler(tf.keras.layers.Layer):
         pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFMPNetSelfAttention(tf.keras.layers.Layer):
@@ -203,6 +217,7 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="o"
         )
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.config = config
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -247,6 +262,23 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         outputs = (o, attention_probs) if output_attentions else (o,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q", None) is not None:
+            with tf.name_scope(self.q.name):
+                self.q.build([None, None, self.config.hidden_size])
+        if getattr(self, "k", None) is not None:
+            with tf.name_scope(self.k.name):
+                self.k.build([None, None, self.config.hidden_size])
+        if getattr(self, "v", None) is not None:
+            with tf.name_scope(self.v.name):
+                self.v.build([None, None, self.config.hidden_size])
+        if getattr(self, "o", None) is not None:
+            with tf.name_scope(self.o.name):
+                self.o.build([None, None, self.config.hidden_size])
+
 
 class TFMPNetAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -255,6 +287,7 @@ class TFMPNetAttention(tf.keras.layers.Layer):
         self.attn = TFMPNetSelfAttention(config, name="attn")
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -266,6 +299,17 @@ class TFMPNetAttention(tf.keras.layers.Layer):
         attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + input_tensor)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attn", None) is not None:
+            with tf.name_scope(self.attn.name):
+                self.attn.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->MPNet
@@ -281,12 +325,21 @@ class TFMPNetIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->MPNet
@@ -299,6 +352,7 @@ class TFMPNetOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -306,6 +360,17 @@ class TFMPNetOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFMPNetLayer(tf.keras.layers.Layer):
@@ -329,6 +394,20 @@ class TFMPNetLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "out", None) is not None:
+            with tf.name_scope(self.out.name):
+                self.out.build(None)
+
 
 class TFMPNetEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -344,15 +423,20 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         self.layer = [TFMPNetLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("relative_attention_bias"):
             self.relative_attention_bias = self.add_weight(
                 name="embeddings",
                 shape=[self.relative_attention_num_buckets, self.n_heads],
                 initializer=get_initializer(self.initializer_range),
             )
-
-        return super().build(input_shape)
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
     def call(
         self,
@@ -561,6 +645,20 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+
 
 MPNET_START_DOCSTRING = r"""
 
@@ -693,6 +791,14 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         )
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+
 
 class TFMPNetLMHead(tf.keras.layers.Layer):
     """MPNet head for masked and permuted language modeling"""
@@ -712,10 +818,18 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.decoder = input_embeddings
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
 
     def get_output_embeddings(self):
         return self.decoder
@@ -816,6 +930,17 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
+
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
@@ -832,6 +957,7 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
+        self.config = config
 
     def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -840,6 +966,17 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -913,6 +1050,17 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -930,6 +1078,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -999,6 +1148,17 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1019,6 +1179,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1073,6 +1234,17 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1092,6 +1264,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1159,3 +1332,14 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mpnet", None) is not None:
+            with tf.name_scope(self.mpnet.name):
+                self.mpnet.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
