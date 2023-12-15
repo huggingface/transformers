@@ -555,7 +555,7 @@ def set_initialized_submodules(model, state_dict_keys, loaded=True):
             not_loaded_keys = [
                 k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")
             ]
-            if len(set(module.state_dict().keys()).intersection(not_loaded_keys)) == 0:
+            if len(set(module.state_dict().keys()).intersection(not_loaded_keys)) > 0:
                 module._is_hf_initialized = False
 
 
