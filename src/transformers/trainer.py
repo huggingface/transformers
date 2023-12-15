@@ -2846,7 +2846,7 @@ class Trainer:
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         logger.info(f"Saving model checkpoint to {output_dir}")
-        model = copy.deepcopy(self.model)
+        model = self.model
         model.to("cpu")
 
         if xm.is_master_ordinal():
@@ -2872,6 +2872,10 @@ class Trainer:
             model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+
+        # We moved the model from TPU -> CPU for saving the weights.
+        # Now we should move it back to subsequent compute still works.
+        model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
