@@ -68,17 +68,17 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)}, outputs)
         import datasets
 
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
         outputs = depth_estimator(
             [
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                dataset[0]["file"],
+                dataset[0]["image"],
                 # LA
-                dataset[1]["file"],
+                dataset[1]["image"],
                 # L
-                dataset[2]["file"],
+                dataset[2]["image"],
             ]
         )
         self.assertEqual(
