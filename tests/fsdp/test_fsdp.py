@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer import FSDP_MODEL_NAME
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import FSDPOption, set_seed
 from transformers.utils import is_accelerate_available, is_torch_bf16_available_on_device
@@ -42,6 +41,7 @@ from transformers.utils import is_accelerate_available, is_torch_bf16_available_
 
 if is_torch_available():
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_1
+    from transformers.trainer import FSDP_MODEL_NAME
 else:
     is_torch_greater_or_equal_than_2_1 = False
 
