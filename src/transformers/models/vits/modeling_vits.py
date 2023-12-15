@@ -809,9 +809,7 @@ class VitsStochasticDurationPredictor(nn.Module):
                 latents = torch.flip(latents, [1])
                 log_determinant_sum += log_determinant
 
-            nll = (
-                torch.sum(0.5 * (math.log(2 * math.pi) + (latents**2)) * padding_mask, [1, 2]) - log_determinant_sum
-            )
+            nll = torch.sum(0.5 * (math.log(2 * math.pi) + (latents**2)) * padding_mask, [1, 2]) - log_determinant_sum
             return nll + logq
         else:
             flows = list(reversed(self.flows))
