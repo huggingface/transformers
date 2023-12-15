@@ -38,14 +38,14 @@ RUN apt-get update && \
 RUN ln -sf $( which python${PY_VER} ) /usr/bin/python && \
     ln -sf $( which python${PY_VER} ) /usr/bin/python3
 
-RUN python3 -m pip install --no-cache-dir --upgrade pip && \
-    python3 -m pip install --no-cache-dir \
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir \
     mkl \
     tensorflow-cpu
 
 WORKDIR /workspace
 COPY . transformers/
 RUN cd transformers/ && \
-    python3 -m pip install --no-cache-dir .
+    python -m pip install --no-cache-dir .
 
 CMD ["/bin/bash"]

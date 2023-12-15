@@ -47,6 +47,6 @@ RUN python -m pip install --no-cache-dir --upgrade pip && \
 WORKDIR /workspace
 COPY . transformers/
 RUN cd transformers/ && \
-    python3 -m pip install --no-cache-dir .
+    python -m pip install --no-cache-dir .
 
 CMD ["/bin/bash"]
