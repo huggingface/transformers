@@ -373,15 +373,30 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] Cache
     - update
+    - update_cross_attention
+    - has_cached_cross_attentions
+    - get_seq_length
+    - get_max_length
+    - get_usable_length
 
 [[autodoc]] DynamicCache
     - update
     - get_seq_length
+    - get_max_length
+    - get_usable_length
     - reorder_cache
+    - to_legacy_cache
+    - from_legacy_cache
+
+[[autodoc]] DynamicCacheWithCrossAttention
+    - update_cross_attention
+    - has_cached_cross_attentions
     - to_legacy_cache
     - from_legacy_cache
 
 [[autodoc]] SinkCache
     - update
     - get_seq_length
+    - get_max_length
+    - get_usable_length
     - reorder_cache
