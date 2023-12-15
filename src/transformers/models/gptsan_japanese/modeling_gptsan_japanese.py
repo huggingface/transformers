@@ -704,6 +704,7 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["GPTSanJapaneseBlock"]
     _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
 
     @property
     def dummy_inputs(self):

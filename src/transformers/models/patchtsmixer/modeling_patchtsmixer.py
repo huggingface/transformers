@@ -784,6 +784,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "past_values"
     supports_gradient_checkpointing = False
+    _supports_cache_class = True
 
     def _init_weights(self, module):
         """Initialize weights"""
