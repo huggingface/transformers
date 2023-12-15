@@ -46,6 +46,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)

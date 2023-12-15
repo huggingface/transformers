@@ -301,6 +301,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),
+        ("vipllava", "VipLlavaForConditionalGeneration"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
@@ -598,6 +599,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
+        ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )

@@ -219,6 +219,7 @@ from . import (
     upernet,
     videomae,
     vilt,
+    vipllava,
     vision_encoder_decoder,
     vision_text_dual_encoder,
     visual_bert,
