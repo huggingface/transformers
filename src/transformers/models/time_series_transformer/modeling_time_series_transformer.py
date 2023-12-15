@@ -330,6 +330,13 @@ class TimeSeriesTransformerAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if past_key_value is not None and self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
+
         bsz = hidden_states.shape[0]
 
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
@@ -372,12 +379,6 @@ class TimeSeriesTransformerAttention(nn.Module):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
-        if past_key_value is not None and self.layer_idx is None:
-            raise ValueError(
-                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
-                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
-                "with a layer index."
-            )
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -533,7 +534,6 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
     def __init__(self, config: TimeSeriesTransformerConfig, layer_idx: int):
         super().__init__()
         self.embed_dim = config.d_model
-        self.layer_idx = layer_idx
 
         self.self_attn = TIME_SERIES_TRANSFORMER_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
