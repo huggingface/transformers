@@ -363,6 +363,7 @@ class FlaxMistralAttention(nn.Module):
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
+
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaDecoderLayer with Llama->Mistral
 class FlaxMistralDecoderLayer(nn.Module):
     config: MistralConfig
@@ -404,6 +405,7 @@ class FlaxMistralDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         return (hidden_states,) + outputs[1:]
+
 
 # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Mistral, GPT_NEO->MISTRAL, transformer->model
 class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
