@@ -20,7 +20,7 @@ import tempfile
 import unittest
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
@@ -610,9 +610,9 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @is_flaky()
+    @unittest.skip(reason="The speech encoder attentions are sometimes skipped resulting in None.")
     def test_retain_grad_hidden_states_attentions(self):
-        super().test_retain_grad_hidden_states_attentions()
+        pass
 
 
 @require_torch
