@@ -226,6 +226,8 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
 
 def prepare_images():
+    # we use revision="refs/pr/1" until the PR is merged
+    # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
     dataset = load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
     image1 = dataset[4]["image"]

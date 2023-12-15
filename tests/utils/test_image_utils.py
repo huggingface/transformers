@@ -538,6 +538,8 @@ class LoadImageTester(unittest.TestCase):
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_rgba(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         img = load_image(dataset[0]["image"])  # img with mode RGBA
@@ -549,6 +551,8 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_la(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         img = load_image(dataset[1]["image"])  # img with mode LA
@@ -560,6 +564,8 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_l(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         img = load_image(dataset[2]["image"])  # img with mode L
@@ -571,6 +577,8 @@ class LoadImageTester(unittest.TestCase):
         )
 
     def test_load_img_exif_transpose(self):
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         img_without_exif_transpose = dataset[3]["image"]

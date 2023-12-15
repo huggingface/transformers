@@ -73,6 +73,8 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
 
         import datasets
 
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         batch = [
