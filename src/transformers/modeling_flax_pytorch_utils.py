@@ -30,6 +30,7 @@ import transformers
 from . import is_safetensors_available
 from .utils import logging
 
+
 if is_safetensors_available():
     from safetensors import safe_open
     from safetensors.flax import load_file as safe_load_file
