@@ -152,6 +152,23 @@ class ModelArguments:
             )
         },
     )
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass."
+            )
+        },
+    )
+    gradient_accumulation_steps: int = field(
+        default=1,
+        metadata={
+            "help": (
+                "Number of updates steps to accumulate before performing a backward/update pass. "
+                "A value > 1 is equivalent to gradient accumulation."
+            )
+        },
+    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -723,6 +740,8 @@ def main():
         preprocess_logits_for_metrics=preprocess_logits_for_metrics
         if training_args.do_eval and not is_torch_tpu_available()
         else None,
+        gradient_accumulation_steps=training_args.gradient_accumulation_steps,
+        gradient_checkpointing=training_args.gradient_checkpointing,
     )
 
     # Training
