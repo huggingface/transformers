@@ -581,7 +581,7 @@ class LoadImageTester(unittest.TestCase):
             (333, 500, 3),
         )
 
-        img_with_exif_transpose = dataset[3]["image"]
+        img_with_exif_transpose = load_image(dataset[3]["image"])
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(
