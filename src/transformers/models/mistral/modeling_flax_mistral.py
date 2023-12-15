@@ -62,6 +62,8 @@ MISTRAL_START_DOCSTRING = r"""
         config ([`MistralConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        input_shape (`Tuple`, *optional*, defaults to `(1, 1)`): Input shape used for initializing weights
+        seed (`int`, *optional*, defaults to 0): Seed used for initializing weights
         dtype (`jax.numpy.dtype`, *optional*, defaults to `float32`):
             The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
             `jax.numpy.bfloat16`.
@@ -692,7 +694,7 @@ class FlaxMistralForCausalLMModule(nn.Module):
 
     def __call__(
         self,
-        input_ids: jnp.ndarray = None,
+        input_ids: jnp.ndarray,
         attention_mask: Optional[jnp.ndarray] = None,
         position_ids: Optional[jnp.ndarray] = None,
         deterministic: bool = True,
