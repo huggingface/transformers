@@ -25,6 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -1183,6 +1184,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[BigBirdPegasusConfig] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -1190,6 +1192,13 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will lead"
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -1208,62 +1217,68 @@ class BigBirdPegasusDecoderAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    def _prepare_key_values(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        bsz = hidden_states.shape[0]
+
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        is_cross_attention = key_value_states is not None
+
+        if is_cross_attention:
+            # `past_key_value[self.layer_idx][2].shape[2] == key_value_states.shape[1]`
+            # is checking that the `sequence_length` of the `past_key_value` is the same as
+            # the provided `key_value_states` to support prefix tuning
+            if (
+                past_key_value is not None
+                and past_key_value.has_cached_cross_attentions(self.layer_idx)
+                and past_key_value[self.layer_idx][2].shape[2] == key_value_states.shape[1]
+            ):
+                # reuse k,v, cross_attentions
+                key_states = past_key_value[self.layer_idx][2]
+                value_states = past_key_value[self.layer_idx][3]
+            else:
+                # compute cross attention k and v and cache them (if there is a cache)
+                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+                if past_key_value is not None:
+                    past_key_value.update_cross_attention(key_states, value_states, self.layer_idx)
+        else:
+            # compute self attention k and v and cache them (if there is a cache)
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+
+        return key_states, value_states
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
+        if past_key_value is not None and self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
+
         # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        key_states, value_states = self._prepare_key_values(hidden_states, key_value_states, past_key_value)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
-
+        bsz, tgt_len, _ = hidden_states.size()
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.reshape(*proj_shape)
@@ -2341,7 +2356,7 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -2477,7 +2492,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2561,18 +2576,36 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
-        # cut decoder_input_ids if past_key_values is used
+        # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+                max_cache_length = past_key_values.get_max_length()
             else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
+                cache_length = past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the decoder_attention_mask exceeds the length of decoder_input_ids, then we are in a
+            # setting where some of the inputs are exclusivelly passed as part of the cache (e.g. when passing
+            # input_embeds as input)
+            if decoder_attention_mask is not None and decoder_attention_mask.shape[1] > decoder_input_ids.shape[1]:
+                decoder_input_ids = decoder_input_ids[:, -(decoder_attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # decoder_input_ids based on the past_length.
+            elif past_length < decoder_input_ids.shape[1]:
+                decoder_input_ids = decoder_input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= decoder_input_ids.shape[1]), let's assume decoder_input_ids only has
+            # unprocessed tokens.
+
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            if (
+                max_cache_length is not None
+                and decoder_attention_mask is not None
+                and cache_length + decoder_input_ids.shape[1] > max_cache_length
+            ):
+                decoder_attention_mask = decoder_attention_mask[:, -max_cache_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed

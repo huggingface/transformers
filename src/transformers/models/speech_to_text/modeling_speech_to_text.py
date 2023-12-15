@@ -22,6 +22,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -185,6 +186,7 @@ class Speech2TextAttention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[Speech2TextConfig] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -192,6 +194,13 @@ class Speech2TextAttention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will lead"
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -210,62 +219,68 @@ class Speech2TextAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    def _prepare_key_values(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        bsz = hidden_states.shape[0]
+
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        is_cross_attention = key_value_states is not None
+
+        if is_cross_attention:
+            # `past_key_value[self.layer_idx][2].shape[2] == key_value_states.shape[1]`
+            # is checking that the `sequence_length` of the `past_key_value` is the same as
+            # the provided `key_value_states` to support prefix tuning
+            if (
+                past_key_value is not None
+                and past_key_value.has_cached_cross_attentions(self.layer_idx)
+                and past_key_value[self.layer_idx][2].shape[2] == key_value_states.shape[1]
+            ):
+                # reuse k,v, cross_attentions
+                key_states = past_key_value[self.layer_idx][2]
+                value_states = past_key_value[self.layer_idx][3]
+            else:
+                # compute cross attention k and v and cache them (if there is a cache)
+                key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+                value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+                if past_key_value is not None:
+                    past_key_value.update_cross_attention(key_states, value_states, self.layer_idx)
+        else:
+            # compute self attention k and v and cache them (if there is a cache)
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            if past_key_value is not None:
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+
+        return key_states, value_states
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
-        bsz, tgt_len, _ = hidden_states.size()
+        if past_key_value is not None and self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
+
         # get key, value proj
-        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
-        # is checking that the `sequence_length` of the `past_key_value` is the same as
-        # the provided `key_value_states` to support prefix tuning
-        if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
-        ):
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0], key_states], dim=2)
-            value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        key_states, value_states = self._prepare_key_values(hidden_states, key_value_states, past_key_value)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
-
+        bsz, tgt_len, _ = hidden_states.size()
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
         key_states = key_states.reshape(*proj_shape)

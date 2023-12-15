@@ -1040,6 +1040,7 @@ class SeamlessM4Tv2Attention(nn.Module):
         bias: bool = True,
         is_causal: bool = False,
         config: Optional[SeamlessM4Tv2Config] = None,
+        layer_idx: Optional[int] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -1047,6 +1048,13 @@ class SeamlessM4Tv2Attention(nn.Module):
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
         self.config = config
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will lead"
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
