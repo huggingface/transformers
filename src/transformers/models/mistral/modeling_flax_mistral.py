@@ -31,7 +31,7 @@ from ...modeling_flax_outputs import (
     FlaxSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
-from ...utils import add_start_docstrings
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from .configuration_mistral import MistralConfig
 
 
@@ -405,7 +405,7 @@ class FlaxMistralDecoderLayer(nn.Module):
 
         return (hidden_states,) + outputs[1:]
 
-
+# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Mistral, GPT_NEO->MISTRAL, transformer->model
 class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -416,7 +416,6 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
     base_model_prefix = "model"
     module_class: nn.Module = None
 
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->Mistral
     def __init__(
         self,
         config: MistralConfig,
@@ -449,7 +448,6 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         else:
             return freeze(random_params)
 
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_cache    
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -469,7 +467,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__call__
+    @add_start_docstrings_to_model_forward(MISTRAL_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
@@ -507,7 +505,7 @@ class FlaxMistralPreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxGPTNeoAttention module
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxMistralAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
