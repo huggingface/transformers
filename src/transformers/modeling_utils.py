@@ -3466,7 +3466,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
-            if is_accelerate_available():
+            if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
             keep_in_fp32_modules = model._keep_in_fp32_modules
         else:
