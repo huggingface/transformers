@@ -275,12 +275,10 @@ class EncoderDecoderModel(PreTrainedModel):
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
 
-    @property
-    def output_embeddings(self):
+    def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
 
-    @output_embeddings.setter
-    def output_embeddings(self, new_embeddings):
+    def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
