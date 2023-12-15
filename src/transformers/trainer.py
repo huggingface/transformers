@@ -1503,13 +1503,9 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if (
-            resume_from_checkpoint is not None
-            and not is_sagemaker_mp_enabled()
-            and not self.is_deepspeed_enabled
-            and not self.is_fsdp_enabled
-        ):
-            self._load_from_checkpoint(resume_from_checkpoint)
+        if resume_from_checkpoint is not None:
+            if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
+                self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
             state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
             if state.train_batch_size is not None:
@@ -1550,6 +1546,19 @@ class Trainer:
         self.accelerator.free_memory()
         self._train_batch_size = batch_size
         if self.args.auto_find_batch_size:
+            if self.state.train_batch_size != self._train_batch_size:
+                from accelerate.utils import release_memory
+
+                (self.model_wrapped,) = release_memory(self.model_wrapped)
+                self.model_wrapped = self.model
+
+                # Check for DeepSpeed *after* the intial pass and modify the config
+                if self.is_deepspeed_enabled:
+                    # Temporarily unset `self.args.train_batch_size`
+                    original_bs = self.args.per_device_train_batch_size
+                    self.args.per_device_train_batch_size = self._train_batch_size // max(1, self.args.n_gpu)
+                    self.propagate_args_to_deepspeed(True)
+                    self.args.per_device_train_batch_size = original_bs
             self.state.train_batch_size = self._train_batch_size
         logger.debug(f"Currently training with a batch size of: {self._train_batch_size}")
         # Data loader and number of training steps
@@ -3900,12 +3909,17 @@ class Trainer:
                         "when using FSDP."
                     )
 
-        if self.is_deepspeed_enabled:
-            if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+        if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
+            self.propagate_args_to_deepspeed()
 
-                ds_plugin = self.accelerator.state.deepspeed_plugin
+    def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
+        """
+        Sets values in the deepspeed plugin based on the Trainer args
+        """
+        from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
-                ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
-                ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
-                ds_plugin.hf_ds_config.trainer_config_process(self.args)
+        ds_plugin = self.accelerator.state.deepspeed_plugin
+
+        ds_plugin.hf_ds_config = HfTrainerDeepSpeedConfig(ds_plugin.hf_ds_config.config)
+        ds_plugin.deepspeed_config = ds_plugin.hf_ds_config.config
+        ds_plugin.hf_ds_config.trainer_config_process(self.args, auto_find_batch_size)
