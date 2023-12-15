@@ -135,6 +135,8 @@
     title: Overview
   - local: quantization
     title: Quantization
+  - local: trainer
+    title: Trainer
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
