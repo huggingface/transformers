@@ -28,6 +28,15 @@ Feel free to check out the [API reference](./main_classes/trainer) for these oth
 
 </Tip>
 
+Before you start, make sure [Accelerate](https://hf.co/docs/accelerate) - a library for enabling and running PyTorch training across distributed environments - is installed.
+
+```bash
+pip install accelerate
+
+# upgrade
+pip install accelerate --upgrade
+```
+
 This guide provides an overview of the [`Trainer`] class.
 
 ## Basic usage
@@ -247,19 +256,6 @@ NEFTune is disabled after training to restore the original embedding layer to av
 
 The [`Trainer`] class is powered by [Accelerate](https://hf.co/docs/accelerate), a library for easily training PyTorch models in distributed environments with support for integrations such as [FullyShardedDataParallel (FSDP)](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) and [DeepSpeed](https://www.deepspeed.ai/).
 
-<Tip>
-
-Make sure Accelerate is installed before using the [`Trainer`] class.
-
-```bash
-pip install accelerate
-
-# upgrade
-pip install accelerate --upgrade
-```
-
-</Tip>
-
 To use Accelerate with [`Trainer`], run the [`accelerate.config`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-config) command to set up training for your training environment. This command creates a `config_file.yaml` that'll be used when you launch your training script. For example, some example configurations you can setup are:
 
 <hfoptions id="config">
@@ -373,40 +369,40 @@ For example, to run the [run_glue.py](https://github.com/huggingface/transformer
 
 ```bash
 accelerate launch \
-./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
+    ./examples/pytorch/text-classification/run_glue.py \
+    --model_name_or_path bert-base-cased \
+    --task_name $TASK_NAME \
+    --do_train \
+    --do_eval \
+    --max_seq_length 128 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 5e-5 \
+    --num_train_epochs 3 \
+    --output_dir /tmp/$TASK_NAME/ \
+    --overwrite_output_dir
 ```
 
 You could also specify the parameters from the `config_file.yaml` file directly in the command line:
 
 ```bash
 accelerate launch --num_processes=2 \
---use_fsdp \
---mixed_precision=bf16 \
---fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
---fsdp_transformer_layer_cls_to_wrap="BertLayer" \
---fsdp_sharding_strategy=1 \
---fsdp_state_dict_type=FULL_STATE_DICT \
-./examples/pytorch/text-classification/run_glue.py
---model_name_or_path bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
+    --use_fsdp \
+    --mixed_precision=bf16 \
+    --fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
+    --fsdp_transformer_layer_cls_to_wrap="BertLayer" \
+    --fsdp_sharding_strategy=1 \
+    --fsdp_state_dict_type=FULL_STATE_DICT \
+    ./examples/pytorch/text-classification/run_glue.py
+    --model_name_or_path bert-base-cased \
+    --task_name $TASK_NAME \
+    --do_train \
+    --do_eval \
+    --max_seq_length 128 \
+    --per_device_train_batch_size 16 \
+    --learning_rate 5e-5 \
+    --num_train_epochs 3 \
+    --output_dir /tmp/$TASK_NAME/ \
+    --overwrite_output_dir
 ```
 
 Check out the [Launching your Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch) tutorial to learn more about `accelerate_launch` and custom configurations.
