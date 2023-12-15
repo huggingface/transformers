@@ -64,9 +64,14 @@ def ffmpeg_microphone(
         raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     system = platform.system()
+    release = platform.release()
     if system == "Linux":
-        format_ = "alsa"
-        input_ = "default"
+        if release.endswith("WSL2"):
+            format_ = "pulse"
+            input_ = "RDPSource"
+        else:
+            format_ = "alsa"
+            input_ = "default"
     elif system == "Darwin":
         format_ = "avfoundation"
         input_ = ":0"
