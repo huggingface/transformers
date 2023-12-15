@@ -543,7 +543,7 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -624,7 +624,7 @@ class GPTSanJapaneseBlock(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
@@ -914,7 +914,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1136,7 +1136,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = False,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1293,7 +1293,7 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         attention_mask: torch.FloatTensor,
         token_type_ids: Optional[torch.FloatTensor] = None,
         spout: Optional[Union[List, torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         **kwargs,
     ):
         if isinstance(spout, list):
