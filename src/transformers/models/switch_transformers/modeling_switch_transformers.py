@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch SwitchTransformers model."""
 
-
 import copy
 import math
 import warnings
@@ -43,7 +42,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_switch_transformers import SwitchTransformersConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -84,7 +82,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     """
     num_groups, tokens_per_group, _ = router_logits.shape
     log_z = torch.logsumexp(router_logits, dim=-1)
-    z_loss = log_z**2
+    z_loss = log_z ** 2
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
@@ -124,7 +122,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts ** 2)
 
 
 class SwitchTransformersTop1Router(nn.Module):
@@ -168,7 +166,7 @@ class SwitchTransformersTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.jitter_noise > 0:
+        if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
 
@@ -263,9 +261,9 @@ class SwitchTransformersDenseActDense(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.dropout(hidden_states)
         if (
-            isinstance(self.wo.weight, torch.Tensor)
-            and hidden_states.dtype != self.wo.weight.dtype
-            and self.wo.weight.dtype != torch.int8
+                isinstance(self.wo.weight, torch.Tensor)
+                and hidden_states.dtype != self.wo.weight.dtype
+                and self.wo.weight.dtype != torch.int8
         ):
             hidden_states = hidden_states.to(self.wo.weight.dtype)
         hidden_states = self.wo(hidden_states)
@@ -435,9 +433,9 @@ class SwitchTransformersAttention(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
+                torch.log(relative_position.float() / max_exact)
+                / math.log(max_distance / max_exact)
+                * (num_buckets - max_exact)
         ).to(torch.long)
         relative_position_if_large = torch.min(
             relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
@@ -464,16 +462,16 @@ class SwitchTransformersAttention(nn.Module):
         return values
 
     def forward(
-        self,
-        hidden_states,
-        mask=None,
-        key_value_states=None,
-        position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
-        query_length=None,
-        use_cache=False,
-        output_attentions=False,
+            self,
+            hidden_states,
+            mask=None,
+            key_value_states=None,
+            position_bias=None,
+            past_key_value=None,
+            layer_head_mask=None,
+            query_length=None,
+            use_cache=False,
+            output_attentions=False,
     ):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
@@ -488,7 +486,7 @@ class SwitchTransformersAttention(nn.Module):
         if past_key_value is not None:
             if len(past_key_value) != 2:
                 raise ValueError(
-                    f"past_key_value should have 2 past states: keys and values. Got { len(past_key_value)} past states"
+                    f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
                 )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
@@ -558,7 +556,7 @@ class SwitchTransformersAttention(nn.Module):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
+                position_bias = position_bias[:, :, -hidden_states.size(1):, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
@@ -604,14 +602,14 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
+            self,
+            hidden_states,
+            attention_mask=None,
+            position_bias=None,
+            layer_head_mask=None,
+            past_key_value=None,
+            use_cache=False,
+            output_attentions=False,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
@@ -637,16 +635,16 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
-        self,
-        hidden_states,
-        key_value_states,
-        attention_mask=None,
-        position_bias=None,
-        layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        query_length=None,
-        output_attentions=False,
+            self,
+            hidden_states,
+            key_value_states,
+            attention_mask=None,
+            position_bias=None,
+            layer_head_mask=None,
+            past_key_value=None,
+            use_cache=False,
+            query_length=None,
+            output_attentions=False,
     ):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
@@ -680,20 +678,20 @@ class SwitchTransformersBlock(nn.Module):
         self.layer.append(SwitchTransformersLayerFF(config, is_sparse=self.is_sparse))
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        encoder_decoder_position_bias=None,
-        layer_head_mask=None,
-        cross_attn_layer_head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
-        output_router_logits=True,
-        return_dict=True,
+            self,
+            hidden_states,
+            attention_mask=None,
+            position_bias=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            encoder_decoder_position_bias=None,
+            layer_head_mask=None,
+            cross_attn_layer_head_mask=None,
+            past_key_value=None,
+            use_cache=False,
+            output_attentions=False,
+            output_router_logits=True,
+            return_dict=True,
     ):
         if past_key_value is not None:
             if not self.is_decoder:
@@ -814,8 +812,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
         if isinstance(module, SwitchTransformersLayerNorm):
             module.weight.data.fill_(factor * 1.0)
         elif isinstance(
-            module,
-            (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
+                module,
+                (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
         ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
@@ -839,8 +837,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
             module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
@@ -852,8 +850,8 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             n_heads = self.config.num_heads
             module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -920,20 +918,20 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         self.embed_tokens = new_embeddings
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        output_router_logits=True,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            inputs_embeds=None,
+            head_mask=None,
+            cross_attn_head_mask=None,
+            past_key_values=None,
+            use_cache=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            output_router_logits=True,
+            return_dict=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1342,23 +1340,23 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqMoEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            decoder_input_ids: Optional[torch.LongTensor] = None,
+            decoder_attention_mask: Optional[torch.BoolTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            decoder_head_mask: Optional[torch.FloatTensor] = None,
+            cross_attn_head_mask: Optional[torch.Tensor] = None,
+            encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
+            decoder_inputs_embeds: Optional[torch.Tensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_router_logits: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
         r"""
         Returns:
@@ -1394,9 +1392,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
                 decoder_head_mask = head_mask
 
         if (
-            output_router_logits
-            and self.config.num_sparse_encoder_layers == 0
-            and self.config.num_sparse_encoder_layers == 0
+                output_router_logits
+                and self.config.num_sparse_encoder_layers == 0
+                and self.config.num_sparse_encoder_layers == 0
         ):
             raise ValueError(
                 "You asked to return `output_router_logits` but the transformer in dense, and does                    "
@@ -1521,24 +1519,24 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqMoEOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        decoder_head_mask: Optional[torch.FloatTensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            decoder_input_ids: Optional[torch.LongTensor] = None,
+            decoder_attention_mask: Optional[torch.BoolTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            decoder_head_mask: Optional[torch.FloatTensor] = None,
+            cross_attn_head_mask: Optional[torch.Tensor] = None,
+            encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+            labels: Optional[torch.LongTensor] = None,
+            use_cache: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_router_logits: Optional[bool] = True,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1629,7 +1627,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim**-0.5)
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
 
         lm_logits = self.lm_head(sequence_output)
 
@@ -1707,16 +1705,16 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
 
     def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
+            self,
+            input_ids,
+            past_key_values=None,
+            attention_mask=None,
+            head_mask=None,
+            decoder_head_mask=None,
+            cross_attn_head_mask=None,
+            use_cache=None,
+            encoder_outputs=None,
+            **kwargs,
     ):
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
@@ -1826,15 +1824,15 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
     @add_start_docstrings_to_model_forward(SWITCH_TRANSFORMERS_ENCODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_router_logits: Optional[bool] = True,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            output_router_logits: Optional[bool] = True,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], MoEModelOutput]:
         r"""
         Returns:

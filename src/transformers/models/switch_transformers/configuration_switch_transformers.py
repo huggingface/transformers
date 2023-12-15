@@ -64,7 +64,7 @@ class SwitchTransformersConfig(PretrainedConfig):
             Router type - choose between `"tokens_masked", `"tokens_scatter"` and `"experts_masked"`.
         router_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the router.
-        router_jitter_noise (`float`, *optional*, defaults to 0.1):
+        router_jitter_noise (`float`, *optional*, defaults to 0.01):
             Amount of noise to add to the router.
         router_dtype (`str`, *optional*, default to `"float32"`):
             The `dtype` used for the routers. It is preferable to keep the `dtype` to `"float32"` as specified in the

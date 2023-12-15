@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch GPTSANJapanese model."""
 
-
 import copy
 from typing import List, Optional, Tuple, Union
 
@@ -33,7 +32,6 @@ from ...utils import (
     logging,
 )
 from .configuration_gptsan_japanese import GPTSanJapaneseConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -67,7 +65,7 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     """
     num_groups, tokens_per_group, _ = router_logits.shape
     log_z = torch.logsumexp(router_logits, dim=-1)
-    z_loss = log_z**2
+    z_loss = log_z ** 2
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
@@ -108,7 +106,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts ** 2)
 
 
 class GPTSanJapaneseDenseActDense(nn.Module):
@@ -187,7 +185,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.jitter_noise > 0:
+        if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
 
@@ -355,14 +353,14 @@ class GPTSanJapaneseAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
-        is_causal: bool = False,
-        config: Optional[GPTSanJapaneseConfig] = None,
+            self,
+            embed_dim: int,
+            num_heads: int,
+            dropout: float = 0.0,
+            is_decoder: bool = False,
+            bias: bool = True,
+            is_causal: bool = False,
+            config: Optional[GPTSanJapaneseConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -376,7 +374,7 @@ class GPTSanJapaneseAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
         self.is_causal = is_causal
 
@@ -389,13 +387,13 @@ class GPTSanJapaneseAttention(nn.Module):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+            self,
+            hidden_states: torch.Tensor,
+            key_value_states: Optional[torch.Tensor] = None,
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            layer_head_mask: Optional[torch.Tensor] = None,
+            output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -412,9 +410,9 @@ class GPTSanJapaneseAttention(nn.Module):
         # is checking that the `sequence_length` of the `past_key_value` is the same as
         # the provided `key_value_states` to support prefix tuning
         if (
-            is_cross_attention
-            and past_key_value is not None
-            and past_key_value[0].shape[2] == key_value_states.shape[1]
+                is_cross_attention
+                and past_key_value is not None
+                and past_key_value[0].shape[2] == key_value_states.shape[1]
         ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
@@ -525,13 +523,13 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
 
     def forward(
-        self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
+            self,
+            hidden_states: Optional[Tuple[torch.FloatTensor]],
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = False,
+            output_attentions: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         r"""
         Self-attention and normalize block.
@@ -606,14 +604,14 @@ class GPTSanJapaneseBlock(nn.Module):
         self.feed_forward = GPTSanJapaneseLayerDenseFF(config) if ext_layer else GPTSanJapaneseLayerSparseFF(config)
 
     def forward(
-        self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-        output_router_tuple: Optional[bool] = False,
+            self,
+            hidden_states: Optional[Tuple[torch.FloatTensor]],
+            past_key_value: Optional[Tuple[torch.Tensor]] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = False,
+            output_attentions: Optional[bool] = False,
+            output_router_tuple: Optional[bool] = False,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         r"""
         GPTSAN transformer block.
@@ -751,8 +749,8 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             n_heads = self.config.num_heads
             module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right
     def _shift_right(self, input_ids):
@@ -892,21 +890,21 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        num_precontext: Optional[torch.LongTensor] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.FloatTensor] = None,
+            spout: Optional[torch.FloatTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = False,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            output_router_logits: Optional[bool] = None,
+            num_precontext: Optional[torch.LongTensor] = None,
     ) -> Union[MoEModelOutputWithPastAndCrossAttentions, Tuple[torch.FloatTensor]]:
         r"""
         num_precontext (`torch.LongTensor` of shape `(batch_size,1)`):
@@ -944,7 +942,7 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             # `num_precontext` is the number of tokens that refer to each other in prefix-lm
             # created per batch, so dimension of num_precontext should be [batch, 1]
             if not (
-                len(num_precontext.shape) == 2 and num_precontext.shape[1] == 1
+                    len(num_precontext.shape) == 2 and num_precontext.shape[1] == 1
             ):  # num_precontext Should be [batch,1]
                 raise ValueError("num_precontext should be [batch, 1] size.")
             num_precontext = torch.reshape(num_precontext, [-1])
@@ -989,8 +987,8 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         # positions for get position_embeddings
         gather_position = (
             (
-                torch.zeros((num_batch, self.config.d_model, num_input_contexts)).to(device)
-                + token_position.unsqueeze(0)
+                    torch.zeros((num_batch, self.config.d_model, num_input_contexts)).to(device)
+                    + token_position.unsqueeze(0)
             )
             .transpose(1, 2)
             .long()
@@ -1040,8 +1038,8 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
                         )
 
             output_router_tuple = (
-                self.config.output_router_logits or output_router_logits
-            ) and layer < self.config.num_switch_layers
+                                          self.config.output_router_logits or output_router_logits
+                                  ) and layer < self.config.num_switch_layers
             block_output = self.blocks[layer](
                 hidden_states=hidden_states,
                 past_key_value=past,
@@ -1114,21 +1112,21 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(GPTSAN_JAPANESE_INPUTS_DOCSTRING)
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.FloatTensor] = None,
+            spout: Optional[torch.FloatTensor] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            head_mask: Optional[torch.FloatTensor] = None,
+            use_cache: Optional[bool] = False,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
+            decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            output_router_logits: Optional[bool] = None,
+            labels: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.FloatTensor], MoECausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1271,13 +1269,13 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        token_type_ids: Optional[torch.FloatTensor] = None,
-        spout: Optional[Union[List, torch.FloatTensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        **kwargs,
+            self,
+            input_ids: torch.LongTensor,
+            attention_mask: torch.FloatTensor,
+            token_type_ids: Optional[torch.FloatTensor] = None,
+            spout: Optional[Union[List, torch.FloatTensor]] = None,
+            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+            **kwargs,
     ):
         if isinstance(spout, list):
             spout = torch.tensor(spout).float()
