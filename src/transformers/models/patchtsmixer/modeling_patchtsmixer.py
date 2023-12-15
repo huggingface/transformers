@@ -2111,6 +2111,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                 if self.distribution_output == "negative_binomial" and torch.any(target_values < 0):
                     raise Exception("target_values cannot be negative for negative_binomial distribution.")
                 distribution = self.distribution_output.distribution(y_hat)
+                # y_hat should be a 2-tuple, each with dimension [bs, num_targets]
+                y_hat = tuple([item.view(-1, self.config.num_targets) for item in y_hat])
                 loss_val = loss(distribution, target_values)
                 # take average of the loss
                 loss_val = weighted_average(loss_val)
@@ -2170,5 +2172,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             distribution.sample() for _ in range(num_parallel_samples)
         ]  # samples: list of [batch_size x num_targets]
         # stack tensors
-        samples = torch.stack(samples, dim=1)  # [batch_size x num_samples x num_targets]
+        samples = torch.stack(samples, dim=1).view(
+            -1, num_parallel_samples, self.config.num_targets
+        )  # [batch_size x num_samples x num_targets]
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
