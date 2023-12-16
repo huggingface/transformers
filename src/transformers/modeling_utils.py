@@ -801,12 +801,13 @@ def _load_state_dict_into_meta_model(
                 # condition looks unreliable
                 fp16_statistics_key = param_name.replace("weight", "SCB")
                 unexpected_keys.remove(fp16_statistics_key)
-
-                if "SCB" not in param_name:
-                    # looks like a redundant if -- .SCB should not be in the loaded_state_dict_keys or expected_keys
-                    set_module_quantized_tensor_to_device(
-                        model, param_name, param_device, value=param, fp16_statistics=state_dict[fp16_statistics_key]
-                    )
+                set_module_quantized_tensor_to_device(
+                    model,
+                    param_name,
+                    param_device,
+                    value=param,
+                    quantized_stats={"SCB": state_dict[fp16_statistics_key]},
+                )
         else:
             # loading not quantized params in quantized model
             set_module_quantized_tensor_to_device(model, param_name, param_device, value=param)

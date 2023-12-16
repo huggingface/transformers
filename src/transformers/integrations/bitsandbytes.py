@@ -21,9 +21,7 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(
-    module, tensor_name, device, value=None, fp16_statistics=None, quantized_stats=None
-):
+def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, quantized_stats=None):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -39,10 +37,8 @@ def set_module_quantized_tensor_to_device(
             The device on which to set the tensor.
         value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
-        fp16_statistics (`torch.HalfTensor`, *optional*):
-            The list of fp16 statistics to set on the module, used for serialization.
         quantized_stats (`dict[str, Any]`, *optional*):
-            Dict with items for 4-bit quantization
+            Dict with items for either 4-bit or 8-bit serialization
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -62,7 +58,7 @@ def set_module_quantized_tensor_to_device(
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
-    prequantized_loading = fp16_statistics is not None or quantized_stats is not None
+    prequantized_loading = quantized_stats is not None
     if is_buffer or not is_bitsandbytes_available():
         is_8bit = False
         is_4bit = False
@@ -103,7 +99,7 @@ def set_module_quantized_tensor_to_device(
                     )
                 new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
                 if prequantized_loading:
-                    setattr(new_value, "SCB", fp16_statistics.to(device))
+                    setattr(new_value, "SCB", quantized_stats["SCB"].to(device))
             elif is_4bit:
                 if prequantized_loading:
                     is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
