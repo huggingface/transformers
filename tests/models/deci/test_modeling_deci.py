@@ -457,6 +457,7 @@ class DeciModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Deci flash attention does not support right padding")
 
+
 @require_torch
 class DeciIntegrationTest(unittest.TestCase):
     @slow
