@@ -152,26 +152,17 @@ class ModelArguments:
             )
         },
     )
-    gradient_checkpointing: bool = field(
+    pad_to_multiple_of: bool = field(
         default=False,
         metadata={
             "help": (
-                "Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass."
+                "Whether to pad the embedding layer to a multiple depending on the device. ",
+                "For NVIDIA GPUs, this will be a multiple of 8, for TPUs a multiple of 128.",
             )
         },
     )
-    gradient_accumulation_steps: int = field(
-        default=1,
-        metadata={
-            "help": (
-                "Number of updates steps to accumulate before performing a backward/update pass. "
-                "A value > 1 is equivalent to gradient accumulation."
-            )
-        },
-    )
-    fp16: bool = field(
-        default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision instead of 32-bit"},
+    attn_implementation: Optional[str] = field(
+        default=None, metadata={"help": ("The attention implementation to use. ")}
     )
 
     def __post_init__(self):
@@ -323,15 +314,6 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if model_args.use_auth_token is not None:
-        warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
-            FutureWarning,
-        )
-        if model_args.token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
-        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -519,10 +501,15 @@ def main():
             trust_remote_code=model_args.trust_remote_code,
             torch_dtype=torch_dtype,
             low_cpu_mem_usage=model_args.low_cpu_mem_usage,
+            attn_implementation=model_args.attn_implementation,
         )
 
     else:
-        model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
+        model = AutoModelForCausalLM.from_config(
+            config,
+            trust_remote_code=model_args.trust_remote_code,
+            attn_implementation=model_args.attn_implementation,
+        )
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params/2**20:.2f}M params")
 
@@ -531,11 +518,19 @@ def main():
     if data_args.truncate_or_pad:
         special_tokens.append(data_args.pad_token)
 
+    # Get the factor by which the embedding layer should be padded based on the device
+    pad_factor = 1
+    if torch.cuda.is_availble():
+        pad_factor = 8
+
+    elif is_torch_tpu_available():
+        pad_factor = 128
+
     # Add the new tokens to the tokenizer
     tokenizer.add_tokens(special_tokens)
     # Get the pre-expansion embeddings of the model and resize the embedding layer
     original_embeddings = model.get_input_embeddings().weight
-    model.resize_token_embeddings(len(tokenizer))
+    model.resize_token_embeddings(len(tokenizer), pad_to_multiple_of=pad_factor)
 
     # Sample the embeddings for the new tokens from a multivariate normal distribution
     # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
@@ -773,8 +768,6 @@ def main():
         preprocess_logits_for_metrics=preprocess_logits_for_metrics
         if training_args.do_eval and not is_torch_tpu_available()
         else None,
-        gradient_accumulation_steps=training_args.gradient_accumulation_steps,
-        gradient_checkpointing=training_args.gradient_checkpointing,
     )
 
     # Training
