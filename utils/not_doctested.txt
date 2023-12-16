@@ -239,6 +239,7 @@ docs/source/en/model_doc/upernet.md
 docs/source/en/model_doc/van.md
 docs/source/en/model_doc/videomae.md
 docs/source/en/model_doc/vilt.md
+docs/source/en/model_doc/vipllava.md
 docs/source/en/model_doc/vision-encoder-decoder.md
 docs/source/en/model_doc/vision-text-dual-encoder.md
 docs/source/en/model_doc/visual_bert.md
@@ -847,6 +848,8 @@ src/transformers/models/videomae/configuration_videomae.py
 src/transformers/models/videomae/convert_videomae_to_pytorch.py
 src/transformers/models/vilt/configuration_vilt.py
 src/transformers/models/vilt/convert_vilt_original_to_pytorch.py
+src/transformers/models/vipllava/configuration_vipllava.py
+src/transformers/models/vipllava/modeling_vipllava.py
 src/transformers/models/vision_encoder_decoder/modeling_flax_vision_encoder_decoder.py
 src/transformers/models/vision_encoder_decoder/modeling_tf_vision_encoder_decoder.py
 src/transformers/models/vision_text_dual_encoder/modeling_flax_vision_text_dual_encoder.py

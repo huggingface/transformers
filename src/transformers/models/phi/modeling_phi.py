@@ -860,6 +860,13 @@ class PhiModel(PhiPreTrainedModel):
 
         past_key_values_length = 0
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
@@ -889,13 +896,6 @@ class PhiModel(PhiPreTrainedModel):
             )
 
         hidden_states = inputs_embeds
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
