@@ -105,7 +105,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
                     is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
                         "0.41.3"
                     )
-                    if not is_4bit_serializable:
+                    if new_value.dtype in (torch.int8, torch.uint8) and not is_4bit_serializable:
                         raise ValueError(
                             "Detected 4-bit weights but the version of bitsandbytes is not compatible with 4-bit serialization. "
                             "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
