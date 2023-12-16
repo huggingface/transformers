@@ -678,17 +678,9 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 vision_input_ids = torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * num_vision_tokens).repeat(batch_size, 1).to(input_ids.device)
                 vision_token_type_ids = torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * num_vision_tokens).repeat(batch_size, 1).to(token_type_ids.device)
 
-                print("Shape of vision input ids:", vision_input_ids.shape)
-                print("Shape of vision token type ids:", vision_token_type_ids.shape)
-                print("Shape of input ids:", input_ids[:,1:].shape)
-                print("Shape of token type ids:", token_type_ids[:,1:].shape)
-
                 input_ids = torch.cat([vision_input_ids, input_ids[:,1:]], dim=1)
                 token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:,1:]], dim=1)
                 attention_mask = torch.tensor([1] * input_ids.shape[1]).repeat(batch_size, 1).to(input_ids.device)
-
-                print("Shape of input ids after concatenation:", input_ids.shape)
-                print("Shape of token type ids after concatenation:", token_type_ids.shape)
 
                 inputs_embeds = self.embed_tokens(input_ids)
                 images_features = self.encode_images(pixel_values)
@@ -712,13 +704,13 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
 
-        print("---LLM forward----")
-        if input_ids is not None:
-            print("Shape of input_ids:", input_ids.shape)
+        print("Shape of input_ids:", input_ids.shape if input_ids is not None else None)
+        print("Shape of input embeddings:", inputs_embeds.shape if inputs_embeds is not None else None)
         print("Shape of token_type_ids:", token_type_ids.shape)
+        print("Shape of position_ids:", position_ids.shape)
         print("Shape of attention_mask:", attention_mask.shape)
-        if position_ids is not None:
-            print("Shape of position_ids:", position_ids.shape)
+        if past_key_values is not None:
+            print("Shape of past_key_values:", past_key_values[0][0].shape)
 
         return self.llm_forward(
             input_ids=input_ids,
@@ -994,8 +986,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         if past_key_values:
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
-            if position_ids is not None:
-                position_ids = position_ids[:, -1:]
+            position_ids = position_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1022,6 +1013,9 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
+        print("Model kwargs:")
+        for k,v in model_kwargs.items():
+            print(k, v.shape if isinstance(v, torch.Tensor) else v)
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
