@@ -724,10 +724,12 @@ class MixtralSparseMoeBlock(nn.Module):
                 f"Removing {len(idxs)} experts would result in less than {self.top_k} experts. This is not allowed as it would"
                 f" result in a loss of capacity."
             )
+        if len(idxs) != len(set(idxs)):
+            raise ValueError("The same expert cannot be removed twice.")
         
-        for idx in idxs:
-            self._remove_expert_by_idx(idx)
-
+        for count, idx in enumerate(sorted(idxs)):
+            self._remove_expert_by_idx(idx - count)
+        
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
