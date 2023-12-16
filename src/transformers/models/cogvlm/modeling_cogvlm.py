@@ -688,6 +688,14 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
 
+        print("Shape of input_ids:", input_ids.shape if input_ids is not None else None)
+        print("Shape of input embeddings:", inputs_embeds.shape if inputs_embeds is not None else None)
+        print("Shape of token_type_ids:", token_type_ids.shape)
+        print("Shape of position_ids:", position_ids.shape)
+        print("Shape of attention_mask:", attention_mask.shape)
+        if past_key_values is not None:
+            print("Shape of past_key_values:", past_key_values[0][0].shape)
+
         return self.llm_forward(
             input_ids=input_ids,
             token_type_ids=token_type_ids,
