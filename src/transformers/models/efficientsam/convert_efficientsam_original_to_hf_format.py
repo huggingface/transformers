@@ -34,11 +34,9 @@ from transformers import (
 
 
 KEYS_TO_MODIFY_MAPPING = {
-    "iou_prediction_head.layers.0": "iou_prediction_head.proj_in",
-    "iou_prediction_head.layers.1": "iou_prediction_head.layers.0",
-    "iou_prediction_head.layers.2": "iou_prediction_head.proj_out",
-    "mask_decoder.output_upscaling.0": "mask_decoder.upscale_conv1",
-    "mask_decoder.output_upscaling.1": "mask_decoder.upscale_layer_norm",
+    "mask_decoder.final_output_upscaling_layers.0.0": "mask_decoder.upscale_conv1",
+    "mask_decoder.final_output_upscaling_layers.1.0": "mask_decoder.upscale_conv2",
+    "mask_decoder.final_output_upscaling_layers.0.1": "mask_decoder.upscale_layer_norm",
     "mask_decoder.output_upscaling.3": "mask_decoder.upscale_conv2",
     "mask_downscaling.0": "mask_embed.conv1",
     "mask_downscaling.1": "mask_embed.layer_norm1",
@@ -55,8 +53,11 @@ KEYS_TO_MODIFY_MAPPING = {
     "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
     "blocks": "layers",
-    "fc1": "lin1",
-    "fc2": "lin2"
+    "iou_prediction_head.fc": "iou_prediction_head.proj_out",
+    "mlp.layers.0.0": "mlp.lin1",
+    "mlp.fc.": "mlp.lin2.",
+    "mlp.fc1.": "mlp.lin1.",
+    "mlp.fc2.": "mlp.lin2.",
 }
 
 
@@ -66,6 +67,8 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
+    output_hypernetworks_mlps_fc_pattern = r".*.output_hypernetworks_mlps.(\d+).fc"
+    iou_prediction_head_pattern = r".*.iou_prediction_head.layers.(\d+).(\d+)"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -75,11 +78,17 @@ def replace_keys(state_dict):
         if re.match(output_hypernetworks_mlps_pattern, key):
             layer_nb = int(re.match(output_hypernetworks_mlps_pattern, key).group(2))
             if layer_nb == 0:
-                key = key.replace("layers.0", "proj_in")
+                key = key.replace(f"layers.{layer_nb}.0", "proj_in")
             elif layer_nb == 1:
-                key = key.replace("layers.1", "layers.0")
-            elif layer_nb == 2:
-                key = key.replace("layers.2", "proj_out")
+                key = key.replace(f"layers.{layer_nb}.0", "layers.0")
+        elif re.match(output_hypernetworks_mlps_fc_pattern, key):
+            key = key.replace("fc", "proj_out")
+        elif re.match(iou_prediction_head_pattern, key):
+            layer_nb = int(re.match(iou_prediction_head_pattern, key).group(1))
+            if layer_nb == 0:
+                key = key.replace(f"layers.{layer_nb}.0", "proj_in")
+            elif layer_nb == 1:
+                key = key.replace(f"layers.{layer_nb}.0", "layers.0")
 
         model_state_dict[key] = value
 
@@ -95,6 +104,8 @@ def convert_efficientsam_checkpoint(model_name, pytorch_dump_folder, push_to_hub
 
     if "efficientsam_ti" in model_name:
         config = EfficientSamConfig()
+
+    config.vision_config.use_rel_pos = False
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)

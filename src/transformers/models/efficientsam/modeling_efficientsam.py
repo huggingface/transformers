@@ -627,8 +627,6 @@ class EfficientSamPromptEncoder(nn.Module):
     def __init__(self, config: EfficientSamPromptEncoderConfig, shared_patch_embedding):
         super().__init__()
         self.shared_embedding = shared_patch_embedding
-        self.mask_embed = EfficientSamMaskEmbedding(config)
-        self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
         self.input_image_size = config.image_size
@@ -995,10 +993,14 @@ class EfficientSamVisionNeck(nn.Module):
 
 # Copied from transformers.models.sam.modeling_sam.SamVisionEncoder with Sam->EfficientSam
 class EfficientSamVisionEncoder(nn.Module):
+    # Ignore Copy
     def __init__(self, config: EfficientSamVisionConfig):
         super().__init__()
         self.config = config
-        self.image_size = config.image_size
+        self.image_size = config.image_size        
+        # The original implementation defines a `pretrain_img_size` which is used to compute the 
+        # dimensionality of `pos_embed`
+        num_image_tokens = ((config.position_embedding_image_size // config.patch_size) ** 2) 
 
         self.patch_embed = EfficientSamPatchEmbeddings(config)
 
@@ -1008,8 +1010,7 @@ class EfficientSamVisionEncoder(nn.Module):
             self.pos_embed = nn.Parameter(
                 torch.zeros(
                     1,
-                    config.image_size // config.patch_size,
-                    config.image_size // config.patch_size,
+                    num_image_tokens + 1,
                     config.hidden_size,
                 )
             )

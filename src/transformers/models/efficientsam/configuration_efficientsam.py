@@ -158,6 +158,8 @@ class EfficientSamVisionConfig(PretrainedConfig):
             Number of channels in the input image.
         image_size (`int`, *optional*, defaults to 1024):
             Expected resolution. Target size of the resized input image.
+        position_embedding_image_size (`int`, *optional*, defaults to 224):
+            Expected image size of the positional embedding. 
         patch_size (`int`, *optional*, defaults to 16):
             Size of the patches to be extracted from the input image.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
@@ -195,6 +197,7 @@ class EfficientSamVisionConfig(PretrainedConfig):
         num_attention_heads=3,
         num_channels=3,
         image_size=1024,
+        position_embedding_image_size=224,
         patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=1e-06,
@@ -218,6 +221,7 @@ class EfficientSamVisionConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
         self.image_size = image_size
+        self.position_embedding_image_size = position_embedding_image_size
         self.patch_size = patch_size
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
