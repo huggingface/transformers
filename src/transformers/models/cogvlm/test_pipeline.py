@@ -1,6 +1,8 @@
-from transformers import pipeline
-from PIL import Image    
 import requests
+from PIL import Image
+
+from transformers import pipeline
+
 
 model_id = "nielsr/cogvlm-chat-hf"
 pipe = pipeline("image-to-text", model=model_id)

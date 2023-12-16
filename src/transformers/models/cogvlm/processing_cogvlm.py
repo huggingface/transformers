@@ -83,7 +83,12 @@ class CogVLMProcessor(ProcessorMixin):
         else:
             pixel_values = None
         text_inputs = self.tokenizer(
-            text, return_tensors=return_tensors, return_token_type_ids=return_token_type_ids, padding=padding, truncation=truncation, max_length=max_length
+            text,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})

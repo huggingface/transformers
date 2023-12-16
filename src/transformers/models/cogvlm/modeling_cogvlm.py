@@ -660,7 +660,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
 
         if past_key_values is not None:
             # generate mode with past_key_values. the image features are already mapped
-             # build position_ids if needed
+            # build position_ids if needed
             pass
         else:
             # not allow for inputs_embeds, because we want to process image feature
@@ -670,18 +670,26 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 # multi-modality
                 if len(input_ids) != len(pixel_values):
                     raise ValueError("Make sure to pass as many texts as images")
-                
+
                 # prepend the input_ids and token_type_ids with image tokens
                 num_vision_tokens = (
                     self.config.vision_config.image_size // self.config.vision_config.patch_size
                 ) ** 2 + 2
                 batch_size = input_ids.shape[0]
 
-                vision_input_ids = torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * num_vision_tokens).repeat(batch_size, 1).to(input_ids.device)
-                vision_token_type_ids = torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * num_vision_tokens).repeat(batch_size, 1).to(token_type_ids.device)
+                vision_input_ids = (
+                    torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * num_vision_tokens)
+                    .repeat(batch_size, 1)
+                    .to(input_ids.device)
+                )
+                vision_token_type_ids = (
+                    torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * num_vision_tokens)
+                    .repeat(batch_size, 1)
+                    .to(token_type_ids.device)
+                )
 
-                input_ids = torch.cat([vision_input_ids, input_ids[:,1:]], dim=1)
-                token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:,1:]], dim=1)
+                input_ids = torch.cat([vision_input_ids, input_ids[:, 1:]], dim=1)
+                token_type_ids = torch.cat([vision_token_type_ids, token_type_ids[:, 1:]], dim=1)
                 attention_mask = torch.tensor([1] * input_ids.shape[1]).repeat(batch_size, 1).to(input_ids.device)
 
                 inputs_embeds = self.embed_tokens(input_ids)

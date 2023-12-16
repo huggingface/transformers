@@ -3153,7 +3153,7 @@ class GenerationMixin:
             print("------STEP--------", step)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            for k,v in model_inputs.items():
+            for k, v in model_inputs.items():
                 print(k, v.shape)
 
             outputs = self(
