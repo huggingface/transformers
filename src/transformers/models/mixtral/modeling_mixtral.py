@@ -710,7 +710,13 @@ class MixtralSparseMoeBlock(nn.Module):
         self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def _remove_expert_by_idx(self, idx: int):
-        new_gate = nn.Linear(self.hidden_dim, self.num_experts - 1, bias=False).to(self.gate.weight.device)
+        new_gate = nn.Linear(
+            self.hidden_dim, 
+            self.num_experts - 1, 
+            bias=False,
+            device=self.gate.weight.device,
+            dtype=self.gate.weight.dtype
+            )
         new_gate.weight.data[:idx] = self.gate.weight.data[:idx]
         new_gate.weight.data[idx:] = self.gate.weight.data[idx + 1 :]
         self.gate = new_gate
