@@ -735,6 +735,7 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rwkv": ["RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP", "RwkvConfig"],
+    "models.mamba": ["MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MambaConfig"],
     "models.sam": [
         "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SamConfig",
@@ -3078,6 +3079,14 @@ else:
             "RwkvPreTrainedModel",
         ]
     )
+    _import_structure["models.mamba"].extend(
+        [
+            "MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MambaForCausalLM",
+            "MambaModel",
+            "MambaPreTrainedModel",
+        ]
+    )
     _import_structure["models.sam"].extend(
         [
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5396,6 +5405,7 @@ if TYPE_CHECKING:
         RoFormerTokenizer,
     )
     from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
+    from .models.mamba import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, MambaConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -7427,6 +7437,12 @@ if TYPE_CHECKING:
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,
+        )
+        from .models.mamba import (
+            MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MambaForCausalLM,
+            MambaModel,
+            MambaPreTrainedModel,
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,

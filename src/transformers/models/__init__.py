@@ -186,6 +186,7 @@ from . import (
     roc_bert,
     roformer,
     rwkv,
+    mamba,
     sam,
     seamless_m4t,
     seamless_m4t_v2,

@@ -1949,7 +1949,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
                 if mim_labels is not None:
                     mim_labels = mim_labels[pos_mask]
-
+                    
         # MMM Image Loss
         if multimodal_masked_embeddings is not None and self.mmm_image_weight > 0:
             sequence_for_image = multimodal_masked_embeddings

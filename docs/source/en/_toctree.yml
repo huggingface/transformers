@@ -386,6 +386,8 @@
         title: M2M100
       - local: model_doc/madlad-400
         title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
