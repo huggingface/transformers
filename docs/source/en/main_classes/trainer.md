@@ -16,70 +16,23 @@ rendered properly in your Markdown viewer.
 
 # Trainer
 
-The [`Trainer`] class provides an API for feature-complete training in PyTorch for most standard use cases. It's used in most of the [example scripts](https://github.com/huggingface/transformers/tree/main/examples).
+The [`Trainer`] class provides an API for feature-complete training in PyTorch, and it supports distributed training on multiple GPUs/TPUs, mixed precision for [NVIDIA GPUs](https://nvidia.github.io/apex/), [AMD GPUs](https://rocm.docs.amd.com/en/latest/rocm.html), and [`torch.amp`](https://pytorch.org/docs/stable/amp.html) for PyTorch. [`Trainer`] goes hand-in-hand with the [`TrainingArguments`] class, which offers a wide range of options to customize how a model is trained. Together, these two classes provide a complete training API.
 
-<Tip>
-
-If you're looking to fine-tune a language model like Llama-2 or Mistral on a text dataset using autoregressive techniques, consider using [`trl`](https://github.com/huggingface/trl)'s [`~trl.SFTTrainer`]. The [`~trl.SFTTrainer`] wraps the [`Trainer`] and is specially optimized for this particular task and supports sequence packing, LoRA, quantization, and DeepSpeed for efficient scaling to any model size. On the other hand, the [`Trainer`] is a more versatile option, suitable for a broader spectrum of tasks.
-
-</Tip>
-
-Before instantiating your [`Trainer`], create a [`TrainingArguments`] to access all the points of customization during training.
-
-The API supports distributed training on multiple GPUs/TPUs, mixed precision through [NVIDIA Apex] for NVIDIA GPUs, [ROCm APEX](https://github.com/ROCmSoftwarePlatform/apex) for AMD GPUs, and Native AMP for PyTorch.
-
-The [`Trainer`] contains the basic training loop which supports the above features. To inject custom behavior you can subclass them and override the following methods:
-
-- **get_train_dataloader** -- Creates the training DataLoader.
-- **get_eval_dataloader** -- Creates the evaluation DataLoader.
-- **get_test_dataloader** -- Creates the test DataLoader.
-- **log** -- Logs information on the various objects watching training.
-- **create_optimizer_and_scheduler** -- Sets up the optimizer and learning rate scheduler if they were not passed at
-  init. Note, that you can also subclass or override the `create_optimizer` and `create_scheduler` methods
-  separately.
-- **create_optimizer** -- Sets up the optimizer if it wasn't passed at init.
-- **create_scheduler** -- Sets up the learning rate scheduler if it wasn't passed at init.
-- **compute_loss** - Computes the loss on a batch of training inputs.
-- **training_step** -- Performs a training step.
-- **prediction_step** -- Performs an evaluation/test step.
-- **evaluate** -- Runs an evaluation loop and returns metrics.
-- **predict** -- Returns predictions (with metrics if labels are available) on a test set.
+[`Seq2SeqTrainer`] and [`Seq2SeqTrainingArguments`] inherit from the [`Trainer`] and [`TrainingArgument`] classes and they're adapted for training models for sequence-to-sequence tasks such as summarization or translation.
 
 <Tip warning={true}>
 
 The [`Trainer`] class is optimized for 🤗 Transformers models and can have surprising behaviors
-when you use it on other models. When using it on your own model, make sure:
+when used with other models. When using it with your own model, make sure:
 
-- your model always return tuples or subclasses of [`~utils.ModelOutput`].
+- your model always return tuples or subclasses of [`~utils.ModelOutput`]
 - your model can compute the loss if a `labels` argument is provided and that loss is returned as the first
   element of the tuple (if your model returns tuples)
-- your model can accept multiple label arguments (use the `label_names` in your [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`.
+- your model can accept multiple label arguments (use `label_names` in [`TrainingArguments`] to indicate their name to the [`Trainer`]) but none of them should be named `"label"`
 
 </Tip>
 
-Here is an example of how to customize [`Trainer`] to use a weighted loss (useful when you have an unbalanced training set):
-
-```python
-from torch import nn
-from transformers import Trainer
-
-
-class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        labels = inputs.pop("labels")
-        # forward pass
-        outputs = model(**inputs)
-        logits = outputs.get("logits")
-        # compute custom loss (suppose one has 3 labels with different weights)
-        loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0], device=model.device))
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
-        return (loss, outputs) if return_outputs else loss
-```
-
-Another way to customize the training loop behavior for the PyTorch [`Trainer`] is to use [callbacks](callback) that can inspect the training loop state (for progress reporting, logging on TensorBoard or other ML platforms...) and take decisions (like early stopping).
-
-
-## Trainer
+## Trainer[[api-reference]]
 
 [[autodoc]] Trainer
     - all
@@ -99,105 +52,6 @@ Another way to customize the training loop behavior for the PyTorch [`Trainer`] 
 
 [[autodoc]] Seq2SeqTrainingArguments
     - all
-
-## Checkpoints
-
-By default, [`Trainer`] will save all checkpoints in the `output_dir` you set in the
-[`TrainingArguments`] you are using. Those will go in subfolder named `checkpoint-xxx` with xxx
-being the step at which the training was at.
-
-Resuming training from a checkpoint can be done when calling [`Trainer.train`] with either:
-
-- `resume_from_checkpoint=True` which will resume training from the latest checkpoint
-- `resume_from_checkpoint=checkpoint_dir` which will resume training from the specific checkpoint in the directory
-  passed.
-
-In addition, you can easily save your checkpoints on the Model Hub when using `push_to_hub=True`. By default, all
-the models saved in intermediate checkpoints are saved in different commits, but not the optimizer state. You can adapt
-the `hub-strategy` value of your [`TrainingArguments`] to either:
-
-- `"checkpoint"`: the latest checkpoint is also pushed in a subfolder named last-checkpoint, allowing you to
-  resume training easily with `trainer.train(resume_from_checkpoint="output_dir/last-checkpoint")`.
-- `"all_checkpoints"`: all checkpoints are pushed like they appear in the output folder (so you will get one
-  checkpoint folder per folder in your final repository)
-
-
-## Logging
-
-By default [`Trainer`] will use `logging.INFO` for the main process and `logging.WARNING` for the replicas if any.
-
-These defaults can be overridden to use any of the 5 `logging` levels with [`TrainingArguments`]'s
-arguments:
-
-- `log_level` - for the main process
-- `log_level_replica` - for the replicas
-
-Further, if [`TrainingArguments`]'s `log_on_each_node` is set to `False` only the main node will
-use the log level settings for its main process, all other nodes will use the log level settings for replicas.
-
-Note that [`Trainer`] is going to set `transformers`'s log level separately for each node in its
-[`Trainer.__init__`]. So you may want to set this sooner (see the next example) if you tap into other
-`transformers` functionality before creating the [`Trainer`] object.
-
-Here is an example of how this can be used in an application:
-
-```python
-[...]
-logger = logging.getLogger(__name__)
-
-# Setup logging
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout)],
-)
-
-# set the main code and the modules it uses to the same log-level according to the node
-log_level = training_args.get_process_log_level()
-logger.setLevel(log_level)
-datasets.utils.logging.set_verbosity(log_level)
-transformers.utils.logging.set_verbosity(log_level)
-
-trainer = Trainer(...)
-```
-
-And then if you only want to see warnings on the main node and all other nodes to not print any most likely duplicated
-warnings you could run it as:
-
-```bash
-my_app.py ... --log_level warning --log_level_replica error
-```
-
-In the multi-node environment if you also don't want the logs to repeat for each node's main process, you will want to
-change the above to:
-
-```bash
-my_app.py ... --log_level warning --log_level_replica error --log_on_each_node 0
-```
-
-and then only the main process of the first node will log at the "warning" level, and all other processes on the main
-node and all processes on other nodes will log at the "error" level.
-
-If you need your application to be as quiet as possible you could do:
-
-```bash
-my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
-```
-
-(add `--log_on_each_node 0` if on multi-node environment)
-
-
-## Randomness
-
-When resuming from a checkpoint generated by [`Trainer`] all efforts are made to restore the
-_python_, _numpy_ and _pytorch_ RNG states to the same states as they were at the moment of saving that checkpoint,
-which should make the "stop and resume" style of training as close as possible to non-stop training.
-
-However, due to various default non-deterministic pytorch settings this might not fully work. If you want full
-determinism please refer to [Controlling sources of randomness](https://pytorch.org/docs/stable/notes/randomness). As explained in the document, that some of those settings
-that make things deterministic (.e.g., `torch.backends.cudnn.deterministic`) may slow things down, therefore this
-can't be done by default, but you can enable those yourself if needed.
-
 
 ## Specific GPUs Selection
 
@@ -294,9 +148,6 @@ export CUDA_VISIBLE_DEVICES=1,0
 In this example we are working with just 2 GPUs, but of course the same would apply to as many GPUs as your computer has.
 
 Also if you do set this environment variable it's the best to set it in your `~/.bashrc` file or some other startup config file and forget about it.
-
-
-
 
 ## Trainer Integrations
 
@@ -518,217 +369,6 @@ Pass `--fsdp "full shard"` along with following changes to be made in `--fsdp_co
   - For size based auto wrap policy, please add `min_num_params` in the config file. 
     It specifies FSDP's minimum number of parameters for auto wrapping.
 
-
-### Using Trainer for accelerated PyTorch Training on Mac 
-
-With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. 
-This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
-Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
-This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
-For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
-and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html). 
-
-<Tip warning={false}>
-
-We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
-It has major fixes related to model correctness and performance improvements for transformer based models.
-Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
-
-</Tip>
-
-**Benefits of Training and Inference using Apple Silicon Chips**
-
-1. Enables users to train larger networks or batch sizes locally
-2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture. 
-Therefore, improving end-to-end performance.
-3. Reduces costs associated with cloud-based development or the need for additional local GPUs.
-
-**Pre-requisites**: To install torch with mps support, 
-please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1).
-
-**Usage**:
-`mps` device will be used by default if available similar to the way `cuda` device is used.
-Therefore, no action from user is required. 
-For example, you can run the official Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
-
-```bash
-export TASK_NAME=mrpc
-
-python examples/pytorch/text-classification/run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
-```
-
-**A few caveats to be aware of**
-
-1. Some PyTorch operations have not been implemented in mps and will throw an error. 
-One way to get around that is to set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1`, 
-which will fallback to CPU for these operations. It still throws a UserWarning however.
-2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
-This means that currently only single GPU of `mps` device type can be used.
-
-Finally, please, remember that, 🤗 `Trainer` only integrates MPS backend, therefore if you
-have any problems or questions with regards to MPS backend usage, please, 
-file an issue with [PyTorch GitHub](https://github.com/pytorch/pytorch/issues).
-
-
-## Using Accelerate Launcher with Trainer
-
-Accelerate now powers Trainer. In terms of what users should expect:
-- They can keep using the Trainer ingterations such as FSDP, DeepSpeed vis trainer arguments without any changes on their part.
-- They can now use Accelerate Launcher with Trainer (recommended).
-
-Steps to use Accelerate Launcher with Trainer:
-1. Make sure 🤗 Accelerate is installed, you can't use the `Trainer` without it anyway. If not `pip install accelerate`. You may also need to update your version of Accelerate: `pip install accelerate --upgrade`
-2. Run `accelerate config` and fill the questionnaire. Below are example accelerate configs:
-  a. DDP Multi-node Multi-GPU config:
-    ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    distributed_type: MULTI_GPU                                                                                                    
-    downcast_bf16: 'no'
-    gpu_ids: all
-    machine_rank: 0 #change rank as per the node
-    main_process_ip: 192.168.20.1
-    main_process_port: 9898
-    main_training_function: main
-    mixed_precision: fp16
-    num_machines: 2
-    num_processes: 8
-    rdzv_backend: static
-    same_network: true
-    tpu_env: []
-    tpu_use_cluster: false
-    tpu_use_sudo: false
-    use_cpu: false
-    ```
-
-  b. FSDP config:
-    ```yaml
-    compute_environment: LOCAL_MACHINE
-    distributed_type: FSDP
-    downcast_bf16: 'no'
-    fsdp_config:
-      fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
-      fsdp_backward_prefetch_policy: BACKWARD_PRE
-      fsdp_forward_prefetch: true
-      fsdp_offload_params: false
-      fsdp_sharding_strategy: 1
-      fsdp_state_dict_type: FULL_STATE_DICT
-      fsdp_sync_module_states: true
-      fsdp_transformer_layer_cls_to_wrap: BertLayer
-      fsdp_use_orig_params: true
-    machine_rank: 0
-    main_training_function: main
-    mixed_precision: bf16
-    num_machines: 1
-    num_processes: 2
-    rdzv_backend: static
-    same_network: true
-    tpu_env: []
-    tpu_use_cluster: false
-    tpu_use_sudo: false
-    use_cpu: false
-    ```
-  c. DeepSpeed config pointing to a file:
-    ```yaml
-    compute_environment: LOCAL_MACHINE
-    deepspeed_config:
-      deepspeed_config_file: /home/user/configs/ds_zero3_config.json
-      zero3_init_flag: true
-    distributed_type: DEEPSPEED
-    downcast_bf16: 'no'
-    machine_rank: 0
-    main_training_function: main
-    num_machines: 1
-    num_processes: 4
-    rdzv_backend: static
-    same_network: true
-    tpu_env: []
-    tpu_use_cluster: false
-    tpu_use_sudo: false
-    use_cpu: false
-    ```
-
-  d. DeepSpeed config using accelerate plugin:
-    ```yaml
-    compute_environment: LOCAL_MACHINE                                                                                             
-    deepspeed_config:                                                                                                              
-      gradient_accumulation_steps: 1
-      gradient_clipping: 0.7
-      offload_optimizer_device: cpu
-      offload_param_device: cpu
-      zero3_init_flag: true
-      zero_stage: 2
-    distributed_type: DEEPSPEED
-    downcast_bf16: 'no'
-    machine_rank: 0
-    main_training_function: main
-    mixed_precision: bf16
-    num_machines: 1
-    num_processes: 4
-    rdzv_backend: static
-    same_network: true
-    tpu_env: []
-    tpu_use_cluster: false
-    tpu_use_sudo: false
-    use_cpu: false
-    ```
-
-3. Run the Trainer script with args other than the ones handled above by accelerate config or launcher args.
-Below is an example to run `run_glue.py` using `accelerate launcher` with FSDP config from above. 
-
-```bash
-cd transformers
-
-accelerate launch \
-./examples/pytorch/text-classification/run_glue.py \
---model_name_or_path bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
-
-4. You can also directly use the cmd args for `accelerate launch`. Above example would map to:
-
-```bash
-cd transformers
-
-accelerate launch --num_processes=2 \
---use_fsdp \
---mixed_precision=bf16 \
---fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
---fsdp_transformer_layer_cls_to_wrap="BertLayer" \
---fsdp_sharding_strategy=1 \
---fsdp_state_dict_type=FULL_STATE_DICT \
-./examples/pytorch/text-classification/run_glue.py
---model_name_or_path bert-base-cased \
---task_name $TASK_NAME \
---do_train \
---do_eval \
---max_seq_length 128 \
---per_device_train_batch_size 16 \
---learning_rate 5e-5 \
---num_train_epochs 3 \
---output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
-```
-
-For more information, please refer the 🤗 Accelerate CLI guide: [Launching your 🤗 Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch).
-
 Sections that were moved:
 
 [ <a href="./deepspeed#deepspeed-trainer-integration">DeepSpeed</a><a id="deepspeed"></a>
@@ -755,27 +395,3 @@ Sections that were moved:
 | <a href="./deepspeed#deepspeed-grad-clip">Gradient Clipping</a><a id="gradient-clipping"></a>
 | <a href="./deepspeed#deepspeed-weight-extraction">Getting The Model Weights Out</a><a id="getting-the-model-weights-out"></a>
 ]
-
-## Boost your fine-tuning performances using NEFTune
-
-
-NEFTune is a technique to boost the performance of chat models and was introduced by the paper “NEFTune: Noisy Embeddings Improve Instruction Finetuning” from Jain et al. it consists of adding noise to the embedding vectors during training. According to the abstract of the paper:
-
-> Standard finetuning of LLaMA-2-7B using Alpaca achieves 29.79% on AlpacaEval, which rises to 64.69% using noisy embeddings. NEFTune also improves over strong baselines on modern instruction datasets. Models trained with Evol-Instruct see a 10% improvement, with ShareGPT an 8% improvement, and with OpenPlatypus an 8% improvement. Even powerful models further refined with RLHF such as LLaMA-2-Chat benefit from additional training with NEFTune.
-
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/trl-internal-testing/example-images/resolve/main/images/neft-screenshot.png">
-</div>
-
-To use it in `Trainer` simply pass `neftune_noise_alpha` when creating your `TrainingArguments` instance. Note that to avoid any surprising behaviour, NEFTune is disabled after training to retrieve back the original behaviour of the embedding layer.
-
-```python
-from transformers import Trainer, TrainingArguments
-
-args = TrainingArguments(..., neftune_noise_alpha=0.1)
-trainer = Trainer(..., args=args)
-
-...
-
-trainer.train()
-```

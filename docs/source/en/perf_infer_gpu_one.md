@@ -46,6 +46,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
@@ -227,7 +228,7 @@ model.save_pretrained("saved_model")
 
 bitsandbytes is a quantization library that includes support for 4-bit and 8-bit quantization. Quantization reduces your model size compared to its native full precision version, making it easier to fit large models onto GPUs with limited memory.
 
-Make sure you have bitsnbytes and 🤗 Accelerate installed:
+Make sure you have bitsandbytes and 🤗 Accelerate installed:
 
 ```bash
 # these versions support 8-bit and 4-bit
