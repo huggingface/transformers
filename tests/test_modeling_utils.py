@@ -1854,18 +1854,13 @@ class TestAttentionImplementation(unittest.TestCase):
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
 
 
-@require_torch
-@require_torch_gpu
 @slow
+@require_torch_gpu
 class Mask4DTestBase(unittest.TestCase):
-    @require_torch
-    @require_torch_gpu
     def tearDown(self):
         gc.collect()
         torch.cuda.empty_cache()
 
-    @require_torch
-    @require_torch_gpu
     def get_test_data(self):
         texts = ["the cat sat", "the cat had", "the cat is"]
         encoded = [self.tokenizer.encode(t) for t in texts]
@@ -1902,21 +1897,15 @@ class Mask4DTestBase(unittest.TestCase):
         return input_0, input_1, mask_1, position_ids_1
 
 
-@require_torch
-@require_torch_gpu
 @slow
+@require_torch_gpu
 class Mask4DTestFP32(Mask4DTestBase):
-    @require_torch
-    @require_torch_gpu
     def setUp(self):
         model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
         model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
 
-    @require_torch
-    @require_torch_gpu
-    @slow
     def test_attention(self):
         """comparing outputs of attention layer"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
@@ -1935,9 +1924,6 @@ class Mask4DTestFP32(Mask4DTestBase):
         outs_1_last_tokens = outs_1[0, -3:, :]  # last three tokens
         assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens)
 
-    @require_torch
-    @require_torch_gpu
-    @slow
     def test_inner_model(self):
         """comparing hidden outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
@@ -1952,9 +1938,6 @@ class Mask4DTestFP32(Mask4DTestBase):
             logits_1_last_tokens,
         )
 
-    @require_torch
-    @require_torch_gpu
-    @slow
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
@@ -1970,23 +1953,17 @@ class Mask4DTestFP32(Mask4DTestBase):
         )
 
 
-@require_torch
-@require_torch_gpu
 @slow
+@require_torch_gpu
 class Mask4DTestFP16(Mask4DTestBase):
     test_attention = Mask4DTestFP32.test_attention
 
-    @require_torch
-    @require_torch_gpu
     def setUp(self):
         model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
         model_dtype = torch.float16
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
 
-    @require_torch
-    @require_torch_gpu
-    @slow
     def test_causal_model_logits(self):
         """comparing logits outputs of whole inner model"""
         input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
