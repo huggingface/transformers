@@ -659,7 +659,11 @@ class CogVLMModel(CogVLMPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if past_key_values is not None:
-            pass  # generate mode with past_key_values. the image features are already mapped
+            # generate mode with past_key_values. the image features are already mapped
+             # build position_ids if needed
+            if position_ids is None:
+                position_ids = build_position_ids(token_type_ids, attention_mask)
+            position_ids = position_ids[:, -1:]
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
@@ -978,15 +982,9 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         inputs_embeds=None,
         **kwargs,
     ):
-        # build position_ids if needed
-        position_ids = kwargs.get("position_ids", None)
-        # if position_ids is None:
-        #     position_ids = build_position_ids(token_type_ids, attention_mask)
-
         if past_key_values:
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
-            position_ids = position_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -998,7 +996,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
             {
                 "token_type_ids": token_type_ids,
                 "pixel_values": pixel_values,
-                "position_ids": position_ids,
+                # "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
