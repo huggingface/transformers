@@ -702,7 +702,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 inputs_embeds = self.embed_tokens(input_ids)
 
             if position_ids is None:
-                print("Position ids are None, setting them:")
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
 
@@ -982,9 +981,6 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
     ):
         position_ids = kwargs.get("position_ids", None)
         if past_key_values:
-            print("Position ids are none. Setting them:")
-            print("Shape of token_type_ids:", token_type_ids.shape)
-            print("Shape of attention_mask:", attention_mask.shape)
             if position_ids is None:
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             position_ids = position_ids[:, -1:]
@@ -1016,9 +1012,6 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         is_encoder_decoder: bool = False,
         standardize_cache_format: bool = False,
     ) -> Dict[str, Any]:
-        print("Model kwargs:")
-        for k,v in model_kwargs.items():
-            print(k, v.shape if isinstance(v, torch.Tensor) else v)
         # update past_key_values
         model_kwargs["past_key_values"] = self._extract_past_from_model_output(
             outputs, standardize_cache_format=standardize_cache_format
