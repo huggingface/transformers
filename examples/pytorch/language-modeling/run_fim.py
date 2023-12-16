@@ -169,6 +169,10 @@ class ModelArguments:
             )
         },
     )
+    fp16: bool = field(
+        default=False,
+        metadata={"help": "Whether to use 16-bit (mixed) precision instead of 32-bit"},
+    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -527,9 +531,38 @@ def main():
     if data_args.truncate_or_pad:
         special_tokens.append(data_args.pad_token)
 
+    # Add the new tokens to the tokenizer
     tokenizer.add_tokens(special_tokens)
+    # Get the pre-expansion embeddings of the model and resize the embedding layer
+    original_embeddings = model.get_input_embeddings().weight
     model.resize_token_embeddings(len(tokenizer))
-    print("Added special tokens!")
+
+    # Sample the embeddings for the new tokens from a multivariate normal distribution
+    # We do this so that the new embeddings are close to the original embeddings and not necessarily zero
+    # More on this: https://nlp.stanford.edu/~johnhew/vocab-expansion.html
+    mean = original_embeddings.mean(dim=0)
+    n = original_embeddings.size()[0]
+    sigma = ((original_embeddings - mean).T @ (original_embeddings - mean)) / n
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mean,
+        covariance_matrix=1e-5 * sigma,
+    )
+    new_token_embeddings = torch.stack(
+        tuple((dist.sample() for _ in range(len(special_tokens)))),
+        dim=0,
+    )
+
+    # Get the updated embedding layer and make a copy of it's weights
+    embeddings = model.get_input_embeddings()
+    new_embeddings = embeddings.weight.clone()
+
+    # Set the new tokens' embeddings to the newly sampled embeddings
+    new_embeddings[-len(special_tokens) :] = new_token_embeddings
+
+    # Update the model's embeddings with the new embeddings
+    embeddings.weight = torch.nn.Parameter(new_embeddings)
+    model.set_input_embeddings(embeddings)
+    logger.info("Added special tokens to the tokenizer and resized model's embedding layer")
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
