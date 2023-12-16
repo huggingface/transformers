@@ -661,9 +661,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
         if past_key_values is not None:
             # generate mode with past_key_values. the image features are already mapped
              # build position_ids if needed
-            if position_ids is None:
-                position_ids = build_position_ids(token_type_ids, attention_mask)
-            position_ids = position_ids[:, -1:]
+            pass
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
@@ -982,7 +980,14 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         inputs_embeds=None,
         **kwargs,
     ):
+        position_ids = kwargs.get("position_ids", None)
         if past_key_values:
+            print("Position ids are none. Setting them:")
+            print("Shape of token_type_ids:", token_type_ids.shape)
+            print("Shape of attention_mask:", attention_mask.shape)
+            if position_ids is None:
+                position_ids = build_position_ids(token_type_ids, attention_mask)
+            position_ids = position_ids[:, -1:]
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
 
@@ -996,7 +1001,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
             {
                 "token_type_ids": token_type_ids,
                 "pixel_values": pixel_values,
-                # "position_ids": position_ids,
+                "position_ids": position_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
