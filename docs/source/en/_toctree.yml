@@ -135,6 +135,8 @@
     title: Overview
   - local: quantization
     title: Quantization
+  - local: trainer
+    title: Trainer
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
@@ -149,7 +151,7 @@
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: PyTorch training on Apple silicon
     - local: perf_hardware
       title: Custom hardware for training
     - local: hpo_train
@@ -218,6 +220,8 @@
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
+    - local: main_classes/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -396,6 +400,8 @@
         title: MegatronGPT2
       - local: model_doc/mistral
         title: Mistral
+      - local: model_doc/mixtral
+        title: Mixtral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -737,6 +743,8 @@
         title: TVP
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder
