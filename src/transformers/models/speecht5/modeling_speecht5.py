@@ -15,7 +15,6 @@
 """ PyTorch SpeechT5 model."""
 
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -2656,7 +2655,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
-        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2703,12 +2701,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if stop_labels is not None:
-            warnings.warn(
-                "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
 
         if labels is not None:
             if decoder_input_values is None:
@@ -2981,7 +2973,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
-        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -3034,12 +3025,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if stop_labels is not None:
-            warnings.warn(
-                "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
 
         if labels is not None:
             if decoder_input_values is None:
