@@ -709,6 +709,25 @@ class MixtralSparseMoeBlock(nn.Module):
 
         self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
+    def _remove_expert_by_idx(self, idx: int):
+        new_gate = nn.Linear(self.hidden_dim, self.num_experts - 1, bias=False).to(self.gate.weight.device)
+        new_gate.weight.data[:idx] = self.gate.weight.data[:idx]
+        new_gate.weight.data[idx:] = self.gate.weight.data[idx + 1 :]
+        self.gate = new_gate
+
+        self.experts.pop(idx)
+        self.num_experts -= 1
+
+    def remove_expert(self, *idxs):
+        if self.num_experts - len(idxs) < self.top_k:
+            raise ValueError(
+                f"Removing {len(idxs)} experts would result in less than {self.top_k} experts. This is not allowed as it would"
+                f" result in a loss of capacity."
+            )
+        
+        for idx in idxs:
+            self._remove_expert_by_idx(idx)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -765,6 +784,9 @@ class MixtralDecoderLayer(nn.Module):
         self.block_sparse_moe = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def remove_expert(self, *idxs):
+        self.block_sparse_moe.remove_expert(*idxs)
 
     def forward(
         self,
@@ -972,6 +994,10 @@ class MixtralModel(MixtralPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def remove_expert(self, *idxs):
+        for layer in self.layers:
+            layer.remove_expert(*idxs)
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -1146,6 +1172,9 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
         self.post_init()
+
+    def remove_expert(self, *idxs):
+        self.model.remove_expert(*idxs)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -1365,6 +1394,9 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def remove_expert(self, *idxs):
+        self.model.remove_expert(*idxs)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
