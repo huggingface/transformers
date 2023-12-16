@@ -120,8 +120,6 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
                 else:
                     new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(device)
             module._parameters[tensor_name] = new_value
-        else:
-            raise ValueError("Quantized parameter passed with device.type == 'cuda'")
 
     else:
         if value is None:
