@@ -2033,10 +2033,15 @@ class Trainer:
         weights_index_file = os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
         safe_weights_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_NAME)
         safe_weights_index_file = os.path.join(resume_from_checkpoint, SAFE_WEIGHTS_INDEX_NAME)
-        is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and any(
-            FSDP_MODEL_NAME in folder_name
-            for folder_name in os.listdir(resume_from_checkpoint)
-            if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+        is_fsdp_ckpt = os.path.isdir(resume_from_checkpoint) and (
+            # this checks the FSDP state dict when `SHARDED_STATE_DICT` is used
+            any(
+                FSDP_MODEL_NAME in folder_name
+                for folder_name in os.listdir(resume_from_checkpoint)
+                if os.path.isdir(os.path.join(resume_from_checkpoint, folder_name))
+            )
+            # this checks the FSDP state dict when `FULL_STATE_DICT` is used
+            or os.path.isfile(os.path.join(resume_from_checkpoint, f"{FSDP_MODEL_NAME}.bin"))
         )
 
         if is_fsdp_ckpt and not self.is_fsdp_enabled:
