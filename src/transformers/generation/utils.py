@@ -910,7 +910,6 @@ class GenerationMixin:
         Returns the candidate generator to be used in `assisted_generation`
         """
         if generation_config.prompt_lookup_num_tokens is not None:
-            print("Using PromptLookupCandidateGenerator")
             candidate_generator = PromptLookupCandidateGenerator(
                 num_output_tokens=generation_config.prompt_lookup_num_tokens,
             )
