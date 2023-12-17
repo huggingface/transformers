@@ -289,6 +289,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
+    def remove_punctuation(self, text: str) -> str:
+        return text.translate(str.maketrans("", "", string.punctuation))
+
     # source: https://github.com/google-research/big_vision/blob/3b8e5ab6ad4f96e32b32826f9e1b8fd277914f9c/big_vision/evaluators/proj/image_text/prompt_engineering.py#L94
     def canonicalize_text(self, text, *, keep_punctuation_exact_string=None):
         """Returns canonicalized `text` (puncuation removed).
@@ -302,12 +305,10 @@ class SiglipTokenizer(PreTrainedTokenizer):
         """
         if keep_punctuation_exact_string:
             text = keep_punctuation_exact_string.join(
-                part.translate(str.maketrans("", "", string.punctuation))
-                for part in text.split(keep_punctuation_exact_string)
+                self.remove_punctuation(part) for part in text.split(keep_punctuation_exact_string)
             )
         else:
-            text = text.translate(str.maketrans("", "", string.punctuation))
-
+            text = self.remove_punctuation(text)
         text = re.sub(r"\s+", " ", text)
         text = text.strip()
 
