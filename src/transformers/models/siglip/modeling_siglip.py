@@ -779,7 +779,7 @@ class SiglipTextTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=None,
+            attention_mask=attention_mask,
             causal_attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
