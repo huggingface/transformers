@@ -18,6 +18,7 @@
 import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
+import warnings
 
 import numpy as np
 import torch
@@ -41,10 +42,10 @@ from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionCo
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"
+_CHECKPOINT_FOR_DOC = "nielsr/siglip-base-patch16-224"
 
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/siglip-base-patch16-224",
+    "nielsr/siglip-base-patch16-224",
     # See all SigLIP models at https://huggingface.co/models?filter=siglip
 ]
 
@@ -844,8 +845,8 @@ class SiglipTextModel(SiglipPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, SiglipTextModel
 
-        >>> model = SiglipTextModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = SiglipTextModel.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
 
@@ -982,8 +983,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipVisionModel
 
-        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = SiglipVisionModel.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1055,8 +1056,8 @@ class SiglipModel(SiglipPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, SiglipModel
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
@@ -1101,8 +1102,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipModel
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1152,8 +1153,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipModel
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1163,8 +1164,11 @@ class SiglipModel(SiglipPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+
+        >>> logits_per_image = outputs.logits_per_image
+        >>> logits_per_text = outputs.logits_per_text
+        >>> probs = torch.matmul(logits_per_image, logits_per_text.t()) * model.temperature + model.bias # these are the probabilities
+        >>> print(probs)
         ```"""
         # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
