@@ -268,13 +268,8 @@ class SiglipVisionEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
-        print("First values of pixel values:", pixel_values[0, 0, :3, :3])
-
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-        print("Shape of embeddings: ", embeddings.shape)
-        print("First values of patch embeddings:", embeddings[0, :3, :3])
 
         embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
@@ -1204,8 +1199,6 @@ class SiglipModel(SiglipPreTrainedModel):
         # cosine similarity as logits
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.temperature.exp() + self.bias
         logits_per_image = logits_per_text.t()
-
-        z = torch.matmul(image_embeds, text_embeds.t()) * self.temperature.exp()
 
         loss = None
         if return_loss:
