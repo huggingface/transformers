@@ -1140,17 +1140,6 @@ class XGLMConverter(SpmConverter):
         )
 
 
-class SiglipConverter(SpmConverter):
-    def post_processor(self):
-        return processors.TemplateProcessing(
-            single=["$A", "</s>"],
-            pair=["$A", "</s>", "$B", "</s>"],
-            special_tokens=[
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
-            ],
-        )
-
-
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
 
@@ -1307,7 +1296,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
-    "SiglipTokenizer": SiglipConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
     "WhisperTokenizer": WhisperConverter,

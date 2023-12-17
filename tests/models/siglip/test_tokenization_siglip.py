@@ -18,7 +18,7 @@ import os
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer, SiglipTokenizerFast
+from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
@@ -39,7 +39,6 @@ else:
 @require_tokenizers
 class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = SiglipTokenizer
-    rust_tokenizer_class = SiglipTokenizerFast
     test_rust_tokenizer = False
     test_sentencepiece = True
     test_sentencepiece_ignore_case = True
@@ -134,15 +133,8 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def siglip_tokenizer(self):
         return SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
-    @cached_property
-    def siglip_tokenizer_fast(self):
-        return SiglipTokenizerFast.from_pretrained("nielsr/siglip-base-patch16-224")
-
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
-
-    def get_rust_tokenizer(self, **kwargs) -> SiglipTokenizerFast:
-        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
