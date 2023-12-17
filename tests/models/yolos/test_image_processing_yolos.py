@@ -21,7 +21,7 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -127,7 +127,7 @@ class YolosImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class YolosImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = YolosImageProcessor if is_vision_available() else None
 
     def setUp(self):
