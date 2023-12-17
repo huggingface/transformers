@@ -96,6 +96,15 @@ def replace_keys(state_dict):
         "prompt_encoder.shared_embedding.positional_embedding"
     ]
 
+    model_state_dict["prompt_encoder.point_embeddings.weight"] = torch.cat(
+        [
+            model_state_dict.pop("prompt_encoder.invalid_points.weight"), 
+            model_state_dict.pop("prompt_encoder.bbox_top_left_embeddings.weight"),
+            model_state_dict.pop("prompt_encoder.bbox_bottom_right_embeddings.weight"),
+            model_state_dict.pop("prompt_encoder.point_embed.weight")
+        ], dim=0
+    )
+
     return model_state_dict
 
 
@@ -106,25 +115,27 @@ def convert_efficientsam_checkpoint(model_name, pytorch_dump_folder, push_to_hub
         config = EfficientSamConfig()
 
     config.vision_config.use_rel_pos = False
+    config.mask_decoder_config.hidden_act = "gelu"
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)
 
-    image_processor = SamImageProcessor()
+    image_processor = SamImageProcessor(do_pad=False, size={"height": 1024, "width": 1024})
 
     processor = SamProcessor(image_processor=image_processor)
     hf_model = EfficientSamModel(config)
 
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to("cuda")
+    # TODO: push the image on the Hub 
+    # img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    # raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    raw_image = Image.open("/home/younes_huggingface_co/code/EfficientSAM/figs/examples/dogs.jpg")
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+    input_points = [[[580, 350], [650, 350]]]
+    input_labels = [[1, 1]]
 
-    input_points = [[[400, 650]]]
-    input_labels = [[1]]
-
-    inputs = processor(images=np.array(raw_image), return_tensors="pt").to("cuda")
+    inputs = processor(images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt").to("cuda")
 
     with torch.no_grad():
         output = hf_model(**inputs)

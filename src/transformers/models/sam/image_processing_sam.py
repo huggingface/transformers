@@ -224,9 +224,10 @@ class SamImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "longest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
-        input_size = get_image_size(image, channel_dim=input_data_format)
-        output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
+            output_height, output_width = size["height"], size["width"]
+        else:
+            input_size = get_image_size(image, channel_dim=input_data_format)
+            output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
         return resize(
             image,
             size=(output_height, output_width),

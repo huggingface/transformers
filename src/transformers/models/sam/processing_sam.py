@@ -52,7 +52,7 @@ class SamProcessor(ProcessorMixin):
         super().__init__(image_processor)
         self.current_processor = self.image_processor
         self.point_pad_value = -10
-        self.target_size = self.image_processor.size["longest_edge"]
+        self.target_size = self.image_processor.size["longest_edge"] if "longest_edge" in self.image_processor.size else self.image_processor.size["height"]
 
     def __call__(
         self,
@@ -194,7 +194,10 @@ class SamProcessor(ProcessorMixin):
         Expects a numpy array of length 2 in the final dimension. Requires the original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = self.image_processor._get_preprocess_shape(original_size, longest_edge=target_size)
+        if "longest_edge" in self.image_processor.size:
+            new_h, new_w = self.image_processor._get_preprocess_shape(original_size, longest_edge=target_size)
+        else:
+            new_h, new_w = self.image_processor.size["height"], self.image_processor.size["width"]
         coords = deepcopy(coords).astype(float)
 
         if is_bounding_box:

@@ -111,7 +111,7 @@ class EfficientSamMaskDecoderConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=256,
-        hidden_act="relu",
+        hidden_act="gelu",
         mlp_dim=2048,
         num_hidden_layers=2,
         num_attention_heads=8,
