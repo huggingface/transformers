@@ -325,42 +325,54 @@ class SiglipTextModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
 
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="SIGLIP does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing_use_reentrant
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_training_gradient_checkpointing_use_reentrant_false
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(reason="Siglip does not use inputs_embeds")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
     @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_from_base
     def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="SiglipTextModel has no base class and is not available in MODEL_MAPPING")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_save_load_fast_init_to_base
     def test_save_load_fast_init_to_base(self):
         pass
 
