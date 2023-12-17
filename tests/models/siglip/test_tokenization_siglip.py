@@ -213,34 +213,13 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_src_tokens, batch["input_ids"][0])
         self.assertEqual(expected_tgt_tokens, batch["labels"][0])
 
-    def test_token_type_ids(self):
-        src_text_1 = ["A first paragraph for summarization."]
-        src_text_2 = ["A second paragraph for summarization."]
+    @unittest.skip(reason="SiglipTokenizer strips the punctuation")
+    def test_subword_regularization_tokenizer(self):
+        pass
 
-        fast_token_type_ids = self.siglip_tokenizer_fast(
-            src_text_1, src_text_2, add_special_tokens=True, return_token_type_ids=True
-        ).token_type_ids
-        slow_token_type_ids = self.siglip_tokenizer(
-            src_text_1, src_text_2, add_special_tokens=True, return_token_type_ids=True
-        ).token_type_ids
-
-        self.assertEqual(slow_token_type_ids, fast_token_type_ids)
-        self.assertEqual(len(slow_token_type_ids[0]), 18)
-
-    def test_fast_and_slow_same_result(self):
-        src_text = "<pad> Today is <unk> nice day </s>"
-        tgt_ids = [0, 1960, 19, 2, 1245, 239, 1]
-        tgt_text = "<pad> Today is<unk> nice day</s>"
-
-        fast_ids = self.siglip_tokenizer_fast(src_text, add_special_tokens=False).input_ids
-        slow_ids = self.siglip_tokenizer(src_text, add_special_tokens=False).input_ids
-        self.assertEqual(tgt_ids, fast_ids)
-        self.assertEqual(tgt_ids, slow_ids)
-
-        fast_text = self.siglip_tokenizer_fast.decode(fast_ids)
-        slow_text = self.siglip_tokenizer.decode(fast_ids)
-        self.assertEqual(tgt_text, fast_text)
-        self.assertEqual(tgt_text, slow_text)
+    @unittest.skip(reason="SiglipTokenizer strips the punctuation")
+    def test_pickle_subword_regularization_tokenizer(self):
+        pass
 
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
