@@ -383,6 +383,7 @@ class SiglipModelTester:
         self.vision_model_tester = SiglipVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
 
+    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -707,8 +708,8 @@ class SiglipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    image = Image.open(requests.get(url, stream=True).raw)
+    return image
 
 
 @require_vision
