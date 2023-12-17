@@ -262,15 +262,27 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     print("Mean of original pixel values:", original_pixel_values.mean())
     print("Mean of HF pixel values:", inputs.pixel_values.mean())
 
+    print("-----HF pixel values -------")
+
     with torch.no_grad():
         outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
 
-    print("Logits per image with HF pixel values:", outputs.logits_per_image[:3, :3])
+    image_probs = torch.sigmoid(outputs.logits_per_image)
+    print("Image probs:", image_probs)
+    text_probs = torch.sigmoid(outputs.logits_per_text)
+    print("Text probs:", text_probs)
+
+    print("-----original pixel values -------")
 
     with torch.no_grad():
         outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
 
     print("Logits per image with original pixel values:", outputs.logits_per_image[:3, :3])
+
+    image_probs = torch.sigmoid(outputs.logits_per_image)
+    print("Image probs:", image_probs)
+    text_probs = torch.sigmoid(outputs.logits_per_text)
+    print("Text probs:", text_probs)
 
     # assert values
     expected_slice = torch.tensor(

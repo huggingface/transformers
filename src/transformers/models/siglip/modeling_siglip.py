@@ -16,9 +16,9 @@
 
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
-import warnings
 
 import numpy as np
 import torch
@@ -1166,8 +1166,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> logits_per_image = outputs.logits_per_image
-        >>> logits_per_text = outputs.logits_per_text
-        >>> probs = torch.matmul(logits_per_image, logits_per_text.t()) * model.temperature + model.bias # these are the probabilities
+        >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
         >>> print(probs)
         ```"""
         # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
