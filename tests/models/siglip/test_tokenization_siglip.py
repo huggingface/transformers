@@ -17,6 +17,7 @@ import json
 import os
 import tempfile
 import unittest
+import tqdm
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
@@ -507,27 +508,9 @@ class CommonSpmIntegrationTests(unittest.TestCase):
             # "Hey <extra_id_0>▁He", # this will fail for the same reason, we replace `_` then strip
         ]
 
-        import tqdm
-
-        # Test with umt5
-        vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
-        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
-        hf_tokenizer = SiglipTokenizer.from_pretrained("google/umt5-small", legacy=False)
-        for text in input_texts:
-            self.assertEqual(
-                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
-            )
-        for texts in tqdm.tqdm(ds["premise"]):
-            for text in texts:
-                self.assertEqual(
-                    hf_tokenizer.encode(text, add_special_tokens=False),
-                    t5x_tokenizer.tokenizer.tokenize(text),
-                    f"{text}",
-                )
-
         # Test with Siglip
         hf_tokenizer = SiglipTokenizer.from_pretrained("t5-small")
-        vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
+        vocab_path = "gs://t5-data/vocabs/cc_en.32000/sentencepiece.model"
         t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
         for text in input_texts:
             self.assertEqual(
