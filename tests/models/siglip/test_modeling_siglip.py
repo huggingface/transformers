@@ -23,11 +23,8 @@ import unittest
 import numpy as np
 import requests
 
-import transformers
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
-    is_pt_flax_cross_test,
     require_torch,
     require_vision,
     slow,
@@ -58,15 +55,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import SiglipProcessor
-
-
-if is_flax_available():
-    import jax.numpy as jnp
-
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
 
 
 class SiglipVisionModelTester:
