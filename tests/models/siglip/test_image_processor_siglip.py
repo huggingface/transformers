@@ -37,15 +37,10 @@ class SiglipImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
-        do_normalize=True,
-        image_mean=[0.48145466, 0.4578275, 0.40821073],
-        image_std=[0.26862954, 0.26130258, 0.27577711],
-        do_convert_rgb=True,
+        do_rescale=True,
+        rescale_factor=1 / 255,
     ):
-        size = size if size is not None else {"shortest_edge": 20}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
+        size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -54,27 +49,19 @@ class SiglipImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
+        self.do_rescale = do_rescale
+        self.rescale_factor = rescale_factor
 
     def prepare_image_processor_dict(self):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
-            "do_normalize": self.do_normalize,
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_convert_rgb": self.do_convert_rgb,
+            "do_rescale": self.do_rescale,
+            "rescale_factor": self.rescale_factor,
         }
 
     def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -104,18 +91,15 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_convert_rgb"))
+        self.assertTrue(hasattr(image_processing, "resample"))
+        self.assertTrue(hasattr(image_processing, "do_rescale"))
+        self.assertTrue(hasattr(image_processing, "rescale_factor"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 20})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+        image_processor = self.image_processing_class.from_dict(
+            self.image_processor_dict, size={"height": 84, "width": 84}
+        )
+        self.assertEqual(image_processor.size, {"height": 84, "width": 84})
