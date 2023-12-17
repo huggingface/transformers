@@ -321,8 +321,7 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
         # Prompt lookup decoding
-        self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", 10)
-        self.prompt_lookup_max_matching_ngram = kwargs.pop("prompt_lookup_max_matching_ngram", 3)
+        self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})

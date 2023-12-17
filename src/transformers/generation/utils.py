@@ -37,7 +37,7 @@ from ..models.auto import (
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
-from .candidates import (
+from .candidate_generator import (
     AssistedCandidateGenerator,
     PromptLookupCandidateGenerator,
     CandidateGenerator,
@@ -909,17 +909,11 @@ class GenerationMixin:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
-        # Check if assistant_model is a string
-        if isinstance(assistant_model, str):
-            if assistant_model == "prompt_lookup":
-                candidate_generator = PromptLookupCandidateGenerator(
-                    num_output_tokens=generation_config.prompt_lookup_num_tokens,
-                    max_matching_ngram_size=generation_config.prompt_lookup_max_matching_ngram,
-                )
-            else:
-                raise NotImplementedError(
-                    f"{assistant_model} is not implemented."
-                )
+        if generation_config.prompt_lookup_num_tokens is not None:
+            print("Using PromptLookupCandidateGenerator")
+            candidate_generator = PromptLookupCandidateGenerator(
+                num_output_tokens=generation_config.prompt_lookup_num_tokens,
+            )
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
@@ -1008,7 +1002,7 @@ class GenerationMixin:
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None:
+        if assistant_model is not None or generation_config.prompt_lookup_num_tokens is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
@@ -4439,7 +4433,7 @@ class GenerationMixin:
                 The sequence used as a prompt for the generation.
             candidate_generator (`CandidateGenerator`, *optional*):
                 A derived instance of [`CandidateGenerator`] that defines how candidate sequences are generated. For
-                more information, the documentation of [`CandidateGenerator`] should be read.
+                more information, the documentation of [`CandidateGenerator`] should be read. Only one of `assistant_model` or `candidate_generator` should be passed as input to this function.
             assistant_model (`PreTrainedModel`, *optional*):
                 An assistant model that can be used to accelerate generation. The assistant model must have the exact
                 same tokenizer. The acceleration is achieved when forecasting candidate tokens with the assistent model
@@ -4598,7 +4592,7 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
             last_assistant_token_is_eos = (
                 ~candidate_input_ids[:, -1]
