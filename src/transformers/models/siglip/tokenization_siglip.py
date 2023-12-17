@@ -316,23 +316,9 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
     def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
-        Converts a string to a list of tokens.
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
         """
-        special_tokens = self._added_tokens_encoder.keys()
-
-        # Replace special tokens with placeholders
-        for idx, special_token in enumerate(special_tokens):
-            text = text.replace(special_token, f"place{idx}holder")
-
-        text = self.canonicalize_text(text, keep_punctuation_exact_string="{}")
-
-        # Add the special tokens back
-        for idx, special_token in enumerate(special_tokens):
-            text = text.replace(f"place{idx}holder", special_token)
-
-        if len(text) == 0:
-            return super().tokenize(text, **kwargs)
-
         tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
@@ -354,6 +340,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
+        text = self.canonicalize_text(text, keep_punctuation_exact_string="{}")
         tokens = self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"

@@ -17,6 +17,7 @@ import json
 import os
 import tempfile
 import unittest
+
 import tqdm
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
