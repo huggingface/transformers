@@ -334,6 +334,7 @@ class CLIPConfig(PretrainedConfig):
             # instead of `str`.
             _text_config_dict = json.loads(CLIPTextConfig(**text_config_dict).to_json_string(use_diff=False))
 
+            only_info = False
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
                 if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
@@ -348,7 +349,7 @@ class CLIPConfig(PretrainedConfig):
                     #   - https://github.com/huggingface/transformers/pull/22035
                     #   - https://github.com/huggingface/transformers/pull/24773
                     if (key, text_config[key]) in {("bos_token_id", 0), ("eos_token_id", 2)}:
-                        continue
+                        only_info = True
 
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
@@ -362,7 +363,10 @@ class CLIPConfig(PretrainedConfig):
                             f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
                             f'value `text_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    if only_info:
+                        logger.info(message)
+                    else:
+                        logger.warning(message)
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
