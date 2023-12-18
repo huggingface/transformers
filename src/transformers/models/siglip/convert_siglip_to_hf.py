@@ -235,8 +235,6 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     model = SiglipModel(config).eval()
     model.load_state_dict(state_dict)
 
-    print("Original temperature:", data["params/t"])
-
     # create processor image processor
     image_processor = SiglipImageProcessor()
     tokenizer = SiglipTokenizer(vocab_file=vocab_file)
@@ -258,6 +256,10 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     original_input_ids = torch.load(filepath)
     assert inputs.input_ids.tolist() == original_input_ids.tolist()
 
+    print("Inputs:")
+    for k, v in inputs.items():
+        print(k, v.shape)
+
     # check difference in pixel_values
     print("Mean of original pixel values:", original_pixel_values.mean())
     print("Mean of HF pixel values:", inputs.pixel_values.mean())
@@ -267,10 +269,8 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     with torch.no_grad():
         outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
 
-    image_probs = torch.sigmoid(outputs.logits_per_image)
-    print("Image probs:", image_probs)
-    text_probs = torch.sigmoid(outputs.logits_per_text)
-    print("Text probs:", text_probs)
+    probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
+    print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
 
     print("-----original pixel values -------")
 

@@ -603,23 +603,30 @@ class SiglipModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+            text=["a photo of 2 cats", "a photo of 2 dogs"], images=image, padding="max_length", return_tensors="pt"
         ).to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
+            logits_per_image = outputs.logits_per_image
+            logits_per_text = outputs.logits_per_text
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
+            logits_per_image.shape,
             torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape,
+            logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[-0.7567, -10.3354]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+
+        # verify the probs
+        probs = torch.sigmoid(logits_per_image)  # these are the probabilities
+        expected_probs = torch.tensor([[3.1937e-01, 3.2463e-05]], device=torch_device)
+        self.assertTrue(torch.allclose(probs, expected_probs, atol=1e-3))

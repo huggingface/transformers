@@ -87,14 +87,15 @@ def _trunc_normal_(tensor, mean, std, a, b):
     return tensor
 
 
-def trunc_normal_tf_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    # type: (Tensor, float, float, float, float) -> Tensor
-    r"""Fills the input Tensor with values drawn from a truncated
+def trunc_normal_tf_(
+    tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0
+) -> torch.Tensor:
+    """Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
-    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
+    normal distribution :math:`\\mathcal{N}(\text{mean}, \text{std}^2)`
     with values outside :math:`[a, b]` redrawn until they are within
     the bounds. The method used for generating the random values works
-    best when :math:`a \leq \text{mean} \leq b`.
+    best when :math:`a \\leq \text{mean} \\leq b`.
 
     NOTE: this 'tf' variant behaves closer to Tensorflow / JAX impl where the
     bounds [a, b] are applied when sampling the normal distribution with mean=0, std=1.0
@@ -106,9 +107,6 @@ def trunc_normal_tf_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
         std: the standard deviation of the normal distribution
         a: the minimum cutoff value
         b: the maximum cutoff value
-    Examples:
-        >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
     """
     with torch.no_grad():
         _trunc_normal_(tensor, 0, 1.0, a, b)
@@ -780,7 +778,7 @@ class SiglipTextTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=None,
             causal_attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1159,15 +1157,17 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
+        >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
         >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True
+        ...     text=texts, images=image, return_tensors="pt", padding="max_length"
         ... )
 
         >>> outputs = model(**inputs)
 
         >>> logits_per_image = outputs.logits_per_image
         >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
-        >>> print(probs)
+        >>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+        31.9% that image 0 is 'a photo of 2 cats'
         ```"""
         # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
