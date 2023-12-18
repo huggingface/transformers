@@ -2930,8 +2930,7 @@ class ModelTesterMixin:
                     for key in new_model.state_dict():
                         if not torch.allclose(new_model.state_dict()[key], new_model_2.state_dict()[key], atol=1e-9):
                             diff_found = True
-                            break
-                    self.assertTrue(diff_found)
+                    self.assertFalse(diff_found)
 
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 80M parameter models.
