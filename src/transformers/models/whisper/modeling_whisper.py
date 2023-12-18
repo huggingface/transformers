@@ -2581,22 +2581,44 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
-            # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
-            repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
-            num_frames = np.repeat(num_frames, repeat_time)
+            # two cases:
+            # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
+            # 2. num_frames is different, compute the DTW matrix for each sample sequentially
+
+            # we're using np.unique because num_frames can be int/list/tuple
+            if len(np.unique(num_frames)) == 1:
+                # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
+                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
+
+                weights = weights[..., : num_frames // 2]
+            else:
+                # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
+                repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
+                num_frames = np.repeat(num_frames, repeat_time)
+
+        if num_frames is None or isinstance(num_frames, int):
+            # Normalize and smoothen the weights.
+            std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+            weights = (weights - mean) / std
+            weights = _median_filter(weights, self.config.median_filter_width)
+
+            # Average the different cross-attention heads.
+            weights = weights.mean(dim=1)
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None:
+            if num_frames is not None and isinstance(num_frames, (tuple, list)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
-            # Normalize and smoothen the weights.
-            std, mean = torch.std_mean(matrix, dim=0, keepdim=True, unbiased=False)
-            matrix = (matrix - mean) / std
-            matrix = _median_filter(matrix, self.config.median_filter_width)
+                # Normalize and smoothen the weights.
+                std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
+                matrix = (matrix - mean) / std
+                matrix = _median_filter(matrix, self.config.median_filter_width)
 
-            # Average the different cross-attention heads.
-            matrix = matrix.mean(dim=0)
+                # Average the different cross-attention heads.
+                matrix = matrix.mean(dim=0)
+            else:
+                matrix = weights[batch_idx]
 
             text_indices, time_indices = _dynamic_time_warping(-matrix.double().cpu().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
