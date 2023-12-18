@@ -15,7 +15,6 @@
 
 import base64
 import os
-from enum import EnumMeta
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -76,16 +75,7 @@ class AnnotationFormat(ExplicitEnum):
     COCO_PANOPTIC = "coco_panoptic"
 
 
-class DeprecatedEnumMeta(EnumMeta):
-    def __init__(cls, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        logger.warning_once(
-            f"`{cls.__name__}` is deprecated and will be removed in v4.38. "
-            f"Please use `transformers.image_utils.AnnotationFormat` instead."
-        )
-
-
-class AnnotionFormat(ExplicitEnum, metaclass=DeprecatedEnumMeta):
+class AnnotionFormat(ExplicitEnum):
     COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
     COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
 
@@ -703,10 +693,17 @@ def validate_annotations(
     supported_annotation_formats: Tuple[AnnotationFormat, ...],
     annotations: List[Dict],
 ) -> None:
-    if promote_annotation_format(annotation_format) not in supported_annotation_formats:
+    if isinstance(annotation_format, AnnotionFormat):
+        logger.warning_once(
+            f"`{annotation_format.__class__.__name__}` is deprecated and will be removed in v4.38. "
+            f"Please use `{AnnotationFormat.__name__}` instead."
+        )
+        annotation_format = promote_annotation_format(annotation_format)
+
+    if annotation_format not in supported_annotation_formats:
         raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
 
-    if promote_annotation_format(annotation_format) is AnnotationFormat.COCO_DETECTION:
+    if annotation_format is AnnotationFormat.COCO_DETECTION:
         if not valid_coco_detection_annotations(annotations):
             raise ValueError(
                 "Invalid COCO detection annotations. Annotations must a dict (single image) or list of dicts "
@@ -714,7 +711,7 @@ def validate_annotations(
                 "being a list of annotations in the COCO format."
             )
 
-    if promote_annotation_format(annotation_format) is AnnotationFormat.COCO_PANOPTIC:
+    if annotation_format is AnnotationFormat.COCO_PANOPTIC:
         if not valid_coco_panoptic_annotations(annotations):
             raise ValueError(
                 "Invalid COCO panoptic annotations. Annotations must a dict (single image) or list of dicts "

@@ -450,11 +450,6 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
 
     def build(self, input_shape):
         if not self.built:
-            input_shape = input_shape.as_list()
-            # If a specific input shape is passed in, we need to modify it to account for padding
-            # Not necessary if those portions of the shape are None
-            if input_shape[-2] is not None:
-                input_shape[-2] += self.explicit_padding * 2
             super().build(input_shape)
 
             self.kernel = tf.Variable(tf.transpose(self.kernel), name="weight_v", trainable=True)
@@ -502,6 +497,14 @@ class TFWav2Vec2NoLayerNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, self.in_conv_dim])
+
 
 class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, layer_id: int = 0, **kwargs: Any) -> None:
@@ -524,6 +527,17 @@ class TFWav2Vec2LayerNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, self.in_conv_dim])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.out_conv_dim])
 
 
 class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
@@ -550,6 +564,17 @@ class TFWav2Vec2GroupNormConvLayer(tf.keras.layers.Layer):
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, self.in_conv_dim])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.out_conv_dim])
+
 
 class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs: Any) -> None:
@@ -563,12 +588,21 @@ class TFWav2Vec2PositionalConvEmbedding(tf.keras.layers.Layer):
         )
         self.padding = TFWav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = get_tf_activation(config.feat_extract_activation)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.conv(hidden_states)
         hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, self.config.hidden_size])
 
 
 class TFWav2Vec2SamePadLayer(tf.keras.layers.Layer):
@@ -608,6 +642,15 @@ class TFWav2Vec2FeatureEncoder(tf.keras.layers.Layer):
             hidden_states = conv_layer(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv_layers", None) is not None:
+            for conv_layer in self.conv_layers:
+                with tf.name_scope(conv_layer.name):
+                    conv_layer.build(None)
+
 
 class TFWav2Vec2FeatureExtractor(TFWav2Vec2FeatureEncoder):
     def __init__(self, config, **kwargs):
@@ -632,12 +675,24 @@ class TFWav2Vec2FeatureProjection(tf.keras.layers.Layer):
             name="projection",
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.feat_proj_dropout)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states, norm_hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.conv_dim[-1]])
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, self.config.conv_dim[-1]])
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFWav2Vec2
@@ -793,6 +848,23 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs):
@@ -815,6 +887,7 @@ class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
             name="output_dense",
         )
         self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.intermediate_dense(hidden_states)
@@ -824,6 +897,17 @@ class TFWav2Vec2FeedForward(tf.keras.layers.Layer):
         hidden_states = self.output_dense(hidden_states)
         hidden_states = self.output_dropout(hidden_states, training=training)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "intermediate_dense", None) is not None:
+            with tf.name_scope(self.intermediate_dense.name):
+                self.intermediate_dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "output_dense", None) is not None:
+            with tf.name_scope(self.output_dense.name):
+                self.output_dense.build([None, None, self.config.intermediate_size])
 
 
 class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
@@ -842,6 +926,7 @@ class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
+        self.config = config
 
     def call(
         self,
@@ -868,6 +953,23 @@ class TFWav2Vec2EncoderLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "feed_forward", None) is not None:
+            with tf.name_scope(self.feed_forward.name):
+                self.feed_forward.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.config.hidden_size])
+
 
 class TFWav2Vec2EncoderLayerStableLayerNorm(tf.keras.layers.Layer):
     def __init__(self, config: Wav2Vec2Config, **kwargs):
@@ -885,6 +987,7 @@ class TFWav2Vec2EncoderLayerStableLayerNorm(tf.keras.layers.Layer):
         self.final_layer_norm = tf.keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
+        self.config = config
 
     def call(
         self,
@@ -908,6 +1011,23 @@ class TFWav2Vec2EncoderLayerStableLayerNorm(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "feed_forward", None) is not None:
+            with tf.name_scope(self.feed_forward.name):
+                self.feed_forward.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.config.hidden_size])
 
 
 class TFWav2Vec2Encoder(tf.keras.layers.Layer):
@@ -973,6 +1093,21 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "pos_conv_embed", None) is not None:
+            with tf.name_scope(self.pos_conv_embed.name):
+                self.pos_conv_embed.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
@@ -1041,6 +1176,21 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
             attentions=all_self_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "pos_conv_embed", None) is not None:
+            with tf.name_scope(self.pos_conv_embed.name):
+                self.pos_conv_embed.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
@@ -1057,12 +1207,23 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
         else:
             self.encoder = TFWav2Vec2Encoder(config, name="encoder")
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         self.masked_spec_embed = self.add_weight(
             shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
         )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "feature_extractor", None) is not None:
+            with tf.name_scope(self.feature_extractor.name):
+                self.feature_extractor.build(None)
+        if getattr(self, "feature_projection", None) is not None:
+            with tf.name_scope(self.feature_projection.name):
+                self.feature_projection.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
 
     def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
         """
@@ -1419,6 +1580,14 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wav2vec2", None) is not None:
+            with tf.name_scope(self.wav2vec2.name):
+                self.wav2vec2.build(None)
+
 
 @add_start_docstrings(
     """TFWav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
@@ -1431,6 +1600,9 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         self.wav2vec2 = TFWav2Vec2MainLayer(config, name="wav2vec2")
         self.dropout = tf.keras.layers.Dropout(config.final_dropout)
         self.lm_head = tf.keras.layers.Dense(config.vocab_size, name="lm_head")
+        self.output_hidden_size = (
+            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        )
 
     def freeze_feature_extractor(self):
         """
@@ -1572,6 +1744,17 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wav2vec2", None) is not None:
+            with tf.name_scope(self.wav2vec2.name):
+                self.wav2vec2.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build([None, None, self.output_hidden_size])
+
 
 class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
     def __init__(self, config):
@@ -1669,3 +1852,17 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "wav2vec2", None) is not None:
+            with tf.name_scope(self.wav2vec2.name):
+                self.wav2vec2.build(None)
+        if getattr(self, "projector", None) is not None:
+            with tf.name_scope(self.projector.name):
+                self.projector.build([None, None, self.config.hidden_size])
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.classifier_proj_size])
