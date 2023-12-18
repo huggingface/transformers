@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ CLIP model configuration"""
-
+import json
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -330,11 +330,24 @@ class CLIPConfig(PretrainedConfig):
                 text_config = {}
 
             # This is the complete result when using `text_config_dict`.
-            _text_config_dict = CLIPTextConfig(**text_config_dict).to_dict()
+            _text_config_dict = json.loads(CLIPTextConfig(**text_config_dict).to_json_string(use_diff=False))
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
                 if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                    # `text_config` was saved when CLIP is added to the library, but it was never used for loading
+                    # `CLIPConfig`. In #22035, we give warnings to avoid users being confused.
+                    # In PR #24773, we change the default values for `bos_token_id` and `eos_token_id`, so
+                    # `_text_config_dict` has those values by default which are different from those in `text_config`,
+                    # and we always get warnings.
+                    # Let's avoid the warnings if `bos_token_id` and `eos_token_id` in `text_config` are not modified by
+                    # the users.
+                    # See:
+                    #   - https://github.com/huggingface/transformers/pull/22035
+                    #   - https://github.com/huggingface/transformers/pull/24773
+                    if (key, text_config[key]) in {("bos_token_id", 0), ("eos_token_id", 2)}:
+                        continue
+
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
