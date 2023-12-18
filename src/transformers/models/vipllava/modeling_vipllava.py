@@ -162,6 +162,14 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return self.language_model._supports_sdpa
+
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
     Args:
