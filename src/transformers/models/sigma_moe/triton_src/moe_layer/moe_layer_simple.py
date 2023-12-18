@@ -85,7 +85,7 @@ class MoE(torch.nn.Module):
         torch.nn.init.normal_(self.keys, std=d_model**-0.5 * weight_std_scale)
         torch.nn.init.normal_(self.values, std=self.size**-0.5 * weight_std_scale)
         torch.nn.init.normal_(
-            self.expert_sel, std=self.k_vec_dim**-0.5 * weight_std_scale
+            self.expert_sel.weight, std=self.k_vec_dim**-0.5 * weight_std_scale
         )
 
         if bias:
@@ -97,7 +97,7 @@ class MoE(torch.nn.Module):
             self.bias = None
             self.o_bias = None
 
-        self.renorm_keep_std(self.expert_sel, dim=1)
+        self.renorm_keep_std(self.expert_sel.weight, dim=1)
 
     def renorm_keep_std(self, weight: torch.Tensor, dim: int = 0):
         with torch.no_grad():
