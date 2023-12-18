@@ -20,7 +20,6 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -64,7 +63,9 @@ class SiglipImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
-        do_normalize(`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
+            `do_normalize` in the `preprocess` method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
             `do_normalize` in the `preprocess` method.
         mean (`float` or `np.ndarray`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
