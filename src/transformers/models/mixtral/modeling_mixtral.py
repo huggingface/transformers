@@ -1182,6 +1182,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         self.post_init()
 
     def remove_expert(self, *idxs):
+        self.num_experts -= 1
         self.model.remove_expert(*idxs)
 
     def get_input_embeddings(self):
