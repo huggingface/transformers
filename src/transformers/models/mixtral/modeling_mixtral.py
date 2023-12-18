@@ -1003,6 +1003,7 @@ class MixtralModel(MixtralPreTrainedModel):
         self.post_init()
 
     def remove_expert(self, *idxs):
+        self.config.num_local_experts -= 1
         for layer in self.layers:
             layer.remove_expert(*idxs)
 
@@ -1179,10 +1180,10 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
-        self.post_init()
 
     def remove_expert(self, *idxs):
         self.num_experts -= 1
+        self.config.num_local_experts -= 1
         self.model.remove_expert(*idxs)
 
     def get_input_embeddings(self):
@@ -1405,6 +1406,7 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
         self.post_init()
 
     def remove_expert(self, *idxs):
+        self.config.num_local_experts -= 1
         self.model.remove_expert(*idxs)
 
     def get_input_embeddings(self):
