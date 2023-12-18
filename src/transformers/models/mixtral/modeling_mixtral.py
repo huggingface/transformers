@@ -101,20 +101,19 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
     _, selected_experts = torch.topk(concatenated_gate_logits, num_experts, dim=-1)
-    selected_experts = selected_experts.to(torch.int64)
 
     if len(selected_experts.shape) == 2:
         selected_experts = selected_experts.unsqueeze(2)
 
     expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
     expert_mask = torch.max(expert_mask, dim=-2).values
-    expert_mask = expert_mask.to(torch.float32)
 
     # Compute the percentage of tokens routed to each experts
     tokens_per_expert = torch.mean(expert_mask, dim=0)
 
     # Compute the average probability of routing to these experts
     router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    
     overall_loss = torch.mean(tokens_per_expert * router_prob_per_expert.unsqueeze(-1))
     return overall_loss * (num_experts**2)
 
