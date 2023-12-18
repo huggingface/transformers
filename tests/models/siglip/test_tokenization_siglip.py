@@ -407,7 +407,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
         input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [37, 86, 20])
-        sp_encode = self.tokenizer.sp_model.encode(". Hello")
         self.assertEqual(input_ids, [37, 86, 20])
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁he", "ll", "o"])
@@ -429,7 +428,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute
         input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [37, 86, 20])
-        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
         self.assertEqual(input_ids, [37, 86, 20])
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁he", "ll", "o"])

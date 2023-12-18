@@ -3155,7 +3155,6 @@ else:
             "SiglipModel",
             "SiglipPreTrainedModel",
             "SiglipTextModel",
-            "SiglipTokenizer",
             "SiglipVisionModel",
         ]
     )
@@ -7513,7 +7512,6 @@ if TYPE_CHECKING:
             SiglipModel,
             SiglipPreTrainedModel,
             SiglipTextModel,
-            SiglipTokenizer,
             SiglipVisionModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
