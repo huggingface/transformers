@@ -146,8 +146,6 @@
       title: Efficient training on CPU
     - local: perf_train_cpu_many
       title: Distributed CPU training
-    - local: perf_train_tpu
-      title: Training on TPUs
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
