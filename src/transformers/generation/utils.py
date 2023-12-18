@@ -1712,6 +1712,7 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
+        print("Generation mode:", generation_mode)
         if generation_mode == GenerationMode.GREEDY_SEARCH:
             # 11. run greedy search
             return self.greedy_search(
@@ -2560,6 +2561,7 @@ class GenerationMixin:
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
         this_peer_finished = False  # used by synced_gpus only
+        step = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -2570,6 +2572,8 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
+            
+            print("------STEP--------", step)
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -2581,6 +2585,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+            step += 1
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
@@ -3138,6 +3143,7 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
+        step = 0
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -3157,6 +3163,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+            step += 1
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
