@@ -212,7 +212,10 @@ class SiglipImageProcessor(BaseImageProcessor):
             ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=mean, std=std) for image in images]
+            images = [
+                self.normalize(image=image, mean=mean, std=std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images

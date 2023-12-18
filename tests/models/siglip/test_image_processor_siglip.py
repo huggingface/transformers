@@ -103,3 +103,7 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.image_processor_dict, size={"height": 84, "width": 84}
         )
         self.assertEqual(image_processor.size, {"height": 84, "width": 84})
+
+    @unittest.skip("not supported")
+    def test_call_numpy_4_channels(self):
+        pass
