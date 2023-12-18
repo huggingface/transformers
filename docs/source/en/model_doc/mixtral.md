@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Mixtral-8x7B is Mistral AI's second Large Language Model (LLM). 
 
-The Mixtral model was proposed in the by the [Mistral AI](https://mistral.ai/) team.
+The Mixtral model was proposed by the [Mistral AI](https://mistral.ai/) team.
 
 It was introduced in the [Mixtral of Experts blogpost](https://mistral.ai/news/mixtral-of-experts/) with the following introduction:
 

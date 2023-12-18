@@ -434,10 +434,18 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.decoder = input_embeddings
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
 
     def get_output_embeddings(self):
         return self.decoder
@@ -484,7 +492,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -506,7 +514,12 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def create_position_ids_from_input_ids(self, input_ids, past_key_values_length=0):
         """
@@ -582,12 +595,21 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Longformer
@@ -600,6 +622,7 @@ class TFLongformerOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -607,6 +630,17 @@ class TFLongformerOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Longformer
@@ -620,6 +654,7 @@ class TFLongformerPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -628,6 +663,14 @@ class TFLongformerPooler(tf.keras.layers.Layer):
         pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Longformer
@@ -640,6 +683,7 @@ class TFLongformerSelfOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -647,6 +691,17 @@ class TFLongformerSelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFLongformerSelfAttention(tf.keras.layers.Layer):
@@ -717,7 +772,28 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                 self.key_global.build((self.config.hidden_size,))
             with tf.name_scope("value_global"):
                 self.value_global.build((self.config.hidden_size,))
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+        if getattr(self, "query_global", None) is not None:
+            with tf.name_scope(self.query_global.name):
+                self.query_global.build([None, None, self.config.hidden_size])
+        if getattr(self, "key_global", None) is not None:
+            with tf.name_scope(self.key_global.name):
+                self.key_global.build([None, None, self.config.hidden_size])
+        if getattr(self, "value_global", None) is not None:
+            with tf.name_scope(self.value_global.name):
+                self.value_global.build([None, None, self.config.hidden_size])
 
     def call(
         self,
@@ -1524,6 +1600,17 @@ class TFLongformerAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
+
 
 class TFLongformerLayer(tf.keras.layers.Layer):
     def __init__(self, config, layer_id=0, **kwargs):
@@ -1553,6 +1640,20 @@ class TFLongformerLayer(tf.keras.layers.Layer):
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "longformer_output", None) is not None:
+            with tf.name_scope(self.longformer_output.name):
+                self.longformer_output.build(None)
 
 
 class TFLongformerEncoder(tf.keras.layers.Layer):
@@ -1631,6 +1732,15 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             attentions=all_attentions,
             global_attentions=all_global_attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @keras_serializable
@@ -1859,6 +1969,20 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         return attention_mask
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 class TFLongformerPreTrainedModel(TFPreTrainedModel):
     """
@@ -2044,6 +2168,14 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+
 
 @add_start_docstrings(
     """Longformer Model with a `language modeling` head on top.""",
@@ -2128,6 +2260,17 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             global_attentions=outputs.global_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
+
 
 @add_start_docstrings(
     """
@@ -2150,6 +2293,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             kernel_initializer=get_initializer(config.initializer_range),
             name="qa_outputs",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2258,6 +2402,17 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             global_attentions=outputs.global_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
+
 
 class TFLongformerClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
@@ -2274,6 +2429,7 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
+        self.config = config
 
     def call(self, hidden_states, training=False):
         hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -2282,6 +2438,17 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=training)
         output = self.out_proj(hidden_states)
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -2386,6 +2553,17 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             global_attentions=outputs.global_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -2406,6 +2584,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @property
     def input_signature(self):
@@ -2500,6 +2679,17 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             global_attentions=outputs.global_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -2522,6 +2712,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2579,3 +2770,14 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer", None) is not None:
+            with tf.name_scope(self.longformer.name):
+                self.longformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])

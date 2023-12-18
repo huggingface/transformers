@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.36.0.dev0"
+__version__ = "4.37.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -855,6 +855,10 @@ _import_structure = {
         "ViltFeatureExtractor",
         "ViltImageProcessor",
         "ViltProcessor",
+    ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": [
@@ -3364,6 +3368,13 @@ else:
             "ViltPreTrainedModel",
         ]
     )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
+        ]
+    )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
     _import_structure["models.vision_text_dual_encoder"].extend(["VisionTextDualEncoderModel"])
     _import_structure["models.visual_bert"].extend(
@@ -5509,6 +5520,10 @@ if TYPE_CHECKING:
         ViltImageProcessor,
         ViltProcessor,
     )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
+    )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
         VisionTextDualEncoderConfig,
@@ -7644,6 +7659,11 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel

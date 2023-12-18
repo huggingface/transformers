@@ -35,7 +35,6 @@ from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
     AnnotationFormat,
-    AnnotionFormat,  # noqa: F401
     ChannelDimension,
     ImageInput,
     PILImageResampling,
