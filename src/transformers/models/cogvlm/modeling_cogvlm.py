@@ -596,6 +596,8 @@ class CogVLMModel(CogVLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        self.num_vision_tokens = (self.config.vision_config.image_size // self.config.vision_config.patch_size) ** 2 + 2
+
     def encode_images(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         images_features = self.vision(pixel_values)
         return images_features
@@ -660,8 +662,13 @@ class CogVLMModel(CogVLMPreTrainedModel):
 
         if past_key_values is not None:
             # generate mode with past_key_values. the image features are already mapped
-            # build position_ids if needed
-            pass
+            # update attention_mask
+            print("We are here")
+            if pixel_values is not None:
+                print("Updating the attention_mask...")
+                batch_size = pixel_values.shape[0]
+                vision_mask = torch.tensor([1] * self.num_vision_tokens).repeat(batch_size, 1).to(attention_mask.device)
+                attention_mask = torch.cat([attention_mask[:,:-1], vision_mask, attention_mask[:,-1].repeat(batch_size, 1)], dim=1)
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
@@ -672,18 +679,15 @@ class CogVLMModel(CogVLMPreTrainedModel):
                     raise ValueError("Make sure to pass as many texts as images")
 
                 # prepend the input_ids and token_type_ids with image tokens
-                num_vision_tokens = (
-                    self.config.vision_config.image_size // self.config.vision_config.patch_size
-                ) ** 2 + 2
                 batch_size = input_ids.shape[0]
 
                 vision_input_ids = (
-                    torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * num_vision_tokens)
+                    torch.tensor([self.config.bos_token_id] + [self.config.pad_token_id] * self.num_vision_tokens)
                     .repeat(batch_size, 1)
                     .to(input_ids.device)
                 )
                 vision_token_type_ids = (
-                    torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * num_vision_tokens)
+                    torch.tensor([LANGUAGE_TOKEN_TYPE] + [VISION_TOKEN_TYPE] * self.num_vision_tokens)
                     .repeat(batch_size, 1)
                     .to(token_type_ids.device)
                 )
@@ -960,6 +964,9 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
+        
+        print("Shape of hidden_states:", hidden_states.shape)
+        print("First values of last hidden states:", hidden_states[0, :3,:3])
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -1036,21 +1043,14 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
             )
             model_kwargs["token_type_ids"] = torch.cat([token_type_ids, new_token_type_ids], dim=-1)
 
-        if not is_encoder_decoder:
-            # update attention mask
-            if "attention_mask" in model_kwargs:
-                attention_mask = model_kwargs["attention_mask"]
-                model_kwargs["attention_mask"] = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-                )
-        else:
-            # update decoder attention mask
-            if "decoder_attention_mask" in model_kwargs:
-                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
-                model_kwargs["decoder_attention_mask"] = torch.cat(
-                    [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
-                    dim=-1,
-                )
+        # update attention mask
+        if "attention_mask" in model_kwargs:
+            print("Updating the attention_mask...")
+            attention_mask = model_kwargs["attention_mask"]
+            print("Shape of attention_mask before update:", attention_mask.shape)
+            model_kwargs["attention_mask"] = torch.cat(
+                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+            )
 
         return model_kwargs
 

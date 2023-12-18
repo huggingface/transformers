@@ -79,7 +79,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         return inputs
 
     original_inputs = gather_inputs(inputs, device=original_device)
-    gen_kwargs = {"max_length": 2048, "do_sample": False}
+    gen_kwargs = {"max_length": 2048, "do_sample": False} # TODO set to max_length: 2048
 
     with torch.no_grad():
         outputs = original_model.generate(**original_inputs, **gen_kwargs)
@@ -91,7 +91,6 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_model.config.vision_config["num_channels"] = original_model.config.vision_config.pop("in_channels")
 
     config = CogVLMConfig(**original_model.config.to_dict())
-    config.use_cache = False
     model = CogVLMForCausalLM(config)
 
     # load state dict
