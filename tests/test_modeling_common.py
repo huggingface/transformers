@@ -2910,12 +2910,14 @@ class ModelTesterMixin:
                     logger = logging.get_logger("transformers.modeling_utils")
 
                     with CaptureLogger(logger) as cl:
+                        torch.manual_seed(0)
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
                     self.assertIn("the shapes did not match", cl.out)
 
                     with CaptureLogger(logger) as cl:
+                        torch.manual_seed(0)
                         new_model_2 = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir,
                             num_labels=42,
