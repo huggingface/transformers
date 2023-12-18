@@ -4630,7 +4630,7 @@ class GenerationMixin:
             # NOTE: Unless otherwise stated, the variable names match those in the paper.
             if do_sample and candidate_logits is not None:
                 # Gets the probabilities from the logits. q_i and p_i denote the model and assistant probabilities of
-                # the tokens selected by the assistant, respectivelly.
+                # the tokens selected by the assistant, respectively.
                 q = candidate_logits.softmax(dim=-1)
                 q_i = q[
                     :,
