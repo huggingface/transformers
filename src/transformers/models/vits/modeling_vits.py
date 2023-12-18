@@ -1022,7 +1022,7 @@ class VitsAttention(nn.Module):
 
         # Pad along column
         x = nn.functional.pad(x, [0, length - 1, 0, 0, 0, 0])
-        x_flat = x.view([batch_heads, length**2 + length * (length - 1)])
+        x_flat = x.view([batch_heads, length*length + length * (length - 1)])
 
         # Add 0's in the beginning that will skew the elements after reshape
         x_flat = nn.functional.pad(x_flat, [length, 0, 0, 0])
