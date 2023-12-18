@@ -4627,50 +4627,18 @@ class GenerationMixin:
             # 3. Select the accepted tokens. There are two possible cases:
             # Case 1: `do_sample=True` and we have logits for the candidates (originally from speculative decoding)
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
-            # NOTE: Unless otherwise stated, the variable names match those in the paper.
+            max_matches = max_len - cur_len - 1
             if do_sample and candidate_logits is not None:
-                # Gets the probabilities from the logits. q_i and p_i denote the model and assistant probabilities of
-                # the tokens selected by the assistant, respectively.
-                q = candidate_logits.softmax(dim=-1)
-                q_i = q[
-                    :,
-                    torch.range(0, candidate_length - 1, dtype=torch.int),
-                    candidate_input_ids[:, -candidate_length:],
-                ].squeeze(0, 1)
-                p = new_logits.softmax(dim=-1)
-                p_i = p[
-                    :,
-                    torch.range(0, candidate_length - 1, dtype=torch.int),
-                    candidate_input_ids[:, -candidate_length:],
-                ].squeeze(0, 1)
-                probability_ratio = p_i / q_i
-
-                # When probability_ratio > 1 (i.e. q_i(x) < p_i(x)), keep the token. Otherwise reject with
-                # p = 1 - probability_ratio (= keep with p = probability_ratio). Keep all the tokens until the first
-                # rejection
-                r_i = torch.rand_like(probability_ratio)
-                is_rejected = r_i > probability_ratio  # equivalent: is_accepted = r_i <= probability_ratio
-                n_matches = (is_rejected.cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
-
-                # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct
-                # behavior)
-                if last_assistant_token_is_eos and n_matches == candidate_length:
-                    n_matches -= 1
-                n_matches = min(n_matches, max_len - cur_len - 1)
-
-                # Next token selection: if there is a rejection, adjust the distribution from the main model before
-                # sampling.
-                gamma = candidate_logits.shape[1]
-                p_n_plus_1 = p[:, n_matches, :]
-                if n_matches < gamma:
-                    q_n_plus_1 = q[:, n_matches, :]
-                    p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0).softmax(dim=-1)
-                else:
-                    p_prime = p_n_plus_1
-                t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
-
-                # The selected tokens include the matches plus the next sampled token
-                selected_tokens = torch.cat((candidate_input_ids[:, :n_matches], t), dim=-1)
+                next_sampled_tokens, n_matches = _speculative_sampling(
+                    candidate_input_ids,
+                    candidate_logits,
+                    candidate_length,
+                    new_logits,
+                    last_assistant_token_is_eos,
+                    max_matches,
+                )
+                # The selected tokens include the matches plus the next sampled tokens
+                selected_tokens = torch.cat((candidate_input_ids[:, :n_matches], next_sampled_tokens), dim=-1)
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
             # original model logits with the candidate tokens. We can keep the candidate tokens until the first
@@ -4688,7 +4656,7 @@ class GenerationMixin:
                 # Ensure we don't generate beyond max_len or an EOS token
                 if last_assistant_token_is_eos and n_matches == candidate_length:
                     n_matches -= 1
-                n_matches = min(n_matches, max_len - cur_len - 1)
+                n_matches = min(n_matches, max_matches)
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -4802,6 +4770,61 @@ class GenerationMixin:
                 )
         else:
             return input_ids
+
+
+def _speculative_sampling(
+    candidate_input_ids,
+    candidate_logits,
+    candidate_length,
+    new_logits,
+    last_assistant_token_is_eos,
+    max_matches,
+):
+    """
+    Applies sampling as in the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf, algorithm 1). Returns
+    the next selected token, as well as the number of candidate matches.
+
+    NOTE: Unless otherwise stated, the variable names match those in the paper.
+    """
+    # Gets the probabilities from the logits. q_i and p_i denote the assistant and model probabilities of the tokens
+    # selected by the assistant, respectively.
+    q = candidate_logits.softmax(dim=-1)
+    q_i = q[
+        :,
+        torch.range(0, candidate_length - 1, dtype=torch.int),
+        candidate_input_ids[:, -candidate_length:],
+    ].squeeze(0, 1)
+    p = new_logits.softmax(dim=-1)
+    p_i = p[
+        :,
+        torch.range(0, candidate_length - 1, dtype=torch.int),
+        candidate_input_ids[:, -candidate_length:],
+    ].squeeze(0, 1)
+    probability_ratio = p_i / q_i
+
+    # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
+    # than the model probability for the same token"), keep the token. Otherwise reject with p = 1 - probability_ratio
+    # (= keep with p = probability_ratio). Keep all the tokens until the first rejection
+    r_i = torch.rand_like(probability_ratio)
+    is_accepted = r_i <= probability_ratio
+    n_matches = (~is_accepted.cumsum(dim=-1) < 1).sum()  # this is `n` in algorithm 1
+
+    # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
+    if last_assistant_token_is_eos and n_matches == candidate_length:
+        n_matches -= 1
+    n_matches = min(n_matches, max_matches)
+
+    # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
+    gamma = candidate_logits.shape[1]
+    p_n_plus_1 = p[:, n_matches, :]
+    if n_matches < gamma:
+        q_n_plus_1 = q[:, n_matches, :]
+        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0).softmax(dim=-1)
+    else:
+        p_prime = p_n_plus_1
+    t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+
+    return t, n_matches
 
 
 def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
