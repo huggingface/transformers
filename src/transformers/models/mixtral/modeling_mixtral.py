@@ -83,7 +83,8 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
 
     Args:
         gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
-            Logits from the `gate`, should be a tuple of tensors. Shape: [batch_size, seqeunce_length, num_experts].
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of 
+            shape [batch_size X sequence_length, num_experts].
         num_experts (`int`, *optional*):
             Number of experts
 
