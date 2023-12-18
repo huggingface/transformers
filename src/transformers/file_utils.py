@@ -18,6 +18,7 @@ This module should not be update anymore and is only left for backward compatibi
 """
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
+from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 
 from . import __version__
 
@@ -25,7 +26,6 @@ from . import __version__
 from .utils import (
     CLOUDFRONT_DISTRIB_PREFIX,
     CONFIG_NAME,
-    DISABLE_TELEMETRY,
     DUMMY_INPUTS,
     DUMMY_MASK,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
