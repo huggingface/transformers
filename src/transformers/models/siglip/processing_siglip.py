@@ -39,14 +39,13 @@ class SiglipProcessor(ProcessorMixin):
     image_processor_class = "SiglipImageProcessor"
     tokenizer_class = ("SiglipTokenizer", "SiglipTokenizer")
 
-    def __init__(self, image_processor, tokenizer, **kwargs):
+    def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.__call__ with CLIP->Siglip, T5->Siglip
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to SiglipTokenizerFast's [`~SiglipTokenizerFast.__call__`] if `text` is not `None` to encode
+        and `kwargs` arguments to SiglipTokenizer's [`~SiglipTokenizer.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.

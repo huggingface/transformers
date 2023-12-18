@@ -235,9 +235,10 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     model = SiglipModel(config).eval()
     model.load_state_dict(state_dict)
 
-    # create processor image processor
+    # create processor
+    # important: make tokenizer not return attention_mask since original one doesn't require it
     image_processor = SiglipImageProcessor()
-    tokenizer = SiglipTokenizer(vocab_file=vocab_file)
+    tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # verify on dummy images and texts

@@ -758,7 +758,7 @@ class SiglipTextTransformer(nn.Module):
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=None,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1129,6 +1129,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipModel
+        >>> import torch
 
         >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
