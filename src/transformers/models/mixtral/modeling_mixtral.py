@@ -83,7 +83,7 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
 
     Args:
         gate_logits (Union[`torch.Tensor`, Tuple[torch.Tensor]):
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of 
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
             shape [batch_size X sequence_length, num_experts].
         num_experts (`int`, *optional*):
             Number of experts
@@ -109,14 +109,14 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
     expert_mask = torch.max(expert_mask, dim=-2).values
     expert_mask = expert_mask.to(torch.float32)
-    
+
     # Compute the percentage of tokens routed to each experts
     tokens_per_expert = torch.mean(expert_mask, dim=0)
 
     # Compute the average probability of routing to these experts
     router_prob_per_expert = torch.mean(routing_weights, dim=0)
     overall_loss = torch.mean(tokens_per_expert * router_prob_per_expert.unsqueeze(-1))
-    return overall_loss * (num_experts ** 2)
+    return overall_loss * (num_experts**2)
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
