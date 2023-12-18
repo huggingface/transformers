@@ -1851,6 +1851,33 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
 
     @slow
+    def test_tiny_token_timestamp_batch_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
+
+        generate_outputs = model.generate(
+            input_features,
+            max_length=448,
+            return_timestamps=True,
+            return_token_timestamps=True,
+            num_beams=3,
+            num_return_sequences=2,
+        )
+
+        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+
+        # should return num_samples*num_return_sequences (4*2)
+        self.assertEqual(len(generate_outputs.sequences), 8)
+
+    @slow
     def test_tiny_specaugment_librispeech(self):
         torch_device = "cpu"
         set_seed(0)
