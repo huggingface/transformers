@@ -330,6 +330,8 @@ class CLIPConfig(PretrainedConfig):
                 text_config = {}
 
             # This is the complete result when using `text_config_dict`.
+            # We can't simply use `to_dict` due to the type of keys in `text_config_dict["id2label"]` being `int`
+            # instead of `str`.
             _text_config_dict = json.loads(CLIPTextConfig(**text_config_dict).to_json_string(use_diff=False))
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
