@@ -25,6 +25,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -62,6 +64,13 @@ class SiglipImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
             method.
+        do_normalize(`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
+            `do_normalize` in the `preprocess` method.
+        mean (`float` or `np.ndarray`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            Mean to use for normalization. Can be overridden by `mean` in the `preprocess` method.
+        std (`float` or `np.ndarray`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            Standard deviation to use for normalization. Can be overridden by `std` in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -73,56 +82,24 @@ class SiglipImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        mean: Optional[Union[float, np.ndarray]] = None,
+        std: Optional[Union[float, np.ndarray]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
+        mean = mean if mean is not None else IMAGENET_STANDARD_MEAN
+        std = std if std is not None else IMAGENET_STANDARD_STD
 
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Rescale an image by a scale factor. image = image * scale, after which image = image * 2 - 1.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`float`):
-                The scaling factor to rescale pixel values by.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The rescaled image.
-        """
-        # first, rescale to 0->1
-        rescaled_image = rescale(
-            image, scale=rescale_factor, data_format=data_format, input_data_format=input_data_format, **kwargs
-        )
-
-        # next, rescale to -1->1
-        rescaled_image = 2 * rescaled_image - 1
-
-        return rescaled_image
+        self.do_normalize = do_normalize
+        self.mean = mean
+        self.std = std
 
     def preprocess(
         self,
@@ -132,6 +109,9 @@ class SiglipImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
+        do_normalize: bool = None,
+        mean: Optional[Union[float, np.ndarray]] = None,
+        std: Optional[Union[float, np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -155,6 +135,12 @@ class SiglipImageProcessor(BaseImageProcessor):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to normalize the image.
+            mean (`float` or `np.ndarray`, *optional*, defaults to `self.mean`):
+                Mean to use for normalization.
+            std (`float` or `np.ndarray`, *optional*, defaults to `self.std`):
+                Standard deviation to use for normalization.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -180,6 +166,9 @@ class SiglipImageProcessor(BaseImageProcessor):
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
+        mean = mean if mean is not None else self.mean
+        std = std if std is not None else self.std
 
         images = make_list_of_images(images)
 
@@ -217,9 +206,12 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, rescale_factor=rescale_factor, input_data_format=input_data_format)
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
                 for image in images
             ]
+
+        if do_normalize:
+            images = [self.normalize(image=image, mean=mean, std=std) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
