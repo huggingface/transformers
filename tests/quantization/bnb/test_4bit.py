@@ -619,14 +619,19 @@ class ExtendedSerializationTest(BaseSerializationTest):
     def test_nf4_double_unsafe(self):
         self.test_serialization(quant_type="nf4", double_quant=True, safe_serialization=False)
 
-    def test_nf4_double_safe(self):
-        self.test_serialization(quant_type="nf4", double_quant=True, safe_serialization=True)
+    # nf4 double safetensors quantization is tested in test_serialization() method from the parent class
 
     def test_fp4_single_unsafe(self):
         self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=False)
 
+    def test_fp4_single_safe(self):
+        self.test_serialization(quant_type="fp4", double_quant=False, safe_serialization=True)
+
     def test_fp4_double_unsafe(self):
         self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=False)
+
+    def test_fp4_double_safe(self):
+        self.test_serialization(quant_type="fp4", double_quant=True, safe_serialization=True)
 
 
 class BloomSerializationTest(BaseSerializationTest):
