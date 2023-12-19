@@ -420,11 +420,9 @@ class LlamaAttention(nn.Module):
                 )
         elif attention_mask is None and self._attention_mask is None:
             # 4d mask is passed through the layers
-            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (bsz, q_len), hidden_states, kv_seq_len
-            )
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(attention_mask, (bsz, q_len), hidden_states, kv_seq_len)
         else:
-            self._attention_mask = attention_mask
+            attention_mask = self._attention_mask
 
         attn_weights = attn_weights + attention_mask
 
@@ -547,6 +545,11 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
+        if (attention_mask is not None and 0 in attention_mask):
+            attn_weights = attn_weights + attention_mask
+        else:
+            attention_mask = None
+        
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
@@ -718,6 +721,10 @@ class LlamaSdpaAttention(LlamaAttention):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
+        elif attention_mask is None and self._attention_mask is None:
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, (bsz, q_len), hidden_states, kv_seq_len)
+        else:
+            attention_mask = self._attention_mask
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
