@@ -277,7 +277,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        non_causal_depth_wise_conv=False, # TODO add to docstrings
+        non_causal_depth_wise_conv=True, # TODO add to docstrings
         use_adapter_with_attention=False, # TODO add to docstrings
         skip_feature_encoder=False, # TODO add to docstrings
         use_intermediate_ffn_before_adapter=False, # TODO add to docstrings
