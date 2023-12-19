@@ -129,8 +129,8 @@ def create_rename_keys(config):
     rename_keys.append(("params/txt/head/bias", "text_model.head.bias"))
 
     # learned temperature and bias
-    rename_keys.append(("params/t", "temperature"))
-    rename_keys.append(("params/b", "bias"))
+    rename_keys.append(("params/t", "logit_scale"))
+    rename_keys.append(("params/b", "logit_bias"))
 
     # fmt: on
     return rename_keys

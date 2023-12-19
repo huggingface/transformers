@@ -509,9 +509,9 @@ class SiglipPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
             nn.init.zeros_(module.attention.in_proj_bias.data)
         elif isinstance(module, SiglipModel):
-            temperature_init = torch.log(torch.tensor(1.0))
-            module.temperature.data.fill_(temperature_init)
-            module.bias.data.zero_()
+            logit_scale_init = torch.log(torch.tensor(1.0))
+            module.logit_scale.data.fill_(logit_scale_init)
+            module.logit_bias.data.zero_()
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -1007,8 +1007,8 @@ class SiglipModel(SiglipPreTrainedModel):
         self.text_model = SiglipTextTransformer(text_config)
         self.vision_model = SiglipVisionTransformer(vision_config)
 
-        self.temperature = nn.Parameter(torch.randn(1))
-        self.bias = nn.Parameter(torch.randn(1))
+        self.logit_scale = nn.Parameter(torch.randn(1))
+        self.logit_bias = nn.Parameter(torch.randn(1))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1180,7 +1180,7 @@ class SiglipModel(SiglipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.temperature.exp() + self.bias
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * self.logit_scale.exp() + self.logit_bias
         logits_per_image = logits_per_text.t()
 
         loss = None
