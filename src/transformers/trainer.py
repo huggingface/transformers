@@ -2867,6 +2867,8 @@ class Trainer:
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         logger.info(f"Saving model checkpoint to {output_dir}")
+        model = self.model
+        model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -2875,24 +2877,26 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
-        if not isinstance(self.model, PreTrainedModel):
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).to("cpu").save_pretrained(
+        if not isinstance(model, PreTrainedModel):
+            if isinstance(unwrap_model(model), PreTrainedModel):
+                unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=self.model.state_dict(),
+                    state_dict=model.state_dict(),
                     save_function=xm.save,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict().to("cpu")
+                state_dict = model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.to("cpu").save_pretrained(
-                output_dir, is_main_process=self.args.should_save, save_function=xm.save
-            )
+            model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+
+        # We moved the model from TPU -> CPU for saving the weights.
+        # Now we should move it back to subsequent compute still works.
+        model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
