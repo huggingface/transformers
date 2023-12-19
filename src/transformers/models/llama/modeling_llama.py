@@ -1029,7 +1029,7 @@ class LlamaModel(LlamaPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
+            # the original 2d or 4d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
@@ -1041,7 +1041,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 past_key_values_length,
             )
         else:
-            # 4d mask is passed through the layers
+            # a modified 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
