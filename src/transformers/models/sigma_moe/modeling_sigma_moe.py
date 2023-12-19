@@ -247,7 +247,7 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
                 dropout=config.moe_dropout,
                 selection_mode=config.selection_mode,
                 activation_after_topk=config.activation_after_topk,
-                activation=config.activation,
+                activation=ACT2FN[config.activation],
                 bias=config.moe_bias,
                 v_dim=config.v_dim,
                 sinkhorn_n_iters=config.sinkhorn_n_iters,
