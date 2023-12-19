@@ -358,13 +358,8 @@ class LlamaAttention(nn.Module):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         bsz, q_len, _ = hidden_states.size()
-
+        
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
@@ -423,7 +418,15 @@ class LlamaAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights + attention_mask
+        elif attention_mask is None and self._attention_mask is None:
+            # 4d mask is passed through the layers
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len
+            )
+        else:
+            self._attention_mask = attention_mask
+
+        attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -1024,23 +1027,24 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        elif self._use_sdpa and not output_attentions:
-            # output_attentions=True can not be supported when using SDPA, and we fall back on
-            # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                (batch_size, seq_length),
-                inputs_embeds,
-                past_key_values_length,
-            )
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            )
+        # if self._use_flash_attention_2:
+        #     # 2d mask is passed through the layers
+        #     attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        # elif self._use_sdpa and not output_attentions:
+        #     # output_attentions=True can not be supported when using SDPA, and we fall back on
+        #     # the manual implementation that requires a 4D causal mask in all cases.
+        #     attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+        #         attention_mask,
+        #         (batch_size, seq_length),
+        #         inputs_embeds,
+        #         past_key_values_length,
+        #     )
+        # else:
+                    # 4d mask is passed through the layers
+            # attention_mask = _prepare_4d_causal_attention_mask(
+            #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+            # )
+
 
         # embed positions
         hidden_states = inputs_embeds
