@@ -413,7 +413,7 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        if attention_mask is not None:
+        if attention_mask is not None and attention_mask.dim() > 2:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
@@ -718,7 +718,7 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
+        if attention_mask is not None and attention_mask.dim() > 2:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
