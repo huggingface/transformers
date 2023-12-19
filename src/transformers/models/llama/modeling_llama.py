@@ -401,12 +401,10 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        cache_length = kv_seq_len - q_len
-
         if self._attention_mask is None or (attention_mask is not None and self._attention_mask.shape[-1] != attention_mask.shape[-1]) :
             # create the 4d mask and cache it
             attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (bsz, q_len), hidden_states, cache_length
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
             )
         elif self._attention_mask is not None:
             attention_mask = self._attention_mask
@@ -715,6 +713,14 @@ class LlamaSdpaAttention(LlamaAttention):
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        if self._attention_mask is None or (attention_mask is not None and self._attention_mask.shape[-1] != attention_mask.shape[-1]) :
+            # create the 4d mask and cache it
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
+            )
+        elif self._attention_mask is not None:
+            attention_mask = self._attention_mask
+
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -722,17 +728,11 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None and attention_mask.dim() > 2:
+        if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-        elif attention_mask is None and self._attention_mask is None:
-            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask, (bsz, q_len), hidden_states, kv_seq_len
-            )
-        else:
-            attention_mask = self._attention_mask
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
