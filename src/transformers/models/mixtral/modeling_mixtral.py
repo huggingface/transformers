@@ -113,8 +113,8 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     # Compute the average probability of routing to these experts
     router_prob_per_expert = torch.mean(routing_weights, dim=0)
     
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(-1))
-    return overall_loss * num_experts
+    overall_loss = torch.mean(tokens_per_expert * router_prob_per_expert.unsqueeze(-1))
+    return overall_loss * (num_experts**2)
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
