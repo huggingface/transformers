@@ -500,6 +500,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
         )
+
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
