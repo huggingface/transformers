@@ -403,6 +403,8 @@ class WhisperGenerationMixin:
             new_fallback_index_map = []
             new_segment_input = []
             new_decoder_input_ids = []
+            new_decoder_attention_mask = []
+
             # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
@@ -445,8 +447,6 @@ class WhisperGenerationMixin:
                     # TODO(PVP) only works for batch size = 1 currently
                     # Need to do before all other logit processors
                     no_speech_prob = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
-                    print("WATCH")
-                    print(no_speech_prob)
                     if no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
                         print("Skip because of VAD")
                         needs_fallback[i] = False
@@ -460,6 +460,8 @@ class WhisperGenerationMixin:
                     new_fallback_index_map.append(fallback_index_map[i])
                     new_segment_input.append(segment_input[i])
                     new_decoder_input_ids.append(decoder_input_ids[i])
+                    if "decoder_attention_mask" in kwargs:
+                        new_decoder_attention_mask.append(kwargs['decoder_attention_mask'][i])
 
             fallback_index_map = new_fallback_index_map
 
@@ -472,6 +474,8 @@ class WhisperGenerationMixin:
             # if we're still in the loop, make sure that decoder_input_ids and segment inputs are tensors
             decoder_input_ids = torch.stack(new_decoder_input_ids)
             segment_input = torch.stack(new_segment_input)
+            if "decoder_attention_mask" in kwargs:
+                kwargs["decoder_attention_mask"] = torch.stack(new_decoder_attention_mask)
 
         return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
 
@@ -826,8 +830,7 @@ class WhisperGenerationMixin:
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
-            # kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
-
+            kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
 
         return decoder_input_ids, kwargs
 
@@ -870,8 +873,11 @@ class WhisperGenerationMixin:
         ):
             max_new_tokens = config.max_target_positions - decoder_input_ids.shape[-1]
 
-        kwargs["max_new_tokens"] = max_new_tokens
-        kwargs["max_length"] = max_length
+        if max_new_tokens is not None:
+            kwargs["max_new_tokens"] = max_new_tokens
+
+        if max_length is not None:
+            kwargs["max_length"] = max_length
 
         return kwargs
 

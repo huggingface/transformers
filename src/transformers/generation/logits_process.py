@@ -1909,11 +1909,12 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 class WhisperNoSpeechDetection(LogitsProcessor):
     r"""This processor can be used to detect silence when using Whisper."""
 
-    def __init__(self, no_speech_token: int, begin_index: int, begin_index_offset: int):
+    def __init__(self, no_speech_token: int, begin_index: int, begin_index_offset: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
         self.begin_index = begin_index
         self.begin_index_offset = begin_index_offset
         self._no_speech_prob = [0.0]
+        self.is_scores_logprobs = scores_is_logprobs
 
         # make sure we pass all logits
         self._pass_all_logits = True
@@ -1930,7 +1931,11 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         if input_ids.shape[1] == self.begin_index:
             no_speech_index = self.begin_index - self.begin_index_offset
             no_speech_scores = scores[:, no_speech_index]
-            probs = no_speech_scores.float().softmax(dim=-1)
+            if self.is_scores_logprobs:
+                probs = no_speech_scores.exp()
+            else:
+                probs = no_speech_scores.float().softmax(dim=-1)
+
             self._no_speech_prob = probs[:, self.no_speech_token]
 
         scores = scores[:, -1, :]
