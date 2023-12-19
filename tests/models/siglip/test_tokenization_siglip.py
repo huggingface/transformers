@@ -18,10 +18,8 @@ import os
 import tempfile
 import unittest
 
-import tqdm
-
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, SiglipTokenizer
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -442,40 +440,3 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [37, 46, 44, 37, 2])
         tokens = self.tokenizer.tokenize("▁He is not              ▁He")
         self.assertEqual(tokens, ["▁he", "▁is", "▁not", "▁he"])  # spaces are eaten by spm even if not start
-
-    @require_seqio
-    @unittest.skipIf(
-        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
-        "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
-    )
-    def test_integration_seqio(self):
-        from datasets import load_dataset
-        from seqio import SentencePieceVocabulary
-
-        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
-
-        # TODO @ArthurZucker fix the 3 commented tests with #23909
-        input_texts = [
-            "Bonjour <extra_id_0>.",
-            # "Bonjour<extra_id_0>.",  # this will fail. In Siglip the special token has to be at the end.
-            # because in Siglip they add `_<extra_id_0>` to the vocab, not `<extra_id_0>`.
-            "                   Hey <extra_id_0>I love you",
-            # "Hey <extra_id_0> I love you", # this will fail, we strip left, to _I vs I
-            # "Hey <extra_id_0>▁He", # this will fail for the same reason, we replace `_` then strip
-        ]
-
-        # Test with Siglip
-        hf_tokenizer = SiglipTokenizer.from_pretrained("t5-small")
-        vocab_path = "gs://t5-data/vocabs/cc_en.32000/sentencepiece.model"
-        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
-        for text in input_texts:
-            self.assertEqual(
-                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
-            )
-        for texts in tqdm.tqdm(ds["premise"]):
-            for text in texts:
-                self.assertEqual(
-                    hf_tokenizer.encode(text, add_special_tokens=False),
-                    t5x_tokenizer.tokenizer.tokenize(text),
-                    f"{text}",
-                )

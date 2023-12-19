@@ -84,7 +84,6 @@ def _trunc_normal_(tensor, mean, std, a, b):
 
     # Clamp to ensure it's in the proper range
     tensor.clamp_(min=a, max=b)
-    return tensor
 
 
 def trunc_normal_tf_(
@@ -111,7 +110,6 @@ def trunc_normal_tf_(
     with torch.no_grad():
         _trunc_normal_(tensor, 0, 1.0, a, b)
         tensor.mul_(std).add_(mean)
-    return tensor
 
 
 def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Google AI and HuggingFace Inc. team.
+# Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ from ...tokenization_utils_base import AddedToken
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
-from ...utils import logging
+from ...utils import logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -119,6 +119,8 @@ class SiglipTokenizer(PreTrainedTokenizer):
         do_lower_case=True,
         **kwargs,
     ) -> None:
+        requires_backends(self, "protobuf")
+
         pad_token = (
             AddedToken(pad_token, rstrip=True, lstrip=True, normalized=False, special=True)
             if isinstance(pad_token, str)
