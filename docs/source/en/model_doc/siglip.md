@@ -24,13 +24,40 @@ The abstract from the paper is the following:
 
 *We propose a simple pairwise Sigmoid loss for Language-Image Pre-training (SigLIP). Unlike standard contrastive learning with softmax normalization, the sigmoid loss operates solely on image-text pairs and does not require a global view of the pairwise similarities for normalization. The sigmoid loss simultaneously allows further scaling up the batch size, while also performing better at smaller batch sizes. Combined with Locked-image Tuning, with only four TPUv4 chips, we train a SigLiT model that achieves 84.5% ImageNet zero-shot accuracy in two days. The disentanglement of the batch size from the loss further allows us to study the impact of examples vs pairs and negative to positive ratio. Finally, we push the batch size to the extreme, up to one million, and find that the benefits of growing batch size quickly diminish, with a more reasonable batch size of 32k being sufficient.*
 
-Tips:
+## Usage tips
 
-- Usage of SigLIP is identical to [CLIP](clip). The only difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. 
+Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
 
+## Usage example
+
+An example of how one can compute image-text similarity is shown below.
+
+```python
+>>> from PIL import Image
+>>> import requests
+>>> from transformers import AutoProcessor, SiglipModel
+>>> import torch
+
+>>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
+>>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+>>> inputs = processor(text=texts, images=image, return_tensors="pt", padding="max_length")
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> logits_per_image = outputs.logits_per_image
+>>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
+>>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+31.9% that image 0 is 'a photo of 2 cats'
+```
 
 ## SiglipConfig
 
@@ -73,7 +100,6 @@ The original code can be found [here](https://github.com/google-research/big_vis
 
 [[autodoc]] SiglipTextModel
     - forward
-
 
 ## SiglipVisionModel
 

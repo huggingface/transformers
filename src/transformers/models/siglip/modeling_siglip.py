@@ -1030,12 +1030,14 @@ class SiglipModel(SiglipPreTrainedModel):
 
         ```python
         >>> from transformers import AutoTokenizer, SiglipModel
+        >>> import torch
 
         >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
         >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.no_grad():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
         # Use SigLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1076,6 +1078,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipModel
+        >>> import torch
 
         >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
@@ -1085,7 +1088,8 @@ class SiglipModel(SiglipPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_image_features(**inputs)
+        >>> with torch.no_grad():
+        ...     image_features = model.get_image_features(**inputs)
         ```"""
         # Use SiglipModel's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1140,7 +1144,8 @@ class SiglipModel(SiglipPreTrainedModel):
         ...     text=texts, images=image, return_tensors="pt", padding="max_length"
         ... )
 
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
 
         >>> logits_per_image = outputs.logits_per_image
         >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
