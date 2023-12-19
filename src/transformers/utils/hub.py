@@ -380,6 +380,7 @@ def cached_file(
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
+        endpoint = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
         resolved_file = hf_hub_download(
             path_or_repo_id,
             filename,
@@ -393,6 +394,7 @@ def cached_file(
             resume_download=resume_download,
             token=token,
             local_files_only=local_files_only,
+            endpoint=endpoint,
         )
     except GatedRepoError as e:
         raise EnvironmentError(
