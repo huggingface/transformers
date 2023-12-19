@@ -1208,13 +1208,13 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             self.encoder = TFWav2Vec2Encoder(config, name="encoder")
 
     def build(self, input_shape=None):
-        self.masked_spec_embed = self.add_weight(
-            shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
-        )
-
         if self.built:
             return
         self.built = True
+        if self.config.mask_time_prob > 0.0 or self.config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = self.add_weight(
+                shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
+            )
         if getattr(self, "feature_extractor", None) is not None:
             with tf.name_scope(self.feature_extractor.name):
                 self.feature_extractor.build(None)
