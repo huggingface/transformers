@@ -781,8 +781,6 @@ class GenerationMixin:
         # exception: Donut checkpoints have task-specific decoder starts and don't expect a BOS token
         elif self.config.model_type == "vision-encoder-decoder" and "donut" in self.name_or_path.lower():
             pass
-        elif self.config.model_type in ["whisper"]:
-            pass
         # user input but doesn't start with decoder_start_token_id -> prepend decoder_start_token_id (and adjust
         # decoder_attention_mask if provided)
         elif (decoder_input_ids[:, 0] != decoder_start_token_id).all().item():
@@ -1129,7 +1127,6 @@ class GenerationMixin:
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
             processors.append(LogitNormalization())
-
         return processors
 
     def _get_stopping_criteria(
@@ -1390,7 +1387,6 @@ class GenerationMixin:
                 "generation.",
                 UserWarning,
             )
-
         if input_ids_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
             warnings.warn(
@@ -2603,11 +2599,10 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, outputs.logits)
+            next_token_logits = outputs.logits[:, -1, :]
 
-            if len(next_tokens_scores.shape) > 2:
-                next_tokens_scores = next_tokens_scores[:, -1, :]
+            # pre-process distribution
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -2886,14 +2881,11 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits
+            next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
             next_token_scores = logits_warper(input_ids, next_token_scores)
-
-            if len(next_token_scores.shape) > 2:
-                next_token_scores = next_token_scores[:, -1, :]
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -3210,16 +3202,12 @@ class GenerationMixin:
                 cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
-            next_token_logits = outputs.logits
+            next_token_logits = outputs.logits[:, -1, :]
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
 
             next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-
-            if len(next_token_scores_processed.shape) > 2:
-                next_token_scores_processed = next_token_scores_processed[:, -1, :]
-
             next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
                 next_token_scores_processed
             )
