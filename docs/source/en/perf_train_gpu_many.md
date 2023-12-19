@@ -596,7 +596,7 @@ torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
 </hfoption>
-<hfoptions id="Accelerate">
+<hfoption id="Accelerate">
 
 Use `--num_processes` to select how many GPUs to use.
 
