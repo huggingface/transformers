@@ -28,7 +28,7 @@ if is_tf_available():
 
         def call(self, inputs):
             tokenized = self.tokenizer(inputs)
-            out = self.bert(**tokenized)
+            out = self.bert(tokenized)
             return out["pooler_output"]
 
 
@@ -42,12 +42,9 @@ class BertTokenizationTest(unittest.TestCase):
         super().setUp()
 
         self.tokenizers = [
-            BertTokenizer.from_pretrained(checkpoint) for checkpoint in (TOKENIZER_CHECKPOINTS * 2)
-        ]  # repeat for when fast_bert_tokenizer=false
-        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS] + [
-            TFBertTokenizer.from_pretrained(checkpoint, use_fast_bert_tokenizer=False)
-            for checkpoint in TOKENIZER_CHECKPOINTS
+            BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS
         ]
+        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
         self.test_sentences = [
@@ -94,15 +91,15 @@ class BertTokenizationTest(unittest.TestCase):
                     self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
     @slow
-    def test_saved_model(self):
+    def test_export_for_inference(self):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
             test_inputs = tf.convert_to_tensor(self.test_sentences)
             out = model(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
-                model.save(save_path)
-                loaded_model = tf.keras.models.load_model(save_path)
-            loaded_output = loaded_model(test_inputs)
+                model.export(save_path)
+                loaded_model = tf.saved_model.load(save_path)
+            loaded_output = loaded_model.serve(test_inputs)
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
             self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)
