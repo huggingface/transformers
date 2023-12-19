@@ -406,7 +406,7 @@ class LlamaAttention(nn.Module):
             attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
             )
-        elif self._attention_mask is not None:
+        elif self._attention_mask is not None: # use the cached value
             attention_mask = self._attention_mask
 
         if past_key_value is not None:
