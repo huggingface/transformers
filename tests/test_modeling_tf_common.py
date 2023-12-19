@@ -316,7 +316,7 @@ class TFModelTesterMixin:
 
             with tf.Graph().as_default() as g:
                 model = model_class(config)
-                model.build()
+                model.build_in_name_scope()
 
                 for op in g.get_operations():
                     model_op_names.add(op.node_def.op)
@@ -346,7 +346,7 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes[:2]:
             model = model_class(config)
-            model.build()
+            model.build_in_name_scope()
 
             onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
@@ -1088,7 +1088,7 @@ class TFModelTesterMixin:
         def _get_word_embedding_weight(model, embedding_layer):
             if isinstance(embedding_layer, tf.keras.layers.Embedding):
                 # builds the embeddings layer
-                model.build()
+                model.build_in_name_scope()
                 return embedding_layer.embeddings
             else:
                 return model._get_word_embedding_weight(embedding_layer)
@@ -1151,7 +1151,7 @@ class TFModelTesterMixin:
             old_total_size = config.vocab_size
             new_total_size = old_total_size + new_tokens_size
             model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
-            model.build()
+            model.build_in_name_scope()
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary

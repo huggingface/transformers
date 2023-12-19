@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import gc
 import glob
 import json
 import os
@@ -49,6 +50,7 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     require_usr_bin_time,
     slow,
@@ -1823,6 +1825,16 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
 
+    def test_error_no_flash_available_with_config(self):
+        with self.assertRaises(ValueError) as cm:
+            config = AutoConfig.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel")
+
+            _ = AutoModel.from_pretrained(
+                "hf-tiny-model-private/tiny-random-MCTCTModel", config=config, attn_implementation="flash_attention_2"
+            )
+
+        self.assertTrue("does not support Flash Attention 2.0" in str(cm.exception))
+
     def test_error_wrong_attn_implementation(self):
         with self.assertRaises(ValueError) as cm:
             _ = AutoModel.from_pretrained("hf-tiny-model-private/tiny-random-MCTCTModel", attn_implementation="foo")
@@ -1840,6 +1852,21 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
 
+    def test_not_available_flash_with_config(self):
+        if is_flash_attn_2_available():
+            self.skipTest("Please uninstall flash-attn package to run test_not_available_flash")
+
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-GPTBigCodeModel")
+
+        with self.assertRaises(ImportError) as cm:
+            _ = AutoModel.from_pretrained(
+                "hf-internal-testing/tiny-random-GPTBigCodeModel",
+                config=config,
+                attn_implementation="flash_attention_2",
+            )
+
+        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+
     def test_not_available_sdpa(self):
         if is_torch_sdpa_available():
             self.skipTest("This test requires torch<=2.0")
@@ -1850,3 +1877,134 @@ class TestAttentionImplementation(unittest.TestCase):
             )
 
         self.assertTrue("PyTorch SDPA requirements in Transformers are not met" in str(cm.exception))
+
+
+@slow
+@require_torch_gpu
+class Mask4DTestBase(unittest.TestCase):
+    def tearDown(self):
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def get_test_data(self):
+        texts = ["the cat sat", "the cat had", "the cat is"]
+        encoded = [self.tokenizer.encode(t) for t in texts]
+        input_0 = torch.tensor(encoded, device=torch_device)
+        # tensor([[   1,  278, 6635, 3290],
+        # [   1,  278, 6635,  750],
+        # [   1,  278, 6635,  338]], device='cuda:0')
+
+        # Combining common prefix with the unique ending tokens:
+        input_1 = torch.cat([input_0[0][:-1], input_0[:, -1]]).unsqueeze(0)
+        # tensor([[   1,  278, 6635, 3290,  750,  338]], device='cuda:0')
+
+        # Creating a 4D mask where each of the last 3 tokens do not attend to each other.
+        mask_1 = torch.tensor(
+            [
+                [
+                    [
+                        [1, 0, 0, 0, 0, 0],
+                        [1, 1, 0, 0, 0, 0],
+                        [1, 1, 1, 0, 0, 0],
+                        [1, 1, 1, 1, 0, 0],
+                        [1, 1, 1, 0, 1, 0],
+                        [1, 1, 1, 0, 0, 1],
+                    ]
+                ]
+            ],
+            device="cuda:0",
+            dtype=torch.int64,
+        )
+
+        # Creating a position_ids tensor. note the repeating figures in the end.
+        position_ids_1 = torch.tensor([[0, 1, 2, 3, 3, 3]], device=torch_device, dtype=torch.int64)
+
+        return input_0, input_1, mask_1, position_ids_1
+
+
+@slow
+@require_torch_gpu
+class Mask4DTestFP32(Mask4DTestBase):
+    def setUp(self):
+        model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
+        model_dtype = torch.float32
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
+
+    def test_attention(self):
+        """comparing outputs of attention layer"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        hid_0 = self.model.model.embed_tokens(input_0)
+        outs_0 = self.model.model.layers[0].self_attn.forward(hid_0)[0]
+        # outs_0.shape == torch.Size([3, 4, 768])
+
+        hid_1 = self.model.model.embed_tokens(input_1)
+        outs_1 = self.model.model.layers[0].self_attn.forward(
+            hid_1, attention_mask=mask_1.bool(), position_ids=position_ids_1
+        )[0]
+        # outs_1.shape == torch.Size([1, 6, 768])
+
+        outs_0_last_tokens = outs_0[:, -1, :]  # last tokens in each batch line
+        outs_1_last_tokens = outs_1[0, -3:, :]  # last three tokens
+        assert torch.allclose(outs_0_last_tokens, outs_1_last_tokens)
+
+    def test_inner_model(self):
+        """comparing hidden outputs of whole inner model"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+        torch.testing.assert_close(
+            logits_0_last_tokens,
+            logits_1_last_tokens,
+        )
+
+    def test_causal_model_logits(self):
+        """comparing logits outputs of whole inner model"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+        torch.testing.assert_close(
+            logits_0_last_tokens,
+            logits_1_last_tokens,
+        )
+
+
+@slow
+@require_torch_gpu
+class Mask4DTestFP16(Mask4DTestBase):
+    test_attention = Mask4DTestFP32.test_attention
+
+    def setUp(self):
+        model_name = "JackFram/llama-68m"  # small Llama-like model from FlexFlow
+        model_dtype = torch.float16
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=model_dtype).to(torch_device)
+
+    def test_causal_model_logits(self):
+        """comparing logits outputs of whole inner model"""
+        input_0, input_1, mask_1, position_ids_1 = self.get_test_data()
+
+        logits_0 = self.model.forward(input_0).logits
+        logits_1 = self.model.forward(input_1, attention_mask=mask_1.bool(), position_ids=position_ids_1).logits
+
+        logits_0_last_tokens = logits_0[:, -1, :]  # last tokens in each batch line
+        logits_1_last_tokens = logits_1[0, -3:, :]  # last three tokens
+
+        indices_0 = logits_0_last_tokens.sort(descending=True).indices
+        indices_1 = logits_1_last_tokens.sort(descending=True).indices
+
+        # checking logits, but note relaxed tolerances for FP16
+        torch.testing.assert_close(logits_0_last_tokens, logits_1_last_tokens, atol=0.02, rtol=0.001)
+
+        # checking tokens order for the top tokens
+        for token_ids_0, token_ids_1 in zip(indices_0, indices_1):
+            self.assertTrue(torch.equal(token_ids_0[:128], token_ids_1[:128]))
