@@ -60,7 +60,7 @@ class TestDocLists(unittest.TestCase):
             doctext = f.read()
 
             doctext = doctext.split(
-                "For now, Transformers supports inference and training through SDPA for the following architectures:"
+                "For now, Transformers supports SDPA inference and training for the following architectures:"
             )[1]
             doctext = doctext.split("Note that FlashAttention can only be used for models using the")[0]
 
