@@ -874,7 +874,8 @@ LLAMA_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of 2D shape `(batch_size, sequence_length)`
+            or 4D shape `(heads, batch_size, sequence_length, total_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -884,6 +885,9 @@ LLAMA_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
+
+            Attention mask may be supplied in 4D shape for finer control of attention patterns within sequences.
+            In such case, the `position_ids` parameters must be customised accordingly.
 
             If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
             `past_key_values`).
