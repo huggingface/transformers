@@ -50,10 +50,6 @@ class LogitsProcessor:
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
 
-    @property
-    def pass_all_logits(self):
-        return getattr(self, "_pass_all_logits", False)
-
 
 class LogitsWarper:
     """Abstract base class for all logit warpers that can be applied during generation with multinomial sampling."""
@@ -63,10 +59,6 @@ class LogitsWarper:
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can be called."
         )
-
-    @property
-    def pass_all_logits(self):
-        return getattr(self, "_pass_all_logits", False)
 
 
 class LogitsProcessorList(list):
@@ -92,9 +84,6 @@ class LogitsProcessorList(list):
                 The processed prediction scores.
 
         """
-        if not any(processor.pass_all_logits for processor in self) and len(scores.shape) > 2:
-            scores = scores[:, -1, :]
-
         for processor in self:
             function_args = inspect.signature(processor.__call__).parameters
             if len(function_args) > 2:

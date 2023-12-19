@@ -226,6 +226,8 @@ class WhisperGenerationMixin:
         # 1. copy generation config
         if generation_config is None:
             generation_config = copy.deepcopy(self.generation_config)
+        else:
+            generation_config = copy.deepcopy(generation_config)
 
         # 2. set global generate variables
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
@@ -913,19 +915,10 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _retrieve_compression_ratio(tokens, vocab_size):
+        """ Compute byte length of zlib compressed token bytes vs. byte length of raw token bytes """
         length = int(math.log2(vocab_size) / 8) + 1
         token_bytes = b''.join([t.to_bytes(length, 'little') for t in tokens.tolist()])
-
-        # string = tok.decode(tokens, skip_special_tokens=True)
-        # string_bytes = string.encode("utf-8")
-        # string_compression_ratio = len(string_bytes) / len(zlib.compress(string_bytes))
-
         compression_ratio = len(token_bytes) / len(zlib.compress(token_bytes))
-
-        # print(f"HERE: string: {string}")
-        # print(f"HERE: string ratio: {string_compression_ratio}")
-        # print(f"HERE: token ratio: {compression_ratio}")
-        # print('HERE:' + 20 * '-')
 
         return compression_ratio
 
