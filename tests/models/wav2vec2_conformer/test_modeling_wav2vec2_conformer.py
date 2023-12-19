@@ -53,6 +53,7 @@ if is_torch_available():
         Wav2Vec2ConformerModel,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
+        AutoProcessor,
     )
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
         Wav2Vec2ConformerGumbelVectorQuantizer,
@@ -198,6 +199,27 @@ class Wav2Vec2ConformerModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
         )
+        
+    def create_and_check_model_with_attention_adapter(self, config, input_values, attention_mask):
+        config.add_adapter = True
+        config.use_adapter_with_attention = True
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+        )
+        
+    def create_and_check_model_with_causal_depth_wise_conv(self, config, input_values, attention_mask):
+        config.non_causal_depth_wise_conv = False
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+        )
 
     def create_and_check_model_with_adapter_for_ctc(self, config, input_values, attention_mask):
         config.add_adapter = True
@@ -208,6 +230,22 @@ class Wav2Vec2ConformerModelTester:
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
+        )
+        
+    def create_and_check_model_from_seamless_communication(self, config, input_values, attention_mask):
+        config.add_adapter = True
+        config.use_adapter_with_attention = True
+        config.skip_feature_encoder = True
+        config.use_intermediate_ffn_before_adapter = True
+        config.use_final_layer_norm = True
+        config.non_causal_depth_wise_conv = False
+        
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
         )
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
@@ -455,6 +493,10 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_model_with_relative_key(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
     def test_model_with_rotary(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="rotary")
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -479,6 +521,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     @require_torch_fp16
     def test_model_float16_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
+        self.model_tester.create_and_check_model_float16(*config_and_inputs)
+
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_model_float16_with_relative_key(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative_key")
         self.model_tester.create_and_check_model_float16(*config_and_inputs)
 
     @require_torch_accelerator
@@ -921,6 +969,60 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+        
+    def test_inference_conformer_shaw(self):
+        model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/conformer-shaw")
+        model.to(torch_device)
+        processor = AutoProcessor.from_pretrained("facebook/conformer-shaw")
+
+        input_speech = self._load_datasamples(2)
+
+        inputs = processor(input_speech, return_tensors="pt", padding=True)
+
+        input_values = inputs.input_values.to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(input_values)
+
+        
+        EXPECTED_SHAPES = [(231, 1024), (326, 1024)]
+        EXPECTED_MEAN = [-2.9937e-05, 3.3123e-05]
+        EXPECTED_STD = [0.1565, 0.1545]
+        
+        # fmt: off
+        expected_slice_0 = torch.tensor(
+            [[-0.0098, -0.0570, -0.1286,  0.0439, -0.1037, -0.0235],
+            [-0.0767,  0.0574, -0.3224,  0.0482,  0.0440, -0.0193],
+            [ 0.0220, -0.0878, -0.2027, -0.0028, -0.0666,  0.0721],
+            [ 0.0307, -0.1099,  0.0273, -0.0416, -0.0715,  0.0094],
+            [ 0.0758, -0.0291,  0.1084,  0.0004, -0.0751, -0.0116],
+            [ 0.0349, -0.0343, -0.0098,  0.0415, -0.0617,  0.0241],
+            [-0.0193, -0.0171,  0.1965,  0.0797, -0.0308,  0.2033],
+            [-0.0323, -0.0315,  0.0948,  0.0944, -0.0254,  0.1241],
+            [-0.0493,  0.0010, -0.1762,  0.0034, -0.0787,  0.0832],
+            [ 0.0043, -0.1228, -0.0739,  0.0266, -0.0337, -0.0068]]
+        )
+        # fmt: on
+        
+        # fmt: off
+        expected_slice_1 = torch.tensor(
+            [[-0.0348, -0.0521, -0.3036,  0.0285, -0.0715, -0.0453],
+            [-0.0102,  0.0114, -0.3266,  0.0027, -0.0558,  0.0038],
+            [ 0.0454,  0.0148, -0.2418, -0.0392, -0.0455,  0.0478],
+            [-0.0013,  0.0825, -0.1730, -0.0091, -0.0426,  0.0360],
+            [-0.0227,  0.0687, -0.1168,  0.0569, -0.0160,  0.0759],
+            [-0.0318,  0.0562, -0.0508,  0.0605,  0.0150,  0.0953],
+            [-0.0415,  0.0438,  0.0233,  0.0336,  0.0262,  0.0860],
+            [-0.0163,  0.0048,  0.0807,  0.0119,  0.0712,  0.0158],
+            [ 0.0244, -0.0145,  0.0262, -0.0237,  0.0283, -0.0125],
+            [-0.0587, -0.0516, -0.0368, -0.0196,  0.0307, -0.1434]]
+        )
+        # fmt: on
+        
+        # 25:35, 4:10
+        
+        
+        
 
     def test_inference_pretrained(self):
         model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")

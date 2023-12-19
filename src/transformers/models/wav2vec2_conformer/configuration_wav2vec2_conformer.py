@@ -184,12 +184,17 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
-            Can be specified to `relative` or `rotary` for relative or rotary position embeddings respectively. If left
-            `None` no relative position embedding is applied.
+            Can be specified to `relative`, `relative_key` or `rotary` for relative, relative as defined by Shaw, or rotary position embeddings respectively. If left
+            `None` no relative position embedding is applied. For more information on `"relative_key"`, please refer to [Self-Attention
+            with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
         rotary_embedding_base (`int`, *optional*, defaults to 10000):
             If `"rotary"` position embeddings are used, defines the size of the embedding base.
         max_source_positions (`int`, *optional*, defaults to 5000):
             if `"relative"` position embeddings are used, defines the maximum source input positions.
+        left_max_position_embeddings (`int`, *optional*, defaults to 64):
+            if `"_key"` position embeddings are used, defines the left clipping value for relative positions.
+        right_max_position_embeddings (`int`, *optional*, defaults to 8):
+            if `"_key"` position embeddings are used, defines the right clipping value for relative positions.
         conv_depthwise_kernel_size (`int`, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):
@@ -272,6 +277,13 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
+        non_causal_depth_wise_conv=False, # TODO add to docstrings
+        use_adapter_with_attention=False, # TODO add to docstrings
+        skip_feature_encoder=False, # TODO add to docstrings
+        use_intermediate_ffn_before_adapter=False, # TODO add to docstrings
+        use_final_layer_norm=False, # TODO add to docstrings
+        left_max_position_embeddings=64, # TODO move to right place in  docstrings
+        right_max_position_embeddings=8, # TODO move to right place in  docstrings
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -357,6 +369,16 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+        
+        # Parameters to do causal depthwise convolution.
+        self.non_causal_depth_wise_conv = non_causal_depth_wise_conv
+        
+        self.use_adapter_with_attention = use_adapter_with_attention
+        self.skip_feature_encoder = skip_feature_encoder
+        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
+        self.use_final_layer_norm = use_final_layer_norm
+        self.left_max_position_embeddings = left_max_position_embeddings
+        self.right_max_position_embeddings = right_max_position_embeddings
 
     @property
     def inputs_to_logits_ratio(self):
