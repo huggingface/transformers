@@ -210,7 +210,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
-    "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
     "ClvpModel",

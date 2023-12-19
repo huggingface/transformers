@@ -968,7 +968,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        >>> pooled_output = outputs.pooler_output  # pooled features
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

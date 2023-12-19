@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_tokenizers_available,
     is_torch_available,
     is_vision_available,
 )
@@ -26,7 +25,6 @@ _import_structure = {
     "configuration_siglip": [
         "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SiglipConfig",
-        "SiglipOnnxConfig",
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
@@ -61,7 +59,6 @@ if TYPE_CHECKING:
     from .configuration_siglip import (
         SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SiglipConfig,
-        SiglipOnnxConfig,
         SiglipTextConfig,
         SiglipVisionConfig,
     )
