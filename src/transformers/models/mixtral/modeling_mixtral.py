@@ -1518,7 +1518,8 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = torch.where(sequence_lengths >= 0, sequence_lengths, input_ids.shape[-1] - 1).to(
                     logits.device
                 )
             else:
