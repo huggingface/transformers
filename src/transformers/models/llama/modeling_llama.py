@@ -532,9 +532,7 @@ class LlamaFlashAttention2(LlamaAttention):
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             elif torch.is_autocast_enabled():
-                print(f"{torch.get_autocast_gpu_dtype()=}")
                 target_dtype = torch.get_autocast_gpu_dtype()
-                print(f"{target_dtype=}")
             else:
                 target_dtype = self.q_proj.weight.dtype
 
