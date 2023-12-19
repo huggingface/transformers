@@ -17,6 +17,7 @@
 
 
 import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -43,7 +44,8 @@ class PhiConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 51200):
             Vocabulary size of the Phi model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PhiModel`].
+            `inputs_ids` passed when calling [`PhiModel`]. If `pad_vocab_size_multiple` is set, the vocabulary size
+            will be padded to be a multiple of `pad_vocab_size_multiple`.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
@@ -150,6 +152,10 @@ class PhiConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
         self.num_key_value_heads = num_key_value_heads
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
@@ -163,7 +169,6 @@ class PhiConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.partial_rotary_factor = partial_rotary_factor
         self.qk_layernorm = qk_layernorm
-        self.pad_vocab_size_multiple = pad_vocab_size_multiple
         self._rope_scaling_validation()
 
         super().__init__(
