@@ -1908,6 +1908,17 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         # make sure we pass all logits
         self._pass_all_logits = True
 
+        # overwritten dynamically
+        self.model = None
+        self.inputs = None
+
+    def set_model(self, model):
+        self.model = model
+
+    def set_inputs(self, inputs):
+        self.inputs = {**self.model.prepare_inputs_for_generation(**inputs), **inputs}
+        self.inputs["input_features"] = self.inputs.pop("inputs")
+
     @property
     def no_speech_prob(self):
         return self._no_speech_prob
@@ -1918,16 +1929,21 @@ class WhisperNoSpeechDetection(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[1] == self.begin_index:
-            no_speech_index = self.begin_index - self.begin_index_offset
-            no_speech_scores = scores[:, no_speech_index]
+            if self.begin_index_offset > 1:
+                with torch.no_grad():
+                    logits = self.model(**self.inputs).logits
+
+                no_speech_index = self.begin_index - self.begin_index_offset
+                no_speech_scores = logits[:, no_speech_index]
+            else:
+                no_speech_scores = scores
+
             if self.is_scores_logprobs:
                 probs = no_speech_scores.exp()
             else:
                 probs = no_speech_scores.float().softmax(dim=-1)
 
             self._no_speech_prob = probs[:, self.no_speech_token]
-
-        scores = scores[:, -1, :]
 
         return scores
 

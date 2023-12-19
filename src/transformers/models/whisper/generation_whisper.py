@@ -247,7 +247,7 @@ class WhisperGenerationMixin:
         # 4. Retrieve logits processors
         # => TODO(Patrick): The way `num_start_tokens` is retrieved here is too brittle. Need a better approach
         num_start_tokens = len(generation_config.forced_decoder_ids) if generation_config.forced_decoder_ids is not None else 1
-        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, num_start_tokens=num_start_tokens, is_shortform=is_shortform)
+        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, num_start_tokens=num_start_tokens, is_shortform=is_shortform, num_beams=kwargs.get("num_beams", 1))
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
@@ -363,6 +363,15 @@ class WhisperGenerationMixin:
         should_skip = [False for _ in range(cur_bsz)]
         fallback_index_map = list(range(cur_bsz))
 
+        if no_speech_threshold is not None:
+            set_inputs = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
+            extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
+            set_inputs({
+                "inputs": segment_input,
+                "decoder_input_ids": decoder_input_ids,
+                **extra_kwargs
+            })
+
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature > 0.0
             generation_config.temperature = temperature
@@ -449,7 +458,8 @@ class WhisperGenerationMixin:
                     # TODO(PVP) only works for batch size = 1 currently
                     # Need to do before all other logit processors
                     no_speech_prob = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
-                    if no_speech_prob[i] > no_speech_threshold and logprobs < logprob_threshold:
+
+                    if logprobs < logprob_threshold and no_speech_prob[i] > no_speech_threshold:
                         print("Skip because of VAD")
                         needs_fallback[i] = False
                         should_skip[i] = True
@@ -733,8 +743,7 @@ class WhisperGenerationMixin:
 
         return init_tokens
 
-    @staticmethod
-    def _retrieve_logit_processors(generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform):
+    def _retrieve_logit_processors(self, generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform, num_beams):
         begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
@@ -768,10 +777,11 @@ class WhisperGenerationMixin:
             generation_config.begin_suppress_tokens = None
 
         if no_speech_threshold is not None and not is_shortform:
-            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index, begin_index_offset=num_start_tokens)
+            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index, begin_index_offset=num_start_tokens, scores_is_logprobs=num_beams > 1)
             logits_processor = (
                 [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
             )
+            no_speech_detector.set_model(self)
 
         return logits_processor
 
