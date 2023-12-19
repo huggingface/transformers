@@ -1931,6 +1931,8 @@ class Trainer:
                 )
                 self.control.should_training_stop = True
 
+            # Reset to False, Avoid divide by zero in _maybe_log_save_evaluate() by repeat print log
+            self.control.should_log = False
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
 
