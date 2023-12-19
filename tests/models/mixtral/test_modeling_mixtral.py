@@ -470,7 +470,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model_sdpa = MixtralForCausalLM.from_pretrained(
             "hf-internal-testing/Mixtral-tiny",
-            torch_dtype=torch.float16,
+            # torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
@@ -478,7 +478,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model_eager = MixtralForCausalLM.from_pretrained(
             "hf-internal-testing/Mixtral-tiny",
-            torch_dtype=torch.float16,
+            # torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
         ).to(torch_device)
