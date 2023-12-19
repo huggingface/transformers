@@ -41,9 +41,7 @@ class BertTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        self.tokenizers = [
-            BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS
-        ]
+        self.tokenizers = [BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
