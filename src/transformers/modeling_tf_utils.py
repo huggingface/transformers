@@ -626,13 +626,22 @@ def dtype_byte_size(dtype):
     return bit_size // 8
 
 
-def strip_model_name_and_prefix(name, _prefix=None):
+def strip_model_name_and_prefix(name, _prefix=None, strip_suffix=False):
     if _prefix is not None and name.startswith(_prefix):
         name = name[len(_prefix) :]
         if name.startswith("/"):
             name = name[1:]
     if "model." not in name and len(name.split("/")) > 1:
         name = "/".join(name.split("/")[1:])
+    if strip_suffix:
+        name = strip_weight_suffix(name)
+    return name
+
+def strip_weight_suffix(name):
+    # TensorFlow weight names all end in ":0", perhaps because they're surprised.
+    # Keras 3 stops doing this, so this function strips the suffix if present to normalize weight names.
+    if name.endswith(":0"):
+        name = name[:-2]
     return name
 
 
@@ -890,6 +899,7 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
     # Read the H5 file
     with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
         # Retrieve the name of each layer from the H5 file
+        breakpoint()
         saved_h5_model_layers_name = set(load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names"))
 
         # Find the missing layers from the high level list of layers
@@ -899,7 +909,6 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
         unexpected_layers = list(saved_h5_model_layers_name - {layer.name for layer in model.layers})
         saved_weight_names_set = set()
         symbolic_weights_names = set()
-        weight_value_tuples = []
 
         # Compute missing and unexpected sub layers
         # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
@@ -928,20 +937,27 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
                 # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
+                    if hasattr(symbolic_weight, "path"):
+                        # Keras 3 compatibility
+                        symbolic_weight_name = symbolic_weight.path
+                    else:
+                        symbolic_weight_name = symbolic_weight.name
                     # TF names always start with the model name so we ignore it
                     if _prefix is not None:
-                        delimeter = len(_prefix.split("/"))
+                        delimiter = len(_prefix.split("/"))
                         symbolic_weight_name = "/".join(
-                            symbolic_weight.name.split("/")[:delimeter]
-                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                            symbolic_weight_name.split("/")[:delimiter]
+                            + symbolic_weight_name.split("/")[delimiter + 1 :]
                         )
                     else:
-                        symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                        symbolic_weight_name = "/".join(symbolic_weight_name.split("/")[1:])
 
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
                     # If not, make the value to None
                     saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+
+                    # TODO Matt: Continue from here and figure out what's going on
 
                     # Retrocompatibility patch: some embeddings are stored with the weights name (e.g. Bart's
                     # `model.shared/embeddings:0` are stored as `model.shared/weights:0`)
@@ -955,15 +971,15 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                     # If the current weight is found
                     if saved_weight_value is not None:
                         # Check if the shape of the current weight and the one from the H5 file are different
-                        if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                        if symbolic_weight.shape != saved_weight_value.shape:
                             # If yes we reshape the weight from the H5 file accordingly to the current weight
                             # If the two shapes are not compatible we raise an issue
                             try:
-                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                                array = np.reshape(saved_weight_value, symbolic_weight.shape)
                             except ValueError as e:
                                 if ignore_mismatched_sizes:
                                     mismatched_layers.append(
-                                        (symbolic_weight_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
+                                        (symbolic_weight_name, saved_weight_value.shape, symbolic_weight.shape)
                                     )
                                     continue
                                 else:
@@ -971,11 +987,9 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
                         else:
                             array = saved_weight_value
 
-                        # We create the tuple that will be loaded and add it to the final list
-                        weight_value_tuples.append((symbolic_weight, array))
+                        # Load the weight
+                        symbolic_weight.assign(array)
 
-    # Load all the weights
-    K.batch_set_value(weight_value_tuples)
 
     # Compute the missing and unexpected layers
     missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
@@ -985,18 +999,19 @@ def load_tf_weights_from_h5(model, resolved_archive_file, ignore_mismatched_size
 
 
 def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
+    keras_3_mode = any([hasattr(w, "path") for w in model.weights])  # First figure out what framework we've got
     # Read the safetensors file
     with safe_open(resolved_archive_file, framework="tf") as safetensors_archive:
         mismatched_layers = []
-        weight_names = []
-        keras_3_mode = any([hasattr(w, "path") for w in model.weights])
-        for w in model.weights:
-            if keras_3_mode:
-                weight_names.append(strip_model_name_and_prefix(w.path, _prefix=_prefix))
-            else:
-                weight_names.append(strip_model_name_and_prefix(w.name, _prefix=_prefix))
-        loaded_weight_names = list(safetensors_archive.keys())
         if keras_3_mode:
+            weight_names = [strip_model_name_and_prefix(w.path, _prefix=_prefix) for w in model.weights]
+        else:
+            weight_names = [strip_model_name_and_prefix(w.name, _prefix=_prefix, strip_suffix=True) for w in model.weights]
+        archive_has_suffix = any([w.endswith(":0") for w in safetensors_archive.keys()])
+        if archive_has_suffix:
+            loaded_weight_names = [strip_weight_suffix(w) for w in safetensors_archive.keys()]
+        else:
+            loaded_weight_names = list(safetensors_archive.keys())
         # Find the missing layers from the high level list of layers
         missing_layers = list(set(weight_names) - set(loaded_weight_names))
         # Find the unexpected layers from the high level list of layers
@@ -1006,23 +1021,26 @@ def load_tf_weights_from_safetensors(model, resolved_archive_file, ignore_mismat
             if keras_3_mode:
                 weight_name = strip_model_name_and_prefix(weight.path, _prefix=_prefix)
             else:
-                weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix)
+                weight_name = strip_model_name_and_prefix(weight.name, _prefix=_prefix, strip_suffix=True)
             if weight_name in loaded_weight_names:
-                weight_value = safetensors_archive.get_tensor(weight_name)
-                # Check if the shape of the current weight and the one from the H5 file are different
-                if K.int_shape(weight) != weight_value.shape:
+                if archive_has_suffix:
+                    weight_value = safetensors_archive.get_tensor(weight_name + ":0")
+                else:
+                    weight_value = safetensors_archive.get_tensor(weight_name)
+                # Check if the shape of the current weight and the one from the safetensors file are different
+                if weight.shape != weight_value.shape:
                     # If yes we reshape the weight from the H5 file accordingly to the current weight
                     # If the two shapes are not compatible we raise an issue
                     try:
-                        weight_value = tf.reshape(weight_value, K.int_shape(weight))
+                        weight_value = tf.reshape(weight_value, tuple(weight.shape))
                     except (ValueError, tf.errors.InvalidArgumentError) as e:
                         if ignore_mismatched_sizes:
-                            mismatched_layers.append((weight_name, weight_value.shape, K.int_shape(weight)))
+                            mismatched_layers.append((weight_name, tuple(weight_value.shape), tuple(weight.shape)))
                             continue
                         else:
                             raise e
 
-                K.set_value(weight, weight_value)  # weight.assign() might break if weight is a DTensor
+                weight.assign(weight_value)  # TODO Find a DTensor-compatible way to do this
     return missing_layers, unexpected_layers, mismatched_layers
 
 
@@ -3483,7 +3501,7 @@ def get_initializer(initializer_range: float = 0.02) -> tf.keras.initializers.Tr
 
 
 if hasattr(tf.keras, "name_scope"):
-    # Keras 3 compatibility check - we use tf.name_scope in Keras 2
+    # Keras 3 nests name scopes for us, so we don't need to manually enter them
     name_scope = nullcontext
 else:
     name_scope = tf.name_scope
