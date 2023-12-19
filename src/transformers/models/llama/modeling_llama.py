@@ -359,7 +359,7 @@ class LlamaAttention(nn.Module):
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
-        
+
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
             query_slices = self.q_proj.weight.split(
@@ -420,7 +420,9 @@ class LlamaAttention(nn.Module):
                 )
         elif attention_mask is None and self._attention_mask is None:
             # 4d mask is passed through the layers
-            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(attention_mask, (bsz, q_len), hidden_states, kv_seq_len)
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len
+            )
         else:
             attention_mask = self._attention_mask
 
@@ -545,11 +547,11 @@ class LlamaFlashAttention2(LlamaAttention):
             key_states = key_states.to(target_dtype)
             value_states = value_states.to(target_dtype)
 
-        if (attention_mask is not None and 0 in attention_mask):
+        if attention_mask is not None and 0 in attention_mask:
             attn_weights = attn_weights + attention_mask
         else:
             attention_mask = None
-        
+
         attn_output = self._flash_attention_forward(
             query_states, key_states, value_states, attention_mask, q_len, dropout=dropout_rate
         )
@@ -722,7 +724,9 @@ class LlamaSdpaAttention(LlamaAttention):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
         elif attention_mask is None and self._attention_mask is None:
-            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, (bsz, q_len), hidden_states, kv_seq_len)
+            attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len
+            )
         else:
             attention_mask = self._attention_mask
 
