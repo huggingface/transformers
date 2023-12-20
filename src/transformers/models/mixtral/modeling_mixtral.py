@@ -662,7 +662,8 @@ class MixtralFlashAttention2(MixtralAttention):
         )
 
 
-class MixtralSdpaAttention(MixtralAttention):
+# Copied from transformers.models.mistral.modeling_mistral.MistralSdpaAttention2 with Mistral->Mixtral
+class MixtralSdpaAttention2(MixtralAttention):
     """
     Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
@@ -874,7 +875,7 @@ class MixtralDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MISTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.self_attn = MIXTRAL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.block_sparse_moe = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

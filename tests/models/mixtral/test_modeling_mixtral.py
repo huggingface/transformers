@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -39,7 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, MixtralForCausalLM, MixtralForSequenceClassification, MixtralModel
+    from transformers import MixtralForCausalLM, MixtralForSequenceClassification, MixtralModel
 
 
 class MixtralModelTester:
@@ -457,58 +456,6 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @slow
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("Mixtral flash attention does not support right padding")
-
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
-
-        model_sdpa = MixtralForCausalLM.from_pretrained(
-            "hf-internal-testing/Mixtral-tiny",
-            # torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = MixtralForCausalLM.from_pretrained(
-            "hf-internal-testing/Mixtral-tiny",
-            # torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        for name, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for name, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
-
-        texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
-
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
-
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
     # Ignore copy
     def test_load_balancing_loss(self):
