@@ -200,7 +200,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/bakLlava-v1-hf", load_in_4bit=True, attn_implementation="eager"
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
@@ -224,7 +226,9 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
 
-        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place?\nASSISTANT:"
@@ -247,20 +251,20 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "llava-hf/llava-1.5-7b-hf"
 
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+        processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+        inputs = processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: the water is calm and clear\n\nThe image shows a wooden pier on a lake, with a', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: the water is calm and clear\n\nThe image shows a wooden pier on a lake, with a', 'USER:  \nWhat is this?\nASSISTANT: The image features two cats lying down on a pink couch. One cat is located on the left side of the couch, while the other cat is on the right side. The couch appears to be a comfortable spot for the cats to rest and relax.']  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
 
@@ -272,14 +276,36 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT:",
         ]
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
-        inputs = self.processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+        inputs = self.processor(prompts, images=[image1, image2], return_tensors="pt", padding=True)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = ['\nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera, Park rules may apply, Per person, Sunrise over', '\nUSER: What is this?\nASSISTANT: Two cats lying on a bed!\nUSER: And this? a dock on a lake with two cats on it (Photo credit: Jocelyn R.']  # fmt: skip
+        EXPECTED_DECODED_TEXT = ['\nUSER: What are the things I should be cautious about when I visit this place? What should I bring with me\nASSISTANT: When visiting this place, bring a camera, Park rules may apply, Per person, Sunrise over', '\nUSER: What is this?\nASSISTANT: Cats']  # fmt: skip
         self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
+    def test_llava_index_error_bug(self):
+        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
+        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
+        # more details
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        # Simulate a super long prompt
+        user_prompt = "Describe the image:?\n" * 200
+        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
+        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
+
+        raw_image = Image.open(requests.get(image_file, stream=True).raw)
+        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
+
+        # Make sure that `generate` works
+        _ = model.generate(**inputs, max_new_tokens=20)
