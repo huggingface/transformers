@@ -2954,7 +2954,7 @@ class ModelTesterMixin:
         # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
         # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
         # for `linear` part.
-        with ContextManagers([no_init_weights(False)]):
+        with ContextManagers([no_init_weights(True)]):
             target_model = MyClass(config=config)
         target_model.apply(target_model._initialize_weights)
 
