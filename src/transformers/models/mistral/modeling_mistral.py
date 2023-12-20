@@ -610,7 +610,7 @@ class MistralFlashAttention2(MistralAttention):
         )
 
 
-class MixtralSdpaAttention(MistralAttention):
+class MistralSdpaAttention(MistralAttention):
     """
     Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
     `LlamaAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
@@ -725,7 +725,7 @@ class MixtralSdpaAttention(MistralAttention):
 MISTRAL_ATTENTION_CLASSES = {
     "eager": MistralAttention,
     "flash_attention_2": MistralFlashAttention2,
-    "sdpa": MixtralSdpaAttention,
+    "sdpa": MistralSdpaAttention,
 }
 
 
