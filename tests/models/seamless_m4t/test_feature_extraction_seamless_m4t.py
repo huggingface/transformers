@@ -139,12 +139,16 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         dict_second = feat_extract_second.to_dict()
         self.assertEqual(dict_first, dict_second)
 
+    @require_torch
     def test_call(self):
+        import torch
+
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+        pt_speech_inputs = [torch.tensor(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
         input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
@@ -152,24 +156,42 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         self.assertTrue(input_features.shape[0] == 3)
         self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size * feature_extractor.stride)
 
+        input_features = feature_extractor(pt_speech_inputs, padding=True, return_tensors="pt").input_features
+        self.assertTrue(input_features.ndim == 3)
+        self.assertTrue(input_features.shape[0] == 3)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size * feature_extractor.stride)
+
         # Test not batched input
         encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
+        encoded_sequences_3 = feature_extractor(speech_inputs[0], return_tensors="pt").input_features
+        encoded_sequences_4 = feature_extractor(pt_speech_inputs[0], return_tensors="pt").input_features
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        self.assertTrue(torch.allclose(encoded_sequences_3, encoded_sequences_4, atol=1e-3))
 
         # Test batched
         encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_3 = feature_extractor(speech_inputs, return_tensors="pt").input_features
+        encoded_sequences_4 = feature_extractor(pt_speech_inputs, return_tensors="pt").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+        for enc_seq_3, enc_seq_4 in zip(encoded_sequences_3, encoded_sequences_4):
+            self.assertTrue(torch.allclose(enc_seq_3, enc_seq_4, atol=1e-3))
 
         # Test 2-D numpy arrays are batched.
         speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
         np_speech_inputs = np.asarray(speech_inputs)
+        pt_speech_inputs = torch.tensor(speech_inputs)
+
         encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_3 = feature_extractor(speech_inputs, return_tensors="pt").input_features
+        encoded_sequences_4 = feature_extractor(pt_speech_inputs, return_tensors="pt").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+        for enc_seq_3, enc_seq_4 in zip(encoded_sequences_3, encoded_sequences_4):
+            self.assertTrue(torch.allclose(enc_seq_3, enc_seq_4, atol=1e-3))
 
     @require_torch
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
@@ -179,8 +201,9 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
+        pt_speech_inputs = torch.from_numpy(np_speech_inputs)
 
-        for inputs in [py_speech_inputs, np_speech_inputs]:
+        for inputs in [py_speech_inputs, np_speech_inputs, pt_speech_inputs]:
             np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
