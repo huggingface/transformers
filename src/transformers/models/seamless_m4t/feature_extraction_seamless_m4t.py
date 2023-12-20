@@ -158,14 +158,17 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays, a list of list of float values or a list of a list of list of float
-                values. If `raw_speech` is a one-dimensional `np.ndarray` or a `List[float]`, `raw_speech` is
+            raw_speech (`np.ndarray`, `torch.Tensor`, `List[float]`, `List[np.ndarray]`, `List[torch.Tensor]`,
+            `List[List[float]]`, `List[List[List[float]]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array,
+                a torch tensor, a list of float values, a list of numpy arrays, a list of torch tensors,
+                a list of list of float values or a list of a list of list of float values.
+                If `raw_speech` is a one-dimensional `np.ndarray`, `torch.Tensor` or a `List[float]`, `raw_speech` is
                 considered a single-channel, single-sample sound. In all other cases, the first dimension of
-                `raw_speech`, whether from an `np.ndarray` or a `List[...]`, corresponds to the number of samples in
-                the batch, and the number of channels (i.e. mono or stereo character) is derived from the other
-                dimensions (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
+                `raw_speech`, whether from an `np.ndarray`, a `torch.Tensor` or a `List[...]`,
+                corresponds to the number of samples in the batch, and the number of channels
+                (i.e. mono or stereo character) is derived from the other dimensions
+                (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
