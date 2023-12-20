@@ -760,7 +760,10 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
             config, layer_idx=layer_idx
         )
         self.mlp = SigmaMoEFeedForwardLayer(config, is_sparse=is_sparse)
-        self.input_layernorm = torch.nn.LayerNorm(
+        self.norm1 = torch.nn.LayerNorm(
+            config.d_model, eps=config.layer_norm_eps
+        )
+        self.norm2 = torch.nn.LayerNorm(
             config.d_model, eps=config.layer_norm_eps
         )
         self.resid_dropout = torch.nn.Dropout(config.resid_pdrop)
@@ -793,27 +796,23 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
-
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
+        src = hidden_states
+        src2 = self.norm1(src)
+        src2 , self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=src2,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        attn_outputs = self.resid_dropout(attn_outputs)
-
-        feed_forward_hidden_states, reg_loss = self.mlp(hidden_states)
-        feed_forward_hidden_states = self.resid_dropout(feed_forward_hidden_states)
-        hidden_states = attn_outputs + feed_forward_hidden_states + residual
-        outputs = (hidden_states,)
-
+        src = src + self.resid_dropout(src2)
+        src2 = self.norm2(src)
+        src3, reg_loss = self.mlp(src2)
+        src = src + self.resid_dropout(src3)
+        
+        outputs = (src,)
+        
         if output_attentions:
             outputs += (self_attn_weights,)
 
@@ -821,8 +820,37 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
             outputs += (present_key_value,)
 
         outputs += (reg_loss,)
-
         return outputs
+
+        # residual = hidden_states
+
+        # hidden_states = self.input_layernorm(hidden_states)
+
+        # # Self Attention
+        # attn_outputs, self_attn_weights, present_key_value = self.self_attn(
+        #     hidden_states=hidden_states,
+        #     attention_mask=attention_mask,
+        #     position_ids=position_ids,
+        #     past_key_value=past_key_value,
+        #     output_attentions=output_attentions,
+        #     use_cache=use_cache,
+        # )
+        # attn_outputs = self.resid_dropout(attn_outputs)
+
+        # feed_forward_hidden_states, reg_loss = self.mlp(hidden_states)
+        # feed_forward_hidden_states = self.resid_dropout(feed_forward_hidden_states)
+        # hidden_states = attn_outputs + feed_forward_hidden_states + residual
+        # outputs = (hidden_states,)
+
+        # if output_attentions:
+        #     outputs += (self_attn_weights,)
+
+        # if use_cache:
+        #     outputs += (present_key_value,)
+
+        # outputs += (reg_loss,)
+
+        # return outputs
 
 
 SIGMA_MOE_START_DOCSTRING = r"""
