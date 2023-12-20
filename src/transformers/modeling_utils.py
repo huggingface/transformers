@@ -3957,13 +3957,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
-            if remove_prefix_from_model:
-                _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
-            elif add_prefix_to_model:
-                _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
-            else:
-                _loaded_keys = loaded_keys
-            set_initialized_submodules(model, _loaded_keys)
+            if not ignore_mismatched_sizes:
+                if remove_prefix_from_model:
+                    _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
+                elif add_prefix_to_model:
+                    _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
+                else:
+                    _loaded_keys = loaded_keys
+                set_initialized_submodules(model, _loaded_keys)
             # This will only initialize submodules that are not marked as initialized by the line above.
             model.apply(model._initialize_weights)
 
