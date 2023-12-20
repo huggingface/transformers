@@ -26,7 +26,12 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import functional as F
 
-from transformers import DetrImageProcessor, ResNetConfig, TableTransformerConfig, TableTransformerForObjectDetection
+from transformers import (
+    ResNetConfig,
+    TableTransformerConfig,
+    TableTransformerForObjectDetection,
+    TableTransformerImageProcessor,
+)
 from transformers.utils import logging
 
 
@@ -371,7 +376,8 @@ def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
-    image_processor = DetrImageProcessor(format="coco_detection", size={"shortest_edge": 800, "longest_edge": 1333})
+    max_size = 800 if "detection" in checkpoint_url else 1000
+    image_processor = TableTransformerImageProcessor(format="coco_detection", max_size=max_size)
     model = TableTransformerForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
