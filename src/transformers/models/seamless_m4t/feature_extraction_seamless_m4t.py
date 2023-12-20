@@ -19,7 +19,10 @@ Feature extractor class for SeamlessM4T
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
+from ...utils import is_torch_available
+
+if is_torch_available():
+    import torch
 
 from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
