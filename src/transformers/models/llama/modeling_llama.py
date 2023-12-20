@@ -289,7 +289,6 @@ class LlamaAttention(nn.Module):
 
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
-        self.cached_mask = None
         self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None:
