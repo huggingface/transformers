@@ -416,7 +416,7 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        if LlamaAttention.cached_mask is None or self.layer_idx == 0 or attention_mask is None:
+        if (attention_mask is None and LlamaAttention.cached_mask is None) or self.layer_idx == 0:
             # create the 4d mask and cache it
             attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
