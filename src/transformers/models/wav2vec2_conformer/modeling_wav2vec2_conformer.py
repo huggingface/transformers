@@ -942,8 +942,6 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)            
-            # TODO: which one is good ?
-            # hidden_states[~attention_mask] = 0.0
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -1090,41 +1088,29 @@ class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Module):
 class Wav2Vec2ConformerAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        
-        self.use_adapter_with_attention = config.use_adapter_with_attention
-
         # feature dim might need to be down-projected
         if config.output_hidden_size != config.hidden_size:
             self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
             self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
         else:
             self.proj = self.proj_layer_norm = None
-
-        if self.use_adapter_with_attention:
-            self.layers = nn.ModuleList(Wav2Vec2ConformerAdapterLayerWithAttention(config) for _ in range(config.num_adapter_layers))
-        else:
-            self.layers = nn.ModuleList(Wav2Vec2ConformerAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layers = nn.ModuleList(Wav2Vec2ConformerAdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
-    def forward(self, hidden_states, attention_mask = None):
+    def forward(self, hidden_states):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
             hidden_states = self.proj_layer_norm(hidden_states)
 
-        if not self.use_adapter_with_attention:
-            hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = hidden_states.transpose(1, 2)
 
         for layer in self.layers:
             layerdrop_prob = np.random.random()
             if not self.training or (layerdrop_prob > self.layerdrop):
-                if self.use_adapter_with_attention:
-                    hidden_states = layer(hidden_states, attention_mask=attention_mask)
-                else:
-                    hidden_states = layer(hidden_states)
+                hidden_states = layer(hidden_states)
 
-        if not self.use_adapter_with_attention:
-            hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
 
@@ -1145,105 +1131,6 @@ class Wav2Vec2ConformerAdapterLayer(nn.Module):
         hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         return hidden_states
-    
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerAdapterLayer with SeamlessM4T->Wav2Vec2, AdapterLayer->AdapterLayerWithAttention,  , adaptor_dropout->conformer_conv_dropout, adaptor->adapter, hidden_size->output_hidden_size
-class Wav2Vec2ConformerAdapterLayerWithAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        embed_dim = config.hidden_size
-        dropout = config.conformer_conv_dropout
-
-        self.kernel_size = config.adapter_kernel_size
-        self.stride = config.adapter_stride
-
-        # 1. residual convolution
-        self.residual_layer_norm = nn.LayerNorm(embed_dim)
-        self.residual_conv = nn.Conv1d(
-            embed_dim,
-            2 * embed_dim,
-            self.kernel_size,
-            stride=self.stride,
-            padding=self.stride // 2,
-        )
-        self.activation = nn.GLU(dim=1)
-
-        # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
-        self.self_attn_conv = nn.Conv1d(
-            embed_dim,
-            2 * embed_dim,
-            self.kernel_size,
-            stride=self.stride,
-            padding=self.stride // 2,
-        )
-        self.self_attn = Wav2Vec2ConformerSelfAttention(config, use_position_embeddings=False)
-        self.self_attn_dropout = nn.Dropout(dropout)
-
-        # Feed-forward
-        self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = Wav2Vec2ConformerFeedForward(config, act_fn="relu")
-
-    def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
-        pad = self.kernel_size // 2
-        seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
-
-        seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
-
-        return seq_lens.floor()
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
-        residual = self.residual_layer_norm(hidden_states)
-
-        # Apply pooling to the residual to match the sequence length of the
-        # multi-head attention output.
-        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
-        residual = residual.transpose(1, 2)
-        residual = self.residual_conv(residual)
-        residual = self.activation(residual)
-        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
-        residual = residual.transpose(1, 2)
-
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        # Apply pooling before feeding to the multihead-attention layer.
-        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
-        hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.self_attn_conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
-        hidden_states = hidden_states.transpose(1, 2)
-
-        if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
-                hidden_states.device
-            )
-            attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
-            attention_mask = _prepare_4d_attention_mask(
-                attention_mask,
-                hidden_states.dtype,
-            )
-
-        # The rest of the computation is identical to a vanilla Transformer
-        # encoder layer.
-        hidden_states, attn_weigths = self.self_attn(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = self.self_attn_dropout(hidden_states)
-        hidden_states = hidden_states + residual
-
-        residual = hidden_states
-
-        hidden_states = self.ffn_layer_norm(hidden_states)
-        hidden_states = self.ffn(hidden_states) + residual
-
-        return hidden_states
-
 
 class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     """
@@ -1530,7 +1417,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if self.adapter is not None:
-            hidden_states = self.adapter(hidden_states, attention_mask=attention_mask)
+            hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
