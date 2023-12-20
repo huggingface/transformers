@@ -2925,6 +2925,73 @@ class ModelTesterMixin:
                                 msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                             )
 
+    def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
+        # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
+        class MyClass(PreTrainedModel):
+            config_class = PretrainedConfig
+
+            def __init__(self, config=None):
+                super().__init__(config if config is not None else PretrainedConfig())
+                self.linear = nn.Linear(10, config.num_labels, bias=True)
+                self.embedding = nn.Embedding(10, 10)
+                self.std = 1
+
+            def _init_weights(self, module):
+                if isinstance(module, nn.Linear):
+                    module.weight.data = nn.init.kaiming_uniform_(module.weight.data, np.sqrt(5))
+                    if module.bias is not None:
+                        module.bias.data = module.bias.data.normal_(mean=0.0, std=self.std)
+
+        # Used to make sure the weights with matched shape are loaded correctly
+        config = PretrainedConfig()
+        config.num_labels = 3
+        model = MyClass(config=config)
+
+        # Used to make sure the weights with mismatched shape are properly initialized
+        set_seed(0)
+        config = PretrainedConfig()
+        config.num_labels = 4
+        # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
+        # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
+        # for `linear` part.
+        with ContextManagers([no_init_weights(False)]):
+            target_model = MyClass(config=config)
+        target_model.apply(target_model._initialize_weights)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            del state_dict["linear.weight"]
+
+            model.config.save_pretrained(tmpdirname)
+            torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+            set_seed(0)
+            new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
+
+            for key in new_model.state_dict().keys():
+                # Make sure that weight values for weights with matched shapes are identical
+                # (i.e. correctly loaded from the checkpoint)
+                if key not in ["linear.weight", "linear.bias"]:
+                    max_diff = torch.max(torch.abs(model.state_dict()[key] - new_model.state_dict()[key]))
+                    self.assertLessEqual(
+                        max_diff.item(),
+                        1e-3,
+                        msg=f"the weight values for `{key}` in `new_model` and `model` are  not identical",
+                    )
+                else:
+                    # make sure we do have some mismatched shapes
+                    self.assertNotEqual(
+                        model.state_dict()[key].shape,
+                        new_model.state_dict()[key].shape,
+                        msg=f"the weight shapes for {key} in `model` and `new_model` should differ",
+                    )
+                    max_diff = torch.max(torch.abs(new_model.state_dict()[key] - target_model.state_dict()[key]))
+                    self.assertLessEqual(
+                        max_diff.item(),
+                        1e-5,
+                        msg=f"the weight values for `{key}` in `new_model` and `target_model` are not identical",
+                    )
+
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 80M parameter models.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
