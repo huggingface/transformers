@@ -342,7 +342,7 @@ For the complete list of the available parameters, refer to the [API documentati
 ### Speculative Decoding
 
 Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
-assistant model (ideally a much smaller one) with  the same tokenizer, to generate a few candidate tokens. The main
+assistant model (ideally a much smaller one) with the same tokenizer, to generate a few candidate tokens. The main
 model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
 `do_sample=True`, then the token validation with resampling introduced in the
 [speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
