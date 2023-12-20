@@ -4000,6 +4000,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ):
             mismatched_keys = []
             if ignore_mismatched_sizes:
+
+                # zero.Init already sharded the model and state_dict() doesn't give us the original
+                # shapes, so cheat to get the original shapes via model.named_parameters() and p.ds_shape
+                if is_deepspeed_zero3_enabled():
+                    shapes = {k: v.ds_shape for k, v in model.named_parameters()}
+                else:
+                    shapes = {k: v.shape for k, v in model_state_dict.items()}
+
                 for checkpoint_key in loaded_keys:
                     # If the checkpoint is sharded, we may not have the key here.
                     if checkpoint_key not in state_dict:
@@ -4012,13 +4020,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                         model_key = ".".join(checkpoint_key.split(".")[1:])
 
-                    if (
-                        model_key in model_state_dict
-                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-                    ):
-                        mismatched_keys.append(
-                            (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                        )
+                    if model_key in model_state_dict and state_dict[checkpoint_key].shape != shapes[model_key]:
+                        mismatched_keys.append((checkpoint_key, state_dict[checkpoint_key].shape, shapes[model_key]))
                         del state_dict[checkpoint_key]
             return mismatched_keys
 
