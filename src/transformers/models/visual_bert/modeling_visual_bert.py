@@ -57,7 +57,7 @@ VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "uclanlp/visualbert-vcr-coco-pre",
     "uclanlp/visualbert-nlvr2",
     "uclanlp/visualbert-nlvr2-pre",
-    "uclanlp/visualbert-nlvr2-coco-pre"
+    "uclanlp/visualbert-nlvr2-coco-pre",
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 ]
 

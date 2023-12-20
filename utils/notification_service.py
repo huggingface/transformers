@@ -100,7 +100,13 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 class Message:
     def __init__(
-        self, title: str, ci_title: str, model_results: Dict, additional_results: Dict, selected_warnings: List = None
+        self,
+        title: str,
+        ci_title: str,
+        model_results: Dict,
+        additional_results: Dict,
+        selected_warnings: List = None,
+        prev_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
@@ -119,10 +125,17 @@ class Message:
         # Failures and success of the additional tests
         self.n_additional_success = sum(r["success"] for r in additional_results.values())
 
-        all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
-        self.n_additional_single_gpu_failures = all_additional_failures["single"]
-        self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
-        self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        if len(additional_results) > 0:
+            # `dicts_to_sum` uses `dicts_to_sum` which requires a non empty dictionary. Let's just add an empty entry.
+            all_additional_failures = dicts_to_sum([r["failed"] for r in additional_results.values()])
+            self.n_additional_single_gpu_failures = all_additional_failures["single"]
+            self.n_additional_multi_gpu_failures = all_additional_failures["multi"]
+            self.n_additional_unknown_gpu_failures = all_additional_failures["unclassified"]
+        else:
+            self.n_additional_single_gpu_failures = 0
+            self.n_additional_multi_gpu_failures = 0
+            self.n_additional_unknown_gpu_failures = 0
+
         self.n_additional_failures = (
             self.n_additional_single_gpu_failures
             + self.n_additional_multi_gpu_failures
@@ -142,6 +155,8 @@ class Message:
         if selected_warnings is None:
             selected_warnings = []
         self.selected_warnings = selected_warnings
+
+        self.prev_ci_artifacts = prev_ci_artifacts
 
     @property
     def time(self) -> str:
@@ -391,8 +406,6 @@ class Message:
 
         # Save the complete (i.e. no truncation) failure tables (of the current workflow run)
         # (to be uploaded as artifacts)
-        if not os.path.isdir(os.path.join(os.getcwd(), "test_failure_tables")):
-            os.makedirs(os.path.join(os.getcwd(), "test_failure_tables"))
 
         model_failures_report = prepare_reports(
             title="These following model modules had failures",
@@ -400,7 +413,7 @@ class Message:
             reports=sorted_model_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/model_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(model_failures_report)
 
@@ -410,27 +423,18 @@ class Message:
             reports=sorted_module_reports,
             to_truncate=False,
         )
-        file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
+        file_path = os.path.join(os.getcwd(), "prev_ci_results/module_failures_report.txt")
         with open(file_path, "w", encoding="UTF-8") as fp:
             fp.write(module_failures_report)
 
-        target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
-        if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
-            # Get the last previously completed CI's failure tables
-            artifact_names = ["test_failure_tables"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_tables = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-            )
-
-            # if the last run produces artifact named `test_failure_tables`
+        if self.prev_ci_artifacts is not None:
+            # if the last run produces artifact named `prev_ci_results`
             if (
-                "test_failure_tables" in prev_tables
-                and "model_failures_report.txt" in prev_tables["test_failure_tables"]
+                "prev_ci_results" in self.prev_ci_artifacts
+                and "model_failures_report.txt" in self.prev_ci_artifacts["prev_ci_results"]
             ):
                 # Compute the difference of the previous/current (model failure) table
-                prev_model_failures = prev_tables["test_failure_tables"]["model_failures_report.txt"]
+                prev_model_failures = self.prev_ci_artifacts["prev_ci_results"]["model_failures_report.txt"]
                 entries_changed = self.compute_diff_for_failure_reports(model_failures_report, prev_model_failures)
                 if len(entries_changed) > 0:
                     # Save the complete difference
@@ -440,7 +444,7 @@ class Message:
                         reports=entries_changed,
                         to_truncate=False,
                     )
-                    file_path = os.path.join(os.getcwd(), "test_failure_tables/changed_model_failures_report.txt")
+                    file_path = os.path.join(os.getcwd(), "prev_ci_results/changed_model_failures_report.txt")
                     with open(file_path, "w", encoding="UTF-8") as fp:
                         fp.write(diff_report)
 
@@ -505,6 +509,10 @@ class Message:
 
         if len(self.selected_warnings) > 0:
             blocks.append(self.warnings)
+
+        new_failure_blocks = self.get_new_model_failure_blocks(with_header=False)
+        if len(new_failure_blocks) > 0:
+            blocks.extend(new_failure_blocks)
 
         return json.dumps(blocks)
 
@@ -625,6 +633,67 @@ class Message:
             {"type": "section", "text": {"type": "mrkdwn", "text": failure_text}},
         ]
 
+    def get_new_model_failure_blocks(self, with_header=True):
+        if self.prev_ci_artifacts is None:
+            return {}
+
+        sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
+
+        prev_model_results = {}
+        if (
+            "prev_ci_results" in self.prev_ci_artifacts
+            and "model_results.json" in self.prev_ci_artifacts["prev_ci_results"]
+        ):
+            prev_model_results = json.loads(self.prev_ci_artifacts["prev_ci_results"]["model_results.json"])
+
+        all_failure_lines = {}
+        for job, job_result in sorted_dict:
+            if len(job_result["failures"]):
+                devices = sorted(job_result["failures"].keys(), reverse=True)
+                for device in devices:
+                    failures = job_result["failures"][device]
+                    prev_error_lines = {}
+                    if job in prev_model_results and device in prev_model_results[job]["failures"]:
+                        prev_error_lines = {error["line"] for error in prev_model_results[job]["failures"][device]}
+
+                    url = None
+                    if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
+                        url = job_result["job_link"][device]
+
+                    for idx, error in enumerate(failures):
+                        if error["line"] in prev_error_lines:
+                            continue
+
+                        new_text = f'{error["line"]}\n\n'
+
+                        if new_text not in all_failure_lines:
+                            all_failure_lines[new_text] = []
+
+                        all_failure_lines[new_text].append(f"<{url}|{device}>" if url is not None else device)
+
+        MAX_ERROR_TEXT = 3000 - len("[Truncated]") - len("```New model failures```\n\n")
+        failure_text = ""
+        for line, devices in all_failure_lines.items():
+            new_text = failure_text + f"{'|'.join(devices)} gpu\n{line}"
+            if len(new_text) > MAX_ERROR_TEXT:
+                # `failure_text` here has length <= 3000
+                failure_text = failure_text + "[Truncated]"
+                break
+            # `failure_text` here has length <= MAX_ERROR_TEXT
+            failure_text = new_text
+
+        blocks = []
+        if failure_text:
+            if with_header:
+                blocks.append(
+                    {"type": "header", "text": {"type": "plain_text", "text": "New model failures", "emoji": True}}
+                )
+            else:
+                failure_text = f"*New model failures*\n\n{failure_text}"
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": failure_text}})
+
+        return blocks
+
     def post_reply(self):
         if self.thread_ts is None:
             raise ValueError("Can only post reply if a post has been made.")
@@ -673,6 +742,20 @@ class Message:
                     )
 
                     time.sleep(1)
+
+        blocks = self.get_new_model_failure_blocks()
+        if blocks:
+            print("Sending the following reply")
+            print(json.dumps({"blocks": blocks}))
+
+            client.chat_postMessage(
+                channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+                text="Results for new failures",
+                blocks=blocks,
+                thread_ts=self.thread_ts["ts"],
+            )
+
+            time.sleep(1)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -903,6 +986,9 @@ if __name__ == "__main__":
     elif ci_event.startswith("Push CI (AMD) - "):
         flavor = ci_event.replace("Push CI (AMD) - ", "")
         job_name_prefix = f"AMD {flavor}"
+    elif ci_event.startswith("Scheduled CI (AMD) - "):
+        flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
+        job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
@@ -968,10 +1054,15 @@ if __name__ == "__main__":
         "Torch CUDA extension tests": "run_tests_torch_cuda_extensions_gpu_test_reports",
     }
 
-    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI") or ci_event.startswith("Push CI (AMD)"):
+    if ci_event in ["push", "Nightly CI"] or ci_event.startswith("Past CI"):
         del additional_files["Examples directory"]
         del additional_files["PyTorch pipelines"]
         del additional_files["TensorFlow pipelines"]
+    elif ci_event.startswith("Scheduled CI (AMD)"):
+        del additional_files["TensorFlow pipelines"]
+        del additional_files["Torch CUDA extension tests"]
+    elif ci_event.startswith("Push CI (AMD)"):
+        additional_files = {}
 
     additional_results = {
         key: {
@@ -1030,7 +1121,31 @@ if __name__ == "__main__":
         with open(os.path.join(directory, "selected_warnings.json")) as fp:
             selected_warnings = json.load(fp)
 
-    message = Message(title, ci_title, model_results, additional_results, selected_warnings=selected_warnings)
+    if not os.path.isdir(os.path.join(os.getcwd(), "prev_ci_results")):
+        os.makedirs(os.path.join(os.getcwd(), "prev_ci_results"))
+
+    with open("prev_ci_results/model_results.json", "w", encoding="UTF-8") as fp:
+        json.dump(model_results, fp, indent=4, ensure_ascii=False)
+
+    prev_ci_artifacts = None
+    target_workflow = "huggingface/transformers/.github/workflows/self-scheduled.yml@refs/heads/main"
+    if os.environ.get("CI_WORKFLOW_REF") == target_workflow:
+        # Get the last previously completed CI's failure tables
+        artifact_names = ["prev_ci_results"]
+        output_dir = os.path.join(os.getcwd(), "previous_reports")
+        os.makedirs(output_dir, exist_ok=True)
+        prev_ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        )
+
+    message = Message(
+        title,
+        ci_title,
+        model_results,
+        additional_results,
+        selected_warnings=selected_warnings,
+        prev_ci_artifacts=prev_ci_artifacts,
+    )
 
     # send report only if there is any failure (for push CI)
     if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):

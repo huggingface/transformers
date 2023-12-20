@@ -42,6 +42,7 @@ class OneFormerProcessor(ProcessorMixin):
         task_seq_len (`int`, *optional*, defaults to 77):
             Sequence length for input task token.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "OneFormerImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")

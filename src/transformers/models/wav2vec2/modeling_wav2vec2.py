@@ -1333,7 +1333,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
-                state_dict = torch.load(weight_path, map_location="cpu")
+                state_dict = torch.load(weight_path, map_location="cpu", weights_only=True)
 
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted

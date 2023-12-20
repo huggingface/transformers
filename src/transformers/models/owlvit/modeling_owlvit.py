@@ -540,9 +540,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, OwlViTMLP):
             factor = self.config.initializer_factor
-            in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            )
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
@@ -1519,7 +1517,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     outputs = model.image_guided_detection(**inputs)
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
-        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )

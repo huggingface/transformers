@@ -14,7 +14,7 @@ on:
 jobs:
   run_tests_templates_like:
     name: "Add new model like template tests"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
 
