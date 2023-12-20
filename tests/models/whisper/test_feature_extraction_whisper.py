@@ -226,10 +226,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertEqual(input_features.shape, (1, 80, 3000))
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
-    @unittest.mock.patch(
-        "transformers.models.whisper.feature_extraction_whisper.is_torch_available",
-        lambda: False,
-    )
+    @unittest.mock.patch("transformers.models.whisper.feature_extraction_whisper.is_torch_available", lambda: False)
     def test_numpy_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = np.array(
