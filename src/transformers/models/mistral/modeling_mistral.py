@@ -609,7 +609,7 @@ class MistralFlashAttention2(MistralAttention):
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
 
-
+# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Mistral
 class MistralSdpaAttention(MistralAttention):
     """
     Llama attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
