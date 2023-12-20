@@ -117,8 +117,8 @@ class GPTNeoXAttention(nn.Module):
         self._init_rope()
 
         self.norm_factor = self.head_size**-0.5
-        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.is_causal = True
 
