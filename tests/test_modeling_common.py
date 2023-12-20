@@ -2969,7 +2969,7 @@ class ModelTesterMixin:
             new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
 
             for key in new_model.state_dict().keys():
-                # Make sure that weight values for weights with matched shapes are identical
+                # check weight values for weights with matched shapes are identical
                 # (i.e. correctly loaded from the checkpoint)
                 if key not in ["linear.weight", "linear.bias"]:
                     max_diff = torch.max(torch.abs(model.state_dict()[key] - new_model.state_dict()[key]))
@@ -2979,12 +2979,13 @@ class ModelTesterMixin:
                         msg=f"the weight values for `{key}` in `new_model` and `model` are  not identical",
                     )
                 else:
-                    # make sure we do have some mismatched shapes
+                    # check we have some mismatched shapes
                     self.assertNotEqual(
                         model.state_dict()[key].shape,
                         new_model.state_dict()[key].shape,
                         msg=f"the weight shapes for {key} in `model` and `new_model` should differ",
                     )
+                    # check the weights with mismatched shape are properly initialized
                     max_diff = torch.max(torch.abs(new_model.state_dict()[key] - target_model.state_dict()[key]))
                     self.assertLessEqual(
                         max_diff.item(),
