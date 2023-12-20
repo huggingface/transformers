@@ -750,7 +750,7 @@ class MixtralSdpaAttention(MixtralAttention):
         return attn_output, None, past_key_value
 
 
-MISTRAL_ATTENTION_CLASSES = {
+MIXTRAL_ATTENTION_CLASSES = {
     "eager": MixtralAttention,
     "flash_attention_2": MixtralFlashAttention2,
     "sdpa": MixtralSdpaAttention,
