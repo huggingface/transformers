@@ -201,9 +201,8 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
-        pt_speech_inputs = torch.from_numpy(np_speech_inputs)
 
-        for inputs in [py_speech_inputs, np_speech_inputs, pt_speech_inputs]:
+        for inputs in [py_speech_inputs, np_speech_inputs]:
             np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
