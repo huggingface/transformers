@@ -911,10 +911,10 @@ class GenerationMixin:
         candidate_generator = AssistedCandidateGenerator(
             input_ids=input_ids,
             assistant_model=assistant_model,
+            generation_config=generation_config,
             logits_processor=logits_processor,
             model_kwargs=model_kwargs,
             inputs_tensor=inputs_tensor,
-            eos_token_id=generation_config.eos_token_id,
         )
         return candidate_generator
 
@@ -1673,7 +1673,7 @@ class GenerationMixin:
             )
 
         # 8. prepare distribution pre_processing samplers
-        logits_processor = self._get_logits_processor(
+        prepared_logits_processor = self._get_logits_processor(
             generation_config=generation_config,
             input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
@@ -1685,7 +1685,7 @@ class GenerationMixin:
         )
 
         # 9. prepare stopping criteria
-        stopping_criteria = self._get_stopping_criteria(
+        prepared_stopping_criteria = self._get_stopping_criteria(
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
@@ -1715,9 +1715,9 @@ class GenerationMixin:
                 input_ids,
                 candidate_generator=candidate_generator,
                 do_sample=generation_config.do_sample,
-                logits_processor=logits_processor,
+                logits_processor=prepared_logits_processor,
                 logits_warper=self._get_logits_warper(generation_config) if generation_config.do_sample else None,
-                stopping_criteria=stopping_criteria,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1730,8 +1730,8 @@ class GenerationMixin:
             # 11. run greedy search
             return self.greedy_search(
                 input_ids,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1749,8 +1749,8 @@ class GenerationMixin:
                 input_ids,
                 top_k=generation_config.top_k,
                 penalty_alpha=generation_config.penalty_alpha,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1776,9 +1776,9 @@ class GenerationMixin:
             # 13. run sample
             return self.sample(
                 input_ids,
-                logits_processor=logits_processor,
+                logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
-                stopping_criteria=stopping_criteria,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1810,8 +1810,8 @@ class GenerationMixin:
             return self.beam_search(
                 input_ids,
                 beam_scorer,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1847,9 +1847,9 @@ class GenerationMixin:
             return self.beam_sample(
                 input_ids,
                 beam_scorer,
-                logits_processor=logits_processor,
+                logits_processor=prepared_logits_processor,
                 logits_warper=logits_warper,
-                stopping_criteria=stopping_criteria,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1881,8 +1881,8 @@ class GenerationMixin:
             return self.group_beam_search(
                 input_ids,
                 beam_scorer,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -1954,8 +1954,8 @@ class GenerationMixin:
             return self.constrained_beam_search(
                 input_ids,
                 constrained_beam_scorer=constrained_beam_scorer,
-                logits_processor=logits_processor,
-                stopping_criteria=stopping_criteria,
+                logits_processor=prepared_logits_processor,
+                stopping_criteria=prepared_stopping_criteria,
                 pad_token_id=generation_config.pad_token_id,
                 eos_token_id=generation_config.eos_token_id,
                 output_scores=generation_config.output_scores,
@@ -4638,7 +4638,7 @@ class GenerationMixin:
                     max_matches,
                 )
                 # The selected tokens include the matches plus the next sampled tokens
-                selected_tokens = torch.cat((candidate_input_ids[:, :n_matches], next_sampled_tokens), dim=-1)
+                selected_tokens = torch.cat((candidate_input_ids[:, -n_matches:], next_sampled_tokens), dim=-1)
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
             # original model logits with the candidate tokens. We can keep the candidate tokens until the first
@@ -4789,17 +4789,9 @@ def _speculative_sampling(
     # Gets the probabilities from the logits. q_i and p_i denote the assistant and model probabilities of the tokens
     # selected by the assistant, respectively.
     q = candidate_logits.softmax(dim=-1)
-    q_i = q[
-        :,
-        torch.range(0, candidate_length - 1, dtype=torch.int),
-        candidate_input_ids[:, -candidate_length:],
-    ].squeeze(0, 1)
+    q_i = q[:, torch.arange(candidate_length), candidate_input_ids[:, -candidate_length:]].squeeze(0, 1)
     p = new_logits.softmax(dim=-1)
-    p_i = p[
-        :,
-        torch.range(0, candidate_length - 1, dtype=torch.int),
-        candidate_input_ids[:, -candidate_length:],
-    ].squeeze(0, 1)
+    p_i = p[:, torch.arange(candidate_length), candidate_input_ids[:, -candidate_length:]].squeeze(0, 1)
     probability_ratio = p_i / q_i
 
     # When probability_ratio > 1 (i.e. q_i(x) < p_i(x), or "assistant probability of the candidate token is smaller
