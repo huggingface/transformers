@@ -4638,7 +4638,7 @@ class GenerationMixin:
                     max_matches,
                 )
                 # The selected tokens include the matches plus the next sampled tokens
-                selected_tokens = torch.cat((candidate_input_ids[:, -n_matches:], next_sampled_tokens), dim=-1)
+                valid_tokens = torch.cat((candidate_input_ids[:, -n_matches:], next_sampled_tokens), dim=-1)
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
             # original model logits with the candidate tokens. We can keep the candidate tokens until the first
@@ -4657,6 +4657,7 @@ class GenerationMixin:
                 if last_assistant_token_is_eos and n_matches == candidate_length:
                     n_matches -= 1
                 n_matches = min(n_matches, max_matches)
+                valid_tokens = selected_tokens[:, : n_matches + 1]
 
             # 4. Update variables according to the number of matching assistant tokens. Remember: the token generated
             # by the model after the last candidate match is also valid, as it is generated from a correct sequence.
@@ -4664,7 +4665,6 @@ class GenerationMixin:
             # is no match.
 
             # 4.1. Get the valid continuation, after the matching tokens
-            valid_tokens = selected_tokens[:, : n_matches + 1]
             input_ids = torch.cat((input_ids, valid_tokens), dim=-1)
             if streamer is not None:
                 streamer.put(valid_tokens.cpu())

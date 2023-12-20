@@ -66,8 +66,8 @@ class CandidateGenerator:
 
 class AssistedCandidateGenerator(CandidateGenerator):
     """
-    `CandidateGenerator` class to be used for assisted generation, with or without speculative decoding. This class
-    generates candidates through the use of a smaller model. Read the following blog post for more information:
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
+    candidates through the use of a smaller model. Read the following blog post for more information:
     https://huggingface.co/blog/assisted-generation
 
     Args:
@@ -137,8 +137,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.input_ids_key = "input_ids"
             self.attention_key = "attention_mask"
 
-        # Prepare generation-related options. Prepares the generation_config to run greedy search for the assistant
-        # model, based on the main models' generation_config.
+        # Prepare generation-related options.
         eos_token_id = generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
@@ -147,17 +146,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
         )
         self.logits_processor = logits_processor
         self.generation_config = copy.deepcopy(generation_config)
-        self.generation_config.do_sample = False
-        self.generation_config.num_beams = 1
         self.generation_config.return_dict_in_generate = True
         self.generation_config.output_scores = True
-        # Sets sampling based parameters to their default (to prevent noisy warnings)
-        self.generation_config.temperature = 1.0
-        self.generation_config.top_k = 50
-        self.generation_config.top_p = 1.0
-        self.generation_config.typical_p = 1.0
-        self.generation_config.epsilon_cutoff = 0.0
-        self.generation_config.eta_cutoff = 0.0
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
