@@ -135,6 +135,8 @@
     title: Overview
   - local: quantization
     title: Quantization
+  - local: trainer
+    title: Trainer
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
@@ -144,12 +146,10 @@
       title: Efficient training on CPU
     - local: perf_train_cpu_many
       title: Distributed CPU training
-    - local: perf_train_tpu
-      title: Training on TPUs
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: PyTorch training on Apple silicon
     - local: perf_hardware
       title: Custom hardware for training
     - local: hpo_train
@@ -741,6 +741,8 @@
         title: TVP
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder

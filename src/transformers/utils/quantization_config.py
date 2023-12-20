@@ -363,7 +363,7 @@ class GPTQConfig(QuantizationConfigMixin):
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
-            The transformers block name to quantize.
+            The transformers block name to quantize. If None, we will infer the block name using common patterns (e.g. model.layers)
         module_name_preceding_first_block (`List[str]`, *optional*):
             The layers that are preceding the first Transformer block.
         batch_size (`int`, *optional*, defaults to 1):
@@ -379,7 +379,14 @@ class GPTQConfig(QuantizationConfigMixin):
             The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
             to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
-                Whether to cache block outputs to reuse as inputs for the succeeding block.
+            Whether to cache block outputs to reuse as inputs for the succeeding block.
+        modules_in_block_to_quantize (`List[List[str]]`, *optional*):
+            List of list of module names to quantize in the specified block. This argument is useful to exclude certain linear modules from being quantized.
+            The block to quantize can be specified by setting `block_name_to_quantize`. We will quantize each list sequentially. If not set, we will quantize all linear layers.
+            Example: `modules_in_block_to_quantize =[["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"], ["self_attn.o_proj"]]`.
+            In this example, we will first quantize the q,k,v layers simultaneously since they are independent.
+            Then, we will quantize `self_attn.o_proj` layer with the q,k,v layers quantized. This way, we will get
+            better results since it reflects the real input `self_attn.o_proj` will get when the model is quantized.
     """
 
     def __init__(
@@ -402,6 +409,7 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length: Optional[int] = None,
         exllama_config: Optional[Dict[str, Any]] = None,
         cache_block_outputs: bool = True,
+        modules_in_block_to_quantize: Optional[List[List[str]]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -424,6 +432,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.exllama_config = exllama_config
         self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
+        self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
 
     def get_loading_attributes(self):
@@ -494,6 +503,12 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
+        if self.modules_in_block_to_quantize is not None:
+            optimum_version = version.parse(importlib.metadata.version("optimum"))
+            if optimum_version < version.parse("1.15.0"):
+                raise ValueError(
+                    "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
+                )
 
     def to_dict(self):
         config_dict = super().to_dict()

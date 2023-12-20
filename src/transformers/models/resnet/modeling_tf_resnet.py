@@ -51,7 +51,13 @@ TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFResNetConvLayer(tf.keras.layers.Layer):
     def __init__(
-        self, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu", **kwargs
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        activation: str = "relu",
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.pad_value = kernel_size // 2
@@ -61,6 +67,8 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
         self.activation = ACT2FN[activation] if activation is not None else tf.keras.layers.Activation("linear")
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # Pad to match that done in the PyTorch Conv2D model
@@ -75,6 +83,17 @@ class TFResNetConvLayer(tf.keras.layers.Layer):
         hidden_state = self.activation(hidden_state)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv", None) is not None:
+            with tf.name_scope(self.conv.name):
+                self.conv.build([None, None, None, self.in_channels])
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build([None, None, None, self.out_channels])
+
 
 class TFResNetEmbeddings(tf.keras.layers.Layer):
     """
@@ -84,6 +103,7 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.embedder = TFResNetConvLayer(
+            config.num_channels,
             config.embedding_size,
             kernel_size=7,
             stride=2,
@@ -105,6 +125,17 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
         hidden_state = self.pooler(hidden_state)
         return hidden_state
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 class TFResNetShortCut(tf.keras.layers.Layer):
     """
@@ -112,19 +143,32 @@ class TFResNetShortCut(tf.keras.layers.Layer):
     downsample the input using `stride=2`.
     """
 
-    def __init__(self, out_channels: int, stride: int = 2, **kwargs) -> None:
+    def __init__(self, in_channels: int, out_channels: int, stride: int = 2, **kwargs) -> None:
         super().__init__(**kwargs)
         self.convolution = tf.keras.layers.Conv2D(
             out_channels, kernel_size=1, strides=stride, use_bias=False, name="convolution"
         )
         # Use same default momentum and epsilon as PyTorch equivalent
         self.normalization = tf.keras.layers.BatchNormalization(epsilon=1e-5, momentum=0.9, name="normalization")
+        self.in_channels = in_channels
+        self.out_channels = out_channels
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_state = x
         hidden_state = self.convolution(hidden_state)
         hidden_state = self.normalization(hidden_state, training=training)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convolution", None) is not None:
+            with tf.name_scope(self.convolution.name):
+                self.convolution.build([None, None, None, self.in_channels])
+        if getattr(self, "normalization", None) is not None:
+            with tf.name_scope(self.normalization.name):
+                self.normalization.build([None, None, None, self.out_channels])
 
 
 class TFResNetBasicLayer(tf.keras.layers.Layer):
@@ -137,10 +181,10 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
     ) -> None:
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
-        self.conv1 = TFResNetConvLayer(out_channels, stride=stride, name="layer.0")
-        self.conv2 = TFResNetConvLayer(out_channels, activation=None, name="layer.1")
+        self.conv1 = TFResNetConvLayer(in_channels, out_channels, stride=stride, name="layer.0")
+        self.conv2 = TFResNetConvLayer(out_channels, out_channels, activation=None, name="layer.1")
         self.shortcut = (
-            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
@@ -154,6 +198,20 @@ class TFResNetBasicLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv1", None) is not None:
+            with tf.name_scope(self.conv1.name):
+                self.conv1.build(None)
+        if getattr(self, "conv2", None) is not None:
+            with tf.name_scope(self.conv2.name):
+                self.conv2.build(None)
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
 
 
 class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
@@ -176,11 +234,11 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         should_apply_shortcut = in_channels != out_channels or stride != 1
         reduces_channels = out_channels // reduction
-        self.conv0 = TFResNetConvLayer(reduces_channels, kernel_size=1, name="layer.0")
-        self.conv1 = TFResNetConvLayer(reduces_channels, stride=stride, name="layer.1")
-        self.conv2 = TFResNetConvLayer(out_channels, kernel_size=1, activation=None, name="layer.2")
+        self.conv0 = TFResNetConvLayer(in_channels, reduces_channels, kernel_size=1, name="layer.0")
+        self.conv1 = TFResNetConvLayer(reduces_channels, reduces_channels, stride=stride, name="layer.1")
+        self.conv2 = TFResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None, name="layer.2")
         self.shortcut = (
-            TFResNetShortCut(out_channels, stride=stride, name="shortcut")
+            TFResNetShortCut(in_channels, out_channels, stride=stride, name="shortcut")
             if should_apply_shortcut
             else tf.keras.layers.Activation("linear", name="shortcut")
         )
@@ -195,6 +253,23 @@ class TFResNetBottleNeckLayer(tf.keras.layers.Layer):
         hidden_state += residual
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv0", None) is not None:
+            with tf.name_scope(self.conv0.name):
+                self.conv0.build(None)
+        if getattr(self, "conv1", None) is not None:
+            with tf.name_scope(self.conv1.name):
+                self.conv1.build(None)
+        if getattr(self, "conv2", None) is not None:
+            with tf.name_scope(self.conv2.name):
+                self.conv2.build(None)
+        if getattr(self, "shortcut", None) is not None:
+            with tf.name_scope(self.shortcut.name):
+                self.shortcut.build(None)
 
 
 class TFResNetStage(tf.keras.layers.Layer):
@@ -220,6 +295,15 @@ class TFResNetStage(tf.keras.layers.Layer):
         for layer in self.stage_layers:
             hidden_state = layer(hidden_state, training=training)
         return hidden_state
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "stage_layers", None) is not None:
+            for layer in self.stage_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFResNetEncoder(tf.keras.layers.Layer):
@@ -263,6 +347,15 @@ class TFResNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
         return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "stages", None) is not None:
+            for layer in self.stages:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFResNetPreTrainedModel(TFPreTrainedModel):
@@ -364,6 +457,17 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embedder", None) is not None:
+            with tf.name_scope(self.embedder.name):
+                self.embedder.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+
 
 @add_start_docstrings(
     "The bare ResNet model outputting raw features without any specific head on top.",
@@ -403,6 +507,14 @@ class TFResNetModel(TFResNetPreTrainedModel):
         )
         return resnet_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "resnet", None) is not None:
+            with tf.name_scope(self.resnet.name):
+                self.resnet.build(None)
+
 
 @add_start_docstrings(
     """
@@ -422,6 +534,7 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             if config.num_labels > 0
             else tf.keras.layers.Activation("linear", name="classifier.1")
         )
+        self.config = config
 
     def classifier(self, x: tf.Tensor) -> tf.Tensor:
         x = tf.keras.layers.Flatten()(x)
@@ -466,3 +579,14 @@ class TFResNetForImageClassification(TFResNetPreTrainedModel, TFSequenceClassifi
             return (loss,) + output if loss is not None else output
 
         return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "resnet", None) is not None:
+            with tf.name_scope(self.resnet.name):
+                self.resnet.build(None)
+        if getattr(self, "classifier_layer", None) is not None:
+            with tf.name_scope(self.classifier_layer.name):
+                self.classifier_layer.build([None, None, self.config.hidden_sizes[-1]])

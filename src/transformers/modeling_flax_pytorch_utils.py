@@ -68,7 +68,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
                 for k in f.keys():
                     pt_state_dict[k] = f.get_tensor(k)
         else:
-            pt_state_dict = torch.load(pt_path, map_location="cpu")
+            pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
         logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
@@ -249,7 +249,7 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
     flax_state_dict = {}
     for shard_file in shard_filenames:
         # load using msgpack utils
-        pt_state_dict = torch.load(shard_file)
+        pt_state_dict = torch.load(shard_file, weights_only=True)
         pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
 
         model_prefix = flax_model.base_model_prefix
