@@ -1381,7 +1381,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not cls._supports_flash_attn_2:
             raise ValueError(
                 f"{cls.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
-                " the model is hosted, on its model hub page: https://huggingface.co/[MODEL_REPO]/discussions/new"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{config._name_or_path}/discussions/new"
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
