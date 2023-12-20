@@ -199,6 +199,14 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
+        non_causal_depth_wise_conv (`bool`, defaults to `True`):
+            If `False`, use causal convolutional depthwise layers in Conformer blocks.
+        skip_feature_encoder (`bool`, defaults to `False`):
+            Whether to skip the feature encoder layers. Only relevant when using a feature extractor that computes spectrogram-like inputs instead of raw waveforms.
+        skip_encoder_layer_norm (`bool`, defaults to `False`):
+            Whether to skip the input layer norm of the encoder.
+        skip_pos_conv_embed (`bool`, defaults to `False`):
+            Whether to skip the positional layer convolutional embedding layer of the encoder.
 
     Example:
 
@@ -275,14 +283,13 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
         max_source_positions=5000,
+        left_max_position_embeddings=64,
+        right_max_position_embeddings=8,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        non_causal_depth_wise_conv=True,  # TODO add to docstrings
-        use_adapter_with_attention=False,  # TODO add to docstrings
-        skip_feature_encoder=False,  # TODO add to docstrings
-        skip_encoder_layer_norm=False,  # TODO add to docstrings
-        left_max_position_embeddings=64,  # TODO move to right place in  docstrings
-        right_max_position_embeddings=8,  # TODO move to right place in  docstrings
+        non_causal_depth_wise_conv=True,
+        skip_feature_encoder=False,
+        skip_encoder_layer_norm=False,
         skip_pos_conv_embed=False,
         **kwargs,
     ):
@@ -314,6 +321,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.position_embeddings_type = position_embeddings_type
         self.rotary_embedding_base = rotary_embedding_base
+        self.left_max_position_embeddings = left_max_position_embeddings
+        self.right_max_position_embeddings = right_max_position_embeddings
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -330,6 +339,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         # Conformer-block related
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.conformer_conv_dropout = conformer_conv_dropout
+        self.non_causal_depth_wise_conv = non_causal_depth_wise_conv
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
         self.apply_spec_augment = apply_spec_augment
@@ -370,15 +380,9 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
 
-        # Parameters to do causal depthwise convolution.
-        self.non_causal_depth_wise_conv = non_causal_depth_wise_conv
-
-        self.use_adapter_with_attention = use_adapter_with_attention
         self.skip_feature_encoder = skip_feature_encoder
         self.skip_encoder_layer_norm = skip_encoder_layer_norm
         self.skip_pos_conv_embed = skip_pos_conv_embed
-        self.left_max_position_embeddings = left_max_position_embeddings
-        self.right_max_position_embeddings = right_max_position_embeddings
 
     @property
     def inputs_to_logits_ratio(self):
