@@ -1420,7 +1420,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
             logger.warning(
-                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes. Not dtype was provided, you should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type="torch_device"):` decorator."
+                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes. "
+                "No dtype was provided, you should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator."
             )
 
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
