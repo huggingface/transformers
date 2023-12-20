@@ -892,13 +892,17 @@ FALCON_INPUTS_DOCSTRING = r"""
             Each element of `past_key_values` is a tuple (past_key, past_value):
             - past_key: [batch_size * num_heads, head_dim, kv_length]
             - past_value: [batch_size * num_heads, kv_length, head_dim]
-        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        attention_mask (`torch.Tensor` of 2D shape `(batch_size, sequence_length)`
+            or 4D shape `(heads, batch_size, sequence_length, total_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
+
+            Attention mask may be supplied in 4D shape for finer control of attention patterns within sequences.
+            In such case, the `position_ids` parameters must be customised accordingly.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -1094,7 +1098,7 @@ class FalconModel(FalconPreTrainedModel):
                 position_ids = position_ids.unsqueeze(0)
 
         if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
+            # the original 2d or 4d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
@@ -1137,7 +1141,7 @@ class FalconModel(FalconPreTrainedModel):
                     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
                 )
         else:
-            # 4d mask is passed through the layers
+            # a modified 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
                 attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
             )
