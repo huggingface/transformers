@@ -4629,7 +4629,7 @@ class GenerationMixin:
             # 👉 Apply algorithm 1 from the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf).
             max_matches = max_len - cur_len - 1
             if do_sample and candidate_logits is not None:
-                next_sampled_tokens, n_matches = _speculative_sampling(
+                valid_tokens, n_matches = _speculative_sampling(
                     candidate_input_ids,
                     candidate_logits,
                     candidate_length,
@@ -4637,8 +4637,6 @@ class GenerationMixin:
                     last_assistant_token_is_eos,
                     max_matches,
                 )
-                # The selected tokens include the matches plus the next sampled tokens
-                valid_tokens = torch.cat((candidate_input_ids[:, -n_matches:], next_sampled_tokens), dim=-1)
 
             # Case 2: all other cases (originally from assisted generation) 👉 Compare the tokens selected from the
             # original model logits with the candidate tokens. We can keep the candidate tokens until the first
@@ -4782,7 +4780,7 @@ def _speculative_sampling(
 ):
     """
     Applies sampling as in the speculative decoding paper (https://arxiv.org/pdf/2211.17192.pdf, algorithm 1). Returns
-    the next selected token, as well as the number of candidate matches.
+    the selected tokens, as well as the number of candidate matches.
 
     NOTE: Unless otherwise stated, the variable names match those in the paper.
     """
@@ -4816,7 +4814,13 @@ def _speculative_sampling(
         p_prime = p_n_plus_1
     t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
 
-    return t, n_matches
+    # The selected tokens include the matches (if any) plus the next sampled tokens
+    if n_matches > 0:
+        valid_tokens = torch.cat((candidate_input_ids[:, -n_matches:], t), dim=-1)
+    else:
+        valid_tokens = t
+
+    return valid_tokens, n_matches
 
 
 def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_attention=False):
