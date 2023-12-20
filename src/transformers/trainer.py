@@ -2987,7 +2987,7 @@ class Trainer:
 
     def evaluate(
         self,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
@@ -3000,7 +3000,7 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (`Dataset`, *optional*):
+            eval_dataset (Union[`Dataset`, Dict[str, `Dataset`]), *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
                 evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
