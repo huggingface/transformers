@@ -286,9 +286,10 @@ class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     cached_mask = None
-    
+
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
+        self.cached_mask = None
         self.config = config
         self.layer_idx = layer_idx
         if layer_idx is None:
@@ -319,7 +320,6 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
-
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -421,7 +421,7 @@ class LlamaAttention(nn.Module):
                 attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
                     attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
                 )
-            elif LlamaAttention.cached_mask is not None:  # use the cached value
+            elif LlamaAttention.cached_mask is not None and self.layer_idx != 0:  # use the cached value
                 attention_mask = LlamaAttention.cached_mask
 
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
@@ -669,7 +669,6 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
-    
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -706,8 +705,10 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        seen_tokens = 0
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += seen_tokens
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -719,20 +720,14 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-
         if attention_mask is not None:
             if LlamaAttention.cached_mask is None or self.layer_idx == 0:
                 # create the 4d mask and cache it
                 attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
+                    attention_mask, (bsz, q_len), hidden_states, seen_tokens
                 )
             elif LlamaAttention.cached_mask is not None:
                 attention_mask = LlamaAttention.cached_mask
-
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                    )
 
             # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
             # Reference: https://github.com/pytorch/pytorch/issues/112577.
