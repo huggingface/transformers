@@ -16,6 +16,7 @@
 # limitations under the License.
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
+from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -60,7 +61,6 @@ from .generic import (
 )
 from .hub import (
     CLOUDFRONT_DISTRIB_PREFIX,
-    DISABLE_TELEMETRY,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
@@ -180,6 +180,7 @@ from .import_utils import (
     is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,

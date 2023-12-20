@@ -146,6 +146,7 @@ docs/source/en/model_doc/levit.md
 docs/source/en/model_doc/lilt.md
 docs/source/en/model_doc/llama.md
 docs/source/en/model_doc/llama2.md
+docs/source/en/model_doc/llava.md
 docs/source/en/model_doc/longformer.md
 docs/source/en/model_doc/longt5.md
 docs/source/en/model_doc/luke.md
@@ -238,6 +239,7 @@ docs/source/en/model_doc/upernet.md
 docs/source/en/model_doc/van.md
 docs/source/en/model_doc/videomae.md
 docs/source/en/model_doc/vilt.md
+docs/source/en/model_doc/vipllava.md
 docs/source/en/model_doc/vision-encoder-decoder.md
 docs/source/en/model_doc/vision-text-dual-encoder.md
 docs/source/en/model_doc/visual_bert.md
@@ -280,7 +282,6 @@ docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
-docs/source/en/perf_train_tpu.md
 docs/source/en/perf_train_tpu_tf.md
 docs/source/en/performance.md
 docs/source/en/perplexity.md
@@ -294,7 +295,7 @@ docs/source/en/serialization.md
 docs/source/en/tasks/asr.md
 docs/source/en/tasks/audio_classification.md
 docs/source/en/tasks/document_question_answering.md
-docs/source/en/tasks/idefics.md  # causes other tests to fail
+docs/source/en/tasks/idefics.md
 docs/source/en/tasks/image_captioning.md
 docs/source/en/tasks/image_classification.md
 docs/source/en/tasks/language_modeling.md
@@ -432,7 +433,7 @@ src/transformers/models/blip/modeling_blip_text.py
 src/transformers/models/blip/modeling_tf_blip_text.py
 src/transformers/models/blip_2/configuration_blip_2.py
 src/transformers/models/blip_2/convert_blip_2_original_to_pytorch.py
-src/transformers/models/blip_2/modeling_blip_2.py  # causes other tests to fail
+src/transformers/models/blip_2/modeling_blip_2.py
 src/transformers/models/bloom/convert_bloom_original_checkpoint_to_pytorch.py
 src/transformers/models/bloom/modeling_bloom.py
 src/transformers/models/bloom/modeling_flax_bloom.py
@@ -634,6 +635,8 @@ src/transformers/models/lilt/configuration_lilt.py
 src/transformers/models/llama/configuration_llama.py
 src/transformers/models/llama/convert_llama_weights_to_hf.py
 src/transformers/models/llama/modeling_llama.py
+src/transformers/models/llava/configuration_llava.py
+src/transformers/models/llava/modeling_llava.py
 src/transformers/models/longformer/configuration_longformer.py
 src/transformers/models/longformer/convert_longformer_original_pytorch_lightning_to_pytorch.py
 src/transformers/models/longt5/configuration_longt5.py
@@ -674,6 +677,8 @@ src/transformers/models/mgp_str/configuration_mgp_str.py
 src/transformers/models/mgp_str/modeling_mgp_str.py
 src/transformers/models/mistral/configuration_mistral.py
 src/transformers/models/mistral/modeling_mistral.py
+src/transformers/models/mixtral/configuration_mixtral.py
+src/transformers/models/mixtral/modeling_mixtral.py
 src/transformers/models/mluke/convert_mluke_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/mobilebert/convert_mobilebert_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/mobilenet_v1/configuration_mobilenet_v1.py
@@ -842,6 +847,8 @@ src/transformers/models/videomae/configuration_videomae.py
 src/transformers/models/videomae/convert_videomae_to_pytorch.py
 src/transformers/models/vilt/configuration_vilt.py
 src/transformers/models/vilt/convert_vilt_original_to_pytorch.py
+src/transformers/models/vipllava/configuration_vipllava.py
+src/transformers/models/vipllava/modeling_vipllava.py
 src/transformers/models/vision_encoder_decoder/modeling_flax_vision_encoder_decoder.py
 src/transformers/models/vision_encoder_decoder/modeling_tf_vision_encoder_decoder.py
 src/transformers/models/vision_text_dual_encoder/modeling_flax_vision_text_dual_encoder.py

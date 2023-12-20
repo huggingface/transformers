@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.36.0.dev0"
+__version__ = "4.37.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -542,6 +542,10 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "models.llava": [
+        "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "LlavaConfig",
+    ],
     "models.longformer": [
         "LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LongformerConfig",
@@ -591,6 +595,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
         "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -850,6 +855,10 @@ _import_structure = {
         "ViltFeatureExtractor",
         "ViltImageProcessor",
         "ViltProcessor",
+    ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": [
@@ -1299,6 +1308,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
+    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache"]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2433,6 +2443,14 @@ else:
             "LlamaPreTrainedModel",
         ]
     )
+    _import_structure["models.llava"].extend(
+        [
+            "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlavaForConditionalGeneration",
+            "LlavaPreTrainedModel",
+            "LlavaProcessor",
+        ]
+    )
     _import_structure["models.longformer"].extend(
         [
             "LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2570,6 +2588,9 @@ else:
             "MistralModel",
             "MistralPreTrainedModel",
         ]
+    )
+    _import_structure["models.mixtral"].extend(
+        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -3345,6 +3366,13 @@ else:
             "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -5170,6 +5198,10 @@ if TYPE_CHECKING:
     from .models.levit import LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, LevitConfig
     from .models.lilt import LILT_PRETRAINED_CONFIG_ARCHIVE_MAP, LiltConfig
     from .models.llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .models.llava import (
+        LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LlavaConfig,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LongformerConfig,
@@ -5217,6 +5249,7 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileBertConfig,
@@ -5486,6 +5519,10 @@ if TYPE_CHECKING:
         ViltFeatureExtractor,
         ViltImageProcessor,
         ViltProcessor,
+    )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
     )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
@@ -5929,6 +5966,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
+        from .cache_utils import Cache, DynamicCache, SinkCache
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -6869,11 +6907,12 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import (
-            LlamaForCausalLM,
-            LlamaForSequenceClassification,
-            LlamaModel,
-            LlamaPreTrainedModel,
+        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llava import (
+            LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlavaForConditionalGeneration,
+            LlavaPreTrainedModel,
+            LlavaProcessor,
         )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6986,6 +7025,12 @@ if TYPE_CHECKING:
             MistralForSequenceClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.mixtral import (
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralModel,
+            MixtralPreTrainedModel,
         )
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7614,6 +7659,11 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel

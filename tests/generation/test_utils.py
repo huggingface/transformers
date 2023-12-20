@@ -20,8 +20,9 @@ import unittest
 import warnings
 
 import numpy as np
+from parameterized import parameterized
 
-from transformers import is_torch_available, pipeline
+from transformers import is_torch_available, pipeline, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
@@ -53,6 +54,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         top_k_top_p_filtering,
     )
+    from transformers.cache_utils import DynamicCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1904,6 +1906,66 @@ class GenerationTesterMixin:
                         )
                     )
 
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        # Tests that generating with the new format is exactly the same as the legacy one (for models that support it).
+        # 👉 tests with and without beam search so that we can test with and without cache reordering.
+        # 👉 tests with and without sampling so we can cover the most common use cases.
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_cache_class:
+                self.skipTest("This model does not support the new cache format")
+
+            config, input_ids, attention_mask, _ = self._get_input_ids_and_config()
+            config.use_cache = True
+            config.is_decoder = True
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_new_tokens": 5,
+                "do_sample": do_sample,
+                "num_beams": num_beams,
+                "num_return_sequences": num_beams,
+                "return_dict_in_generate": True,  # Required to return `past_key_values`
+            }
+
+            # Sets seed before calling `generate` for the case with do_sample=True
+            seed = torch.randint(0, 1000000, (1,)).item()
+            set_seed(seed)
+            legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
+            set_seed(seed)
+            new_results = model.generate(
+                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
+            )
+
+            # The two sets of generated sequences must match, despite the cache format between forward passes being
+            # different
+            self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
+            self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
+            self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+
+            # The contents of the two caches, when converted to the same format (in both directions!), must match
+            legacy_cache = legacy_results.past_key_values
+            new_cache_converted = new_results.past_key_values.to_legacy_cache()
+            for layer_idx in range(len(legacy_cache)):
+                for kv_idx in range(len(legacy_cache[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            legacy_cache[layer_idx][kv_idx],
+                            new_cache_converted[layer_idx][kv_idx],
+                        )
+                    )
+
+            new_cache = new_results.past_key_values
+            legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
+            for layer_idx in range(len(new_cache)):
+                for kv_idx in range(len(new_cache[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            new_cache[layer_idx][kv_idx],
+                            legacy_cache_converted[layer_idx][kv_idx],
+                        )
+                    )
+
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
         num_sequences_in_output = batch_size * num_return_sequences
@@ -3066,85 +3128,26 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
     def test_model_kwarg_assisted_decoding_encoder_decoder(self):
+        """
+        Tests that the following scenario is compatible with assisted generation:
+        1. encoder-decoder main model
+        2. encoder-decoder assistant model
+        3. both have a custom input
+        (e.g. Whisper)
+        """
+
         # PT-only test: TF doesn't support assisted decoding yet.
         # Bart subclass with a kwarg that distorts the output
         class FakeBart(BartForConditionalGeneration):
-            def forward(self, input_ids, foo=False, **kwargs):
-                outs = super().forward(input_ids, **kwargs)
-
+            def forward(self, input_ids, past_key_values, foo=False, **kwargs):
+                outs = super().forward(input_ids, past_key_values=past_key_values, **kwargs)
                 if foo:
                     outs["logits"][:, :, :] = 0.0
-
                 return outs
 
             def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
                 kwargs["encoder_outputs"] = encoder_outputs
                 inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
-                inputs["foo"] = foo
-                return inputs
-
-        model = FakeBart.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
-            torch_device
-        )
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration")
-
-        text = "Hello world"
-        tokenized_inputs = tokenizer([text], return_tensors="pt")
-        input_ids = tokenized_inputs.input_ids.to(torch_device)
-
-        # Traditional way of generating text
-        outputs_normal = model.generate(input_ids)
-        self.assertEqual(outputs_normal.shape, (1, 20))
-
-        # Should be different with foo
-        outputs_foo = model.generate(
-            input_ids,
-            foo=True,
-        )
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
-
-        # Assistant model
-        assistant = AutoModelForSeq2SeqLM.from_pretrained(
-            "hf-internal-testing/tiny-random-BartForConditionalGeneration"
-        ).to(torch_device)
-
-        # If assisted generation passes model_kwargs correctly, should be same as previous
-        outputs_assisted = model.generate(
-            input_ids,
-            foo=True,
-            assistant_model=assistant,
-        )
-        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
-
-        # Check that passing encoder_outputs directly also works as expected
-        encoder_outputs = assistant.get_encoder()(input_ids)
-
-        outputs_assisted = model.generate(
-            foo=True,
-            assistant_model=assistant,
-            encoder_outputs=encoder_outputs,
-            assistant_encoder_outputs=encoder_outputs,
-        )
-        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
-
-    def test_assisted_decoding_encoder_decoder_shared_encoder(self):
-        # PT-only test: TF doesn't support assisted decoding yet.
-        # Bart subclass with a kwarg called foo that distorts the output
-        class FakeBart(BartForConditionalGeneration):
-            def forward(self, input_ids, foo=False, **kwargs):
-                outs = super().forward(input_ids, **kwargs)
-
-                if foo:
-                    outs["logits"][:, :, :] = 0.0
-
-                return outs
-
-            def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
-                kwargs["encoder_outputs"] = encoder_outputs
-                inputs = super().prepare_inputs_for_generation(*args, **kwargs)
-
                 inputs["foo"] = foo
                 return inputs
 
@@ -3167,9 +3170,88 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
 
         # Assistant model
-        assistant = BartForCausalLM.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
+        assistant = FakeBart.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
             torch_device
         )
+
+        # If assisted generation passes model_kwargs correctly, should be same as previous
+        outputs_assisted = model.generate(
+            input_ids,
+            foo=True,
+            assistant_model=assistant,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+        # Check that passing encoder_outputs directly also works as expected
+        encoder_outputs = assistant.get_encoder()(input_ids)
+
+        outputs_assisted = model.generate(
+            foo=True,
+            assistant_model=assistant,
+            encoder_outputs=encoder_outputs,
+            assistant_encoder_outputs=encoder_outputs,
+        )
+        self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+    def test_assisted_decoding_encoder_decoder_shared_encoder(self):
+        """
+        Tests that the following scenario is compatible with assisted generation:
+        1. encoder-decoder main model
+        2. decoder-only assistant model
+        3. both have a custom input
+        (e.g. DistilWhisper)
+        """
+
+        # PT-only test: TF doesn't support assisted decoding yet.
+        # Bart subclass with a kwarg called foo that distorts the output
+        class FakeBartSeq2Seq(BartForConditionalGeneration):
+            def forward(self, input_ids, foo=False, **kwargs):
+                outs = super().forward(input_ids, **kwargs)
+                if foo:
+                    outs["logits"][:, :, :] = 0.0
+                return outs
+
+            def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
+                kwargs["encoder_outputs"] = encoder_outputs
+                inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+                inputs["foo"] = foo
+                return inputs
+
+        class FakeBartCausalLM(BartForCausalLM):
+            def forward(self, input_ids, attention_mask, past_key_values, foo=False, **kwargs):
+                outs = super().forward(input_ids, attention_mask, past_key_values=past_key_values, **kwargs)
+                if foo:
+                    outs["logits"][:, :, :] = 0.0
+                return outs
+
+            def prepare_inputs_for_generation(self, *args, foo=False, encoder_outputs=None, **kwargs):
+                kwargs["encoder_outputs"] = encoder_outputs
+                inputs = super().prepare_inputs_for_generation(*args, **kwargs)
+                inputs["foo"] = foo
+                return inputs
+
+        model = FakeBartSeq2Seq.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration").to(
+            torch_device
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BartForConditionalGeneration")
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # Traditional way of generating text
+        outputs_normal = model.generate(input_ids)
+        self.assertEqual(outputs_normal.shape, (1, 20))
+
+        # Should be different with foo
+        outputs_foo = model.generate(input_ids, foo=True)
+        with self.assertRaises(AssertionError):
+            self.assertListEqual(outputs_foo.tolist(), outputs_normal.tolist())
+
+        # Assistant model
+        assistant = FakeBartCausalLM.from_pretrained(
+            "hf-internal-testing/tiny-random-BartForConditionalGeneration"
+        ).to(torch_device)
 
         # If assisted generation passes model_kwargs correctly, should be same as previous
         outputs_assisted = model.generate(
