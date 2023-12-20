@@ -1815,10 +1815,10 @@ class DetaForObjectDetection(DetaPreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        aux_loss = []
-        # TO DO: prettify
-        for i in range(outputs_class.size(1) - 1):
-            aux_loss.append({"logits": outputs_class[:, i], "pred_boxes": outputs_coord[:, i]})
+        aux_loss = [
+            {"logits": logits, "pred_boxes": pred_boxes}
+            for logits, pred_boxes in zip(outputs_class.transpose(0, 1)[:-1], outputs_coord.transpose(0, 1)[:-1])
+        ]
         return aux_loss
 
     @add_start_docstrings_to_model_forward(DETA_INPUTS_DOCSTRING)
