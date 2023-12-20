@@ -183,6 +183,18 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
         )
 
+    def test_resize_max_size_respected(self):
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        # create torch tensors as image
+        image = torch.randint(0, 256, (3, 100, 1500), dtype=torch.uint8)
+        processed_image = image_processor(
+            image, size={"longest_edge": 1333, "shortest_edge": 800}, do_pad=False, return_tensors="pt"
+        )["pixel_values"]
+
+        self.assertTrue(processed_image.shape[-1] <= 1333)
+        self.assertTrue(processed_image.shape[-2] <= 800)
+
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
         # prepare image and target
