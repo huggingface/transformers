@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Wav2Vec2Conformer checkpoint."""
+"""Convert Wav2Vec2Conformer BERT checkpoint."""
 
 
 import argparse
@@ -31,188 +31,82 @@ from transformers import (
     logging,
 )
 
-
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-MAPPING = {
-    "post_extract_proj": "feature_projection.projection",
-    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
-    "self_attn.linear_k": "encoder.layers.*.self_attn.linear_k",
-    "self_attn.linear_v": "encoder.layers.*.self_attn.linear_v",
-    "self_attn.linear_q": "encoder.layers.*.self_attn.linear_q",
-    "self_attn.pos_bias_u": "encoder.layers.*.self_attn.pos_bias_u",
-    "self_attn.pos_bias_v": "encoder.layers.*.self_attn.pos_bias_v",
-    "self_attn.linear_out": "encoder.layers.*.self_attn.linear_out",
-    "self_attn.linear_pos": "encoder.layers.*.self_attn.linear_pos",
-    "self_attn.rotary_emb": "encoder.embed_positions",
-    "self_attn_layer_norm": "encoder.layers.*.self_attn_layer_norm",
-    "conv_module.pointwise_conv1": "encoder.layers.*.conv_module.pointwise_conv1",
-    "conv_module.pointwise_conv2": "encoder.layers.*.conv_module.pointwise_conv2",
-    "conv_module.depthwise_conv": "encoder.layers.*.conv_module.depthwise_conv",
-    "conv_module.batch_norm": "encoder.layers.*.conv_module.batch_norm",
-    "conv_module.layer_norm": "encoder.layers.*.conv_module.layer_norm",
-    "ffn1.w_1": "encoder.layers.*.ffn1.intermediate_dense",
-    "ffn1.w_2": "encoder.layers.*.ffn1.output_dense",
-    "ffn1.layer_norm": "encoder.layers.*.ffn1_layer_norm",
-    "ffn2.w_1": "encoder.layers.*.ffn2.intermediate_dense",
-    "ffn2.w_2": "encoder.layers.*.ffn2.output_dense",
-    "ffn2.layer_norm": "encoder.layers.*.ffn2_layer_norm",
-    "final_layer_norm": "encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "encoder.layer_norm",
-    "w2v_model.layer_norm": "feature_projection.layer_norm",
-    "quantizer.weight_proj": "quantizer.weight_proj",
-    "quantizer.vars": "quantizer.codevectors",
-    "project_q": "project_q",
-    "final_proj": "project_hid",
-    "w2v_encoder.proj": "lm_head",
-    "mask_emb": "masked_spec_embed",
-}
-TOP_LEVEL_KEYS = [
-    "lm_head",
-    "quantizer.weight_proj",
-    "quantizer.codevectors",
-    "project_q",
-    "project_hid",
+
+wav2vec_convert_list = [
+    ("encoder", "wav2vec2_conformer.encoder"),
+    ("encoder_frontend.model_dim_proj", "feature_projection.projection"),
+    ("encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
+    ("encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
+    ("encoder.inner.layers", "encoder.layers"),
+    ("encoder.inner_layer_norm", "encoder.layer_norm"),
+    ("encoder.adaptor_layers", "adapter.layers"),
+    ("inner_proj", "intermediate_dense"),
+    ("self_attn.output_proj", "self_attn.linear_out"),
+    ("output_proj", "output_dense"),
+    ("self_attn.k_proj", "self_attn.linear_k"),
+    ("self_attn.v_proj", "self_attn.linear_v"),
+    ("self_attn.q_proj", "self_attn.linear_q"),
+    ("self_attn.sdpa.u_bias", "self_attn.pos_bias_u"),
+    ("self_attn.sdpa.v_bias", "self_attn.pos_bias_v"),
+    ("self_attn.sdpa.rel_k_embed", "self_attn.distance_embedding"),
+    ("self_attn.sdpa.r_proj", "self_attn.linear_pos"),
+    ("conv.pointwise_conv1", "conv_module.pointwise_conv1"),
+    ("conv.pointwise_conv2", "conv_module.pointwise_conv2"),
+    ("conv.depthwise_conv", "conv_module.depthwise_conv"),
+    ("conv.layer_norm", "conv_module.depthwise_layer_norm"),
+    ("conv_layer_norm", "conv_module.layer_norm"),
+    ("encoder.proj1", "intermediate_ffn.intermediate_dense"),
+    ("encoder.proj2", "intermediate_ffn.output_dense"),
+    ("encoder.layer_norm", "inner_layer_norm"),
+    ("quantizer.entry_proj","quantizer.weight_proj"),
+    ("final_proj", "project_hid"),
+    ("final_target_proj", "project_q"),
+    ("masker.temporal_mask_embed", "wav2vec2_conformer.masked_spec_embed"),
+    ("quantizer.entries","quantizer.codevectors")
 ]
 
-
-def set_recursively(hf_pointer, key, value, full_name, weight_type):
-    for attribute in key.split("."):
-        hf_pointer = getattr(hf_pointer, attribute)
-
-    if weight_type is not None:
-        hf_shape = getattr(hf_pointer, weight_type).shape
-    else:
-        hf_shape = hf_pointer.shape
-
-    if hf_shape != value.shape:
-        raise ValueError(
-            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
-            f" {value.shape} for {full_name}"
-        )
-
-    if weight_type == "weight":
-        hf_pointer.weight.data = value
-    elif weight_type == "weight_g":
-        hf_pointer.weight_g.data = value
-    elif weight_type == "weight_v":
-        hf_pointer.weight_v.data = value
-    elif weight_type == "bias":
-        hf_pointer.bias.data = value
-    elif weight_type == "running_mean":
-        hf_pointer.running_mean.data = value
-    elif weight_type == "running_var":
-        hf_pointer.running_var.data = value
-    elif weight_type == "num_batches_tracked":
-        hf_pointer.num_batches_tracked.data = value
-    elif weight_type == "inv_freq":
-        hf_pointer.inv_freq.data = value
-    else:
-        hf_pointer.data = value
-
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+def param_count(model):
+    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
 
 
-def recursively_load_weights(fairseq_model, hf_model):
-    unused_weights = []
-    fairseq_dict = fairseq_model.state_dict()
+def _convert_model(
+    original_model,
+    hf_model,
+    convert_list,
+):
+    state_dict = original_model.state_dict()
 
-    feature_extractor = hf_model.wav2vec2_conformer.feature_extractor
+    for k, v in list(state_dict.items()):
+        new_key = k
+        for old_layer_name, new_layer_name in convert_list:
+            if old_layer_name in new_key:
+                new_key = new_key.replace(old_layer_name, new_layer_name)
 
-    for name, value in fairseq_dict.items():
-        is_used = False
-        if "conv_layers" in name:
-            load_conv_layer(
-                name,
-                value,
-                feature_extractor,
-                unused_weights,
-                hf_model.config.feat_extract_norm == "group",
-            )
-            is_used = True
-        else:
-            for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2_conformer." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
-                if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                    is_used = True
-                    if "*" in mapped_key:
-                        layer_index = name.split(key)[0].split(".")[-2]
-                        mapped_key = mapped_key.replace("*", layer_index)
-                    if "pos_bias_u" in name:
-                        weight_type = None
-                    elif "pos_bias_v" in name:
-                        weight_type = None
-                    elif "weight_g" in name:
-                        weight_type = "weight_g"
-                    elif "weight_v" in name:
-                        weight_type = "weight_v"
-                    elif "bias" in name:
-                        weight_type = "bias"
-                    elif "weight" in name:
-                        # TODO: don't match quantizer.weight_proj
-                        weight_type = "weight"
-                    elif "running_mean" in name:
-                        weight_type = "running_mean"
-                    elif "inv_freq" in name:
-                        weight_type = "inv_freq"
-                    elif "running_var" in name:
-                        weight_type = "running_var"
-                    elif "num_batches_tracked" in name:
-                        weight_type = "num_batches_tracked"
-                    else:
-                        weight_type = None
-                    set_recursively(hf_model, mapped_key, value, name, weight_type)
-                continue
-        if not is_used:
-            unused_weights.append(name)
+        # must do it by hand
+        if ".layer_norm" in new_key and new_key.split(".layer_norm")[0][-1].isnumeric():
+            new_key = new_key.replace("layer_norm", "final_layer_norm")
 
-    logger.warning(f"Unused weights: {unused_weights}")
+        state_dict[new_key] = state_dict.pop(k)
 
+    extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
+    extra_keys = set({k for k in extra_keys if "num_updates" not in k}) # filter unecessary param
+    missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
+    if len(extra_keys) != 0:
+        raise ValueError(f"extra keys found: {extra_keys}")
+    if len(missing_keys) != 0:
+        raise ValueError(f"missing keys: {missing_keys}")
+    hf_model.load_state_dict(state_dict, strict=False)
+    n_params = param_count(hf_model)
 
-# Copied from transformers.models.wav2vec2.convert_wav2vec2_original_pytorch_checkpoint_to_pytorch.load_conv_layer
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
-    name = full_name.split("conv_layers.")[-1]
-    items = name.split(".")
-    layer_id = int(items[0])
-    type_id = int(items[1])
+    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
 
-    if type_id == 0:
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
-        if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-        elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
-                raise ValueError(
-                    f"{full_name} has size {value.shape}, but"
-                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
-                )
-            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
-    else:
-        unused_weights.append(full_name)
+    hf_model.eval()
+    del state_dict
+
+    return hf_model
 
 
 @torch.no_grad()
@@ -225,16 +119,19 @@ def convert_wav2vec2_conformer_checkpoint(
     if config_path is not None:
         config = Wav2Vec2ConformerConfig.from_pretrained(config_path, hidden_act="swish")
     else:
-        config = Wav2Vec2ConformerConfig()
+        config = Wav2Vec2ConformerConfig(apply_spec_augment=False)
 
 
     hf_wav2vec = Wav2Vec2ConformerForPreTraining(config)
+    
 
     model = load_conformer_shaw_model(checkpoint_path, dtype=torch.float32)
     model.eval()
 
-    recursively_load_weights(model, hf_wav2vec)
-
+    hf_wav2vec = _convert_model(
+        model, hf_wav2vec, wav2vec_convert_list
+    )
+        
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
     
     if repo_id:
@@ -243,18 +140,22 @@ def convert_wav2vec2_conformer_checkpoint(
     if process_path:
         processor = AutoProcessor.from_pretrained(process_path)
         
+        processor.feature_extractor.padding_value = 1
+        processor.save_pretrained(pytorch_dump_folder_path)
+        
         if repo_id:
             processor.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default="/home/yoach/tmp/wav2vec_seamless", type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default="conformer_shaw", type=str, help="Path to fairseq checkpoint")
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--checkpoint_path", default="conformer_shaw", type=str, help="Path to seamless communication checkpoint")
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
+    parser.add_argument("--process_path", default=None, type=str, help="Push to this repo id if precised.")
 
     args = parser.parse_args()
     convert_wav2vec2_conformer_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.repo_id
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.repo_id, args.process_path
     )
