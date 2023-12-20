@@ -479,6 +479,8 @@ class MixtralFlashAttention2(MixtralAttention):
             # Handle the case where the model is quantized
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
+            elif torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             else:
                 target_dtype = self.q_proj.weight.dtype
 
