@@ -415,7 +415,7 @@ class LlamaAttention(nn.Module):
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
-        
+
         if LlamaAttention.cached_mask is None or self.layer_idx == 0 or attention_mask is None:
             # create the 4d mask and cache it
             attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
