@@ -45,6 +45,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoFeatureExtractor,
         Wav2Vec2ConformerForAudioFrameClassification,
         Wav2Vec2ConformerForCTC,
         Wav2Vec2ConformerForPreTraining,
@@ -53,7 +54,6 @@ if is_torch_available():
         Wav2Vec2ConformerModel,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
-        AutoFeatureExtractor,
     )
     from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
         Wav2Vec2ConformerGumbelVectorQuantizer,
@@ -142,7 +142,11 @@ class Wav2Vec2ConformerModelTester:
         self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
 
     def prepare_config_and_inputs(self, position_embeddings_type="relative", create_mel_spectrogram=False):
-        input_shape = [self.batch_size, self.seq_length, self.conv_dim[-1]] if create_mel_spectrogram else [self.batch_size, self.seq_length]
+        input_shape = (
+            [self.batch_size, self.seq_length, self.conv_dim[-1]]
+            if create_mel_spectrogram
+            else [self.batch_size, self.seq_length]
+        )
         input_values = floats_tensor(input_shape, self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
@@ -200,7 +204,7 @@ class Wav2Vec2ConformerModelTester:
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
         )
-        
+
     def create_and_check_model_with_causal_depth_wise_conv(self, config, input_values, attention_mask):
         config.non_causal_depth_wise_conv = False
         model = Wav2Vec2ConformerModel(config=config)
@@ -221,21 +225,19 @@ class Wav2Vec2ConformerModelTester:
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
-        
+
     def create_and_check_model_from_seamless_communication(self, config, input_values, attention_mask):
         config.add_adapter = False
         config.skip_feature_encoder = True
         config.skip_encoder_layer_norm = True
         config.skip_pos_conv_embed = True
         config.non_causal_depth_wise_conv = False
-        
+
         model = Wav2Vec2ConformerModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
         config.add_adapter = True
@@ -505,11 +507,11 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
-        
+
     def test_model_with_causal_depth_wise_conv(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_causal_depth_wise_conv(*config_and_inputs)
-    
+
     def test_model_from_seamless_communication(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(create_mel_spectrogram=True)
         self.model_tester.create_and_check_model_from_seamless_communication(*config_and_inputs)
@@ -966,19 +968,21 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
-        
+
     def test_inference_w2v2_bert(self):
         model = Wav2Vec2ConformerForPreTraining.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
         model.to(torch_device)
         processor = AutoFeatureExtractor.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
 
         input_speech = self._load_datasamples(2)
-        
+
         inputs = processor(input_speech, return_tensors="pt", padding=True).to(torch_device)
 
         model.eval()
         with torch.no_grad():
-            outputs = model.wav2vec2_conformer(inputs['input_features'], attention_mask=inputs["attention_mask"], output_attentions=True)
+            outputs = model.wav2vec2_conformer(
+                inputs["input_features"], attention_mask=inputs["attention_mask"], output_attentions=True
+            )
 
         # fmt: off
         expected_slice_0 = torch.tensor(
@@ -994,7 +998,7 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             [ 0.0043, -0.1228, -0.0739,  0.0266, -0.0337, -0.0068]]
         ).to(torch_device)
         # fmt: on
-        
+
         # fmt: off
         expected_slice_1 = torch.tensor(
             [[-0.0348, -0.0521, -0.3036,  0.0285, -0.0715, -0.0453],
@@ -1009,29 +1013,26 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             [-0.0587, -0.0516, -0.0368, -0.0196,  0.0307, -0.1434]]
         ).to(torch_device)
         # fmt: on
-        
-        
+
         torch.testing.assert_close(outputs.last_hidden_state[0, 25:35, 4:10], expected_slice_0, atol=1e-4, rtol=1e-6)
         torch.testing.assert_close(outputs.last_hidden_state[1, 25:35, 4:10], expected_slice_1, atol=1e-4, rtol=1e-6)
 
         self.assertAlmostEqual(outputs.last_hidden_state[1].mean().item(), 3.3123e-05)
         self.assertAlmostEqual(outputs.last_hidden_state[1].std().item(), 0.1545, delta=2e-5)
-        
+
         self.assertListEqual(list(outputs.last_hidden_state.shape), [2, 326, 1024])
 
-        
-        
     def test_inference_w2v2_bert_pretrained(self):
         model = Wav2Vec2ConformerForPreTraining.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
         model.to(torch_device)
         processor = AutoFeatureExtractor.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
 
         input_speech = self._load_datasamples(2)
-        
+
         inputs = processor(input_speech, return_tensors="pt", padding=True).to(torch_device)
-        
+
         # apply augmentation
-        model.wav2vec2_conformer.config.apply_spec_augment=True
+        model.wav2vec2_conformer.config.apply_spec_augment = True
 
         torch.manual_seed(0)
         mask_time_indices = _compute_mask_indices(
@@ -1041,13 +1042,14 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
             min_masks=2,
         )
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-        
-        
-        with torch.no_grad():
-            outputs = model(inputs['input_features'], attention_mask=inputs["attention_mask"], output_attentions=True,
-                            mask_time_indices=mask_time_indices,)
 
-        
+        with torch.no_grad():
+            outputs = model(
+                inputs["input_features"],
+                attention_mask=inputs["attention_mask"],
+                output_attentions=True,
+                mask_time_indices=mask_time_indices,
+            )
 
         # compute cosine similarity
         cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
@@ -1059,11 +1061,14 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         config = Wav2Vec2ConformerConfig.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
         model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
-        
-    
+
         with torch.no_grad():
-            outputs_rand = model_rand(inputs['input_features'], attention_mask=inputs["attention_mask"], output_attentions=True,
-                            mask_time_indices=mask_time_indices,)
+            outputs_rand = model_rand(
+                inputs["input_features"],
+                attention_mask=inputs["attention_mask"],
+                output_attentions=True,
+                mask_time_indices=mask_time_indices,
+            )
 
         # compute cosine similarity
         cosine_sim_rand = torch.cosine_similarity(
@@ -1078,7 +1083,6 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         # a random wav2vec2_conformer model has not learned to predict the quantized latent states
         # => the cosine similarity between quantized states and predicted states is very likely < 0.1
         self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
-
 
     def test_inference_pretrained(self):
         model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")

@@ -35,7 +35,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -269,7 +268,8 @@ def _sample_negative_indices(
 
     return sampled_negative_indices
 
-# Copied from transformers.models.seamless_m4t_v2._compute_new_attention_mask
+
+# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
@@ -295,6 +295,7 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     mask = mask.masked_fill(bool_mask, 0)
 
     return mask
+
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
@@ -593,6 +594,7 @@ class Wav2Vec2ConformerFeedForward(nn.Module):
         hidden_states = self.output_dropout(hidden_states)
         return hidden_states
 
+
 class Wav2Vec2ConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
@@ -633,17 +635,17 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             bias=False,
         )
         self.dropout = nn.Dropout(config.conformer_conv_dropout)
-        
+
         self.non_causal_depth_wise_conv = config.non_causal_depth_wise_conv
 
     def forward(self, hidden_states, attention_mask=None):
         hidden_states = self.layer_norm(hidden_states)
-        
+
         # Ensure that we do not leak padded positions in depthwise convolution if attention mask is passed.
         # Put 0 where necessary
         if attention_mask is not None and not self.non_causal_depth_wise_conv:
             hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
-        
+
         # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -652,19 +654,19 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         hidden_states = self.pointwise_conv1(hidden_states)
         # => (batch, channel, dim)
         hidden_states = self.glu(hidden_states)
-        
+
         if not self.non_causal_depth_wise_conv:
             # Pad the sequence entirely on the left because of causal convolution.
             hidden_states = torch.nn.functional.pad(hidden_states, (self.depthwise_conv.kernel_size[0] - 1, 0))
 
         # 1D Depthwise Conv
         hidden_states = self.depthwise_conv(hidden_states)
-        
+
         if self.non_causal_depth_wise_conv:
             hidden_states = self.batch_norm(hidden_states)
         else:
             hidden_states = self.depthwise_layer_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-            
+
         hidden_states = self.activation(hidden_states)
 
         hidden_states = self.pointwise_conv2(hidden_states)
@@ -699,7 +701,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
             self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
-            
+
         if self.position_embeddings_type == "relative_key":
             self.left_max_position_embeddings = config.left_max_position_embeddings
             self.right_max_position_embeddings = config.right_max_position_embeddings
@@ -750,7 +752,7 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             )
         else:
             scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.head_size)
-                
+
         if self.position_embeddings_type == "relative_key":
             query_length, key_length = query.shape[2], key.shape[2]
 
@@ -921,8 +923,12 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         else:
             self.embed_positions = None
 
-        self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config) if not config.skip_pos_conv_embed else None
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if not config.skip_encoder_layer_norm else None
+        self.pos_conv_embed = (
+            Wav2Vec2ConformerPositionalConvEmbedding(config) if not config.skip_pos_conv_embed else None
+        )
+        self.layer_norm = (
+            nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if not config.skip_encoder_layer_norm else None
+        )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
@@ -941,7 +947,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)            
+            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -1132,6 +1138,7 @@ class Wav2Vec2ConformerAdapterLayer(nn.Module):
 
         return hidden_states
 
+
 class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1296,7 +1303,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
     def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
         self.config = config
-        
+
         self.feature_extractor = Wav2Vec2ConformerFeatureEncoder(config) if not config.skip_feature_encoder else None
         self.feature_projection = Wav2Vec2ConformerFeatureProjection(config)
 
@@ -1305,9 +1312,9 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
             self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         self.encoder = Wav2Vec2ConformerEncoder(config)
-        
+
         self.adapter = Wav2Vec2ConformerAdapter(config) if config.add_adapter else None
-        
+
         # Initialize weights and apply final processing
         self.post_init()
 

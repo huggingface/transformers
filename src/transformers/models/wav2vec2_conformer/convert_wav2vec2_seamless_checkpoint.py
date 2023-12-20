@@ -16,20 +16,17 @@
 
 
 import argparse
-import json
-import os
-
-from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 import torch
-
+from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
+    AutoProcessor,
     Wav2Vec2ConformerConfig,
     Wav2Vec2ConformerForPreTraining,
-    AutoProcessor,
     logging,
 )
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -61,12 +58,13 @@ wav2vec_convert_list = [
     ("encoder.proj1", "intermediate_ffn.intermediate_dense"),
     ("encoder.proj2", "intermediate_ffn.output_dense"),
     ("encoder.layer_norm", "inner_layer_norm"),
-    ("quantizer.entry_proj","quantizer.weight_proj"),
+    ("quantizer.entry_proj", "quantizer.weight_proj"),
     ("final_proj", "project_hid"),
     ("final_target_proj", "project_q"),
     ("masker.temporal_mask_embed", "wav2vec2_conformer.masked_spec_embed"),
-    ("quantizer.entries","quantizer.codevectors")
+    ("quantizer.entries", "quantizer.codevectors"),
 ]
+
 
 def param_count(model):
     return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
@@ -92,7 +90,7 @@ def _convert_model(
         state_dict[new_key] = state_dict.pop(k)
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = set({k for k in extra_keys if "num_updates" not in k}) # filter unecessary param
+    extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unecessary param
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
@@ -111,7 +109,11 @@ def _convert_model(
 
 @torch.no_grad()
 def convert_wav2vec2_conformer_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, repo_id=None, process_path=None,
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    config_path=None,
+    repo_id=None,
+    process_path=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -121,28 +123,24 @@ def convert_wav2vec2_conformer_checkpoint(
     else:
         config = Wav2Vec2ConformerConfig(apply_spec_augment=False)
 
-
     hf_wav2vec = Wav2Vec2ConformerForPreTraining(config)
-    
 
     model = load_conformer_shaw_model(checkpoint_path, dtype=torch.float32)
     model.eval()
 
-    hf_wav2vec = _convert_model(
-        model, hf_wav2vec, wav2vec_convert_list
-    )
-        
+    hf_wav2vec = _convert_model(model, hf_wav2vec, wav2vec_convert_list)
+
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
-    
+
     if repo_id:
         hf_wav2vec.push_to_hub(repo_id)
-    
+
     if process_path:
         processor = AutoProcessor.from_pretrained(process_path)
-        
+
         processor.feature_extractor.padding_value = 1
         processor.save_pretrained(pytorch_dump_folder_path)
-        
+
         if repo_id:
             processor.push_to_hub(repo_id)
 
@@ -150,7 +148,9 @@ def convert_wav2vec2_conformer_checkpoint(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default="conformer_shaw", type=str, help="Path to seamless communication checkpoint")
+    parser.add_argument(
+        "--checkpoint_path", default="conformer_shaw", type=str, help="Path to seamless communication checkpoint"
+    )
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
     parser.add_argument("--process_path", default=None, type=str, help="Push to this repo id if precised.")

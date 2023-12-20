@@ -277,12 +277,12 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        non_causal_depth_wise_conv=True, # TODO add to docstrings
-        use_adapter_with_attention=False, # TODO add to docstrings
-        skip_feature_encoder=False, # TODO add to docstrings
-        skip_encoder_layer_norm=False, # TODO add to docstrings
-        left_max_position_embeddings=64, # TODO move to right place in  docstrings
-        right_max_position_embeddings=8, # TODO move to right place in  docstrings
+        non_causal_depth_wise_conv=True,  # TODO add to docstrings
+        use_adapter_with_attention=False,  # TODO add to docstrings
+        skip_feature_encoder=False,  # TODO add to docstrings
+        skip_encoder_layer_norm=False,  # TODO add to docstrings
+        left_max_position_embeddings=64,  # TODO move to right place in  docstrings
+        right_max_position_embeddings=8,  # TODO move to right place in  docstrings
         skip_pos_conv_embed=False,
         **kwargs,
     ):
@@ -369,10 +369,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
-        
+
         # Parameters to do causal depthwise convolution.
         self.non_causal_depth_wise_conv = non_causal_depth_wise_conv
-        
+
         self.use_adapter_with_attention = use_adapter_with_attention
         self.skip_feature_encoder = skip_feature_encoder
         self.skip_encoder_layer_norm = skip_encoder_layer_norm
