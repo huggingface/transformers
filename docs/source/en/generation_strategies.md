@@ -341,13 +341,13 @@ For the complete list of the available parameters, refer to the [API documentati
 
 ### Speculative Decoding
 
-Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above that uses an
-assistant model with  the same tokenizer, ideally a much smaller model, to generate a few candidate tokens. The main
+Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
+assistant model (ideally a much smaller one) with  the same tokenizer, to generate a few candidate tokens. The main
 model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
 `do_sample=True`, then the token validation with resampling introduced in the
 [speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
 
-Currently, only greedy search and sampling are supported with assisted decoding, and doesn't support batched inputs.
+Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
 To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 To enable assisted decoding, set the `assistant_model` argument with a model.
@@ -369,8 +369,8 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness
-just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improving latency.
+When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
+just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
