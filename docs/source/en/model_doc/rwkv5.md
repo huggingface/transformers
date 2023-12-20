@@ -48,7 +48,6 @@ outputs = model(inputs["input_ids"][:, :2])
 outputs = model(inputs["input_ids"][:, 2:], state=outputs.state)
 output_two = outputs.last_hidden_state
 
-self.parent.assertTrue(torch.allclose(output_two, output_whole, atol=1e-5))
 ```
 
 

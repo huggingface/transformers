@@ -38,12 +38,13 @@ VOCAB_FILES_NAMES = {
 }
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "RWKV/rwkv-5-world-169m": "https://huggingface.co/RWKV/rwkv-5-world-169m/blob/main/rwkv_vocab_v20230424.txt",
+        "RWKV/rwkv-5-world-1b5": "https://huggingface.co/RWKV/rwkv-5-world-1b5/blob/main/rwkv_vocab_v20230424.txt",
     },
 }
 
 
-class TRIE:
+# Compared to the trie provided by HuggingFace, the main difference in the trie implemented here is that it has special encoding and decoding logic, and it needs to handle token that are not encoded in ASCII.
+class RWKVTOKENIZERTRIE:
     __slots__ = tuple("ch,to,values,front".split(","))
     to: list
     values: set
@@ -61,7 +62,7 @@ class TRIE:
             if fr.ch is not None:
                 ret.append(fr.ch)
             fr = fr.front
-        return "<TRIE %s %s>" % (ret[::-1], self.values)
+        return "<RWKVTOKENIZERTRIE %s %s>" % (ret[::-1], self.values)
 
     def add(self, key: bytes, idx: int = 0, val=None):
         if idx == len(key):
@@ -71,11 +72,11 @@ class TRIE:
             return self
         ch = key[idx]
         if self.to[ch] is None:
-            self.to[ch] = TRIE(front=self, ch=ch)
+            self.to[ch] = RWKVTOKENIZERTRIE(front=self, ch=ch)
         return self.to[ch].add(key, idx=idx + 1, val=val)
 
     def find_longest(self, key: bytes, idx: int = 0):
-        u: TRIE = self
+        u: RWKVTOKENIZERTRIE = self
         ch: int = key[idx]
 
         while u.to[ch] is not None:
@@ -103,8 +104,6 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
             idx = int(l[: l.index(" ")])
             x = eval(l[l.index(" ") : l.rindex(" ")])
             x = x.encode("utf-8") if isinstance(x, str) else x
-            assert isinstance(x, bytes)
-            assert len(x) == int(l[l.rindex(" ") :])
             sorted += [x]
             self.encoder[idx] = x
 
@@ -112,7 +111,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         for k, v in self.encoder.items():
             self.decoder[v] = int(k)
 
-        self.trie = TRIE()
+        self.trie = RWKVTOKENIZERTRIE()
         for t, i in self.decoder.items():
             _ = self.trie.add(t, val=(t, i))
         self.errors = errors  # how to handle errors in decoding
@@ -281,7 +280,11 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            for idx, x in self.encoder.items():
+                if isinstance(x, str):
+                    x = x.decode("utf-8")
+                line = f"{idx} {repr(x)} {len(x)}\n"
+                f.write(line)
 
         return (vocab_file,)
 

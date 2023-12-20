@@ -21,7 +21,10 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+RWKV5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "RWKV/rwkv-5-world-1b5": "https://huggingface.co/RWKV/rwkv-5-world-1b5/resolve/main/config.json",
+    "RWKV/rwkv-5-world-3b": "https://huggingface.co/RWKV/rwkv-5-world-3b/resolve/main/config.json",
+}
 
 
 class Rwkv5Config(PretrainedConfig):

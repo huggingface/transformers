@@ -27,7 +27,7 @@ if is_torch_available():
 @require_torch
 class RWKVWorldTokenizationTest(unittest.TestCase):
     def test_rwkv_world_tokenizer_encode(self):
-        tokenizer = RWKVWorldTokenizer.from_pretrained("RWKV/rwkv-5-world-169m")
+        tokenizer = RWKVWorldTokenizer.from_pretrained("RWKV/rwkv-5-world-1b5")
         s1 = tokenizer("Hello")["input_ids"]
         self.assertListEqual(s1, [33155])
         s2 = tokenizer("S:2")["input_ids"]
