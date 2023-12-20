@@ -2037,14 +2037,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 FutureWarning,
             )
 
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
-
-        if generation_config is None:
-            generation_config = copy.deepcopy(self.generation_config)
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
