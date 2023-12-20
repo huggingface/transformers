@@ -2975,7 +2975,7 @@ class ModelTesterMixin:
                     max_diff = torch.max(torch.abs(model.state_dict()[key] - new_model.state_dict()[key]))
                     self.assertLessEqual(
                         max_diff.item(),
-                        1e-3,
+                        1e-6,
                         msg=f"the weight values for `{key}` in `new_model` and `model` are  not identical",
                     )
                 else:
@@ -2988,7 +2988,7 @@ class ModelTesterMixin:
                     max_diff = torch.max(torch.abs(new_model.state_dict()[key] - target_model.state_dict()[key]))
                     self.assertLessEqual(
                         max_diff.item(),
-                        1e-5,
+                        1e-6,
                         msg=f"the weight values for `{key}` in `new_model` and `target_model` are not identical",
                     )
 
