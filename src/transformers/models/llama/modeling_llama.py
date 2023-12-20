@@ -285,8 +285,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    _attention_mask = None
-
+    cached_mask = None
+    
     def __init__(self, config: LlamaConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.config = config
@@ -319,6 +319,7 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
+
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -415,13 +416,13 @@ class LlamaAttention(nn.Module):
                 f" {attn_weights.size()}"
             )
         if attention_mask is not None:
-            if self._attention_mask is None or self._attention_mask.shape[-1] != attention_mask.shape[-1]:
+            if LlamaAttention.cached_mask is None or self.layer_idx == 0:
                 # create the 4d mask and cache it
-                attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
                     attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
                 )
-            elif self._attention_mask is not None:  # use the cached value
-                attention_mask = self._attention_mask
+            elif LlamaAttention.cached_mask is not None:  # use the cached value
+                attention_mask = LlamaAttention.cached_mask
 
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
@@ -668,6 +669,7 @@ class LlamaSdpaAttention(LlamaAttention):
     SDPA API.
     """
 
+    
     # Adapted from LlamaAttention.forward
     def forward(
         self,
@@ -719,13 +721,13 @@ class LlamaSdpaAttention(LlamaAttention):
 
 
         if attention_mask is not None:
-            if self._attention_mask is None or self._attention_mask.shape[-1] != attention_mask.shape[-1]:
+            if LlamaAttention.cached_mask is None or self.layer_idx == 0:
                 # create the 4d mask and cache it
-                attention_mask = self._attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                     attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
                 )
-            elif self._attention_mask is not None:
-                attention_mask = self._attention_mask
+            elif LlamaAttention.cached_mask is not None:
+                attention_mask = LlamaAttention.cached_mask
 
                 if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                     raise ValueError(
