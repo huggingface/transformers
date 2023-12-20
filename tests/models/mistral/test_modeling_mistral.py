@@ -535,7 +535,9 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
-        model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+        )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
 
         # greedy generation outputs
