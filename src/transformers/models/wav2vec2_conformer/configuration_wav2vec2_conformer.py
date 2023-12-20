@@ -280,10 +280,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         non_causal_depth_wise_conv=True, # TODO add to docstrings
         use_adapter_with_attention=False, # TODO add to docstrings
         skip_feature_encoder=False, # TODO add to docstrings
-        use_intermediate_ffn_before_adapter=False, # TODO add to docstrings
-        use_final_layer_norm=False, # TODO add to docstrings
+        skip_encoder_layer_norm=False, # TODO add to docstrings
         left_max_position_embeddings=64, # TODO move to right place in  docstrings
         right_max_position_embeddings=8, # TODO move to right place in  docstrings
+        skip_pos_conv_embed=False,
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -375,8 +375,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         
         self.use_adapter_with_attention = use_adapter_with_attention
         self.skip_feature_encoder = skip_feature_encoder
-        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
-        self.use_final_layer_norm = use_final_layer_norm
+        self.skip_encoder_layer_norm = skip_encoder_layer_norm
+        self.skip_pos_conv_embed = skip_pos_conv_embed
         self.left_max_position_embeddings = left_max_position_embeddings
         self.right_max_position_embeddings = right_max_position_embeddings
 

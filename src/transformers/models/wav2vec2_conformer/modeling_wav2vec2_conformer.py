@@ -622,7 +622,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if config.non_causal_depth_wise_conv:
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
-            self.batch_norm = nn.LayerNorm(config.hidden_size)
+            self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
@@ -663,7 +663,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if self.non_causal_depth_wise_conv:
             hidden_states = self.batch_norm(hidden_states)
         else:
-            hidden_states = self.batch_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
+            hidden_states = self.depthwise_layer_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
             
         hidden_states = self.activation(hidden_states)
 
@@ -921,8 +921,8 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         else:
             self.embed_positions = None
 
-        self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.pos_conv_embed = Wav2Vec2ConformerPositionalConvEmbedding(config) if not config.skip_pos_conv_embed else None
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if not config.skip_encoder_layer_norm else None
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2ConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
@@ -941,7 +941,9 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
+            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)            
+            # TODO: which one is good ?
+            # hidden_states[~attention_mask] = 0.0
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -994,7 +996,8 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        hidden_states = self.layer_norm(hidden_states)
+        if self.layer_norm:
+            hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -1416,14 +1419,8 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 
         self.encoder = Wav2Vec2ConformerEncoder(config)
         
-        self.intermediate_ffn = None
-        if config.use_intermediate_ffn_before_adapter:
-            self.intermediate_ffn = Wav2Vec2ConformerFeedForward(config, act_fn="relu")
-
         self.adapter = Wav2Vec2ConformerAdapter(config) if config.add_adapter else None
         
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size) if config.use_final_layer_norm else None
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1531,10 +1528,6 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-        
-        if self.intermediate_ffn:
-            expanded_hidden_states = self.intermediate_ffn(hidden_states)
-            hidden_states = hidden_states + 0.5 * expanded_hidden_states
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states, attention_mask=attention_mask)
