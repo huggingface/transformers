@@ -415,20 +415,20 @@ class LlamaAttention(nn.Module):
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
-        if attention_mask is not None:
-            if LlamaAttention.cached_mask is None or self.layer_idx == 0:
-                # create the 4d mask and cache it
-                attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
-                    attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
-                )
-            elif LlamaAttention.cached_mask is not None and self.layer_idx != 0:  # use the cached value
-                attention_mask = LlamaAttention.cached_mask
+        
+        if LlamaAttention.cached_mask is None or self.layer_idx == 0 or attention_mask is None:
+            # create the 4d mask and cache it
+            attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
+            )
+        elif LlamaAttention.cached_mask is not None and self.layer_idx != 0:  # use the cached value
+            attention_mask = LlamaAttention.cached_mask
 
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights + attention_mask
+        if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            raise ValueError(
+                f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+            )
+        attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
