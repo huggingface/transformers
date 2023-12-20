@@ -584,7 +584,7 @@ class Wav2Vec2ConformerFeedForward(nn.Module):
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Wav2Vec2Conformer.forward
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward.forward
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -1381,7 +1381,6 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward with wav2vec2->wav2vec2_conformer
     def forward(
         self,
         input_values: Optional[torch.Tensor],
