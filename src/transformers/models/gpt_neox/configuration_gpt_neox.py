@@ -86,7 +86,7 @@ class GPTNeoXConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-        attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
+        attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
         Example:
