@@ -705,10 +705,8 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-        seen_tokens = 0
         if past_key_value is not None:
-            seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-            kv_seq_len += seen_tokens
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
@@ -724,7 +722,7 @@ class LlamaSdpaAttention(LlamaAttention):
             if LlamaAttention.cached_mask is None or self.layer_idx == 0:
                 # create the 4d mask and cache it
                 attention_mask = LlamaAttention.cached_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                    attention_mask, (bsz, q_len), hidden_states, seen_tokens
+                    attention_mask, (bsz, q_len), hidden_states, kv_seq_len - q_len
                 )
             elif LlamaAttention.cached_mask is not None:
                 attention_mask = LlamaAttention.cached_mask
