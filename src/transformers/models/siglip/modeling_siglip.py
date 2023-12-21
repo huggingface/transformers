@@ -363,21 +363,9 @@ class SiglipAttention(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, q_len, k_v_seq_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, q_len, k_v_seq_len)
-        else:
-            attn_weights_reshaped = None
-
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        print("Shape of attention weights:", attn_weights.shape)
-        print("Shape of value states:", value_states.shape)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -391,7 +379,7 @@ class SiglipAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Siglip
