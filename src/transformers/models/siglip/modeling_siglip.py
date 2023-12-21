@@ -804,7 +804,8 @@ class SiglipTextModel(SiglipPreTrainedModel):
         >>> model = SiglipTextModel.from_pretrained("nielsr/siglip-base-patch16-224")
         >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> # important: make sure to set padding="max_length" as that's how the model was trained
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1016,7 +1017,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
         >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> # important: make sure to set padding="max_length" as that's how the model was trained
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
         >>> with torch.no_grad():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
@@ -1121,6 +1123,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
+        >>> # important: make sure to set padding="max_length" as that's how the model was trained
         >>> inputs = processor(
         ...     text=texts, images=image, return_tensors="pt", padding="max_length"
         ... )
