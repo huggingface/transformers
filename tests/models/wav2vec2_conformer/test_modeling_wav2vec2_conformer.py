@@ -142,11 +142,11 @@ class Wav2Vec2ConformerModelTester:
         self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
 
     def prepare_config_and_inputs(self, position_embeddings_type="relative", create_mel_spectrogram=False):
-        input_shape = (
-            [self.batch_size, self.seq_length, self.conv_dim[-1]]
-            if create_mel_spectrogram
-            else [self.batch_size, self.seq_length]
-        )
+        if create_mel_spectrogram:
+            input_shape = [self.batch_size, self.seq_length, self.conv_dim[-1]]
+        else:
+            input_shape = [self.batch_size, self.seq_length]
+
         input_values = floats_tensor(input_shape, self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
@@ -226,7 +226,7 @@ class Wav2Vec2ConformerModelTester:
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
 
-    def create_and_check_model_from_seamless_communication(self, config, input_values, attention_mask):
+    def create_and_check_causal_fbank_model(self, config, input_values, attention_mask):
         config.add_adapter = False
         config.skip_feature_encoder = True
         config.skip_encoder_layer_norm = True
@@ -514,7 +514,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     def test_model_from_seamless_communication(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(create_mel_spectrogram=True)
-        self.model_tester.create_and_check_model_from_seamless_communication(*config_and_inputs)
+        self.model_tester.create_and_check_causal_fbank_model(*config_and_inputs)
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -919,6 +919,57 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
+    def check_inference_pretrained(self, model_id, model, input_name, inputs, features_shape):
+        torch.manual_seed(0)
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(
+                inputs[input_name],
+                attention_mask=inputs["attention_mask"],
+                output_attentions=True,
+                mask_time_indices=mask_time_indices,
+            )
+
+        # compute cosine similarity
+        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked = cosine_sim[mask_time_indices]
+
+        # ... now compare to randomly initialized model
+
+        config = Wav2Vec2ConformerConfig.from_pretrained(model_id)
+        model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            outputs_rand = model_rand(
+                inputs[input_name],
+                attention_mask=inputs["attention_mask"],
+                output_attentions=True,
+                mask_time_indices=mask_time_indices,
+            )
+
+        # compute cosine similarity
+        cosine_sim_rand = torch.cosine_similarity(
+            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
+        )
+
+        # retrieve cosine sim of masked features
+        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
+
+        # a pretrained wav2vec2_conformer model has learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states > 0.5
+        # a random wav2vec2_conformer model has not learned to predict the quantized latent states
+        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
+        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+
     def test_inference_ctc_normal_batched_rel_pos(self):
         model = Wav2Vec2ConformerForCTC.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large-960h-ft")
         model.to(torch_device)
@@ -970,9 +1021,9 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     def test_inference_w2v2_bert(self):
-        model = Wav2Vec2ConformerForPreTraining.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
+        model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/w2v-bert-2.0")
         model.to(torch_device)
-        processor = AutoFeatureExtractor.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
+        processor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
 
         input_speech = self._load_datasamples(2)
 
@@ -1014,8 +1065,8 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         # fmt: on
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, 25:35, 4:10], expected_slice_0, atol=1e-4, rtol=1e-6)
-        torch.testing.assert_close(outputs.last_hidden_state[1, 25:35, 4:10], expected_slice_1, atol=1e-4, rtol=1e-6)
+        self.assertTrue((outputs.last_hidden_state[0, 25:35, 4:10] - expected_slice_0).abs().max() <= 1e-4)
+        self.assertTrue((outputs.last_hidden_state[1, 25:35, 4:10] - expected_slice_1).abs().max() <= 1e-4)
 
         self.assertAlmostEqual(outputs.last_hidden_state[1].mean().item(), 3.3123e-05)
         self.assertAlmostEqual(outputs.last_hidden_state[1].std().item(), 0.1545, delta=2e-5)
@@ -1023,126 +1074,34 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(list(outputs.last_hidden_state.shape), [2, 326, 1024])
 
     def test_inference_w2v2_bert_pretrained(self):
-        model = Wav2Vec2ConformerForPreTraining.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
+        model_id = "facebook/w2v-bert-2.0"
+        model = Wav2Vec2ConformerForPreTraining.from_pretrained(model_id)
         model.to(torch_device)
-        processor = AutoFeatureExtractor.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+        input_name = feature_extractor.model_input_names[0]
 
         input_speech = self._load_datasamples(2)
-
-        inputs = processor(input_speech, return_tensors="pt", padding=True).to(torch_device)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
+        features_shape = inputs["input_features"].shape[:2]
 
         # apply augmentation
         model.wav2vec2_conformer.config.apply_spec_augment = True
 
-        torch.manual_seed(0)
-        mask_time_indices = _compute_mask_indices(
-            inputs["input_features"].shape[:2],
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
-        )
-        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(
-                inputs["input_features"],
-                attention_mask=inputs["attention_mask"],
-                output_attentions=True,
-                mask_time_indices=mask_time_indices,
-            )
-
-        # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked = cosine_sim[mask_time_indices]
-
-        # ... now compare to randomly initialized model
-
-        config = Wav2Vec2ConformerConfig.from_pretrained("/home/yoach/tmp/wav2vec_seamless")
-        model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs_rand = model_rand(
-                inputs["input_features"],
-                attention_mask=inputs["attention_mask"],
-                output_attentions=True,
-                mask_time_indices=mask_time_indices,
-            )
-
-        # compute cosine similarity
-        cosine_sim_rand = torch.cosine_similarity(
-            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
-        )
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
-
-        # a pretrained wav2vec2_conformer model has learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states > 0.5
-        # a random wav2vec2_conformer model has not learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
-        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+        self.check_inference_pretrained(model_id, model, input_name, inputs, features_shape)
 
     def test_inference_pretrained(self):
-        model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
+        model_id = "facebook/wav2vec2-conformer-rel-pos-large"
+        model = Wav2Vec2ConformerForPreTraining.from_pretrained(model_id)
         model.to(torch_device)
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "facebook/wav2vec2-conformer-rel-pos-large", return_attention_mask=True
-        )
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_id, return_attention_mask=True)
+        input_name = feature_extractor.model_input_names[0]
         input_speech = self._load_datasamples(2)
 
-        inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
 
-        batch_size = inputs_dict["input_values"].shape[0]
-        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+        batch_size = inputs["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs["input_values"].shape[1]))
 
         features_shape = (batch_size, feature_seq_length)
 
-        torch.manual_seed(0)
-        mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
-        )
-        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
-        with torch.no_grad():
-            outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
-                mask_time_indices=mask_time_indices,
-            )
-
-        # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked = cosine_sim[mask_time_indices]
-
-        # ... now compare to randomly initialized model
-
-        config = Wav2Vec2ConformerConfig.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
-        model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs_rand = model_rand(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
-                mask_time_indices=mask_time_indices,
-            )
-
-        # compute cosine similarity
-        cosine_sim_rand = torch.cosine_similarity(
-            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
-        )
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
-
-        # a pretrained wav2vec2_conformer model has learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states > 0.5
-        # a random wav2vec2_conformer model has not learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
-        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
+        self.check_inference_pretrained(model_id, model, input_name, inputs, features_shape)
