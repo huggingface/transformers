@@ -704,6 +704,7 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+                print("Token type ids:", token_type_ids)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
 
             else:
@@ -990,6 +991,9 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
         if past_key_values:
             if position_ids is None:
+                # the reason we add + 2 + 1 here is because we have 2 additional vision tokens,
+                # and we need to add 1 to take into account the one extra token that is going to
+                # be sent through the model
                 position_ids = build_position_ids(token_type_ids, attention_mask) + 2 + 1
             position_ids = position_ids[:, -1:]
             input_ids = input_ids[:, -1:]

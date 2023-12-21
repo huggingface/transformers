@@ -42,7 +42,7 @@ class CogVLMProcessorTest(unittest.TestCase):
         image_processor = CLIPImageProcessor()
         tokenizer = LlamaTokenizer.from_pretrained("stas/tiny-random-llama-2")
 
-        processor = CogVLMProcessor(image_processor, tokenizer, patch_size=2)
+        processor = CogVLMProcessor(image_processor, tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
 

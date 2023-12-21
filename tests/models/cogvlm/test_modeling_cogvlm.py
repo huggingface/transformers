@@ -97,18 +97,12 @@ class CogVLMModelTester:
         self.seq_length = self.text_seq_length + self.vision_seq_length
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(torch_device)
-        token_type_ids = torch.cat(
-            [
-                torch.zeros(self.batch_size, self.text_seq_length, dtype=torch.long),
-                torch.ones(self.batch_size, self.vision_seq_length, dtype=torch.long),
-            ],
-            dim=1,
-        ).to(torch_device)
+        input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size).to(torch_device)
+        token_type_ids = torch.zeros(self.batch_size, self.text_seq_length, dtype=torch.long).to(torch_device)
 
         attention_mask = None
         if self.use_input_mask:
-            attention_mask = random_attention_mask([self.batch_size, self.seq_length]).to(torch_device)
+            attention_mask = random_attention_mask([self.batch_size, self.text_seq_length]).to(torch_device)
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size]).to(
             torch_device
