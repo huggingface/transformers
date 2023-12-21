@@ -38,11 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MixtralForCausalLM,
-        MixtralForSequenceClassification,
-        MixtralModel,
-    )
+    from transformers import MixtralForCausalLM, MixtralForSequenceClassification, MixtralModel
 
 
 class MixtralModelTester:
