@@ -206,12 +206,6 @@ class UdopTokenizer(PreTrainedTokenizer):
             CrossEntropyLoss.
         only_label_first_subword (`bool`, *optional*, defaults to `True`):
             Whether or not to only label the first subword, in case word labels are provided.
-        extra_ids (`int`, *optional*, defaults to 100):
-            The number of extra IDs added to the special tokens.
-        loc_extra_ids (`int`, *optional*, defaults to 501):
-            The number of extra location IDs added to the special tokens.
-        other_extra_ids (`int`, *optional*, defaults to 200):
-            The number of extra other IDs added to the special tokens.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
@@ -274,40 +268,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        extra_ids=100,
-        loc_extra_ids=501,
-        other_extra_ids=200,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=True,
         **kwargs,
     ) -> None:
-        # Add extra_ids to the special token list
-        if extra_ids > 0 and (additional_special_tokens is None or "<extra_id_0>" not in additional_special_tokens):
-            if additional_special_tokens is None:
-                additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)]
-            additional_special_tokens.extend(["<extra_l_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
-            additional_special_tokens.extend(["</extra_l_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
-            additional_special_tokens.extend(["<extra_t_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
-            additional_special_tokens.extend(["</extra_t_id_{}>".format(i) for i in range(extra_ids - 1, -1, -1)])
-
-        if loc_extra_ids > 0 and (additional_special_tokens is None or "<loc_0>" not in additional_special_tokens):
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<loc_{}>".format(i) for i in range(loc_extra_ids - 1, -1, -1)])
-
-        if other_extra_ids > 0 and (additional_special_tokens is None or "<other_0>" not in additional_special_tokens):
-            if additional_special_tokens is None:
-                additional_special_tokens = []
-            additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids - 1, -1, -1)])
-
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.vocab_file = vocab_file
-        self._extra_ids = extra_ids
-        self._loc_extra_ids = loc_extra_ids
-        self._other_extra_ids = other_extra_ids
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
@@ -327,9 +296,6 @@ class UdopTokenizer(PreTrainedTokenizer):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
-            extra_ids=extra_ids,
-            loc_extra_ids=loc_extra_ids,
-            other_extra_ids=other_extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
