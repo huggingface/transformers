@@ -339,7 +339,7 @@ class SiglipAttention(nn.Module):
 
         batch_size, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states) * self.scale
+        query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
@@ -347,36 +347,37 @@ class SiglipAttention(nn.Module):
         key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        src_len = key_states.shape[-2]
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+        k_v_seq_len = key_states.shape[-2]
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
 
-        if attn_weights.size() != (batch_size, self.num_heads, q_len, src_len):
+        if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
             raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, src_len)}, but is"
+                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, k_v_seq_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, q_len, src_len):
+            if attention_mask.size() != (batch_size, 1, q_len, k_v_seq_len):
                 raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, q_len, src_len)}, but is {attention_mask.size()}"
+                    f"Attention mask should be of size {(batch_size, 1, q_len, k_v_seq_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, q_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, q_len, src_len)
+            attn_weights = attn_weights + attention_mask
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, q_len, src_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, q_len, src_len)
+            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, q_len, k_v_seq_len)
+            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, q_len, k_v_seq_len)
         else:
             attn_weights_reshaped = None
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        print("Shape of attention weights:", attn_weights.shape)
+        print("Shape of value states:", value_states.shape)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
@@ -428,11 +429,11 @@ class SiglipEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, q_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            attention_mask (`torch.FloatTensor`):
+                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
