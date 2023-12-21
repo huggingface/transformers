@@ -299,16 +299,20 @@ class UMT5Attention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+        # computes variables that will change in the presence of a cache
+        batch_size, seq_length = hidden_states.shape[:2]
+        has_cache = past_key_value is not None and past_key_value.get_seq_length(self.layer_idx) > 0
+        query_length = seq_length
+        if has_cache:
+            query_length += past_key_value.get_usable_length(seq_length, self.layer_idx)
+
+        # compute the attention scores
         key_states, value_states = self._prepare_key_values(hidden_states, encoder_hidden_states, past_key_value)
         query_states = self._shape(self.q(hidden_states))
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
         # compute positional bias
-        batch_size, seq_length = hidden_states.shape[:2]
         if self.has_relative_attention_bias:
-            query_length = seq_length
-            if past_key_value is not None:
-                query_length += past_key_value.get_usable_length(seq_length, self.layer_idx)
             position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
         else:
             position_bias = torch.zeros(
@@ -317,7 +321,7 @@ class UMT5Attention(nn.Module):
                 dtype=attention_scores.dtype,
                 requires_grad=self.training,
             )
-        if past_key_value is not None:
+        if has_cache:
             position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
         if attention_mask is not None:
             position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
@@ -1331,7 +1335,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
     # TODO (joao): reintroduce the copied from in a follow-up PR
     def prepare_inputs_for_generation(
         self,
-        input_ids,
+        decoder_input_ids,
         past_key_values=None,
         attention_mask=None,
         head_mask=None,
@@ -1353,22 +1357,23 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
                 max_cache_length = None
 
             # Keep only the unprocessed tokens:
-            # 1 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            if past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 2 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+            # 1 - If the past_length is smaller than decoder_input_ids', then decoder_input_ids holds all input tokens.
+            # We can discard decoder_input_ids based on the past_length.
+            if past_length < decoder_input_ids.shape[1]:
+                decoder_input_ids = decoder_input_ids[:, past_length:]
+            # 2 - Otherwise (past_length >= decoder_input_ids.shape[1]), let's assume decoder_input_ids only has
+            # unprocessed tokens.
 
             # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
             if (
                 max_cache_length is not None
                 and decoder_attention_mask is not None
-                and cache_length + input_ids.shape[1] > max_cache_length
+                and cache_length + decoder_input_ids.shape[1] > max_cache_length
             ):
                 decoder_attention_mask = decoder_attention_mask[:, -max_cache_length:]
 
         return {
-            "decoder_input_ids": input_ids,
+            "decoder_input_ids": decoder_input_ids,
             "past_key_values": past_key_values,
             "encoder_outputs": encoder_outputs,
             "attention_mask": attention_mask,

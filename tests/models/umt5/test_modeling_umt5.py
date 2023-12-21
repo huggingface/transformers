@@ -560,6 +560,27 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_sentencepiece
 @require_tokenizers
 class Umt5IntegrationTest(unittest.TestCase):
+    def test_generation(self):
+        model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
+
+        inputs = tokenizer(
+            "A <extra_id_0> walks into a bar and orders a <extra_id_1> with <extra_id_2> pinch of <extra_id_3>.",
+            return_tensors="pt",
+        )
+        generated_ids = model.generate(**inputs, use_cache=True)
+        filling = tokenizer.batch_decode(generated_ids)[0]
+        EXPECTED_FILLING = (
+            '<pad><extra_id_0>stranger<extra_id_1>stranger<extra_id_2>1<extra_id_3>ice<extra_id_4> a<extra_id_5> A '
+            'stranger<extra_id_6>strangers are the ones who<extra_id_7> <extra_id_48><extra_id_48><0x0A><extra_id_48>'
+            '<extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48>'
+            '<extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48>'
+            '<extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48>'
+            '<extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48>'
+            '<extra_id_48><extra_id_48><extra_id_48><extra_id_48><extra_id_48>'
+        )
+        self.assertEqual(filling, EXPECTED_FILLING)
+
     @slow
     @unittest.skip(
         "Unless we stop stripping left and right by default for all special tokens, the expected ids obtained here will not match the original ones. Wait for https://github.com/huggingface/transformers/pull/23909 to be merged"
