@@ -1,7 +1,7 @@
 # Image Captioning (vision-encoder-text-decoder model) training example
 
 The following example showcases how to finetune a vision-encoder-text-decoder model for image captioning
-using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/visionencoderdecoder#transformers.FlaxVisionEncoderDecoderModel).
+using the JAX/Flax backend, leveraging 🤗 Transformers library's [FlaxVisionEncoderDecoderModel](https://huggingface.co/docs/transformers/model_doc/vision-encoder-decoder#transformers.FlaxVisionEncoderDecoderModel).
 
 JAX/Flax allows you to trace pure functions and compile them into efficient, fused accelerator code on both GPU and TPU.
 Models written in JAX/Flax are **immutable** and updated in a purely functional

@@ -77,6 +77,9 @@ PRIVATE_MODELS = [
     "Kosmos2TextModel",
     "Kosmos2TextForCausalLM",
     "Kosmos2VisionModel",
+    "SeamlessM4Tv2TextToUnitModel",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2TextToUnitForConditionalGeneration",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -249,6 +252,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Owlv2TextModel",
     "Owlv2VisionModel",
     "OwlViTForObjectDetection",
+    "PatchTSMixerForPrediction",
+    "PatchTSMixerForPretraining",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
@@ -298,6 +303,10 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
     "UdopForConditionalGeneration",
+    "SeamlessM4Tv2NARTextToUnitModel",
+    "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
 ]
 
 # DO NOT edit this list!
@@ -906,6 +915,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
+    "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",

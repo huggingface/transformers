@@ -283,6 +283,7 @@ class TFSwinEmbeddings(tf.keras.layers.Layer):
 
         self.norm = tf.keras.layers.LayerNormalization(name="norm", epsilon=1e-5)
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.config = config
 
     def build(self, input_shape: tf.TensorShape) -> None:
         if self.use_mask_token:
@@ -296,7 +297,19 @@ class TFSwinEmbeddings(tf.keras.layers.Layer):
             )
         else:
             self.position_embeddings = None
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build([None, None, self.config.embed_dim])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
 
     def call(
         self, pixel_values: tf.Tensor, bool_masked_pos: bool = None, training: bool = False
@@ -381,6 +394,14 @@ class TFSwinPatchEmbeddings(tf.keras.layers.Layer):
         embeddings = tf.transpose(embeddings, (0, 2, 1))
         return embeddings, output_dimensions
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, None, self.num_channels])
+
 
 class TFSwinPatchMerging(tf.keras.layers.Layer):
     """
@@ -442,6 +463,17 @@ class TFSwinPatchMerging(tf.keras.layers.Layer):
         input_feature = self.reduction(input_feature, training=training)
 
         return input_feature
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "reduction", None) is not None:
+            with tf.name_scope(self.reduction.name):
+                self.reduction.build([None, None, 4 * self.dim])
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build([None, None, 4 * self.dim])
 
 
 class TFSwinDropPath(tf.keras.layers.Layer):
@@ -521,7 +553,19 @@ class TFSwinSelfAttention(tf.keras.layers.Layer):
         relative_coords = tf.stack([stack_0, stack_1], axis=2)
 
         self.relative_position_index.assign(tf.cast(tf.reduce_sum(relative_coords, axis=-1), tf.int32))
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.all_head_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.all_head_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.all_head_size])
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
         new_x_shape = shape_list(x)[:-1] + [self.num_attention_heads, self.attention_head_size]
@@ -597,11 +641,23 @@ class TFSwinSelfOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(dim, name="dense")
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob, name="dropout")
+        self.dim = dim
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.dim])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
 
 
 class TFSwinAttention(tf.keras.layers.Layer):
@@ -631,6 +687,17 @@ class TFSwinAttention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self", None) is not None:
+            with tf.name_scope(self.self.name):
+                self.self.build(None)
+        if getattr(self, "self_output", None) is not None:
+            with tf.name_scope(self.self_output.name):
+                self.self_output.build(None)
+
 
 class TFSwinIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: SwinConfig, dim: int, **kwargs) -> None:
@@ -640,11 +707,20 @@ class TFSwinIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.dim = dim
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.dim])
 
 
 class TFSwinOutput(tf.keras.layers.Layer):
@@ -652,11 +728,21 @@ class TFSwinOutput(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(dim, name="dense")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, "dropout")
+        self.config = config
+        self.dim = dim
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, int(self.config.mlp_ratio * self.dim)])
 
 
 class TFSwinLayer(tf.keras.layers.Layer):
@@ -684,6 +770,7 @@ class TFSwinLayer(tf.keras.layers.Layer):
         )
         self.intermediate = TFSwinIntermediate(config, dim, name="intermediate")
         self.swin_output = TFSwinOutput(config, dim, name="output")
+        self.dim = dim
 
     def get_attn_mask(self, height: int, width: int, window_size: int, shift_size: int) -> tf.Tensor | None:
         img_mask = tf.zeros((height, width))
@@ -789,6 +876,29 @@ class TFSwinLayer(tf.keras.layers.Layer):
         layer_outputs = (layer_output, attention_outputs[1]) if output_attentions else (layer_output,)
         return layer_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layernorm_before", None) is not None:
+            with tf.name_scope(self.layernorm_before.name):
+                self.layernorm_before.build([None, None, self.dim])
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "drop_path", None) is not None:
+            with tf.name_scope(self.drop_path.name):
+                self.drop_path.build(None)
+        if getattr(self, "layernorm_after", None) is not None:
+            with tf.name_scope(self.layernorm_after.name):
+                self.layernorm_after.build([None, None, self.dim])
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "swin_output", None) is not None:
+            with tf.name_scope(self.swin_output.name):
+                self.swin_output.build(None)
+
 
 class TFSwinStage(tf.keras.layers.Layer):
     def __init__(
@@ -860,6 +970,18 @@ class TFSwinStage(tf.keras.layers.Layer):
         if output_attentions:
             stage_outputs += layer_outputs[1:]
         return stage_outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "downsample", None) is not None:
+            with tf.name_scope(self.downsample.name):
+                self.downsample.build(None)
+        if getattr(self, "blocks", None) is not None:
+            for layer in self.blocks:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFSwinEncoder(tf.keras.layers.Layer):
@@ -940,6 +1062,15 @@ class TFSwinEncoder(tf.keras.layers.Layer):
             attentions=all_self_attentions,
             reshaped_hidden_states=all_reshaped_hidden_states,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFSwinPreTrainedModel(TFPreTrainedModel):
@@ -1160,6 +1291,20 @@ class TFSwinMainLayer(tf.keras.layers.Layer):
             reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, self.num_features])
+
 
 @add_start_docstrings(
     "The bare Swin Model transformer outputting raw hidden-states without any specific head on top.",
@@ -1217,6 +1362,14 @@ class TFSwinModel(TFSwinPreTrainedModel):
 
         return swin_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "swin", None) is not None:
+            with tf.name_scope(self.swin.name):
+                self.swin.build(None)
+
 
 class TFSwinPixelShuffle(tf.keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
@@ -1251,6 +1404,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
         )
         self.pixel_shuffle = TFSwinPixelShuffle(config.encoder_stride, name="1")
+        self.config = config
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         hidden_states = x
@@ -1261,6 +1415,17 @@ class TFSwinDecoder(tf.keras.layers.Layer):
         # B,H,W,C -> B,C,H,W
         hidden_states = tf.transpose(hidden_states, (0, 3, 1, 2))
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv2d", None) is not None:
+            with tf.name_scope(self.conv2d.name):
+                self.conv2d.build([None, None, None, self.config.hidden_size])
+        if getattr(self, "pixel_shuffle", None) is not None:
+            with tf.name_scope(self.pixel_shuffle.name):
+                self.pixel_shuffle.build(None)
 
 
 @add_start_docstrings(
@@ -1372,6 +1537,17 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "swin", None) is not None:
+            with tf.name_scope(self.swin.name):
+                self.swin.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1446,3 +1622,15 @@ class TFSwinForImageClassification(TFSwinPreTrainedModel, TFSequenceClassificati
             attentions=outputs.attentions,
             reshaped_hidden_states=outputs.reshaped_hidden_states,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "swin", None) is not None:
+            with tf.name_scope(self.swin.name):
+                self.swin.build(None)
+        if getattr(self, "classifier", None) is not None:
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build([None, None, self.swin.num_features])

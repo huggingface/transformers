@@ -610,6 +610,13 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
         )
 
+        def empty_prefix_allowed_tokens_fn(batch_id, inputs_ids):
+            return []
+
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(empty_prefix_allowed_tokens_fn, 1)
+
+        self.assertRaises(ValueError, prefix_constrained_logits_proc, input_ids, scores.clone())
+
     def test_hamming_diversity(self):
         vocab_size = 4
         num_beams = 2
