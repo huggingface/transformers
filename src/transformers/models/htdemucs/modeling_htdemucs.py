@@ -45,7 +45,7 @@ class HtdemucsBaseModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
@@ -72,13 +72,13 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 def inverse_spectrogram(spectrogram, hop_length, length=None):
     spectrogram = nn.functional.pad(spectrogram, (0, 0, 0, 1))
     spectrogram = nn.functional.pad(spectrogram, (2, 2))
-    pad = hop_length // 2 * 3
-    unpadded_length = hop_length * int(math.ceil(length / hop_length)) + 2 * pad
+    padding = hop_length // 2 * 3
+    unpadded_length = hop_length * int(math.ceil(length / hop_length)) + 2 * padding
 
     *other, freqs, frames = spectrogram.shape
     n_fft = 2 * freqs - 2
     spectrogram = spectrogram.view(-1, freqs, frames)
-    win_length = n_fft // (1 + pad)
+    win_length = n_fft // (1 + padding)
 
     waveform = torch.istft(
         spectrogram,
@@ -91,19 +91,16 @@ def inverse_spectrogram(spectrogram, hop_length, length=None):
         center=True,
     )
 
-    _, unpadded_length = waveform.shape
+    unpadded_length = waveform.shape[1]
     waveform = waveform.view(*other, unpadded_length)
-    waveform = waveform[..., pad : pad + length]
+    waveform = waveform[..., padding : padding + length]
     return waveform
 
 
 class HtdemucsAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        config: HtdemucsConfig,
-    ):
+    def __init__(self, config: HtdemucsConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -112,18 +109,9 @@ class HtdemucsAttention(nn.Module):
 
         self.scaling = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(
-            self.embed_dim,
-            self.embed_dim,
-        )
-        self.v_proj = nn.Linear(
-            self.embed_dim,
-            self.embed_dim,
-        )
-        self.q_proj = nn.Linear(
-            self.embed_dim,
-            self.embed_dim,
-        )
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -216,8 +204,6 @@ class HtdemucsTransformerBlock(nn.Module):
     def __init__(self, config: HtdemucsConfig, is_cross_attn=False):
         super().__init__()
         self.embed_dim = config.bottom_channels if config.bottom_channels is not None else config.hidden_size
-        self.is_cross_attn = is_cross_attn
-
         self.attn = HtdemucsAttention(config)
 
         self.dropout = config.dropout
@@ -331,16 +317,10 @@ class HtdemucsTransformerLayer(nn.Module):
         temp_hidden_states = temp_hidden_states[0]
 
         if output_attentions:
-            all_attentions += (
-                freq_layer_outputs[1],
-                temp_layer_outputs[1],
-            )
+            all_attentions += (freq_layer_outputs[1], temp_layer_outputs[1])
 
         if output_hidden_states:
-            all_hidden_states += (
-                freq_hidden_states,
-                temp_hidden_states,
-            )
+            all_hidden_states += (freq_hidden_states, temp_hidden_states)
 
         freq_layer_outputs = self.freq_cross_attn(
             freq_hidden_states,
@@ -359,18 +339,12 @@ class HtdemucsTransformerLayer(nn.Module):
         temp_hidden_states = temp_hidden_states[0]
 
         if output_attentions:
-            all_attentions += (
-                freq_layer_outputs[1],
-                temp_layer_outputs[1],
-            )
+            all_attentions += (freq_layer_outputs[1], temp_layer_outputs[1])
 
         if output_hidden_states:
-            all_hidden_states += (
-                freq_hidden_states,
-                temp_hidden_states,
-            )
+            all_hidden_states += (freq_hidden_states, temp_hidden_states)
 
-        return (freq_hidden_states, temp_hidden_states, all_attentions, all_hidden_states)
+        return freq_hidden_states, temp_hidden_states, all_attentions, all_hidden_states
 
 
 class HtdemucsScaledFrequencyEmbedding(nn.Module):
@@ -395,10 +369,6 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
 
         self.embedding.weight.data /= config.freq_embedding_lr_scale
         self.scale = config.freq_embedding_lr_scale
-
-    @property
-    def weight(self):
-        return self.embedding.weight * self.scale
 
     def forward(self, input_features):
         frequencies = torch.arange(input_features.shape[-2], device=input_features.device)
@@ -740,14 +710,7 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
         if temp_attention_mask is not None:
             temp_attention_mask = _expand_mask(temp_attention_mask, freq_hidden_states.dtype)
 
-        all_hidden_states = (
-            (
-                freq_hidden_states,
-                temp_hidden_states,
-            )
-            if output_hidden_states
-            else None
-        )
+        all_hidden_states = (freq_hidden_states,temp_hidden_states) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for idx, layer in enumerate(self.layers):
@@ -936,9 +899,8 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         freq_hidden_states = freq_hidden_states.view(bsz, self.num_stems, -1, freq, seq_len)
         freq_hidden_states = freq_hidden_states * freq_std[:, None] + freq_mean[:, None]
 
-        freq_hidden_states = freq_hidden_states.view(bsz, self.num_stems, -1, 2, freq, seq_len).permute(
-            0, 1, 2, 4, 5, 3
-        )
+        freq_hidden_states = freq_hidden_states.view(bsz, self.num_stems, -1, 2, freq, seq_len)
+        freq_hidden_states = freq_hidden_states.permute(0, 1, 2, 4, 5, 3)
         freq_hidden_states = freq_hidden_states.view_as_complex(freq_hidden_states.contiguous())
         freq_hidden_states = inverse_spectrogram(freq_hidden_states, self.hop_length, input_values.shape[-1])
 
