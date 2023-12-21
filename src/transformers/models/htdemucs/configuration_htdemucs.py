@@ -65,12 +65,31 @@ class HtdemucsConfig(PretrainedConfig):
         layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(hidden_size).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether the model should return the last key/values attentions (not used by all models)
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         num_stems (`int`, *optional*, defaults to 8):
             The number of stems the audio is split into.
+        audio_channels (`int`, *optional*, defaults to 2):
+            The number of input/output audio channels.
+        hidden_channels (`int`, *optional*, defaults to 48):
+            The initial number of hidden channels.
+        channel_growth (`int`, *optional*, defaults to 2):
+            Factor by which to increase the number of hidden channels with each layer.
+        num_conv_layers (`int`, *optional*, defaults to 4):
+            Number of convolutional layers in the temporal and frequency branches of the encoder and decoder.
+        residual_conv_depth (`int`, *optional*, defaults to 2):
+            Depth of the convolutional residual branch in the temporal and frequency branches of the encoder and decoder.
+        bottom_channels (`int`, *optional*, defaults to 512):
+            Dimension of the linear conv layer that is applied before and after the transformer model to
+            upsample/downsample the number of channels.
+        n_fft (`int`, *optional* defaults to 4096):
+            Size of the Fourier transform applied to the input audio.
+        stride (`int`, *optional*, defaults to 4):
+            Stride for encoder and decoder layers.
+        freq_embedding_lr_scale (`float`, *optional*, defaults to 10):
+            Factor by which to boost the learning rate in the scaled embedding layer.
     """
     model_type = "htdemucs"
 
@@ -82,6 +101,7 @@ class HtdemucsConfig(PretrainedConfig):
         num_attention_heads=8,
         layerdrop=0.0,
         use_cache=True,
+        init_std=0.02,
         activation_function="gelu",
         hidden_size=512,
         dropout=0.1,
@@ -89,8 +109,16 @@ class HtdemucsConfig(PretrainedConfig):
         activation_dropout=0.0,
         initializer_factor=0.02,
         layer_scale_init_value=1e-4,
-        scale_embedding=False,
         num_stems=8,
+        audio_channels=2,
+        hidden_channels=48,
+        channel_growth=2,
+        num_conv_layers=4,
+        residual_conv_depth=2,
+        bottom_channels=512,
+        n_fft=4096,
+        stride=4,
+        freq_embedding_lr_scale=10,
         **kwargs,
     ):
         self.max_position_embeddings = max_position_embeddings
@@ -106,16 +134,16 @@ class HtdemucsConfig(PretrainedConfig):
         self.layer_scale_init_value = layer_scale_init_value
         self.layerdrop = layerdrop
         self.use_cache = use_cache
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.init_std = init_std
         self.num_stems = num_stems
+        self.audio_channels = audio_channels
+        self.hidden_channels = hidden_channels
+        self.channel_growth = channel_growth
+        self.num_conv_layers = num_conv_layers
+        self.residual_conv_depth = residual_conv_depth
+        self.bottom_channels = bottom_channels
+        self.n_fft = n_fft
+        self.stride = stride
+        self.freq_embedding_lr_scale = freq_embedding_lr_scale
 
-        head_dim = self.hidden_size // self.num_attention_heads
-        if (head_dim * self.num_heads) != self.embed_dim:
-            raise ValueError(
-                f"`hidden_size` must be divisible by `num_attention_heads`. Got `hidden_size`: {self.hidden_size}"
-                f" and `num_attention_heads`: {self.num_attention_heads}."
-            )
-
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)

@@ -107,6 +107,12 @@ class HtdemucsAttention(nn.Module):
         self.dropout = config.dropout
         self.head_dim = config.hidden_size // config.num_attention_heads
 
+        if (self.head_dim * self.num_heads) != self.embed_dim:
+            raise ValueError(
+                f"`hidden_size` must be divisible by `num_attention_heads`. Got `hidden_size`: {config.hidden_size}"
+                f" and `num_attention_heads`: {config.num_attention_heads}."
+            )
+
         self.scaling = self.head_dim**-0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -355,17 +361,17 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
 
     def __init__(self, config: HtdemucsConfig):
         super().__init__()
-        num_embeddings = config.num_mel_bins // (2 * config.stride)
+        num_embeddings = config.n_fft // (2 * config.stride)
         embedding_dim = 2 * config.hidden_channels
 
         self.embedding = nn.Embedding(num_embeddings, embedding_dim)
 
-        if config.smooth_freq_embedding_weights:
-            weight = torch.cumsum(self.embedding.weight.data, dim=0)
-            # when summing gaussian, scale raises as sqrt(n), so we normalize by that
-            smoothing_factor = torch.arange(1, num_embeddings + 1)
-            smoothing_factor = smoothing_factor[:, None].to(weight)
-            self.embedding.weight.data[:] = weight / smoothing_factor.sqrt()
+        # smooth the frequency embedding weights
+        # when summing gaussian, scale raises as sqrt(n), so we normalize by that
+        weight = torch.cumsum(self.embedding.weight.data, dim=0)
+        smoothing_factor = torch.arange(1, num_embeddings + 1)
+        smoothing_factor = smoothing_factor[:, None].to(weight)
+        self.embedding.weight.data[:] = weight / smoothing_factor.sqrt()
 
         self.embedding.weight.data /= config.freq_embedding_lr_scale
         self.scale = config.freq_embedding_lr_scale
@@ -385,7 +391,7 @@ class HtdemucsResidualConvLayer(nn.Module):
         self.residual_layers = nn.ModuleList([])
         self.layer_scales = nn.ParameterList([])
 
-        for layer_idx in range(self.depth):
+        for layer_idx in range(config.residual_conv_depth):
             dilation = 2**layer_idx
             layer = [
                 nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation),
@@ -395,7 +401,7 @@ class HtdemucsResidualConvLayer(nn.Module):
             ]
             layer = nn.Sequential(*layer)  # TODO(SG): remove sequential
             self.residual_layers.append(layer)
-            self.layer_scales.append(nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value))
+            self.layer_scales.append(nn.Parameter(torch.ones(out_channels) * config.layer_scale_init_value))
 
     def forward(self, hidden_states):
         for layer_scale, residual_layer in zip(self.layer_scales, self.residual_layers):
@@ -406,8 +412,8 @@ class HtdemucsResidualConvLayer(nn.Module):
 class HtdemucsTempEncoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels):
         super().__init__()
-        self.stride = config.residual_stride
-        self.conv_in = nn.Conv1d(in_channels, out_channels, kernel_size=8, stride=4, padding=2)
+        self.stride = config.stride
+        self.conv_in = nn.Conv1d(in_channels, out_channels, kernel_size=8, stride=self.stride, padding=2)
         self.residual_conv = HtdemucsResidualConvLayer(config, out_channels)
         self.conv_out = nn.Conv1d(out_channels, 2 * out_channels, kernel_size=1)
 
@@ -575,7 +581,7 @@ class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
         self.num_stems = config.num_stems
 
         self.pos_emb = None
-        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
+        # self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
 
     def extend_pe(self, x):
         seq_len = x.size(-1)
@@ -775,16 +781,15 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 class HtdemucsModel(HtdemucsPreTrainedModel):
     def __init__(self, config: HtdemucsConfig):
         super().__init__(config)
-        in_channels = config.in_channels
+        in_channels = config.audio_channels
         out_channels = config.hidden_channels
         num_layers = config.num_conv_layers
 
         self.bottom_channels = config.bottom_channels
         self.num_stems = config.num_stems
-        self.hop_length = config.hop_length
+        self.hop_length = config.n_fft // 4
 
         self.freq_embedding = HtdemucsScaledFrequencyEmbedding(config)
-        self.freq_embedding_scale = config.freq_embedding_scale
 
         self.temp_encoder = nn.ModuleList()
         self.freq_encoder = nn.ModuleList()
@@ -806,15 +811,14 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
             self.freq_decoder.insert(0, HtdemucsFreqDecoderLayer(config, out_channels, in_channels, is_last))
 
             in_channels = out_channels
-            out_channels = config.growth * out_channels
+            out_channels = config.channel_growth * out_channels
 
-        hidden_channels = config.hidden_channels * config.growth ** (num_layers - 1)
+        hidden_channels = config.hidden_channels * config.channel_growth ** (num_layers - 1)
 
-        if self.bottom_channels is not None:
-            self.temp_upsampler = nn.Conv1d(hidden_channels, self.bottom_channels, kernel_size=1)
-            self.temp_downsampler = nn.Conv1d(self.bottom_channels, hidden_channels, kernel_size=1)
-            self.freq_upsampler = nn.Conv1d(hidden_channels, self.bottom_channels, kernel_size=1)
-            self.freq_downsampler = nn.Conv1d(self.bottom_channels, hidden_channels, kernel_size=1)
+        self.temp_upsampler = nn.Conv1d(hidden_channels, config.bottom_channels, kernel_size=1)
+        self.temp_downsampler = nn.Conv1d(config.bottom_channels, hidden_channels, kernel_size=1)
+        self.freq_upsampler = nn.Conv1d(hidden_channels, config.bottom_channels, kernel_size=1)
+        self.freq_downsampler = nn.Conv1d(config.bottom_channels, hidden_channels, kernel_size=1)
 
         self.transformer = HtdemucsTransformer(config)
 
@@ -868,23 +872,21 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
 
         # mid-block
         if self.crosstransformer:
-            if self.bottom_channels:
-                bsz, channels, freq, seq_len = freq_hidden_states.shape
-                freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
-                freq_hidden_states = self.freq_upsampler(freq_hidden_states)
-                freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
-                temp_hidden_states = self.temp_upsampler(temp_hidden_states)
+            bsz, channels, freq, seq_len = freq_hidden_states.shape
+            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
+            freq_hidden_states = self.freq_upsampler(freq_hidden_states)
+            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
+            temp_hidden_states = self.temp_upsampler(temp_hidden_states)
 
             transformer_outputs = self.transformer(freq_hidden_states, temp_hidden_states)
             freq_hidden_states = transformer_outputs[0]
             temp_hidden_states = transformer_outputs[1]
 
-            if self.bottom_channels:
-                bsz, channels, freq, seq_len = freq_hidden_states.shape
-                freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
-                freq_hidden_states = self.freq_downsampler(freq_hidden_states)
-                freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
-                temp_hidden_states = self.temp_downsampler(temp_hidden_states)
+            bsz, channels, freq, seq_len = freq_hidden_states.shape
+            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
+            freq_hidden_states = self.freq_downsampler(freq_hidden_states)
+            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
+            temp_hidden_states = self.temp_downsampler(temp_hidden_states)
 
         # up-blocks
         for layer, (temp_decoder, freq_decoder) in enumerate(zip(self.temp_decoder, self.freq_decoder)):
