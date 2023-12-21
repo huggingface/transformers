@@ -81,6 +81,7 @@ class AnnotionFormat(ExplicitEnum):
 SUPPORTED_ANNOTATION_FORMATS = (AnnotionFormat.COCO_DETECTION, AnnotionFormat.COCO_PANOPTIC)
 
 
+# Copied from transformers.models.detr.image_processing_detr.normalize_annotation
 def normalize_annotation(annotation: Dict, image_size: Tuple[int, int]) -> Dict:
     image_height, image_width = image_size
     norm_annotation = {}
@@ -141,7 +142,42 @@ def make_pixel_mask(
     return mask
 
 
-# inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
+# Copied from transformers.models.detr.image_processing_detr.convert_coco_poly_to_mask
+def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndarray:
+    """
+    Convert a COCO polygon annotation to a mask.
+
+    Args:
+        segmentations (`List[List[float]]`):
+            List of polygons, each polygon represented by a list of x-y coordinates.
+        height (`int`):
+            Height of the mask.
+        width (`int`):
+            Width of the mask.
+    """
+    try:
+        from pycocotools import mask as coco_mask
+    except ImportError:
+        raise ImportError("Pycocotools is not installed in your environment.")
+
+    masks = []
+    for polygons in segmentations:
+        rles = coco_mask.frPyObjects(polygons, height, width)
+        mask = coco_mask.decode(rles)
+        if len(mask.shape) < 3:
+            mask = mask[..., None]
+        mask = np.asarray(mask, dtype=np.uint8)
+        mask = np.any(mask, axis=2)
+        masks.append(mask)
+    if masks:
+        masks = np.stack(masks, axis=0)
+    else:
+        masks = np.zeros((0, height, width), dtype=np.uint8)
+
+    return masks
+
+
+# Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation with DETR->TableTransformer
 def prepare_coco_detection_annotation(
     image,
     target,
@@ -149,7 +185,7 @@ def prepare_coco_detection_annotation(
     input_data_format: Optional[Union[ChannelDimension, str]] = None,
 ):
     """
-    Convert the target in COCO format into the format expected by DETR.
+    Convert the target in COCO format into the format expected by TableTransformer.
     """
     image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
