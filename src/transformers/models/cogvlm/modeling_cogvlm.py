@@ -318,27 +318,27 @@ def attention_fn(
     scaling_attention_score: bool = True,
     attention_dropout: nn.Module = None,
 ):
-    attention_mask_bool = attention_mask == 0
-    is_low_triangle = (attention_mask_bool == torch.ones_like(attention_mask_bool, dtype=torch.float).tril()).all()
-    is_full = (attention_mask_bool > 0).all()
+    # attention_mask_bool = attention_mask == 0
+    # is_low_triangle = (attention_mask_bool == torch.ones_like(attention_mask_bool, dtype=torch.float).tril()).all()
+    # is_full = (attention_mask_bool > 0).all()
     if not (int(torch.__version__.split(".")[0]) >= 2):
         warnings.warn("It's recommended to use torch2.0 or higher.")
-    if int(torch.__version__.split(".")[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
-        dropout_p = 0.0 if attention_dropout is None or not attention_dropout.training else attention_dropout.p
-        context_layer = torch.nn.functional.scaled_dot_product_attention(
-            query_layer, key_layer, value_layer, attn_mask=None, dropout_p=dropout_p, is_causal=not is_full
-        )
-        return context_layer, None
-    else:
-        if scaling_attention_score:
-            query_layer = query_layer / math.sqrt(query_layer.shape[-1])
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        attention_scores = attention_scores + attention_mask
-        attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_layer.dtype)
-        if attention_dropout is not None:
-            attention_scores = attention_dropout(attention_scores)
-        context_layer = torch.matmul(attention_scores, value_layer)
-        return context_layer, attention_scores
+    # if int(torch.__version__.split(".")[0]) >= 2 and scaling_attention_score and (is_full or is_low_triangle):
+    #     dropout_p = 0.0 if attention_dropout is None or not attention_dropout.training else attention_dropout.p
+    #     context_layer = torch.nn.functional.scaled_dot_product_attention(
+    #         query_layer, key_layer, value_layer, attn_mask=None, dropout_p=dropout_p, is_causal=not is_full
+    #     )
+    #     return context_layer, None
+    # else:
+    if scaling_attention_score:
+        query_layer = query_layer / math.sqrt(query_layer.shape[-1])
+    attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+    attention_scores = attention_scores + attention_mask
+    attention_scores = nn.functional.softmax(attention_scores, dim=-1, dtype=torch.float32).to(query_layer.dtype)
+    if attention_dropout is not None:
+        attention_scores = attention_dropout(attention_scores)
+    context_layer = torch.matmul(attention_scores, value_layer)
+    return context_layer, attention_scores
 
 
 # source: https://github.com/THUDM/SwissArmyTransformer/blob/1b160fcf42989c1ffcb964587f51241618f39f5b/tests/test_triton_rotary_embedding.py#L25.
@@ -447,6 +447,7 @@ class CogVLMVisionExpertAttention(nn.Module):
             scaling_attention_score=True,
             attention_dropout=None,
         )
+
         if context_layer.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
                 f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
@@ -497,8 +498,8 @@ class CogVLMDecoderLayer(nn.Module):
         position_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
@@ -586,19 +587,18 @@ class CogVLMModel(CogVLMPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
+        self.vision = CogVLMVisionModel(config)
+        self.num_vision_tokens = (
+            self.config.vision_config.image_size // self.config.vision_config.patch_size
+        ) ** 2 + 2
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([CogVLMDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = CogVLMRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.vision = CogVLMVisionModel(config)
-
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-        self.num_vision_tokens = (
-            self.config.vision_config.image_size // self.config.vision_config.patch_size
-        ) ** 2 + 2
 
     def encode_images(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         images_features = self.vision(pixel_values)
@@ -654,7 +654,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -704,7 +703,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 images_features = self.encode_images(pixel_values)
                 images_features = images_features.reshape(-1, images_features.shape[-1])
                 images_features = images_features.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-                print("Token type ids:", token_type_ids)
                 inputs_embeds = inputs_embeds.index_put([token_type_ids == VISION_TOKEN_TYPE], images_features)
 
             else:
@@ -923,7 +921,6 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         >>> generated_text = processor.batch_decode(outputs, skip_special_tokens=True)
         ```
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
