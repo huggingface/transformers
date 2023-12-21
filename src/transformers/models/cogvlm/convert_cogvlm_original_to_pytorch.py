@@ -34,7 +34,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 original_device = "cuda:0"
-hf_device = "cuda:3"
+hf_device = "cuda:2"
 
 
 @torch.no_grad()
@@ -79,7 +79,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         return inputs
 
     original_inputs = gather_inputs(inputs, device=original_device)
-    gen_kwargs = {"max_length": 2048, "do_sample": False} # TODO set to max_length: 2048
+    gen_kwargs = {"max_length": 2048, "do_sample": False}  # TODO set to max_length: 2048
 
     with torch.no_grad():
         outputs = original_model.generate(**original_inputs, **gen_kwargs)

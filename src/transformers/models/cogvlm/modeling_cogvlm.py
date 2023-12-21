@@ -596,7 +596,9 @@ class CogVLMModel(CogVLMPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.num_vision_tokens = (self.config.vision_config.image_size // self.config.vision_config.patch_size) ** 2 + 2
+        self.num_vision_tokens = (
+            self.config.vision_config.image_size // self.config.vision_config.patch_size
+        ) ** 2 + 2
 
     def encode_images(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         images_features = self.vision(pixel_values)
@@ -663,12 +665,14 @@ class CogVLMModel(CogVLMPreTrainedModel):
         if past_key_values is not None:
             # generate mode with past_key_values. the image features are already mapped
             # update attention_mask
-            print("We are here")
             if pixel_values is not None:
-                print("Updating the attention_mask...")
                 batch_size = pixel_values.shape[0]
-                vision_mask = torch.tensor([1] * self.num_vision_tokens).repeat(batch_size, 1).to(attention_mask.device)
-                attention_mask = torch.cat([attention_mask[:,:-1], vision_mask, attention_mask[:,-1].repeat(batch_size, 1)], dim=1)
+                vision_mask = (
+                    torch.tensor([1] * self.num_vision_tokens).repeat(batch_size, 1).to(attention_mask.device)
+                )
+                attention_mask = torch.cat(
+                    [attention_mask[:, :-1], vision_mask, attention_mask[:, -1].repeat(batch_size, 1)], dim=1
+                )
         else:
             # not allow for inputs_embeds, because we want to process image feature
             assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
@@ -716,14 +720,6 @@ class CogVLMModel(CogVLMPreTrainedModel):
             if position_ids is None:
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
-
-        print("Shape of input_ids:", input_ids.shape if input_ids is not None else None)
-        print("Shape of input embeddings:", inputs_embeds.shape if inputs_embeds is not None else None)
-        print("Shape of token_type_ids:", token_type_ids.shape)
-        print("Shape of position_ids:", position_ids.shape)
-        print("Shape of attention_mask:", attention_mask.shape)
-        if past_key_values is not None:
-            print("Shape of past_key_values:", past_key_values[0][0].shape)
 
         return self.llm_forward(
             input_ids=input_ids,
@@ -964,9 +960,6 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
-        
-        print("Shape of hidden_states:", hidden_states.shape)
-        print("First values of last hidden states:", hidden_states[0, :3,:3])
 
         return CausalLMOutputWithPast(
             loss=loss,
@@ -997,7 +990,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
         position_ids = kwargs.get("position_ids", None)
         if past_key_values:
             if position_ids is None:
-                position_ids = build_position_ids(token_type_ids, attention_mask)
+                position_ids = build_position_ids(token_type_ids, attention_mask) + 2 + 1
             position_ids = position_ids[:, -1:]
             input_ids = input_ids[:, -1:]
             token_type_ids = token_type_ids[:, -1:]
@@ -1045,9 +1038,7 @@ class CogVLMForCausalLM(CogVLMPreTrainedModel):
 
         # update attention mask
         if "attention_mask" in model_kwargs:
-            print("Updating the attention_mask...")
             attention_mask = model_kwargs["attention_mask"]
-            print("Shape of attention_mask before update:", attention_mask.shape)
             model_kwargs["attention_mask"] = torch.cat(
                 [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
             )
