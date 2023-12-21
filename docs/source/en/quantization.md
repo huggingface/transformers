@@ -548,6 +548,7 @@ The benchmarks indicate AWQ quantization is the fastest for inference, text gene
 The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-AWQ) model was benchmarked with `batch_size=1` with and without fused modules.
 
 <figcaption class="text-center text-gray-500 text-lg">Unfused module</figcaption>
+
 |   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
 |-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
 |            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
@@ -559,6 +560,7 @@ The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7
 |            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
 
 <figcaption class="text-center text-gray-500 text-lg">Fused module</figcaption>
+
 |   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
 |-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
 |            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |

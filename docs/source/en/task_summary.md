@@ -182,7 +182,7 @@ Like classification tasks in any modality, text classification labels a sequence
 
 ### Token classification
 
-In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](/glossary#token). Token classification assigns each token a label from a predefined set of classes. 
+In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](glossary#token). Token classification assigns each token a label from a predefined set of classes. 
 
 Two common types of token classification are:
 

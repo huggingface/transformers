@@ -2515,7 +2515,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
-        Converts a string in a sequence of tokens, replacing unknown tokens with the `unk_token`.
+        Converts a string into a sequence of tokens, replacing unknown tokens with the `unk_token`.
 
         Args:
             text (`str`):
