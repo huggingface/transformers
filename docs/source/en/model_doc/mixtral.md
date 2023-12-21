@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Mixtral-8x7B is Mistral AI's second Large Language Model (LLM). 
 
-The Mixtral model was proposed in the by the [Mistral AI](https://mistral.ai/) team.
+The Mixtral model was proposed by the [Mistral AI](https://mistral.ai/) team.
 
 It was introduced in the [Mixtral of Experts blogpost](https://mistral.ai/news/mixtral-of-experts/) with the following introduction:
 
@@ -42,7 +42,7 @@ Mixtral-45B is a decoder-based LM with the following architectural choices:
 
 * Mixtral is a Mixture of Expert (MOE) model with 8 experts per MLP, with a total of 45B paramateres but the compute required is the same as a 14B model. This is because even though each experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dipatched twice (top 2 routing) and thus the compute (the operation required at each foward computation) is just 2 X sequence_length. 
 
-The following implementation details are shared with Mistral AI's first model [mistral](~models/doc/mistral):
+The following implementation details are shared with Mistral AI's first model [mistral](mistral):
 * Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
 * GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
 * Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
