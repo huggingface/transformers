@@ -306,10 +306,10 @@ class SiglipTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->Siglip
 class SiglipAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention.__init__
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -329,10 +329,6 @@ class SiglipAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -341,7 +337,7 @@ class SiglipAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, q_len, embed_dim = hidden_states.size()
+        batch_size, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states) * self.scale
         key_states = self.k_proj(hidden_states)
@@ -351,14 +347,12 @@ class SiglipAttention(nn.Module):
         key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        kv_seq_len = key_states.shape[-2]
-
-        src_len = key_states.size(1)
+        src_len = key_states.shape[-2]
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
-        if attn_weights.size() != (batch_size, self.num_heads, q_len, kv_seq_len):
+        if attn_weights.size() != (batch_size, self.num_heads, q_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, kv_seq_len)}, but is"
+                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, src_len)}, but is"
                 f" {attn_weights.size()}"
             )
 
@@ -382,7 +376,7 @@ class SiglipAttention(nn.Module):
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        # attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
