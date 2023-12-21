@@ -712,17 +712,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         # batch size 1: copy the audio sample since pipeline consumes it
         output = pipe(sample.copy(), batch_size=1)
-        self.assertDictEqual(
-            output,
-            EXPECTED_OUTPUT,
-        )
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
 
         # batch size 2
         output = pipe(sample, batch_size=2)
-        self.assertDictEqual(
-            output,
-            EXPECTED_OUTPUT,
-        )
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
 
     @require_torch
     @slow

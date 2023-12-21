@@ -2558,13 +2558,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         weights = weights.permute([1, 0, 2, 3])
 
         if "beam_indices" in generate_outputs:
-            # If beam search has been used, the output sequences can have been generated for more timesteps than their sequence_lengths
-            # Since the beam search strategy choose the most probable sequences at the end of the search
+            # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
+            # Since the beam search strategy chooses the most probable sequences at the end of the search
             # In that case, we make sure that the weights have the right output_length
             weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
             weights = weights[:, :, :weight_length]
 
-            # If beam indice is still -1, it means that the associated token id is EOS
+            # If beam index is still -1, it means that the associated token id is EOS
             beam_indices = generate_outputs.beam_indices[:, :weight_length]
             beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
 
