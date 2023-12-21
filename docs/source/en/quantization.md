@@ -468,9 +468,6 @@ Try 4-bit quantization in this [notebook](https://colab.research.google.com/driv
 
 This section explores some of the specific features of 4-bit models, such as changing the compute data type, using the Normal Float 4 (NF4) data type, and using nested quantization.
 
-#### Push 4-bit models on the Hub
-
-If you have `bitsandbytes>=0.41.3`, you can serialize 4-bit models and push them on Hugging Face Hub. Simply call `model.push_to_hub()` after loading it in 4-bit precision.
 
 #### Compute data type
 
