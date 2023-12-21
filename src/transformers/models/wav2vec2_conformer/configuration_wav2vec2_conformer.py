@@ -184,9 +184,12 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
-            Can be specified to `relative`, `relative_key` or `rotary` for relative, relative as defined by Shaw, or rotary position embeddings respectively. If left
-            `None` no relative position embedding is applied. For more information on `"relative_key"`, please refer to [Self-Attention
+            Can be specified to :
+                - `rotary`, for rotary position embeddings.
+                - `relative`, for relative position embeddings.
+                - `relative_key`, for relative position embeddings as defined by Shaw in [Self-Attention
             with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            If left to `None`, no relative position embeddings is applied.
         rotary_embedding_base (`int`, *optional*, defaults to 10000):
             If `"rotary"` position embeddings are used, defines the size of the embedding base.
         max_source_positions (`int`, *optional*, defaults to 5000):
