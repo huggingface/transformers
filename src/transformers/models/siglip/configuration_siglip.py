@@ -15,11 +15,7 @@
 """ Siglip model configuration"""
 
 import os
-from typing import TYPE_CHECKING, Union
-
-
-if TYPE_CHECKING:
-    pass
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

@@ -211,7 +211,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 @torch.no_grad()
-def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, push_to_hub=False):
+def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our SigLIP structure.
     """
@@ -285,12 +285,13 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     text_probs = torch.sigmoid(outputs.logits_per_text)
     print("Text probs:", text_probs)
 
-    # assert values
-    expected_slice = torch.tensor(
-        [[-2.9621, -2.1672], [-0.2713, 0.2910]],
-    )
-    assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
-    print("Looks ok!")
+    if verify_logits:
+        # assert values
+        expected_slice = torch.tensor(
+            [[-2.9621, -2.1672], [-0.2713, 0.2910]],
+        )
+        assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
+        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
@@ -325,8 +326,15 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
+        "--verify_logits",
+        action="store_false",
+        help="Whether to verify logits against the original implementation.",
+    )
+    parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
 
     args = parser.parse_args()
-    convert_siglip_checkpoint(args.model_name, args.vocab_file, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_siglip_checkpoint(
+        args.model_name, args.vocab_file, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub
+    )

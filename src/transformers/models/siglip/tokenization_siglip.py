@@ -63,14 +63,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             contains the vocabulary necessary to instantiate a tokenizer.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
-
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -97,9 +89,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
             The maximum length (in number of tokens) for model inputs.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
-    Attributes:
-        sp_model (`SentencePieceProcessor`):
-            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -141,9 +130,6 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
         self.do_lower_case = do_lower_case
         self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
         self.sp_model = self.get_spm_processor()
         self.vocab_file = vocab_file
@@ -318,8 +304,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
     def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
+        Converts a string to a list of tokens.
         """
         tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
