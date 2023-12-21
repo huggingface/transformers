@@ -23,6 +23,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache, DynamicCacheWithCrossAttention
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -153,7 +154,7 @@ class UMT5Attention(nn.Module):
     T5's attention using relative_attention_bias.
     """
 
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config: UMT5Config, layer_idx: Optional[int] = None, has_relative_attention_bias: bool = False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -164,6 +165,13 @@ class UMT5Attention(nn.Module):
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will lead"
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -240,41 +248,67 @@ class UMT5Attention(nn.Module):
         values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
+    def _prepare_key_values(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if past_key_value is not None and self.layer_idx is None:
+            raise ValueError(
+                f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                "with a layer index."
+            )
+
+        # if encoder_hidden_states are provided this layer is used as a cross-attention
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention:
+            # `past_key_value[self.layer_idx][2].shape[2] == encoder_hidden_states.shape[1]`
+            # is checking that the `sequence_length` of the `past_key_value` is the same as
+            # the provided `encoder_hidden_states` to support prefix tuning
+            if (
+                past_key_value is not None
+                and past_key_value.has_cached_cross_attentions(self.layer_idx)
+                and past_key_value[self.layer_idx][2].shape[2] == encoder_hidden_states.shape[1]
+            ):
+                # reuse k,v, cross_attentions
+                key_states = past_key_value[self.layer_idx][2]
+                value_states = past_key_value[self.layer_idx][3]
+            else:
+                # compute cross attention k and v and cache them (if there is a cache)
+                key_states = self._shape(self.k(encoder_hidden_states))
+                value_states = self._shape(self.v(encoder_hidden_states))
+                if past_key_value is not None:
+                    past_key_value.update_cross_attention(key_states, value_states, self.layer_idx)
+        else:
+            # compute self attention k and v and cache them (if there is a cache)
+            key_states = self._shape(self.k(hidden_states))
+            value_states = self._shape(self.v(hidden_states))
+            if past_key_value is not None and self.is_decoder:
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx)
+
+        return key_states, value_states
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         encoder_hidden_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-    ):
-        is_cross_attention = encoder_hidden_states is not None
-        batch_size, seq_length = hidden_states.shape[:2]
-
-        # use encoder_hidden_states if cross attention
-        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        # checking that the `sequence_length` of the `past_key_value` is the same as the he provided
-        # `encoder_hidden_states` to support prefix tuning
-        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        else:
-            key_states = self._shape(self.k(current_states))
-            value_states = self._shape(self.v(current_states))
-            if past_key_value is not None and not is_cross_attention:
-                # reuse k, v, self_attention
-                key_states = torch.cat([past_key_value[0], key_states], dim=2)
-                value_states = torch.cat([past_key_value[1], value_states], dim=2)
-
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+        key_states, value_states = self._prepare_key_values(hidden_states, encoder_hidden_states, past_key_value)
         query_states = self._shape(self.q(hidden_states))
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
         # compute positional bias
+        batch_size, seq_length = hidden_states.shape[:2]
         if self.has_relative_attention_bias:
             query_length = seq_length
             if past_key_value is not None:
-                query_length += past_key_value[0].shape[2]
+                query_length += past_key_value.get_usable_length(seq_length, self.layer_idx)
             position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
         else:
             position_bias = torch.zeros(
@@ -287,16 +321,6 @@ class UMT5Attention(nn.Module):
             position_bias = position_bias[:, :, -hidden_states.size(1) :, :]
         if attention_mask is not None:
             position_bias = position_bias + attention_mask  # (batch_size, n_heads, seq_length, key_length)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
 
         attention_scores += position_bias
         # (batch_size, n_heads, seq_length, key_length)
@@ -316,9 +340,9 @@ class UMT5Attention(nn.Module):
 
 
 class UMT5LayerSelfAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.SelfAttention = UMT5Attention(config, has_relative_attention_bias=True)
+        self.SelfAttention = UMT5Attention(config, layer_idx=layer_idx, has_relative_attention_bias=True)
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -342,9 +366,9 @@ class UMT5LayerSelfAttention(nn.Module):
 
 
 class UMT5LayerCrossAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.EncDecAttention = UMT5Attention(config, has_relative_attention_bias=False)
+        self.EncDecAttention = UMT5Attention(config, layer_idx=layer_idx, has_relative_attention_bias=False)
         self.layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -370,13 +394,13 @@ class UMT5LayerCrossAttention(nn.Module):
 
 
 class UMT5Block(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: UMT5Config, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(UMT5LayerSelfAttention(config))
+        self.layer.append(UMT5LayerSelfAttention(config, layer_idx=layer_idx))
         if self.is_decoder:
-            self.layer.append(UMT5LayerCrossAttention(config))
+            self.layer.append(UMT5LayerCrossAttention(config, layer_idx=layer_idx))
 
         self.layer.append(UMT5LayerFF(config))
 
@@ -393,14 +417,11 @@ class UMT5Block(nn.Module):
         output_attentions=False,
     ):
         # Self Attention
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-
-        hidden_states, self_attn_weights, present_key_value = self.layer[0](
+        hidden_states, self_attn_weights, past_key_value = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            past_key_value=self_attn_past_key_value,
+            past_key_value=past_key_value,
         )
 
         # clamp inf values to enable fp16 training
@@ -410,26 +431,21 @@ class UMT5Block(nn.Module):
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         # Cross-Attention Block
-        cross_attn_present_key_value = None
         cross_attn_weights = None
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.layer[1](
+            hidden_states, cross_attn_weights, past_key_value = self.layer[1](
                 hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
+                past_key_value=past_key_value,
             )
             # clamp inf values to enable fp16 training
             if hidden_states.dtype == torch.float16:
                 max_dtype = torch.finfo(hidden_states.dtype).max
                 clamp_value = torch.where(torch.isinf(hidden_states).any(), max_dtype - 1000, max_dtype)
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-            present_key_value += cross_attn_present_key_value
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
@@ -442,7 +458,7 @@ class UMT5Block(nn.Module):
 
         outputs = (
             hidden_states,
-            present_key_value,
+            past_key_value,
         )
 
         if output_attentions:
@@ -481,6 +497,7 @@ class UMT5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["UMT5Block"]
     _keep_in_fp32_modules = ["wo"]
+    _supports_cache_class = True
 
     @property
     def dummy_inputs(self):
@@ -588,7 +605,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         super().__init__(config)
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
-        self.block = nn.ModuleList([UMT5Block(config) for i in range(config.num_layers)])
+        self.block = nn.ModuleList([UMT5Block(config, layer_idx) for layer_idx in range(config.num_layers)])
         self.final_layer_norm = UMT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -618,6 +635,8 @@ class UMT5Stack(UMT5PreTrainedModel):
         return_dict=None,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+        # If a cache is passed, assumes it is to be used
+        use_cache = use_cache or (self.is_decoder and past_key_values is not None)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -645,8 +664,14 @@ class UMT5Stack(UMT5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCacheWithCrossAttention.from_legacy_cache(past_key_values)
+
         # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
+        past_key_values_length = past_key_values.get_usable_length(seq_length) if past_key_values is not None else 0
+        mask_seq_length = past_key_values_length + seq_length
 
         if use_cache is True:
             if not self.is_decoder:
@@ -659,10 +684,6 @@ class UMT5Stack(UMT5PreTrainedModel):
             encoder_attention_mask = torch.ones(
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
-
-        # initialize past_key_values with `None` if past does not exist
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -689,14 +710,13 @@ class UMT5Stack(UMT5PreTrainedModel):
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
         cross_attn_head_mask = self.get_head_mask(cross_attn_head_mask, self.config.num_layers)
-        present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.is_decoder else None
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
+        for i, layer_module in enumerate(self.block):
             layer_head_mask = head_mask[i]
             cross_attn_layer_head_mask = cross_attn_head_mask[i]
 
@@ -724,15 +744,12 @@ class UMT5Stack(UMT5PreTrainedModel):
                     encoder_attention_mask=encoder_extended_attention_mask,
                     layer_head_mask=layer_head_mask,
                     cross_attn_layer_head_mask=cross_attn_layer_head_mask,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                 )
 
                 hidden_states = layer_outputs[0]
-
-            if use_cache:
-                present_key_value_states += (layer_outputs[1],)
 
             if output_attentions:
                 all_attentions += (layer_outputs[2],)
@@ -746,12 +763,15 @@ class UMT5Stack(UMT5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
+        if use_cache and use_legacy_cache:
+            past_key_values = past_key_values.to_legacy_cache()
+
         if not return_dict:
             return tuple(
                 v
                 for v in [
                     hidden_states,
-                    present_key_value_states,
+                    past_key_values,
                     all_hidden_states,
                     all_attentions,
                     all_cross_attentions,
@@ -760,7 +780,7 @@ class UMT5Stack(UMT5PreTrainedModel):
             )
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
             cross_attentions=all_cross_attentions,
@@ -848,8 +868,20 @@ UMT5_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance;
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
@@ -1183,7 +1215,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1296,7 +1328,7 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration.prepare_inputs_for_generation
+    # TODO (joao): reintroduce the copied from in a follow-up PR
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1310,18 +1342,30 @@ class UMT5ForConditionalGeneration(UMT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs,
     ):
-        # cut decoder_input_ids if past_key_values is used
+        # Omit tokens covered by past_key_values
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+                max_cache_length = past_key_values.get_max_length()
             else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
+                cache_length = past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
-            input_ids = input_ids[:, remove_prefix_length:]
+            # Keep only the unprocessed tokens:
+            # 1 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            if past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 2 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            if (
+                max_cache_length is not None
+                and decoder_attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
+            ):
+                decoder_attention_mask = decoder_attention_mask[:, -max_cache_length:]
 
         return {
             "decoder_input_ids": input_ids,

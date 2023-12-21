@@ -54,7 +54,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         top_k_top_p_filtering,
     )
-    from transformers.cache_utils import DynamicCache
+    from transformers.cache_utils import DynamicCache, DynamicCacheWithCrossAttention
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -1919,6 +1919,11 @@ class GenerationTesterMixin:
             config.use_cache = True
             config.is_decoder = True
 
+            if config.is_encoder_decoder:
+                cache_cls = DynamicCacheWithCrossAttention
+            else:
+                cache_cls = DynamicCache
+
             model = model_class(config).to(torch_device).eval()
             generation_kwargs = {
                 "max_new_tokens": 5,
@@ -1934,14 +1939,14 @@ class GenerationTesterMixin:
             legacy_results = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
             set_seed(seed)
             new_results = model.generate(
-                input_ids, attention_mask=attention_mask, past_key_values=DynamicCache(), **generation_kwargs
+                input_ids, attention_mask=attention_mask, past_key_values=cache_cls(), **generation_kwargs
             )
 
             # The two sets of generated sequences must match, despite the cache format between forward passes being
             # different
             self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
             self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
-            self.assertTrue(isinstance(new_results.past_key_values, DynamicCache))
+            self.assertTrue(isinstance(new_results.past_key_values, cache_cls))
 
             # The contents of the two caches, when converted to the same format (in both directions!), must match
             legacy_cache = legacy_results.past_key_values
@@ -1956,7 +1961,7 @@ class GenerationTesterMixin:
                     )
 
             new_cache = new_results.past_key_values
-            legacy_cache_converted = DynamicCache.from_legacy_cache(legacy_results.past_key_values)
+            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
                     self.assertTrue(
