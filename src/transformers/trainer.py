@@ -2384,11 +2384,10 @@ class Trainer:
         self.args.distributed_state.wait_for_everyone()
         # Then go through the rewriting process starting on process 0
         if staging_output_dir != output_dir:
-            with self.args.main_process_first(
-                desc="Renaming model checkpoint folder to true location", local=self.args.save_on_each_node
-            ):
-                if os.path.exists(staging_output_dir):
-                    os.rename(staging_output_dir, output_dir)
+            if self.args.should_save and os.path.exists(staging_output_dir):
+                os.rename(staging_output_dir, output_dir)
+            else:
+                self.args.distributed_state.wait_for_everyone()
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
