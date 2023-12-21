@@ -560,6 +560,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 @require_sentencepiece
 @require_tokenizers
 class Umt5IntegrationTest(unittest.TestCase):
+    @slow
     def test_generation(self):
         model = UMT5ForConditionalGeneration.from_pretrained("google/umt5-small")
         tokenizer = AutoTokenizer.from_pretrained("google/umt5-small")
