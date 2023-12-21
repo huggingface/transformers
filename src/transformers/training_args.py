@@ -36,6 +36,7 @@ from .trainer_utils import (
     SchedulerType,
 )
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
@@ -1839,7 +1840,8 @@ class TrainingArguments:
         if not is_sagemaker_mp_enabled():
             if not is_accelerate_available():
                 raise ImportError(
-                    "Using the `Trainer` with `PyTorch` requires `accelerate>=0.21.0`: Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`:
+                    Please run `pip install transformers[torch]` or `pip install accelerate -U`"
                 )
             AcceleratorState._reset_state(reset_partial_state=True)
         self.distributed_state = None
