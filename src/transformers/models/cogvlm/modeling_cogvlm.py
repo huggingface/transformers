@@ -688,13 +688,20 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 position_ids = build_position_ids(token_type_ids, attention_mask)
             input_ids = None
 
-        print("Shape of input_ids:", input_ids.shape if input_ids is not None else None)
-        print("Shape of input embeddings:", inputs_embeds.shape if inputs_embeds is not None else None)
+        if input_ids is not None:
+            print("Shape of input_ids:", input_ids.shape)
+        if inputs_embeds is not None:
+            print("Shape of inputs_embeds:", inputs_embeds.shape)
+            print("Mean of inputs_embeds:", inputs_embeds.mean())
         print("Shape of token_type_ids:", token_type_ids.shape)
+        print("Token type ids:", token_type_ids)
         print("Shape of position_ids:", position_ids.shape)
+        print("Position ids:", position_ids)
         print("Shape of attention_mask:", attention_mask.shape)
+        print("Mean of attention_mask:", attention_mask.long().float().mean())
         if past_key_values is not None:
             print("Shape of past_key_values:", past_key_values[0][0].shape)
+            print("Mean of past_key_values:", past_key_values[0][0].mean())
 
         return self.llm_forward(
             input_ids=input_ids,
@@ -799,9 +806,9 @@ class CogVLMModel(CogVLMPreTrainedModel):
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        
+
         print("Shape of hidden_states:", hidden_states.shape)
-        print("First values of last hidden states:", hidden_states[0, :3,:3])
+        print("First values of last hidden states:", hidden_states[0, :3, :3])
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,

@@ -2572,7 +2572,7 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            
+
             print("------STEP--------", step)
 
             # prepare model inputs
