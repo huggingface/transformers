@@ -268,6 +268,7 @@ def _sample_negative_indices(
 
     return sampled_negative_indices
 
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
@@ -543,19 +544,21 @@ class Wav2Vec2ConformerFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerFeedForward(nn.Module):
-    def __init__(self, config, act_fn=None):
+    def __init__(self, config):
         super().__init__()
-        act_fn = act_fn if act_fn is not None else config.hidden_act
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.intermediate_act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward.forward
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -651,12 +654,12 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
     Can be enhanced with rotary or relative position embeddings.
     """
 
-    def __init__(self, config, use_position_embeddings=True):
+    def __init__(self, config):
         super().__init__()
 
         self.head_size = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.position_embeddings_type = config.position_embeddings_type if use_position_embeddings else None
+        self.position_embeddings_type = config.position_embeddings_type
 
         self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
         self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1062,6 +1065,7 @@ class Wav2Vec2ConformerGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Adapter with Wav2Vec2->Wav2Vec2Conformer
 class Wav2Vec2ConformerAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
