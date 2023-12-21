@@ -42,11 +42,6 @@
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Visión Artificial
-  - isExpanded: false
-    sections:
-    - local: debugging
-      title: Debugging
-    title: Rendimiento y escalabilidad
   title: Guías prácticas
 - sections:
   - local: fast_tokenizers
@@ -68,6 +63,10 @@
   - local: community
     title: Los recursos de la comunidad
   title: Guías para desarrolladores
+- sections:
+  - local: debugging
+    title: Debugging
+  title: Rendimiento y escalabilidad
 - sections:
   - local: add_new_pipeline
     title: ¿Cómo puedo añadir un pipeline a 🤗 Transformers?
