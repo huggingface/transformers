@@ -155,6 +155,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "HerBERT": "BERT",
     "LayoutXLM": "LayoutLMv2",
     "Llama2": "LLaMA",
+    "MADLAD-400": "T5",
     "MatCha": "Pix2Struct",
     "mBART-50": "mBART",
     "Megatron-GPT2": "OpenAI GPT-2",
@@ -170,6 +171,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "XLS-R": "Wav2Vec2",
     "XLSR-Wav2Vec2": "Wav2Vec2",
 }
+MODEL_NAMES_TO_IGNORE = ["CLIPVisionModel"]
 
 
 def get_model_table_from_auto_modules() -> str:
@@ -242,6 +244,8 @@ def get_model_table_from_auto_modules() -> str:
     check = {True: "✅", False: "❌"}
 
     for name in model_names:
+        if name in MODEL_NAMES_TO_IGNORE:
+            continue
         if name in MODEL_NAMES_WITH_SAME_CONFIG.keys():
             prefix = model_name_to_prefix[MODEL_NAMES_WITH_SAME_CONFIG[name]]
         else:

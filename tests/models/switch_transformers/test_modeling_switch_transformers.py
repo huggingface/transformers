@@ -726,10 +726,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def test_disk_offload(self):
         pass
 
-    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
-    def test_assisted_decoding_sample(self):
-        pass
-
 
 class SwitchTransformersEncoderOnlyModelTester:
     def __init__(

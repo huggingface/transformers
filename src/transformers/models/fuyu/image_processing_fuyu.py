@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 def make_list_of_list_of_images(
-    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
+    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput],
 ) -> List[List[ImageInput]]:
     if is_valid_image(images):
         return [[images]]
