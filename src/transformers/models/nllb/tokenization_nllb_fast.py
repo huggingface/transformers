@@ -148,10 +148,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         src_lang=None,
         tgt_lang=None,
-        additional_special_tokens=None,
+        additional_special_tokens=FAIRSEQ_LANGUAGE_CODES,
         legacy_behaviour=False,
         **kwargs,
     ):
+        self.vocab_file = vocab_file
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -160,13 +161,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         )
         self.legacy_behaviour = legacy_behaviour
 
-        _additional_special_tokens = FAIRSEQ_LANGUAGE_CODES.copy()
-
+        # Add the mask token at the end of the vocab
         if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            _additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in _additional_special_tokens]
-            )
+            additional_special_tokens += mask_token
+        else:
+            additional_special_tokens = mask_token
 
         super().__init__(
             vocab_file=vocab_file,
@@ -177,15 +176,15 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             cls_token=cls_token,
             unk_token=unk_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            additional_special_tokens=_additional_special_tokens,
+            additional_special_tokens=additional_special_tokens,
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
 
-        self.vocab_file = vocab_file
+        # make sur we set the mask token accordingly
+        self.mask_token = mask_token
 
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
@@ -195,6 +194,38 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
+
+    @property
+    def lang_code_to_id(self):
+        logger.warning_once(
+            "the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
+        return self._lang_code_to_id
+
+    @property
+    def fairseq_tokens_to_ids(self):
+        logger.warning_once(
+            "the `fairseq_tokens_to_ids` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
+        return self._fairseq_tokens_to_ids
+
+    @property
+    def id_to_lang_code(self):
+        logger.warning_once(
+            "the `id_to_lang_code` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
+        return self._id_to_lang_code
+
+    @property
+    def fairseq_ids_to_tokens(self):
+        logger.warning_once(
+            "the `_fairseq_ids_to_tokens` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
+        return self._fairseq_ids_to_tokens
 
     @property
     def can_save_slow_tokenizer(self) -> bool:

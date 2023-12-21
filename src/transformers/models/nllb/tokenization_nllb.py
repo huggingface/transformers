@@ -170,8 +170,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.fairseq_offset = 1
         self.sp_model_size = len(self.sp_model)
 
-
-        # Everything that follows is kept for BC
+        # Everything that follows is kept for BC and will be removed in v4.38
         self._fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
         self._lang_code_to_id = {
             code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
@@ -182,6 +181,12 @@ class NllbTokenizer(PreTrainedTokenizer):
         self._fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self._fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
+        # Add the mask token at the end of the vocab
+        if additional_special_tokens is not None:
+            additional_special_tokens += mask_token
+        else:
+            additional_special_tokens = mask_token
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -189,7 +194,6 @@ class NllbTokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             cls_token=cls_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -198,6 +202,10 @@ class NllbTokenizer(PreTrainedTokenizer):
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
+
+        # make sur we set the mask token accordingly
+        self.mask_token = mask_token
+
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code_id = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
@@ -229,29 +237,36 @@ class NllbTokenizer(PreTrainedTokenizer):
 
     @property
     def lang_code_to_id(self):
-        logger.warning_once("the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-                         " this attribute will be removed in the next release of `transformers`")
+        logger.warning_once(
+            "the `lang_code_to_id` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
         return self._lang_code_to_id
-    
 
     @property
     def fairseq_tokens_to_ids(self):
-        logger.warning_once("the `fairseq_tokens_to_ids` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-                         " this attribute will be removed in the next release of `transformers`")
+        logger.warning_once(
+            "the `fairseq_tokens_to_ids` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
         return self._fairseq_tokens_to_ids
 
     @property
     def id_to_lang_code(self):
-        logger.warning_once("the `id_to_lang_code` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-                         " this attribute will be removed in the next release of `transformers`")
+        logger.warning_once(
+            "the `id_to_lang_code` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
         return self._id_to_lang_code
 
     @property
     def fairseq_ids_to_tokens(self):
-        logger.warning_once("the `_fairseq_ids_to_tokens` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-                         " this attribute will be removed in the next release of `transformers`")
-        return self._fairseq_ids_to_tokens 
-        
+        logger.warning_once(
+            "the `_fairseq_ids_to_tokens` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
+            " this attribute will be removed in `transformers` v4.38"
+        )
+        return self._fairseq_ids_to_tokens
+
     @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
