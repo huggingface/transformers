@@ -764,6 +764,8 @@ class WhisperSdpaAttention(WhisperAttention):
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -2035,14 +2037,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 FutureWarning,
             )
 
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
-
-        if generation_config is None:
-            generation_config = copy.deepcopy(self.generation_config)
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
@@ -2155,6 +2157,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     raise ValueError(
                         f"Unsupported language: {generation_config.language}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+                    )
+                if language_token not in generation_config.lang_to_id:
+                    raise ValueError(
+                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                        "(You should just add it to the generation config)"
                     )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:

@@ -447,6 +447,13 @@ class FalconAttention(nn.Module):
         else:
             present = None
 
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
         if alibi is None:
             if self._use_sdpa and not output_attentions:
                 attn_output = F.scaled_dot_product_attention(
@@ -613,6 +620,8 @@ class FalconFlashAttention2(FalconAttention):
             # Handle the case where the model is quantized
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
+            elif torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             else:
                 target_dtype = self.query_key_value.weight.dtype
 

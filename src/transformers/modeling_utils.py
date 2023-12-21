@@ -154,6 +154,23 @@ else:
 if is_peft_available():
     from .utils import find_adapter_config_file
 
+TORCH_INIT_FUNCTIONS = {
+    "uniform_": nn.init.uniform_,
+    "normal_": nn.init.normal_,
+    "trunc_normal_": nn.init.trunc_normal_,
+    "constant_": nn.init.constant_,
+    "xavier_uniform_": nn.init.xavier_uniform_,
+    "xavier_normal_": nn.init.xavier_normal_,
+    "kaiming_uniform_": nn.init.kaiming_uniform_,
+    "kaiming_normal_": nn.init.kaiming_normal_,
+    "uniform": nn.init.uniform,
+    "normal": nn.init.normal,
+    "xavier_uniform": nn.init.xavier_uniform,
+    "xavier_normal": nn.init.xavier_normal,
+    "kaiming_uniform": nn.init.kaiming_uniform,
+    "kaiming_normal": nn.init.kaiming_normal,
+}
+
 
 @contextmanager
 def no_init_weights(_enable=True):
@@ -164,12 +181,24 @@ def no_init_weights(_enable=True):
     """
     global _init_weights
     old_init_weights = _init_weights
+
     if _enable:
         _init_weights = False
+
+        def _skip_init(*args, **kwargs):
+            pass
+
+        # # Save the original initialization functions
+        for name, init_func in TORCH_INIT_FUNCTIONS.items():
+            setattr(torch.nn.init, name, _skip_init)
     try:
         yield
     finally:
         _init_weights = old_init_weights
+        if _enable:
+            # # Restore the original initialization functions
+            for name, init_func in TORCH_INIT_FUNCTIONS.items():
+                setattr(torch.nn.init, name, init_func)
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
@@ -451,7 +480,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu")
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", weights_only=True)
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -487,7 +516,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         else:
             map_location = "cpu"
 
-        return torch.load(checkpoint_file, map_location=map_location)
+        return torch.load(checkpoint_file, map_location=map_location, weights_only=True)
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -646,6 +675,7 @@ def _load_state_dict_into_meta_model(
     is_quantized=False,
     is_safetensors=False,
     keep_in_fp32_modules=None,
+    unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -747,16 +777,40 @@ def _load_state_dict_into_meta_model(
         elif not is_quantized:
             # For backward compatibility with older versions of `accelerate`
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-        else:
-            if param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
-                fp16_statistics = state_dict[param_name.replace("weight", "SCB")]
-            else:
-                fp16_statistics = None
+        elif param.dtype in (torch.int8, torch.uint8) and is_quantized:
+            # handling newly quantized weights and loaded quantized weights
+            # edit the param.dtype restrictions and is_quantized condition when adding new quant methods
+            quantized_stats = {}
 
-            if "SCB" not in param_name:
+            if (param_name + ".quant_state.bitsandbytes__fp4" in state_dict) or (
+                param_name + ".quant_state.bitsandbytes__nf4" in state_dict
+            ):
+                # 4bit loading. Collecting components for restoring quantized weight
+                # This can be expanded to make a universal call for any quantized weight loading
+                for k, v in state_dict.items():
+                    if param_name + "." in k:
+                        quantized_stats[k] = v
+                        unexpected_keys.remove(k)
+
                 set_module_quantized_tensor_to_device(
-                    model, param_name, param_device, value=param, fp16_statistics=fp16_statistics
+                    model, param_name, param_device, value=param, quantized_stats=quantized_stats
                 )
+
+            elif param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
+                # 8bit loading. Could be combined with the above 4bit call.
+                # condition looks unreliable
+                fp16_statistics_key = param_name.replace("weight", "SCB")
+                unexpected_keys.remove(fp16_statistics_key)
+                set_module_quantized_tensor_to_device(
+                    model,
+                    param_name,
+                    param_device,
+                    value=param,
+                    quantized_stats={"SCB": state_dict[fp16_statistics_key]},
+                )
+        else:
+            # loading not quantized params in quantized model
+            set_module_quantized_tensor_to_device(model, param_name, param_device, value=param)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -1244,6 +1298,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Here we use config._attn_implementation_internal to check whether the attention implementation was explicitely set by the user.
         # The property `PretrainedConfig._attn_implementation` is never `None`, for backward compatibility (always fall back on "eager").
         # The `hasattr` here is used as some Transformers tests for some reason do not call PretrainedConfig __init__ (e.g. test_no_super_init_config_and_model)
+        requested_attn_implementation = None
         if hasattr(config, "_attn_implementation_internal") and config._attn_implementation_internal is not None:
             if config._attn_implementation != "flash_attention_2" and use_flash_attention_2:
                 raise ValueError(
@@ -1260,9 +1315,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError(message + ".")
 
             # If a config is passed with a preset attn_implementation, we skip the automatic dispatch and use the user-provided config, with hard checks that the requested attention implementation is available.
-            hard_check_only = True
-        else:
-            hard_check_only = False
+            requested_attn_implementation = config._attn_implementation_internal
 
         if use_flash_attention_2:
             logger.warning_once(
@@ -1275,13 +1328,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config,
                 torch_dtype=torch_dtype,
                 device_map=device_map,
-                hard_check_only=hard_check_only,
+                hard_check_only=False,
                 check_device_map=check_device_map,
             )
-        elif cls._supports_sdpa or config._attn_implementation == "sdpa":
+        elif requested_attn_implementation in [None, "sdpa"]:
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
-            config = cls._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
-        elif not hard_check_only:
+            config = cls._check_and_enable_sdpa(
+                config, hard_check_only=False if requested_attn_implementation is None else True
+            )
+        else:
             config._attn_implementation = "eager"
 
         return config
@@ -1350,8 +1405,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if not cls._supports_flash_attn_2:
             raise ValueError(
-                f"{cls.__name__} does not support Flash Attention 2.0 yet. Please open an issue on GitHub to "
-                "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
+                f"{cls.__name__} does not support Flash Attention 2.0 yet. Please request to add support where"
+                f" the model is hosted, on its model hub page: https://huggingface.co/{config._name_or_path}/discussions/new"
+                " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
         if not is_flash_attn_2_available():
@@ -1389,9 +1445,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
-            raise ValueError(
-                f"Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes. You passed {torch_dtype}, this might lead to"
-                " unexpected behaviour."
+            logger.warning(
+                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes. "
+                "No dtype was provided, you should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator."
             )
 
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
@@ -1505,7 +1561,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def _init_weights(self, module):
         """
-        Initialize the weights. This method should be overridden by derived class.
+        Initialize the weights. This method should be overridden by derived class and is
+        the only initialization method that will be called when loading a checkpoint
+        using `from_pretrained`. Any attempt to initialize outside of this function
+        will be useless as the torch.nn.init function are all replaced with skip.
         """
         pass
 
@@ -1673,7 +1732,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         Arguments:
             new_num_tokens (`int`, *optional*):
-                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
+                The new number of tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
                 returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
             pad_to_multiple_of (`int`, *optional*):
@@ -2163,15 +2222,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             and not getattr(self, "is_8bit_serializable", False)
             and not _hf_peft_config_loaded
         ):
-            raise ValueError(
-                "You are calling `save_pretrained` to a 8-bit converted model you may likely encounter unexepected"
-                " behaviors. If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
+            raise NotImplementedError(
+                "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
+                "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
             )
 
-        # If the model has adapters attached, you can save the adapters
-        if getattr(self, "is_loaded_in_4bit", False) and not _hf_peft_config_loaded:
+        if (
+            getattr(self, "is_loaded_in_4bit", False)
+            and not getattr(self, "is_4bit_serializable", False)
+            and not _hf_peft_config_loaded
+        ):
             raise NotImplementedError(
-                "You are calling `save_pretrained` on a 4-bit converted model. This is currently not supported"
+                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
+                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
             )
 
         if getattr(self, "_awq_is_fused", False):
@@ -2740,8 +2803,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_safetensors = False
 
         if is_bitsandbytes_available():
+            is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
             is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
         else:
+            is_4bit_serializable = False
             is_8bit_serializable = False
 
         if trust_remote_code is True:
@@ -2922,6 +2987,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 **kwargs,
             )
         else:
+            # In case one passes a config to `from_pretrained` + "attn_implementation"
+            # override the `_attn_implementation` attribute to `attn_implementation` of the kwargs
+            # Please see: https://github.com/huggingface/transformers/issues/28038
+
+            # Overwrite `config._attn_implementation` by the one from the kwargs --> in auto-factory
+            # we pop attn_implementation from the kwargs but this handles the case where users
+            # passes manually the config to `from_pretrained`.
+            config = copy.deepcopy(config)
+
+            kwarg_attn_imp = kwargs.pop("attn_implementation", None)
+            if kwarg_attn_imp is not None and config._attn_implementation != kwarg_attn_imp:
+                config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
 
         quantizer = None
@@ -3018,10 +3095,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
 
-        if (
-            is_8bit_serializable
-            and quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES
-            and load_in_8bit
+        if quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES and (
+            (is_8bit_serializable and load_in_8bit) or (is_4bit_serializable and load_in_4bit)
         ):
             if quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES:
                 logger.warning(
@@ -3031,8 +3106,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             config.quantization_config = quantization_config
         elif (
-            is_8bit_serializable
-            and not load_in_8bit
+            (is_8bit_serializable or is_4bit_serializable)
+            and not (load_in_8bit or load_in_4bit)
             and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
         ):
             quantization_config = config.quantization_config
@@ -3047,8 +3122,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
             load_in_8bit = quantization_config.load_in_8bit
+            load_in_4bit = quantization_config.load_in_4bit
 
-            if load_in_8bit:
+            if load_in_8bit or load_in_4bit:
                 if torch_dtype is None:
                     torch_dtype = torch.float16
                 if device_map is None:
@@ -3066,12 +3142,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         elif (
             not is_8bit_serializable
-            and not load_in_8bit
+            and not (load_in_8bit or load_in_4bit)
             and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
         ):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
-                " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
+                " `bitsandbytes` version to support 4 and 8 bit serialization. Please install the latest version of `bitsandbytes` with "
                 " `pip install --upgrade bitsandbytes`."
             )
 
@@ -3413,6 +3489,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         )
 
         with ContextManagers(init_contexts):
+            # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
         # make sure we use the model's config since the __init__ call might have copied it
@@ -3420,7 +3497,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Check first if we are `from_pt`
         if use_keep_in_fp32_modules:
-            if is_accelerate_available():
+            if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
             keep_in_fp32_modules = model._keep_in_fp32_modules
         else:
@@ -3478,6 +3555,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
+            model.is_4bit_serializable = is_4bit_serializable
 
         if load_in_8bit and torch_dtype is None:
             logger.warning(
@@ -3911,13 +3989,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
-            if remove_prefix_from_model:
-                _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
-            elif add_prefix_to_model:
-                _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
-            else:
-                _loaded_keys = loaded_keys
-            set_initialized_submodules(model, _loaded_keys)
+            if not ignore_mismatched_sizes:
+                if remove_prefix_from_model:
+                    _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
+                elif add_prefix_to_model:
+                    _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
+                else:
+                    _loaded_keys = loaded_keys
+                set_initialized_submodules(model, _loaded_keys)
             # This will only initialize submodules that are not marked as initialized by the line above.
             model.apply(model._initialize_weights)
 
@@ -3970,10 +4049,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         model_key in model_state_dict
                         and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
                     ):
-                        mismatched_keys.append(
-                            (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
-                        )
-                        del state_dict[checkpoint_key]
+                        if (
+                            state_dict[checkpoint_key].shape[-1] == 1
+                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
+                        ):
+                            # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
+                            # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
+                            pass
+                        else:
+                            mismatched_keys.append(
+                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                            )
+                            del state_dict[checkpoint_key]
             return mismatched_keys
 
         if resolved_archive_file is not None:
@@ -4082,6 +4169,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             is_quantized=is_quantized,
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
+                            unexpected_keys=unexpected_keys,
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -4118,10 +4206,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
-
-        if is_quantized:
-            unexpected_keys = [elem for elem in unexpected_keys if "SCB" not in elem]
-            missing_keys = [elem for elem in missing_keys if "SCB" not in elem]
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
