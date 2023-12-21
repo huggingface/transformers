@@ -186,7 +186,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         # make sur we set the mask token accordingly
         self.mask_token = mask_token
 
-        self.lang_code_to_id = {
+        self._lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
 
@@ -202,30 +202,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             " this attribute will be removed in `transformers` v4.38"
         )
         return self._lang_code_to_id
-
-    @property
-    def fairseq_tokens_to_ids(self):
-        logger.warning_once(
-            "the `fairseq_tokens_to_ids` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
-        )
-        return self._fairseq_tokens_to_ids
-
-    @property
-    def id_to_lang_code(self):
-        logger.warning_once(
-            "the `id_to_lang_code` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
-        )
-        return self._id_to_lang_code
-
-    @property
-    def fairseq_ids_to_tokens(self):
-        logger.warning_once(
-            "the `_fairseq_ids_to_tokens` attribute is deprecated. The logic is natively handled in the `tokenizer.adder_tokens_decoder`"
-            " this attribute will be removed in `transformers` v4.38"
-        )
-        return self._fairseq_ids_to_tokens
 
     @property
     def can_save_slow_tokenizer(self) -> bool:
