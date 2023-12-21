@@ -183,7 +183,7 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         # Add the mask token at the end of the vocab
         if additional_special_tokens is not None:
-            additional_special_tokens += mask_token
+            additional_special_tokens += [mask_token]
         else:
             additional_special_tokens = mask_token
 
