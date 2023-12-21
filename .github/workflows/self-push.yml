@@ -26,6 +26,7 @@ jobs:
             llllllls -l
 
       - name: step 3
+        if: !cancelled()
         shell: bash
         run: |
             ls -l
