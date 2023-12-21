@@ -502,6 +502,7 @@ class TrainerIntegrationCommon:
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@patch.dict(os.environ, {"DVCLIVE_TEST": "true"})
 class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     """
     Only tests that want to tap into the auto-pre-run 2 trainings:
@@ -786,6 +787,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@patch.dict(os.environ, {"DVCLIVE_TEST": "true"})
 class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def setUp(self):
         super().setUp()

@@ -156,7 +156,9 @@ class TestTrainerDistributed(TestCasePlus):
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"--output_dir {output_dir}".split()
         cmd = ["torchrun"] + distributed_args + args
-        execute_subprocess_async(cmd, env=self.get_env())
+        env = self.get_env()
+        env["DVCLIVE_TEST"] = "true"
+        execute_subprocess_async(cmd, env=env)
         # successful return here == success - any errors would have caused an error in the sub-call
 
 
