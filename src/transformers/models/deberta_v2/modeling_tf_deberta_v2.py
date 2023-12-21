@@ -362,6 +362,9 @@ class TFDebertaV2ConvLayer(tf.keras.layers.Layer):
         self.config = config
 
     def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("conv"):
             self.conv_kernel = self.add_weight(
                 name="kernel",
@@ -371,13 +374,9 @@ class TFDebertaV2ConvLayer(tf.keras.layers.Layer):
             self.conv_bias = self.add_weight(
                 name="bias", shape=[self.config.hidden_size], initializer=tf.zeros_initializer()
             )
-        return
-        if self.built:
-            return
-        self.built = True
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build(None)
+                self.LayerNorm.build([None, None, self.config.hidden_size])
         if getattr(self, "dropout", None) is not None:
             with tf.name_scope(self.dropout.name):
                 self.dropout.build(None)
@@ -453,7 +452,7 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
                 self.conv.build(None)
         if getattr(self, "LayerNorm", None) is not None:
             with tf.name_scope(self.LayerNorm.name):
-                self.LayerNorm.build([None, None, self.config.hidden_size])
+                self.LayerNorm.build([None, self.config.hidden_size])
         if getattr(self, "layer", None) is not None:
             for layer in self.layer:
                 with tf.name_scope(layer.name):
