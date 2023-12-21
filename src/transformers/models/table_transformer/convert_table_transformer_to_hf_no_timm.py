@@ -393,20 +393,20 @@ def convert_table_transformer_checkpoint(model_name, verify_logits, pytorch_dump
     # verify forward pass
     outputs = model(pixel_values)
 
-    print("Logits:", outputs.logits)
-    print(outputs.logits[0, :3, :3])
+    print("Logits:", outputs.logits[0, :3, :3])
+    print("Boxes:", outputs.pred_boxes[0, :3, :3])
 
     if verify_logits:
-        if model_name == "table-detection":
+        if model_name == "table-transformer-detection":
             expected_shape = (1, 15, 3)
             expected_logits = torch.tensor(
-                [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+                [[-6.7367, -16.1034, 6.0084], [-8.2358, -21.3736, 7.2158], [-8.5200, -21.0653, 7.8105]]
             )
             expected_boxes = torch.tensor(
-                [[0.4867, 0.1767, 0.6732], [0.6718, 0.4479, 0.3830], [0.4716, 0.1760, 0.6364]]
+                [[0.5042, 0.2059, 0.8021], [0.7470, 0.4986, 0.4195], [0.4779, 0.1883, 0.7409]]
             )
 
-        elif model_name == "table-structure-recognition":
+        elif model_name == "table-transformer-structure-recognition":
             expected_shape = (1, 125, 7)
             expected_logits = torch.tensor(
                 [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
@@ -444,7 +444,7 @@ if __name__ == "__main__":
         choices=model_name_to_url.keys(),
         help="Name of the original Table Transformer checkpoint you'd like to convert.",
     )
-    parser.add_argument("--verify_logits", action="store_true", help="Whether or not to verify the logits.")
+    parser.add_argument("--verify_logits", action="store_false", help="Whether or not to verify the logits.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
