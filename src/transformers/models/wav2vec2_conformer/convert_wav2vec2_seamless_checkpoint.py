@@ -21,7 +21,7 @@ import torch
 from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
-    AutoProcessor,
+    SeamlessM4TFeatureExtractor,
     Wav2Vec2ConformerConfig,
     Wav2Vec2ConformerForPreTraining,
     logging,
@@ -135,14 +135,12 @@ def convert_wav2vec2_conformer_checkpoint(
     if repo_id:
         hf_wav2vec.push_to_hub(repo_id)
 
-    if process_path:
-        processor = AutoProcessor.from_pretrained(process_path)
+    # save feature extractor
+    fe = SeamlessM4TFeatureExtractor(padding_value=1)
+    fe.save_pretrained(pytorch_dump_folder_path)
 
-        processor.feature_extractor.padding_value = 1
-        processor.save_pretrained(pytorch_dump_folder_path)
-
-        if repo_id:
-            processor.push_to_hub(repo_id)
+    if repo_id:
+        fe.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
@@ -153,7 +151,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
-    parser.add_argument("--process_path", default=None, type=str, help="Push to this repo id if precised.")
 
     args = parser.parse_args()
     convert_wav2vec2_conformer_checkpoint(
