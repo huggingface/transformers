@@ -286,6 +286,33 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    def test_small_model_integration_test_llama_batched_regression(self):
+        # Let' s make sure we test the preprocessing to replace what is used
+        model_id = "llava-hf/llava-1.5-7b-hf"
+
+        # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
+        model = LlavaForConditionalGeneration.from_pretrained(
+            "llava-hf/llava-1.5-7b-hf", load_in_4bit=True, attn_implementation="eager"
+        )
+        processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
+
+        prompts = [
+            "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+            "USER: <image>\nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: <image>\nAnd this?\nASSISTANT:",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+
+        inputs = processor(prompts, images=[image1, image2, image1], return_tensors="pt", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20)
+
+        EXPECTED_DECODED_TEXT = ['USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT: When visiting this serene location, one should be cautious about the weather conditions and potential', 'USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat sleeping on a bed.']  # fmt: skip
+
+        self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
+
+    @slow
+    @require_bitsandbytes
     def test_llava_index_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
