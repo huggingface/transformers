@@ -200,9 +200,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/bakLlava-v1-hf", load_in_4bit=True, attn_implementation="eager"
-        )
+        model = LlavaForConditionalGeneration.from_pretrained("llava-hf/bakLlava-v1-hf", load_in_4bit=True)
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
