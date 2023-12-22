@@ -209,6 +209,7 @@ jobs:
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_task_guides.py
             - run: python utils/check_docstrings.py
+            - run: python utils/check_support_list.py
 
 workflows:
     version: 2
