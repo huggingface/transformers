@@ -212,6 +212,10 @@ if is_accelerate_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
 
 
+def _is_peft_model(model):
+    return is_peft_available() and isinstance(model, PeftModel)
+
+
 if TYPE_CHECKING:
     import optuna
 
@@ -398,13 +402,12 @@ class Trainer:
                     " to `True` to avoid any unexpected behavior such as device placement mismatching."
                 )
 
-        _is_peft_model = is_peft_available() and isinstance(model, PeftModel)
         _is_quantized_and_base_model = getattr(model, "is_quantized", False) and not getattr(
             model, "_hf_peft_config_loaded", False
         )
 
         # At this stage the model is already loaded
-        if _is_quantized_and_base_model and not _is_peft_model:
+        if _is_quantized_and_base_model and not _is_peft_model(model):
             raise ValueError(
                 "You cannot perform fine-tuning on purely quantized models. Please attach trainable adapters on top of"
                 " the quantized model to correctly perform fine-tuning. Please see: https://huggingface.co/docs/transformers/peft"
@@ -619,7 +622,7 @@ class Trainer:
         """
         unwrapped_model = unwrap_model(model)
 
-        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+        if _is_peft_model(unwrapped_model):
             embeddings = unwrapped_model.base_model.model.get_input_embeddings()
         else:
             embeddings = unwrapped_model.get_input_embeddings()
@@ -640,7 +643,7 @@ class Trainer:
 
         unwrapped_model = unwrap_model(model)
 
-        if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+        if _is_peft_model(unwrapped_model):
             embeddings = unwrapped_model.base_model.model.get_input_embeddings()
         else:
             embeddings = unwrapped_model.get_input_embeddings()
@@ -696,7 +699,7 @@ class Trainer:
         if self._signature_columns is None:
             # Inspect model forward signature to keep only the arguments it accepts.
             model_to_inspect = self.model
-            if is_peft_available() and isinstance(self.model, PeftModel):
+            if _is_peft_model(self.model):
                 model_to_inspect = self.model.get_base_model()
             signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
@@ -2114,7 +2117,7 @@ class Trainer:
                 self._issue_warnings_after_load(load_result)
 
         # Load adapters following PR # 24096
-        elif is_peft_available() and isinstance(model, PeftModel):
+        elif _is_peft_model(model):
             # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
             if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                 if os.path.exists(resume_from_checkpoint):
@@ -2177,7 +2180,7 @@ class Trainer:
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
             else:
-                if is_peft_available() and isinstance(model, PeftModel):
+                if _is_peft_model(model):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
                     if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
@@ -2258,17 +2261,7 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            if isinstance(self.eval_dataset, dict):
-                metrics = {}
-                for eval_dataset_name, eval_dataset in self.eval_dataset.items():
-                    dataset_metrics = self.evaluate(
-                        eval_dataset=eval_dataset,
-                        ignore_keys=ignore_keys_for_eval,
-                        metric_key_prefix=f"eval_{eval_dataset_name}",
-                    )
-                    metrics.update(dataset_metrics)
-            else:
-                metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
             # Run delayed LR scheduler now that metrics are populated
@@ -2453,7 +2446,13 @@ class Trainer:
         elif self.is_deepspeed_enabled:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
-            self.model_wrapped.save_checkpoint(output_dir)
+            accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+            )
+            if accept_exclude_frozen_parameters and _is_peft_model(self.model):
+                self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)
+            else:
+                self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
             save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
@@ -2766,7 +2765,7 @@ class Trainer:
 
         if labels is not None:
             unwrapped_model = unwrap_model(model)
-            if is_peft_available() and isinstance(unwrapped_model, PeftModel):
+            if _is_peft_model(unwrapped_model):
                 model_name = unwrapped_model.base_model.model._get_name()
             else:
                 model_name = unwrapped_model._get_name()
@@ -2858,6 +2857,8 @@ class Trainer:
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         logger.info(f"Saving model checkpoint to {output_dir}")
+        model = self.model
+        model.to("cpu")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -2866,24 +2867,26 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
-        if not isinstance(self.model, PreTrainedModel):
-            if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).to("cpu").save_pretrained(
+        if not isinstance(model, PreTrainedModel):
+            if isinstance(unwrap_model(model), PreTrainedModel):
+                unwrap_model(model).save_pretrained(
                     output_dir,
                     is_main_process=self.args.should_save,
-                    state_dict=self.model.state_dict(),
+                    state_dict=model.state_dict(),
                     save_function=xm.save,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict().to("cpu")
+                state_dict = model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.to("cpu").save_pretrained(
-                output_dir, is_main_process=self.args.should_save, save_function=xm.save
-            )
+            model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
+
+        # We moved the model from TPU -> CPU for saving the weights.
+        # Now we should move it back to subsequent compute still works.
+        model.to(self.args.device)
 
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
@@ -2984,7 +2987,7 @@ class Trainer:
 
     def evaluate(
         self,
-        eval_dataset: Optional[Dataset] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
@@ -2997,10 +3000,24 @@ class Trainer:
         You can also subclass and override this method to inject custom behavior.
 
         Args:
-            eval_dataset (`Dataset`, *optional*):
+            eval_dataset (Union[`Dataset`, Dict[str, `Dataset`]), *optional*):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
-                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
-                method.
+                not accepted by the `model.forward()` method are automatically removed. If it is a dictionary, it will
+                evaluate on each dataset, prepending the dictionary key to the metric name. Datasets must implement the
+                `__len__` method.
+
+                <Tip>
+
+                If you pass a dictionary with names of datasets as keys and datasets as values, evaluate will run
+                separate evaluations on each dataset. This can be useful to monitor how training affects other
+                datasets or simply to get a more fine-grained evaluation.
+                When used with `load_best_model_at_end`, make sure `metric_for_best_model` references exactly one
+                of the datasets. If you, for example, pass in `{"data1": data1, "data2": data2}` for two datasets
+                `data1` and `data2`, you could specify `metric_for_best_model="eval_data1_loss"` for using the
+                loss on `data1` and `metric_for_best_model="eval_data1_loss"` for the loss on `data2`.
+
+                </Tip>
+
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -3012,6 +3029,19 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
+        # handle multipe eval datasets
+        eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
+        if isinstance(eval_dataset, dict):
+            metrics = {}
+            for eval_dataset_name, _eval_dataset in eval_dataset.items():
+                dataset_metrics = self.evaluate(
+                    eval_dataset=_eval_dataset,
+                    ignore_keys=ignore_keys,
+                    metric_key_prefix=f"{metric_key_prefix}_{eval_dataset_name}",
+                )
+                metrics.update(dataset_metrics)
+            return metrics
+
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 

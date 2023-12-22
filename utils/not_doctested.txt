@@ -282,7 +282,6 @@ docs/source/en/perf_train_cpu_many.md
 docs/source/en/perf_train_gpu_many.md
 docs/source/en/perf_train_gpu_one.md
 docs/source/en/perf_train_special.md
-docs/source/en/perf_train_tpu.md
 docs/source/en/perf_train_tpu_tf.md
 docs/source/en/performance.md
 docs/source/en/perplexity.md
