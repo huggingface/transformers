@@ -24,6 +24,7 @@ import argparse
 import gc
 import os
 
+import safetensors
 import torch
 from huggingface_hub import hf_hub_download
 
@@ -31,18 +32,21 @@ from transformers import PhiConfig, PhiForCausalLM
 
 
 _MODELS = {
-    "microsoft/phi-1": "https://huggingface.co/microsoft/phi-1/blob/main/pytorch_model.bin",
-    "microsoft/phi-1_5": "https://huggingface.co/microsoft/phi-1_5/blob/main/pytorch_model.bin",
+    "microsoft/phi-1": ["https://huggingface.co/microsoft/phi-1/blob/main/pytorch_model.bin"],
+    "microsoft/phi-1_5": ["https://huggingface.co/microsoft/phi-1_5/blob/main/pytorch_model.bin"],
+    "microsoft/phi-2": [
+        "https://huggingface.co/microsoft/phi-2/blob/main/model-00001-of-00002.safetensors",
+        "https://huggingface.co/microsoft/phi-2/blob/main/model-00002-of-00002.safetensors",
+    ],
 }
 
-
 PHI_MAPPING = {
-    "layers.0.wte.weight": "model.embed_tokens.weight",
-    "layers.25.linear.bias": "lm_head.bias",
-    "layers.25.linear.weight": "lm_head.weight",
-    "layers.25.ln.bias": "model.final_layernorm.bias",
-    "layers.25.ln.weight": "model.final_layernorm.weight",
+    "transformer.embd.wte.weight": "model.embed_tokens.weight",
+    "lm_head.linear": "lm_head",
+    "lm_head.ln": "model.final_layernorm",
     "layers": "model.layers",
+    "transformer": "model",
+    ".h.": ".layers.",
     "ln": "input_layernorm",
     "mixer": "self_attn",
     "Wqkv": "query_key_value",
@@ -53,14 +57,6 @@ PHI_MAPPING = {
 def convert_weights(original_weights, mapping, config):
     converted_weights = {}
     original_weights_keys = sorted(original_weights.keys())
-
-    # we change names (1-24) -> layers(0-23) for Phi model layers
-    range_change = {
-        f"layers.{k}.": f"layers.{v}."
-        for k, v in zip(range(1, config.num_hidden_layers + 1), range(0, config.num_hidden_layers))
-    }
-
-    mapping.update(**range_change)
 
     for original_weights_key in original_weights_keys:
         new_key = original_weights_key
@@ -104,27 +100,39 @@ def _download(url: str, root: str):
     )
 
 
-def convert_phi_weights(checkpoint_path, pytorch_dump_folder_path, use_cuda, save_weights_directly):
+def convert_phi_weights(
+    model_name, checkpoint_path, pytorch_dump_folder_path, use_cuda, save_weights_directly, _MODELS
+):
+    _MODELS = _MODELS if model_name not in _MODELS.keys() else {model_name: _MODELS.get(model_name)}
     device = "cuda" if torch.cuda.is_available() and use_cuda else "cpu"
-    for each_model_name, each_model_url in _MODELS.items():
+    for model_name, model_url in _MODELS.items():
         converted_checkpoint = {}
+        model_checkpoint = {}
 
-        model_path = os.path.join(checkpoint_path, each_model_name + "_" + each_model_url.split("/")[-1])
-        if not os.path.exists(model_path):
-            print(f"\n{each_model_name} was not found! Downloading it to {model_path}")
-            _download(url=each_model_url, root=model_path)
-        model_checkpoint = torch.load(model_path, map_location=device)
-        model_type = each_model_name.split("/")[1]  # phi-1 or phi-1_5
-        config = PhiConfig.from_pretrained(f"susnato/{model_type}_dev")
+        # for phi-2 the weights are stored in 2 different safetensors file so we need to iterate over thaat list and download one at a time
+        for model_each_url in model_url:
+            model_path = os.path.join(checkpoint_path, model_name + "_" + model_each_url.split("/")[-1])
+            if not os.path.exists(model_path):
+                print(f"\n{model_name} was not found! Downloading it to {model_path}")
+                _download(url=model_each_url, root=model_path)
+
+            if model_path.endswith("safetensors"):
+                loaded_weights = safetensors.torch.load_file(model_path, device=device)
+            else:
+                loaded_weights = torch.load(model_path, map_location=device)
+            model_checkpoint.update(**loaded_weights)
+
+        model_type = model_name.split("/")[1]  # phi-1 or phi-1_5 or phi-2
+        config = PhiConfig.from_pretrained(
+            f"susnato/{model_type}_dev" if model_name != "microsoft/phi-2" else f"susnato/{model_type}"
+        )
 
         # Converting the weights
         converted_checkpoint.update(**convert_weights(model_checkpoint, PHI_MAPPING, config))
 
         # Save either the whole model or the converted weights
         if save_weights_directly:
-            save_weights_path = os.path.join(
-                pytorch_dump_folder_path, each_model_name.split("/")[-1] + "_" + each_model_url.split("/")[-1]
-            )
+            save_weights_path = os.path.join(pytorch_dump_folder_path, model_type + "_pytorch_model.bin")
             torch.save(converted_checkpoint, save_weights_path)
             print(f"Model weights saved at {save_weights_path}!")
 
@@ -149,6 +157,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
     parser.add_argument(
+        "--model_name",
+        type=str,
+        help="Name of the model to convert. (Please enter one of the following: phi-1, phi-1_5, phi-2). If nothing is provided, all models will be converted.",
+        default=None,
+    )
+    parser.add_argument(
         "--checkpoint_path", type=str, help="Path to the folder of downloaded checkpoints. (Please enter full path)"
     )
     parser.add_argument(
@@ -172,4 +186,11 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_phi_weights(args.checkpoint_path, args.pytorch_dump_folder_path, args.use_cuda, args.save_weights_directly)
+    convert_phi_weights(
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.use_cuda,
+        args.save_weights_directly,
+        _MODELS,
+    )
