@@ -21,7 +21,7 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
-def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, fp16_statistics=None):
+def set_module_quantized_tensor_to_device(module, tensor_name, device, value=None, quantized_stats=None):
     """
     A helper function to set a given tensor (parameter of buffer) of a module on a specific device (note that doing
     `param.to(device)` creates a new tensor not linked to the parameter, which is why we need this function). The
@@ -37,8 +37,8 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             The device on which to set the tensor.
         value (`torch.Tensor`, *optional*):
             The value of the tensor (useful when going from the meta device to any other device).
-        fp16_statistics (`torch.HalfTensor`, *optional*):
-            The list of fp16 statistics to set on the module, used for serialization.
+        quantized_stats (`dict[str, Any]`, *optional*):
+            Dict with items for either 4-bit or 8-bit serialization
     """
     # Recurse if needed
     if "." in tensor_name:
@@ -58,8 +58,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
     if old_value.device == torch.device("meta") and device not in ["meta", torch.device("meta")] and value is None:
         raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {device}.")
 
-    is_4bit = False
-    is_8bit = False
+    prequantized_loading = quantized_stats is not None
     if is_buffer or not is_bitsandbytes_available():
         is_8bit = False
         is_4bit = False
@@ -74,32 +73,53 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
                 new_value = old_value.to(device)
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
-                if value.dtype == torch.int8:
-                    is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
-                        "0.37.2"
-                    )
-                    if not is_8bit_serializable:
-                        raise ValueError(
-                            "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
-                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                        )
             else:
                 new_value = torch.tensor(value, device="cpu")
 
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
             # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D) and fp16_statistics is None:
+            if issubclass(module.source_cls, Conv1D) and not prequantized_loading:
                 new_value = new_value.T
 
             kwargs = old_value.__dict__
-            if is_8bit:
-                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
-            elif is_4bit:
-                new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(device)
 
+            if prequantized_loading != (new_value.dtype in (torch.int8, torch.uint8)):
+                raise ValueError(
+                    f"Value dtype `{new_value.dtype}` is not compatible with parameter quantization status."
+                )
+
+            if is_8bit:
+                is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
+                    "0.37.2"
+                )
+                if new_value.dtype in (torch.int8, torch.uint8) and not is_8bit_serializable:
+                    raise ValueError(
+                        "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
+                        "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                    )
+                new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(device)
+                if prequantized_loading:
+                    setattr(new_value, "SCB", quantized_stats["SCB"].to(device))
+            elif is_4bit:
+                if prequantized_loading:
+                    is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
+                        "0.41.3"
+                    )
+                    if new_value.dtype in (torch.int8, torch.uint8) and not is_4bit_serializable:
+                        raise ValueError(
+                            "Detected 4-bit weights but the version of bitsandbytes is not compatible with 4-bit serialization. "
+                            "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                        )
+                    new_value = bnb.nn.Params4bit.from_prequantized(
+                        data=new_value,
+                        quantized_stats=quantized_stats,
+                        requires_grad=False,
+                        device=device,
+                        **kwargs,
+                    )
+                else:
+                    new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(device)
             module._parameters[tensor_name] = new_value
-            if fp16_statistics is not None:
-                setattr(module.weight, "SCB", fp16_statistics.to(device))
 
     else:
         if value is None:
@@ -117,7 +137,11 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
 
 
 def _replace_with_bnb_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, has_been_replaced=False
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    has_been_replaced=False,
 ):
     """
     Private method that wraps the recursion for module replacement.
