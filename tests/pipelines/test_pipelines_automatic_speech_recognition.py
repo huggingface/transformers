@@ -714,7 +714,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = pipe(sample.copy(), batch_size=1)
         self.assertDictEqual(output, EXPECTED_OUTPUT)
 
-        # batch size 2
+        # batch size 2: input audio is chunked into smaller pieces so it's testing batching
         output = pipe(sample, batch_size=2)
         self.assertDictEqual(output, EXPECTED_OUTPUT)
 
