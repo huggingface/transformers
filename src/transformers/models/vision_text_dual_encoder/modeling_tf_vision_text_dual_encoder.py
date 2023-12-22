@@ -247,16 +247,16 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         # However, the name of that extra layer is the name of the MainLayer in the base model.
         if "vision_model" in tf_weight:
             if tf_weight.count("vision_model") == 1:
-                return re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight)
+                return (re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight),)
             elif tf_weight.count("vision_model") == 2:
-                return re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight)
+                return (re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight),)
             else:
                 raise ValueError(
                     f"Unexpected weight name {tf_weight}. Please file an issue on the"
                     " Transformers repo to let us know about this error!"
                 )
         elif "text_model" in tf_weight:
-            return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
+            return (re.sub(r"text_model\..*?\.", "text_model.", tf_weight),)
         else:
             return (tf_weight,)
 
@@ -598,7 +598,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
 
-        model.build()  # Ensure model is fully built
+        model.build_in_name_scope()  # Ensure model is fully built
 
         return model
 
