@@ -87,10 +87,6 @@ class MoE(torch.nn.Module):
             self.expert_sel.weight, std=self.k_vec_dim**-0.5 * weight_std_scale
         )
 
-        # Reshape the keys and values into one big matrix
-        self.keys.data = torch.reshape(self.keys, (int(self.n_experts * self.expert_size), self.k_vec_dim))
-        self.values.data = torch.reshape(self.values, (self.k_vec_dim, int(self.n_experts * self.expert_size)))
-
         if bias:
             self.bias = torch.nn.Parameter(
                 torch.zeros(int(self.n_experts * self.expert_size))
@@ -169,10 +165,14 @@ class MoE(torch.nn.Module):
     
     def create_index(self, index: torch.Tensor) -> torch.Tensor:
         bs, seq_len = index.shape
-        one_hot = torch.nn.functional.one_hot(index)
+        one_hot = torch.nn.functional.one_hot(index, num_classes=self.n_experts)
         return one_hot.unsqueeze(-1).expand(bs, seq_len, self.n_experts, self.expert_size).reshape((bs, seq_len, -1))
 
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Reshape the keys and values into one big matrix
+        self.keys.data = torch.reshape(self.keys, (int(self.n_experts * self.expert_size), self.k_vec_dim))
+        self.values.data = torch.reshape(self.values, (self.k_vec_dim, int(self.n_experts * self.expert_size)))
+
         # Selection score calculation
         # sel = sel_raw = F.linear(input, self.expert_sel, None)
         sel = sel_raw = self.expert_sel(input)
