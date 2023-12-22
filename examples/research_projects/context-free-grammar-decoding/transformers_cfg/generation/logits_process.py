@@ -1,8 +1,11 @@
-import math
-import torch
 import logging
-from transformers.generation.logits_process import LogitsProcessor, LOGITS_PROCESSOR_INPUTS_DOCSTRING
+import math
+
+import torch
+
+from transformers.generation.logits_process import LOGITS_PROCESSOR_INPUTS_DOCSTRING, LogitsProcessor
 from transformers.utils import add_start_docstrings
+
 
 logger = logging.getLogger(__name__)
 
@@ -80,4 +83,3 @@ class GrammarConstrainedLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         return self.process_logits(input_ids, scores)
-

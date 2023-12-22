@@ -1,4 +1,5 @@
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
+
 
 setup(
     name="transformers_cfg",
@@ -6,7 +7,7 @@ setup(
     author="EPFL-dlab",
     author_email="saibo.geng@epfl.ch",
     description="Extension of Transformers library for Context-Free Grammar Constrained Decoding",
-    long_description=open('README.md').read(),
+    long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/epfl-dlab/transformers-CFG",
     packages=find_packages(),
@@ -15,7 +16,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=open('requirements.txt').read().splitlines(),
+    install_requires=open("requirements.txt").read().splitlines(),
     package_data={
         "transformers_cfg": ["examples/grammars/*.ebnf"],
     },

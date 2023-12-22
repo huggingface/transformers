@@ -17,13 +17,13 @@
 
 # import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 from transformers_cfg.generation.logits_process import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 if __name__ == "__main__":
-
     # Load model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
@@ -34,7 +34,6 @@ if __name__ == "__main__":
         grammar_str = file.read()
     grammar = IncrementalGrammarConstraint(grammar_str, "root", tokenizer)
     grammar_processor = GrammarConstrainedLogitsProcessor(grammar)
-
 
     # Generate
     prefix1 = "This is a valid json string for http request:"

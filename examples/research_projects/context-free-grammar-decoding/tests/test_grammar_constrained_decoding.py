@@ -1,6 +1,8 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
 from transformers_cfg.generation import GrammarConstrainedLogitsProcessor
+from transformers_cfg.grammar_utils import IncrementalGrammarConstraint
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 MODEL_IDS = [
     "hf-internal-testing/tiny-random-GPTJForCausalLM",
@@ -18,7 +20,6 @@ def test_grammar_constrained_decoding_greedy_w_number_grammar():
     """
 
     for model_id in MODEL_IDS:
-
         model = AutoModelForCausalLM.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -40,14 +41,14 @@ def test_grammar_constrained_decoding_greedy_w_number_grammar():
             top_p=0.92,
             top_k=5,
             logits_processor=[grammar_processor],
-            repetition_penalty=100.,
+            repetition_penalty=100.0,
             early_stopping=True,
         )
 
         # generations = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        generations = tokenizer.batch_decode(output[:, input_ids.shape[1]:], skip_special_tokens=True)
-        assert (generations[0].isdigit()), f"generations: {generations} is not a number"
+        generations = tokenizer.batch_decode(output[:, input_ids.shape[1] :], skip_special_tokens=True)
+        assert generations[0].isdigit(), f"generations: {generations} is not a number"
 
 
 def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
@@ -57,7 +58,6 @@ def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
     """
 
     for model_id in MODEL_IDS:
-
         model = AutoModelForCausalLM.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
@@ -76,32 +76,32 @@ def test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar():
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
             num_beams=1,
-            max_new_tokens=40,
+            max_new_tokens=MAX_NEW_TOKENS,
             top_p=0.92,
             top_k=5,
             logits_processor=[grammar_processor],
-            repetition_penalty=100.,
+            repetition_penalty=100.0,
             early_stopping=True,
         )
 
         # generations = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        generation: str = tokenizer.batch_decode(output[:, input_ids.shape[1]:], skip_special_tokens=True)[0]
+        generation: str = tokenizer.batch_decode(output[:, input_ids.shape[1] :], skip_special_tokens=True)[0]
 
         def check_parentheses(generation):
             stack = []
             for char in generation:
-                if char == '(':
+                if char == "(":
                     stack.append(char)
-                elif char == ')':
+                elif char == ")":
                     if not stack:
                         return False
                     stack.pop()
             return not stack
 
-        assert (check_parentheses(generation)), f"generations: {generation} is not a balanced parenthesis"
+        assert check_parentheses(generation), f"generations: {generation} is not a balanced parenthesis"
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_grammar_constrained_decoding_greedy_w_number_grammar()
     test_grammar_constrained_decoding_greedy_w_balanced_parenthesis_grammar()
