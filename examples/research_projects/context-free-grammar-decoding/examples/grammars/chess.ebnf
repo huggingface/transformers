@@ -1,0 +1,13 @@
+# Specifies chess moves as a list in algebraic notation, using PGN conventions
+
+# Force first move to "1. ", then any 1-2 digit number after, relying on model to follow the pattern
+root    ::= "1. " move " " move "\n" ([1-9] [0-9]? ". " move " " move "\n")+
+move    ::= (pawn | nonpawn | castle) [+#]?
+
+# piece type, optional file/rank, optional capture, dest file & rank
+nonpawn ::= [NBKQR] [a-h]? [1-8]? "x"? [a-h] [1-8]
+
+# optional file & capture, dest file & rank, optional promotion
+pawn    ::= ([a-h] "x")? [a-h] [1-8] ("=" [NBKQR])?
+
+castle  ::= "O-O" "-O"?

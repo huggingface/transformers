@@ -1,0 +1,2 @@
+torch
+transformers
