@@ -286,3 +286,46 @@ class BackboneConfigMixin:
         output["out_features"] = output.pop("_out_features")
         output["out_indices"] = output.pop("_out_indices")
         return output
+
+
+def load_backbone(config):
+    """
+    Loads the backbone model from a config object.
+
+    If the config is from the backbone model itself, then we return a backbone model with randomly initialized
+    weights.
+
+    If the config is from the parent model of the backbone model itself, then we load the pretrained backbone weights
+    if specified.
+    """
+    from transformers import AutoBackbone, AutoConfig
+
+    backbone_config = getattr(config, "backbone_config", None)
+    use_timm_backbone = getattr(config, "use_timm_backbone", None)
+    use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
+    backbone_checkpoint = getattr(config, "backbone", None)
+
+    # If there is a backbone_config and a backbone checkpoint, and use_pretrained_backbone=False then the desired
+    # behaviour is ill-defined: do you want to load from the checkpoint's config or the backbone_config?
+    if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
+        raise ValueError("Cannot specify both config.backbone_config and config.backbone")
+
+    if backbone_config is not None or use_timm_backbone or backbone_checkpoint is not None:
+        # This is a config from the parent model the has a backbone. This contains the pretrained backbone checkpoint
+        # if specified.
+        # By default, most models don't have use_pretrained_backbone set.
+        if use_pretrained_backbone:
+            if backbone_checkpoint is None:
+                raise ValueError("config.backbone must be set if use_pretrained_backbone is True")
+            backbone = AutoBackbone.from_pretrained(
+                backbone_checkpoint,
+                use_timm_backbone=getattr(config, "use_timm_backbone", False),
+            )
+        else:
+            if backbone_config is None:
+                backbone_config = AutoConfig.from_pretrained(backbone_checkpoint)
+            backbone = AutoBackbone.from_config(config=backbone_config)
+    else:
+        # This is a backbone config, so we just initialize the backbone model with random weights directly.
+        backbone = AutoBackbone.from_config(config=config)
+    return backbone

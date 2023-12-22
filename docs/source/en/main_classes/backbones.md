@@ -19,9 +19,9 @@ rendered properly in your Markdown viewer.
 Backbones are models used for feature extraction for computer vision tasks. One can use a model as backbone in two ways:
 
 * initializing `AutoBackbone` class with a pretrained model,
-* initializing a supported backbone configuration and passing it to the model architecture. 
+* initializing a supported backbone configuration and passing it to the model architecture.
 
-## Using AutoBackbone 
+## Using AutoBackbone
 
 You can use `AutoBackbone` class to initialize a model as a backbone and get the feature maps for any stage. You can define `out_indices` to indicate the index of the layers which you would like to get the feature maps from. You can also use `out_features` if you know the name of the layers. You can use them interchangeably. If you are using both `out_indices` and `out_features`, ensure they are consistent. Not passing any of the feature map arguments will make the backbone yield the feature maps of the last layer.
 To visualize how stages look like, let's take the Swin model. Each stage is responsible from feature extraction, outputting feature maps.
@@ -71,11 +71,19 @@ In computer vision, models consist of backbone, neck, and a head. Backbone extra
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
 
-backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
-config = MaskFormerConfig(backbone_config=backbone_config)
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=True)
 model = MaskFormerForInstanceSegmentation(config)
 ```
-You can also initialize a backbone with random weights to initialize the model neck with it. 
+
+You can also initialize a backbone with random weights, with the same architecture as a pretrained model to initialize the model neck with it.
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=False)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+Alternatively you can initialize the backbone with a supported backbone configuration, with randomly initialized weights. Below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with instance segmentation head with [ResNet](../model_doc/resnet) backbone.
 
 ```py
 backbone_config = ResNetConfig()
@@ -85,9 +93,26 @@ model = MaskFormerForInstanceSegmentation(config)
 
 `timm` models are also supported in transformers through `TimmBackbone` and `TimmBackboneConfig`.
 
-```python
-from transformers import TimmBackboneConfig, TimmBackbone
+```py
+from transformers import TimmBackboneConfig, TimmBackbone, MaskFormerConfig, MaskFormerForInstanceSegmentation
 
+# Create a timm backbone model from a config
 backbone_config = TimmBackboneConfig("resnet50")
 model = TimmBackbone(config=backbone_config)
+
+# Create a timm backbone from a pretrained model
+model = TimmBackbone.from_pretrained("resnet50")
+
+# Create a MaskFormer model with a timm backbone
+config = MaskFormerConfig(backbone="resnet50", use_timm_backbone=True)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+By default, `TimmBackbone` will use pretrained weights. You can disable this by setting `use_pretrained=False`.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation
+
+config = MaskFormerConfig(backbone="resnet50", use_timm_backbone=True, use_pretrained_backbone=False)
+model = MaskFormerForInstanceSegmentation(config)
 ```
