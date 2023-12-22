@@ -1817,6 +1817,7 @@ class GenerationMixin:
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                sequential=generation_config.low_memory,
                 **model_kwargs,
             )
 
@@ -2210,8 +2211,7 @@ class GenerationMixin:
             model_kwargs["past_key_values"] = tuple(new_key_values)
 
             if sequential:
-                all_outputs = {key: [] for key in outputs}  # defined in first loop iteration
-                all_last_hstates, all_hstates, all_logits = [], [], []
+                all_outputs = []
                 for i in range(top_k):
                     # compute the candidate tokens by the language model and collect their hidden_states
                     next_model_inputs = self.prepare_inputs_for_generation(top_k_ids[:, i].view(-1, 1), **model_kwargs)
@@ -2222,32 +2222,8 @@ class GenerationMixin:
                         output_hidden_states=True,
                         output_attentions=output_attentions,
                     )
-                    for key in all_outputs:
-                        all_outputs[key].append(outputs[key])
-
-                    if self.config.is_encoder_decoder:
-                        next_hidden = outputs.decoder_hidden_states[-1]
-                        full_hidden_states = outputs.decoder_hidden_states
-
-                    else:
-                        next_hidden = outputs.hidden_states[-1]
-                        full_hidden_states = outputs.hidden_states
-
-                    all_last_hstates.append(torch.squeeze(next_hidden, 0))
-                    all_hstates.append(full_hidden_states)
-                    all_logits.append(outputs.logits[:, -1, :])
-
-                # stack hidden states
-                next_hidden = torch.stack([all_last_hstates[i] for i in range(top_k)], dim=0)
-                final_full_hstates = [0 for i in range(len(full_hidden_states))]
-                for layer in range(len(full_hidden_states)):
-                    final_full_hstates[layer] = torch.stack(
-                        [torch.squeeze(all_hstates[i][layer], 0) for i in range(top_k)], dim=0
-                    )
-                full_hidden_states = tuple(final_full_hstates)
-
-                # stack logits
-                logits = torch.cat(all_logits, dim=0)
+                    all_outputs.append(outputs)
+                outputs = stack_model_outputs(all_outputs)
 
             else:
                 # compute the candidate tokens by the language model and collect their hidden_states
@@ -2260,15 +2236,15 @@ class GenerationMixin:
                     output_hidden_states=True,
                     output_attentions=output_attentions,
                 )
-                # name is different for encoder-decoder and decoder-only models
-                if self.config.is_encoder_decoder:
-                    next_hidden = outputs.decoder_hidden_states[-1]
-                    full_hidden_states = outputs.decoder_hidden_states
-                else:
-                    next_hidden = outputs.hidden_states[-1]
-                    full_hidden_states = outputs.hidden_states
+            # name is different for encoder-decoder and decoder-only models
+            if self.config.is_encoder_decoder:
+                next_hidden = outputs.decoder_hidden_states[-1]
+                full_hidden_states = outputs.decoder_hidden_states
+            else:
+                next_hidden = outputs.hidden_states[-1]
+                full_hidden_states = outputs.hidden_states
 
-                logits = outputs.logits[:, -1, :]
+            logits = outputs.logits[:, -1, :]
 
             context_hidden = last_hidden_states.repeat_interleave(top_k, dim=0)
 
@@ -3006,6 +2982,7 @@ class GenerationMixin:
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
         synced_gpus: bool = False,
+        sequential: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -3051,6 +3028,10 @@ class GenerationMixin:
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            sequential (`bool`, defaults to `False`):
+                By default, beam search has `batch_size * num_beams` as effective batch size (see `beam_search()` for
+                more details). This flag will avoid parallelizing the beam search and will instead run beam search
+                sequentially.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3117,6 +3098,7 @@ class GenerationMixin:
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
+        sequential = sequential if sequential is not None else self.generation_config.low_memory
         if max_length is not None:
             warnings.warn(
                 "`max_length` is deprecated in this function, use"
@@ -3191,12 +3173,39 @@ class GenerationMixin:
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            # if sequential is True, split the input to batches of batch_size and run sequentially
+            if sequential:
+                if any(
+                    model_name in self.__class__.__name__.lower()
+                    for model_name in ["fsmt", "reformer", "bloom", "ctrl", "gpt_bigcode", "transo_xl", "xlnet", "cpm"]
+                ):
+                    raise RuntimeError(
+                        f"Currently generation for {self.__class__.__name__} is not supported "
+                        f"for `low_memory beam_search`. Please open an issue on GitHub if you need this feature."
+                    )
+
+                inputs_per_sub_batches = _split_model_inputs(
+                    model_inputs, split_size=batch_size, full_batch_size=batch_beam_size
+                )
+                outputs_per_sub_batch = [
+                    self(
+                        **inputs_per_sub_batch,
+                        return_dict=True,
+                        output_attentions=output_attentions,
+                        output_hidden_states=output_hidden_states,
+                    )
+                    for inputs_per_sub_batch in inputs_per_sub_batches
+                ]
+
+                outputs = stack_model_outputs(outputs_per_sub_batch)
+
+            else:  # Unchanged original behavior
+                outputs = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
@@ -4905,3 +4914,124 @@ def _ranking_fast(
     contrastive_score = torch.stack(torch.split(contrastive_score, beam_width))  # [B, K]
     _, selected_idx = contrastive_score.max(dim=-1)  # [B]
     return selected_idx
+
+
+def _split_model_inputs(
+    model_output: Union[ModelOutput, Dict], split_size: int, full_batch_size: int
+) -> List[Union[ModelOutput, Dict]]:
+    """
+    Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
+    size. The input object is dict when it was prepared for forward pass and ModelOutput when it was returned from
+    previous forward pass.
+    """
+    # Infer the class from the object
+    model_output_cls = type(model_output)
+    if (full_batch_size % split_size) != 0:
+        raise ValueError("`full_batch_size` must be divisible by `split_size`")
+
+    if split_size > full_batch_size:
+        raise ValueError("`split_size` must be smaller or equal to `full_batch_size`")
+
+    # Helper function to split tensors or tuples of tensors
+    def _split(data):
+        """
+        Takes care of three cases:
+        1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
+        2. data is a tuple: e.g. hidden_states, attentions etc. Keep the tuple as it is and split each tensor in it and
+           return a list of tuples
+        3. data is a tuple of tuples, e.g. past_key_values. Keep the tuple as it is and split each tuple in it and
+           return a list of tuples of tuples
+        (see documentation of ModelOutput)
+        """
+        if data is None:
+            return [None] * (full_batch_size // split_size)
+        if isinstance(data, torch.Tensor):
+            return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
+        elif isinstance(data, tuple):
+            # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
+            if isinstance(data[0], tuple):
+                return [
+                    tuple(tuple(tensor[i : i + split_size] for tensor in inner_tuple) for inner_tuple in data)
+                    for i in range(0, full_batch_size, 1)
+                ]
+
+            else:
+                return [
+                    tuple(sub_tensor[i : i + split_size] for sub_tensor in data)
+                    for i in range(0, full_batch_size, split_size)
+                ]
+        elif isinstance(data, ModelOutput):
+            return _split_model_inputs(model_output["encoder_outputs"], split_size, full_batch_size)
+        else:
+            raise ValueError(f"Unexpected attribute type: {type(data)}")
+
+    # Find all the dataclass fields (e.g., last_hidden_state, pooler_output etc.) and split them
+    keys = (
+        model_output.__dataclass_fields__.keys()
+        if hasattr(model_output, "__dataclass_fields__")
+        else model_output.keys()
+    )
+    # we only keep keys that are in the model_output
+    keys = [k for k in keys if k in model_output]
+    # here we can have three types of values: tensors, tuples of tensors and booleans
+    # bool should not be split but replicated for each split
+    bool_keys = [k for k in keys if isinstance(model_output[k], bool)]
+    non_bool_keys = [k for k in keys if not isinstance(model_output[k], bool)]
+    # import pdb; pdb.set_trace()
+    data_split_list = [
+        {k: _split(model_output[k])[i] for k in non_bool_keys} for i in range(full_batch_size // split_size)
+    ]
+    # bool values are the same and replicated for each split
+    bool_data = {k: model_output[k] for k in bool_keys}
+
+    # Convert each dictionary in the list to an object of the inferred class
+    return [model_output_cls(**data_split, **bool_data) for data_split in data_split_list]
+
+
+def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
+    """
+    Stack a list of ModelOutput objects (or its subclasses) along the batch_size dimension. The function infers the
+    specific ModelOutput subclass from the list provided.
+    """
+    if not model_outputs:
+        raise ValueError("Input list is empty.")
+
+    # Infer the class from the first object in the list
+    model_output_cls = type(model_outputs[0])
+
+    # Ensure all objects are of the same type
+    if not all(isinstance(obj, model_output_cls) for obj in model_outputs):
+        raise ValueError("All elements in the list should be of the same type.")
+
+    # Helper function to concat tensors or tuples of tensors
+    def _concat(data):
+        """
+        Reverse of `_split` function above.
+        """
+        if any(data is None for data in data):
+            return None
+        if isinstance(data[0], torch.Tensor):
+            return torch.cat(data, dim=0)
+        elif isinstance(data[0], tuple):
+            # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
+            if isinstance(data[0][0], tuple):
+                return tuple(
+                    tuple(torch.cat([attr[i][j] for attr in data], dim=0) for j in range(len(data[0][0])))
+                    for i in range(len(data[0]))
+                )
+            else:
+                return tuple(torch.cat([attr[i] for attr in data], dim=0) for i in range(len(data[0])))
+        elif isinstance(data[0], (int, float)):
+            # If the elements are integers or floats, return a tensor
+            return torch.tensor(data)
+        else:
+            raise ValueError(f"Unexpected attribute type: {type(data[0])}")
+
+    # Use a dictionary comprehension to gather attributes from all objects and concatenate them
+    concatenated_data = {
+        k: _concat([getattr(model_output, k) for model_output in model_outputs])
+        for k in model_output_cls.__dataclass_fields__.keys()
+    }
+
+    # Return a new object of the inferred class with the concatenated attributes
+    return model_output_cls(**concatenated_data)
