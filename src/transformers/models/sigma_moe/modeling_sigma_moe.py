@@ -1295,7 +1295,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
             loss = loss_fct(shift_logits, shift_labels)
 
             self.config: SigmaMoEConfiguration
-            if self.config.routing_regularization is not None:
+            if self.training and self.config.routing_regularization is not None:
                 loss += _get_router_loss(self.config, model_outputs[-1])
 
         if not return_dict:
