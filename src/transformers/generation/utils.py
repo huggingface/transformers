@@ -3150,11 +3150,7 @@ class GenerationMixin:
                 if this_peer_finished_flag.item() == 0.0:
                     break
 
-            print("------STEP--------", step)
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            for k, v in model_inputs.items():
-                print(k, v.shape)
 
             outputs = self(
                 **model_inputs,
