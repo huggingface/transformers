@@ -4952,7 +4952,7 @@ def _split_model_inputs(
             if isinstance(data[0], tuple):
                 return [
                     tuple(tuple(tensor[i : i + split_size] for tensor in inner_tuple) for inner_tuple in data)
-                    for i in range(0, full_batch_size, 1)
+                    for i in range(0, full_batch_size, split_size)
                 ]
 
             else:

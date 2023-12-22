@@ -1516,7 +1516,7 @@ class GenerationTesterMixin:
                 ]
             ):
                 self.skipTest("May fix in the future: need model-specific fixes")
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=2)
             # batch_size=1 is ok, but batch_size>1 will cause non-identical output
 
             config.use_cache = True
