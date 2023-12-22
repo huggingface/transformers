@@ -47,13 +47,8 @@ class VitMatteConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
+            when this is `False`.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -87,8 +82,6 @@ class VitMatteConfig(PretrainedConfig):
         backbone_config: PretrainedConfig = None,
         backbone=None,
         use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         hidden_size: int = 384,
         batch_norm_eps: float = 1e-5,
         initializer_range: float = 0.02,
@@ -97,9 +90,6 @@ class VitMatteConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
 
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
@@ -118,8 +108,6 @@ class VitMatteConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range

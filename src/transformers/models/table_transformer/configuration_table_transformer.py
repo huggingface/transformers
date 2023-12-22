@@ -96,11 +96,9 @@ class TableTransformerConfig(PretrainedConfig):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, `True`):
-            Whether to use pretrained weights for the backbone.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+        use_pretrained_backbone (`bool`, *optional*, `False`):
+            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
+            when this is `False`.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -182,11 +180,6 @@ class TableTransformerConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        if not use_timm_backbone and use_pretrained_backbone:
-            raise ValueError(
-                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
-            )
-
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 

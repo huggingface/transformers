@@ -47,13 +47,8 @@ class ViTHybridConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
+            when this is `False`.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -106,8 +101,6 @@ class ViTHybridConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -125,9 +118,6 @@ class ViTHybridConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
@@ -158,8 +148,6 @@ class ViTHybridConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

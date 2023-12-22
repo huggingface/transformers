@@ -45,13 +45,8 @@ class DetaConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, `False`):
-            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
-            library.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
-            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
+            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
+            when this is `False`.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetaModel`] can
             detect in a single image. In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
@@ -155,8 +150,6 @@ class DetaConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         num_queries=900,
         max_position_embeddings=2048,
         encoder_layers=6,
@@ -197,9 +190,6 @@ class DetaConfig(PretrainedConfig):
         disable_custom_kernels=True,
         **kwargs,
     ):
-        if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
@@ -218,8 +208,6 @@ class DetaConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
