@@ -96,10 +96,8 @@ class VitMatteConfig(PretrainedConfig):
 
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
-
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
             backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
