@@ -233,7 +233,7 @@ class AwqTest(unittest.TestCase):
         quantized_model = AutoModelForCausalLM.from_pretrained(self.model_with_no_k_proj_quantized).to(torch_device)
 
         self.assertTrue(isinstance(quantized_model.model.decoder.layers[0].self_attn.k_proj, torch.nn.Linear))
-        self.assertFalse(isinstance(quantized_model.model.decoder.layers[0].self_attn.k_proj, torch.nn.Linear))
+        self.assertFalse(isinstance(quantized_model.model.decoder.layers[0].self_attn.v_proj, torch.nn.Linear))
 
         EXPECTED_OUTPUT = torch.LongTensor([[0, 1, 0, 50118, 50118, 133, 248, 12, 134, 16, 10, 372, 2031]]).to(
             torch_device
