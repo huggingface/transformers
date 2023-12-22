@@ -620,6 +620,8 @@ class FalconFlashAttention2(FalconAttention):
             # Handle the case where the model is quantized
             if hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
+            elif torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             else:
                 target_dtype = self.query_key_value.weight.dtype
 
