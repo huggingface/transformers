@@ -362,7 +362,7 @@ class AutoImageProcessor:
         if image_processor_class is None and image_processor_auto_map is None:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
-                logger.warning(
+                logger.info(
                     "Could not find image processor class in the image processor config or the model config. Loading"
                     " based on pattern matching with the model's feature extractor configuration."
                 )
@@ -370,7 +370,7 @@ class AutoImageProcessor:
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
-                logger.warning(
+                logger.info(
                     "Could not find image processor auto map in the image processor config or the model config."
                     " Loading based on pattern matching with the model's feature extractor configuration."
                 )
