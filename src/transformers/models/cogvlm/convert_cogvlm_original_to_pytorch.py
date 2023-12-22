@@ -63,7 +63,9 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # query = "Please extract all text from this image"
     # image = Image.open("/home/niels/python_projects/transformers/src/transformers/models/cogvlm/img_3805.jpeg").convert("RGB")
 
-    tokenizer = LlamaTokenizer.from_pretrained("lmsys/vicuna-7b-v1.5")
+    tokenizer = LlamaTokenizer.from_pretrained(
+        "lmsys/vicuna-7b-v1.5", model_input_names=["input_ids", "attention_mask", "token_type_ids"]
+    )
     inputs = original_model.build_conversation_input_ids(
         tokenizer, query=query, history=[], images=[image]
     )  # chat mode

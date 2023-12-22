@@ -58,16 +58,15 @@ class CogVLMProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        # TODO support all these kwargs?
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = True,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = True,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = None,
+        return_special_tokens_mask: bool = None,
+        return_offsets_mapping: bool = None,
+        return_token_type_ids: bool = None,
         return_length: bool = False,
-        verbose: bool = True,
+        verbose: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -84,11 +83,18 @@ class CogVLMProcessor(ProcessorMixin):
             pixel_values = None
         text_inputs = self.tokenizer(
             text,
+            add_special_tokens=add_special_tokens,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
+            stride=stride,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
         )
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
