@@ -2608,7 +2608,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list)):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
