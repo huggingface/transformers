@@ -360,5 +360,5 @@ class VideoMAEImageProcessor(BaseImageProcessor):
             for video in videos
         ]
 
-        data = {"pixel_values": videos}
+        data = {"pixel_values": np.asarray(videos)}
         return BatchFeature(data=data, tensor_type=return_tensors)
