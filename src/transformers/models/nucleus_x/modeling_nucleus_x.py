@@ -45,6 +45,7 @@ from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -55,9 +56,12 @@ from .configuration_nucleus_x import NucleusXConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "NucleusAI/Nucleus-X"
 _CONFIG_FOR_DOC = "NucleusXConfig"
 
-NUCLEUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = []
+NUCLEUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "NucleusAI/Nucleus-X",
+]
 
 
 def split_heads(tensors, bsz, seqlen, num_heads):
@@ -946,6 +950,11 @@ class NucleusXModel(NucleusXPreTrainedModel):
         return embed
 
     @add_start_docstrings_to_model_forward(NUCLEUS_X_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=NucleusXOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1192,9 +1201,9 @@ class NucleusXForCausalLM(NucleusXPreTrainedModel):
         >>> from transformers import AutoTokenizer, NucleusXForCausalLM, NucleusXConfig
         >>> import torch
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("NucleusAI/NucleusX-7B")
-        >>> config = NucleusXConfig.from_pretrained("NucleusAI/NucleusX-7B")
-        >>> model = NucleusXForCausalLM.from_pretrained("NucleusAI/NucleusX-7B", config=config)
+        >>> tokenizer = AutoTokenizer.from_pretrained("NucleusAI/Nucleus-X")
+        >>> config = NucleusXConfig.from_pretrained("NucleusAI/Nucleus-X")
+        >>> model = NucleusXForCausalLM.from_pretrained("NucleusAI/Nucleus-X", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1337,6 +1346,11 @@ class NucleusXForSequenceClassification(NucleusXPreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(NUCLEUS_X_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=NucleusXClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,

@@ -56,7 +56,7 @@ New NucleusXModels can be instantiated as follows:
 >>> from transformers import NucleusXConfig, NucleusXForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+>>> tokenizer = AutoTokenizer.from_pretrained("NucleusAI/Nucleus-X")
 >>> config = NucleusXConfig(vocab_size=len(tokenizer),
 ...                         pad_token_id=tokenizer.eos_token_id,
 ...                         eos_token_id=tokenizer.eos_token_id,
