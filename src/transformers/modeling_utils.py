@@ -795,22 +795,6 @@ def _load_state_dict_into_meta_model(
             quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
             # TODO: consider removing used param_parts from state_dict before return
 
-            elif param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
-                # 8bit loading. Could be combined with the above 4bit call.
-                # condition looks unreliable
-                fp16_statistics_key = param_name.replace("weight", "SCB")
-                unexpected_keys.remove(fp16_statistics_key)
-                set_module_quantized_tensor_to_device(
-                    model,
-                    param_name,
-                    param_device,
-                    value=param,
-                    quantized_stats={"SCB": state_dict[fp16_statistics_key]},
-                )
-        else:
-            # loading not quantized params in quantized model
-            set_module_quantized_tensor_to_device(model, param_name, param_device, value=param)
-
     return error_msgs, offload_index, state_dict_index
 
 
