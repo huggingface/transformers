@@ -20,7 +20,7 @@
   - local: model_sharing
     title: Compartir un modelo
   title: Tutoriales
-- section:
+- sections:
   - isExpanded: false
     sections:
     - local: tasks/question_answering
