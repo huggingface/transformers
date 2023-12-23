@@ -629,38 +629,41 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         ):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
-        param = module._parameters[tensor_name]
-        if param.device.type != "cuda":
-            new_value = param_value.to("cpu")
-            if (
-                self.quantization_status == QuantizationStatus.PREQUANTIZED and not self.is_model_serializeable()
-            ):  # was `if param_value.dtype == torch.int8:`
-                raise ValueError(
-                    "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
-                    "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
-                )
+        new_value = param_value.to("cpu")
+        if (
+            self.quantization_status == QuantizationStatus.PREQUANTIZED and not self.is_model_serializeable()
+        ):
+            raise ValueError(
+                "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
+                "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+            )
 
-            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
-            # Since weights are saved in the correct "orientation", we skip transposing when loading.
-            if issubclass(module.source_cls, Conv1D):
-                if fp16_statistics is None:
-                    new_value = new_value.T
+        # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+        # Since weights are saved in the correct "orientation", we skip transposing when loading.
+        if issubclass(module.source_cls, Conv1D):
+            if fp16_statistics is None:
+                new_value = new_value.T
 
-            kwargs = old_value.__dict__
-            new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(target_device)
+        kwargs = old_value.__dict__
+        new_value = bnb.nn.Int8Params(new_value, requires_grad=False, **kwargs).to(target_device)
 
-            module._parameters[tensor_name] = new_value
-            if fp16_statistics is not None:
-                setattr(module.weight, "SCB", fp16_statistics.to(target_device))
+        module._parameters[tensor_name] = new_value
+        if fp16_statistics is not None:
+            setattr(module.weight, "SCB", fp16_statistics.to(target_device))
 
 
 class Bnb4BitHFQuantizer(BnbHFQuantizer):
     """
     4-bit quantization from bitsandbytes.py quantization method:
         before loading: converts transformer layers into Linear4bit during loading: load 16bit weight and pass to the
-        layer object after: quantizes individual weights in Linear4bit into 4bit at fitst .cuda() call
-    serialization: not implemented yet
+        layer object after: quantizes individual weights in Linear4bit into 4bit at the first .cuda() call
+        saving:
+            from state dict, as usual; saves weights and `quant_state` components
+        loading:
+            need to locate `quant_state` components and pass to Param4bit constructor
     """
+
+    aux_keys_suffixes = ('bitsandbytes__nf4', 'bitsandbytes__fp4', 'quant_map', 'nested_absmax', 'absmax', 'nested_quant_map')
 
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
@@ -740,7 +743,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         return model
 
     def is_model_serializeable(self, model: PreTrainedModel = None) -> bool:
-        return False
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
 
     def check_quantized_param(
         self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: StateDict
@@ -778,10 +781,8 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         if tensor_name == "bias":
             if param_value is None:
                 new_value = old_value.to(target_device)
-            elif isinstance(param_value, torch.Tensor):
-                new_value = param_value.to(target_device)
             else:
-                new_value = torch.tensor(param_value, device=target_device)
+                new_value = param_value.to(target_device)
 
             new_value = torch.nn.Parameter(new_value, requires_grad=old_value.requires_grad)
             module._parameters[tensor_name] = new_value
@@ -796,8 +797,36 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         ):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
-        param = module._parameters[tensor_name]
-        if param.device.type != "cuda":
+        # construct `new_value` for the module._parameters[tensor_name]:
+        if self.quantization_status == QuantizationStatus.PREQUANTIZED:
+            # 4bit loading. Collecting components for restoring quantized weight
+            # This can be expanded to make a universal call for any quantized weight loading
+
+            if not self.is_model_serializeable():
+                raise ValueError(
+                    "Detected int4 weights but the version of bitsandbytes is not compatible with int4 serialization. "
+                    "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
+                )
+
+            if (param_name + ".quant_state.bitsandbytes__fp4" not in state_dict) and (
+                param_name + ".quant_state.bitsandbytes__nf4" not in state_dict
+            ):
+                raise ValueError(f"Supplied state dict for {param_name} does not contain `bitsandbytes__*` and possibly other `quantized_stats` components.")
+
+            quantized_stats = {}
+            for k, v in state_dict.items():
+                if param_name + "." in k:
+                    quantized_stats[k] = v
+                    # unexpected_keys.remove(k)  # addressed by .update_mismatched_keys() elsewhere
+                    # TODO: consider that approach vs state_dict cleanup
+
+            new_value = bnb.nn.Params4bit.from_prequantized(
+                data=param_value,
+                quantized_stats=quantized_stats,
+                requires_grad=False,
+                device=target_device,
+            )
+        else:  # self.quantization_status == QuantizationStatus.FRESH
             new_value = param_value.to("cpu")
 
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
@@ -808,7 +837,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
             kwargs = old_value.__dict__
             new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(target_device)
 
-            module._parameters[tensor_name] = new_value
+        module._parameters[tensor_name] = new_value
 
 
 class AWQHFQuantizer(HFQuantizer):
