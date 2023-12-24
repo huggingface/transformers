@@ -215,9 +215,7 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open(
-    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
-).convert("RGB")
+image = Image.new('RGB', (1, 1))
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 encoding = processor(image, words, boxes=boxes, return_tensors="pt")
@@ -239,9 +237,7 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open(
-    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
-).convert("RGB")
+image = Image.new('RGB', (1, 1))
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 word_labels = [1, 2]
@@ -281,9 +277,7 @@ from PIL import Image
 
 processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
-image = Image.open(
-    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
-).convert("RGB")
+image = Image.new('RGB', (1, 1))
 question = "What's his name?"
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
