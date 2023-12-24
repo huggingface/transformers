@@ -195,7 +195,7 @@ class TextGenerationPipeline(Pipeline):
 
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
-                corresponding to your framework [here](./model#generative-models)).
+                corresponding to your framework [here](https://huggingface.co/docs/transformers/v4.36.1/en/main_classes/text_generation)).
 
         Return:
             A list or a list of list of `dict`: Returns one of the following dictionaries (cannot return a combination
