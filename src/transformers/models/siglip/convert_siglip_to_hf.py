@@ -40,11 +40,13 @@ logger = logging.get_logger(__name__)
 model_name_to_checkpoint = {
     "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
+    "siglip-large-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
 }
 
 model_name_to_image_size = {
     "siglip-base-patch16-224": 224,
     "siglip-base-patch16-256-i18n": 256,
+    "siglip-large-patch14-384": 384,
 }
 
 
@@ -53,19 +55,23 @@ def get_siglip_config(model_name):
 
     vocab_size = 250000 if "i18n" in model_name else 32000
     image_size = model_name_to_image_size[model_name]
+    patch_size = 16 if "patch16" in model_name else 14
 
     # size of the architecture
+    config.vision_config.image_size = image_size
+    config.vision_config.patch_size = patch_size
+    config.text_config.vocab_size = vocab_size
+
     if "base" in model_name:
-        config.vision_config.image_size = image_size
-        config.vision_config.patch_size = 16
-        config.text_config.vocab_size = vocab_size
-        config.text_config.hidden_size = 768
-        config.text_config.intermediate_size = 3072
-        config.text_config.max_position_embeddings = 64
-        config.text_config.num_attention_heads = 12
+        pass
     elif "large" in model_name:
-        config.vision_config.hidden_size = 1024
-        config.vision_config.num_hidden_layers = 24
+        config.text_config.hidden_size = 1152
+        config.text_config.intermediate_size = 4304
+        config.text_config.num_hidden_layers = 27
+        config.text_config.num_attention_heads = 16
+        config.vision_config.hidden_size = 1152
+        config.vision_config.intermediate_size = 4304
+        config.vision_config.num_hidden_layers = 27
         config.vision_config.num_attention_heads = 16
     else:
         raise ValueError("Model not supported")
@@ -260,7 +266,8 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
 
     # create processor
     # important: make tokenizer not return attention_mask since original one doesn't require it
-    size = {"height": config.vision_config.image_size, "width": config.vision_config.image_size}
+    image_size = config.vision_config.image_size
+    size = {"height": image_size, "width": image_size}
     image_processor = SiglipImageProcessor(size=size)
     tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -275,7 +282,15 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", padding="max_length")
 
     # verify input_ids against original ones
-    filename = "siglip_pixel_values_256.pt" if "i18n" in model_name else "siglip_pixel_values.pt"
+    if image_size == 224:
+        filename = "siglip_pixel_values.pt"
+    elif image_size == 256:
+        filename = "siglip_pixel_values_256.pt"
+    elif image_size == 384:
+        filename = "siglip_pixel_values_384.pt"
+    else:
+        raise ValueError("Image size not supported")
+
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
@@ -306,6 +321,8 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             expected_slice = torch.tensor(
                 [[-0.9064, 0.1073], [-0.0299, 0.5304]],
             )
+        elif model_name == "siglip-large-patch14-384":
+            expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")

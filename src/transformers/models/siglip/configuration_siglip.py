@@ -39,16 +39,16 @@ class SiglipTextConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 49408):
+        vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Siglip text model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`SiglipModel`].
-        hidden_size (`int`, *optional*, defaults to 512):
+        hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        intermediate_size (`int`, *optional*, defaults to 2048):
+        intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
+        num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         max_position_embeddings (`int`, *optional*, defaults to 64):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
@@ -86,11 +86,11 @@ class SiglipTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=49408,
-        hidden_size=512,
-        intermediate_size=2048,
+        vocab_size=32000,
+        hidden_size=768,
+        intermediate_size=3072,
         num_hidden_layers=12,
-        num_attention_heads=8,
+        num_attention_heads=12,
         max_position_embeddings=64,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
@@ -156,7 +156,7 @@ class SiglipVisionConfig(PretrainedConfig):
             Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 32):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -191,7 +191,7 @@ class SiglipVisionConfig(PretrainedConfig):
         num_attention_heads=12,
         num_channels=3,
         image_size=224,
-        patch_size=32,
+        patch_size=16,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
