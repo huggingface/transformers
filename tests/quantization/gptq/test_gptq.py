@@ -98,7 +98,7 @@ class GPTQTest(unittest.TestCase):
     bits = 4
     group_size = 128
     desc_act = False
-    use_exllama = False
+    use_exllama = True
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
