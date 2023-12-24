@@ -39,12 +39,14 @@ logger = logging.get_logger(__name__)
 
 model_name_to_checkpoint = {
     "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
+    "siglip-base-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_256_60500360.npz",
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
     "siglip-large-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
 }
 
 model_name_to_image_size = {
     "siglip-base-patch16-224": 224,
+    "siglip-base-patch16-256": 256,
     "siglip-base-patch16-256-i18n": 256,
     "siglip-large-patch14-384": 384,
 }
@@ -316,6 +318,10 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
         if model_name == "siglip-base-patch16-224":
             expected_slice = torch.tensor(
                 [[-2.9621, -2.1672], [-0.2713, 0.2910]],
+            )
+        elif model_name == "siglip-base-patch16-256":
+            expected_slice = torch.tensor(
+                [[-3.1146, -1.9894], [-0.7312, 0.6387]],
             )
         elif model_name == "siglip-base-patch16-256-i18n":
             expected_slice = torch.tensor(
