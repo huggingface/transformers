@@ -37,14 +37,28 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+model_name_to_checkpoint = {
+    "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
+    "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
+}
+
+model_name_to_image_size = {
+    "siglip-base-patch16-224": 224,
+    "siglip-base-patch16-256-i18n": 256,
+}
+
+
 def get_siglip_config(model_name):
     config = SiglipConfig()
 
+    vocab_size = 250000 if "i18n" in model_name else 32000
+    image_size = model_name_to_image_size[model_name]
+
     # size of the architecture
     if "base" in model_name:
-        config.vision_config.image_size = 224
+        config.vision_config.image_size = image_size
         config.vision_config.patch_size = 16
-        config.text_config.vocab_size = 32000
+        config.text_config.vocab_size = vocab_size
         config.text_config.hidden_size = 768
         config.text_config.intermediate_size = 3072
         config.text_config.max_position_embeddings = 64
@@ -211,7 +225,7 @@ def flatten_nested_dict(params, parent_key="", sep="/"):
 
 
 @torch.no_grad()
-def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
+def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
     """
     Copy/paste/tweak model's weights to our SigLIP structure.
     """
@@ -219,8 +233,17 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     # define default SigLIP configuration
     config = get_siglip_config(model_name)
 
+    # get checkpoint
+    checkpoint = model_name_to_checkpoint[model_name]
+
+    # get vocab file
+    if "i18n" in model_name:
+        vocab_file = "/Users/nielsrogge/Documents/SigLIP/multilingual_vocab/sentencepiece.model"
+    else:
+        vocab_file = "/Users/nielsrogge/Documents/SigLIP/english_vocab/sentencepiece.model"
+
     # load original state dict
-    data = load("/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz")
+    data = load(checkpoint)
     state_dict = flatten_nested_dict(data)
 
     # remove and rename some keys
@@ -237,7 +260,8 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
 
     # create processor
     # important: make tokenizer not return attention_mask since original one doesn't require it
-    image_processor = SiglipImageProcessor()
+    size = {"height": config.vision_config.image_size, "width": config.vision_config.image_size}
+    image_processor = SiglipImageProcessor(size=size)
     tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
     processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
@@ -251,45 +275,38 @@ def convert_siglip_checkpoint(model_name, vocab_file, pytorch_dump_folder_path, 
     inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", padding="max_length")
 
     # verify input_ids against original ones
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_pixel_values.pt", repo_type="dataset")
+    filename = "siglip_pixel_values_256.pt" if "i18n" in model_name else "siglip_pixel_values.pt"
+    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
     original_pixel_values = torch.load(filepath)
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip_input_ids.pt", repo_type="dataset")
     original_input_ids = torch.load(filepath)
-    assert inputs.input_ids.tolist() == original_input_ids.tolist()
 
-    print("Inputs:")
-    for k, v in inputs.items():
-        print(k, v.shape)
+    if "i18n" not in model_name:
+        assert inputs.input_ids.tolist() == original_input_ids.tolist()
 
-    # check difference in pixel_values
-    print("Mean of original pixel values:", original_pixel_values.mean())
-    print("Mean of HF pixel values:", inputs.pixel_values.mean())
-
-    print("-----HF pixel values -------")
-
-    with torch.no_grad():
-        outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
-
-    probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
-    print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
-
-    print("-----original pixel values -------")
-
+    # note: we're testing with original pixel values here since we don't have exact pixel values
     with torch.no_grad():
         outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
 
-    print("Logits per image with original pixel values:", outputs.logits_per_image[:3, :3])
+    # with torch.no_grad():
+    #     outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
 
-    image_probs = torch.sigmoid(outputs.logits_per_image)
-    print("Image probs:", image_probs)
-    text_probs = torch.sigmoid(outputs.logits_per_text)
-    print("Text probs:", text_probs)
+    print(outputs.logits_per_image[:3, :3])
+
+    probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
+    print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+    print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
 
     if verify_logits:
-        # assert values
-        expected_slice = torch.tensor(
-            [[-2.9621, -2.1672], [-0.2713, 0.2910]],
-        )
+        if model_name == "siglip-base-patch16-224":
+            expected_slice = torch.tensor(
+                [[-2.9621, -2.1672], [-0.2713, 0.2910]],
+            )
+        elif model_name == "siglip-base-patch16-256-i18n":
+            expected_slice = torch.tensor(
+                [[-0.9064, 0.1073], [-0.0299, 0.5304]],
+            )
+
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
 
@@ -312,15 +329,8 @@ if __name__ == "__main__":
         "--model_name",
         default="siglip-base-patch16-224",
         type=str,
-        choices=["siglip-base-patch16-224"],
+        choices=model_name_to_checkpoint.keys(),
         help="Name of the model you'd like to convert.",
-    )
-    parser.add_argument(
-        "--vocab_file",
-        default="/Users/nielsrogge/Documents/SigLIP/sentencepiece.model",
-        type=str,
-        required=False,
-        help="Path to the vocabulary file.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -335,6 +345,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_siglip_checkpoint(
-        args.model_name, args.vocab_file, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub
-    )
+    convert_siglip_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.verify_logits, args.push_to_hub)
