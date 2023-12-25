@@ -965,7 +965,7 @@ class T5Block(nn.Module):
         self.layer = nn.ModuleList()
         self.layer.append(T5LayerSelfAttention(config, positional_embedding_injected_in_attention=positional_embedding_injected_in_attention))
         if self.is_decoder:
-            self.layer.append(T5LayerCrossAttention(config))
+            self.layer.append(T5LayerCrossAttention(config, positional_embedding_injected_in_attention=positional_embedding_injected_in_attention))
 
         self.layer.append(T5LayerFF(config))
 
