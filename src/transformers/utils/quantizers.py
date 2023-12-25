@@ -526,14 +526,13 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
 
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
-        llm_int8_skip_modules = self.quantization_config.llm_int8_skip_modules
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
 
         # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if llm_int8_skip_modules is None:
+        if self.quantization_config.llm_int8_skip_modules is None:
             self.modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            self.modules_to_not_convert = llm_int8_skip_modules
+            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
         if not isinstance(self.modules_to_not_convert, list):
             self.modules_to_not_convert = [self.modules_to_not_convert]
@@ -702,18 +701,14 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         # TODO: consider moving parts common with 8bits to super()
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
-        llm_int8_skip_modules = (
-            self.quantization_config.llm_int8_skip_modules
-        )  # Despite the name, this still occurs in 4-bit q-configs!
-
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
         assert load_in_8bit_fp32_cpu_offload is False  # TODO remove  # Check if this still occurs in 4-bit q-configs!
 
         # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if llm_int8_skip_modules is None:
+        if self.quantization_config.llm_int8_skip_modules is None:
             self.modules_to_not_convert = get_keys_to_not_convert(model)
         else:
-            self.modules_to_not_convert = llm_int8_skip_modules
+            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
 
         if not isinstance(self.modules_to_not_convert, list):
             self.modules_to_not_convert = [self.modules_to_not_convert]
