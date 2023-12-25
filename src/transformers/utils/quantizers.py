@@ -518,7 +518,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         self,
         model: PreTrainedModel,
         device_map: DeviceMap,
-        torch_dtype: torch.dtype,
         keep_in_fp32_modules: List[str] = [],
     ) -> PreTrainedModel:
         super().process_model_before_weight_loading(model)
@@ -558,13 +557,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
 
         model.config.quantization_config = self.quantization_config
         model.is_8bit_serializable = self.is_model_serializeable()
-
-        if torch_dtype is None:
-            logger.warning(
-                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute."
-                "All non-linear modules will be loaded in full precision."
-                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
-            )
 
         model.is_loaded_in_8bit = True  # TODO: consider replacing with ref to Q-config
         return model
@@ -695,7 +687,6 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         self,
         model: PreTrainedModel,
         device_map: DeviceMap,
-        torch_dtype: torch.dtype,
         keep_in_fp32_modules: List[str] = [],
     ) -> PreTrainedModel:
         super().process_model_before_weight_loading(model)

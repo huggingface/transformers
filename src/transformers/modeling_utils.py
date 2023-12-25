@@ -3338,7 +3338,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if quantizer is not None:
             quantizer.process_model_before_weight_loading(
-                model=model, device_map=device_map, torch_dtype=torch_dtype, keep_in_fp32_modules=keep_in_fp32_modules
+                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
             )
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
