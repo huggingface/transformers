@@ -258,8 +258,6 @@ class HFQuantizer(ABC):
         """setting model attributes and/or converting model BEFORE weights loading"""
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
-        model.is_loaded_in_4bit = False
-        model.is_loaded_in_8bit = False
         logger.info("Activating quantized loading for this model using {self.__class__}")
 
     def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
@@ -495,6 +493,8 @@ class BnbHFQuantizer(HFQuantizer):
 
     def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
         super().process_model_before_weight_loading(model, **kwargs)
+        model.is_loaded_in_4bit = False
+        model.is_loaded_in_8bit = False
 
     def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
         super().process_model_after_weight_loading(model, **kwargs)
