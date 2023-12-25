@@ -73,7 +73,7 @@ class QuantizationConfigParser:
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         if load_in_4bit or load_in_8bit:
-            warnings.warn(
+            logger.warning(
                 "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
                 "Please, pass a `quantization_config` dict or instance instead.",
                 FutureWarning,
