@@ -1,6 +1,5 @@
 import importlib
 import inspect
-import warnings
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
@@ -371,7 +370,6 @@ class GPTQHFQuantizer(HFQuantizer):
 
         if self.quantization_status == QuantizationStatus.PREQUANTIZED:
             model = self.quantizer.convert_model(model)
-            model._is_quantized_training_enabled = True
 
         return model
 
@@ -425,9 +423,8 @@ class BnbHFQuantizer(HFQuantizer):
 
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
-                "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
-                " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
-                " pip install bitsandbytes` "
+                "Using `bitsandbytes` 8-bit quantization requires Accelerate: `pip install accelerate` "
+                "and the latest version of bitsandbytes: `pip install -i https://pypi.org/simple/ bitsandbytes`"
             )
 
         if kwargs.get("from_tf", False) or kwargs.get("from_flax", False):
