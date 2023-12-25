@@ -734,7 +734,7 @@ class T5Attention(nn.Module):
         if position_bias is None:
             ### experiments showed that when using xformers AttentionBias the training is NOT stable! 
             xattn_AttentionBias_forbidden = torch.cuda.get_device_capability('cuda') < (8, 0)
-
+            xattn_AttentionBias_forbidden |= query_states.dtype not in [torch.float16, torch.bfloat16]                
             #print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
             #xattn_AttentionBias_forbidden = False
         else:
@@ -859,7 +859,8 @@ class T5Attention(nn.Module):
                       
             attn_output = xops.memory_efficient_attention(
                 **memory_efficient_attention_kwargs,
-                op = None, #(fmha.flash.FwOp, fmha.flash.BwOp, ) 
+                op = (fmha.flash.FwOp, fmha.flash.BwOp, ) 
+                #op = None,  ##use this if you want xformers to automatically choose the memory efficient attention version that matches you capabilities.
             )
 
             if not xattn_AttentionBias_forbidden:
