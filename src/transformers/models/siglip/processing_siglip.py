@@ -16,9 +16,13 @@
 Image/Text processor class for SigLIP.
 """
 
+from typing import List, Optional, Union
 
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...utils import TensorType
 
 
 class SiglipProcessor(ProcessorMixin):
@@ -42,11 +46,19 @@ class SiglipProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
+    def __call__(
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        images: ImageInput = None,
+        padding: Union[bool, str, PaddingStrategy] = "max_length",
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length=None,
+        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
+    ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to SiglipTokenizer's [`~SiglipTokenizer.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
+        the text. To prepare the image(s), this method forwards the `images` argument to
         SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
         of the above two methods for more information.
 
@@ -59,7 +71,19 @@ class SiglipProcessor(ProcessorMixin):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
-
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`, *optional*):
+                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -69,7 +93,7 @@ class SiglipProcessor(ProcessorMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
-            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
@@ -82,10 +106,12 @@ class SiglipProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         if text is not None:
-            encoding = self.tokenizer(text, padding="max_length", return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(
+                text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            )
 
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -93,7 +119,7 @@ class SiglipProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def decode(self, *args, **kwargs):
         """
