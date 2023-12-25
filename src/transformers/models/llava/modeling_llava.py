@@ -445,8 +445,15 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                         device=attention_mask.device,
                     )
 
+                    # Filter out only the tokens that can be un-attended, this can happen
+                    # in the case one uses Llava + Fused modules where the cache on the
+                    # first iteration is already big enough, or if one passes custom cache
+                    valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
+                    new_batch_index = batch_index[valid_indices]
+                    new_non_attended_tokens = non_attended_tokens[valid_indices]
+
                     # Zero-out the places where we don't need to attend
-                    extended_attention_mask[batch_index, non_attended_tokens] = 0
+                    extended_attention_mask[new_batch_index, new_non_attended_tokens] = 0
 
                     attention_mask = torch.cat((attention_mask, extended_attention_mask), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
