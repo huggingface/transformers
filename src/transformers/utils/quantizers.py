@@ -324,7 +324,6 @@ class GPTQHFQuantizer(HFQuantizer):
     loading: preprocess model into special GPTQ layers, then load into state_dict as usual
     """
 
-    require_low_cpu_mem_usage = True
     method = QuantizationMethod.GPTQ
 
     def __init__(self, quantization_config: QuantizationConfig, **kwargs):
@@ -399,7 +398,6 @@ class BnbHFQuantizer(HFQuantizer):
     """
 
     use_keep_in_fp32_modules = True
-    require_low_cpu_mem_usage = True
     method = QuantizationMethod.BITS_AND_BYTES
     requires_parameters_quantization = True
 
@@ -850,8 +848,6 @@ class AWQHFQuantizer(HFQuantizer):
     """
     TODO: class docstring
     """
-
-    require_low_cpu_mem_usage = True
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)

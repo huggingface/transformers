@@ -95,7 +95,7 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import QuantizationMethod
-from .utils.quantizers import QuantizationConfigParser  # TODO remove BnbHFQuantizer
+from .utils.quantizers import QuantizationConfigParser
 from .utils.versions import require_version_core
 
 
@@ -2975,8 +2975,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantizer is not None:
             quantizer.validate_environment(torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax)
 
+            # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
+                logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
 
             torch_dtype = quantizer.set_torch_dtype(torch_dtype)
 
@@ -3311,7 +3313,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif low_cpu_mem_usage or hasattr(quantizer, "require_low_cpu_mem_usage"):
+        elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
