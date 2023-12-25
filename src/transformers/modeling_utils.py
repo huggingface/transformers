@@ -3494,14 +3494,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if (
-            quantization_config is not None
-            and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.do_fuse
-        ):
-            model = fuse_awq_modules(model, config.quantization_config)
-            model._awq_is_fused = True
-
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
             device_map_kwargs = {

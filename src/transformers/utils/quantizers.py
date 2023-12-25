@@ -98,9 +98,8 @@ class QuantizationConfigParser:
 
         elif self.quantization_method == QuantizationMethod.AWQ:
             raise ValueError(
-                "You cannot pass an `AwqConfig` when loading a model as you can only use AWQ models"
-                " for inference. To quantize transformers models with AWQ algorithm, please refer to our"
-                " quantization docs: https://huggingface.co/docs/transformers/main_classes/quantization "
+                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
+                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
             )
 
         return kwargs
@@ -903,6 +902,10 @@ class AWQHFQuantizer(HFQuantizer):
 
     def process_model_after_weight_loading(self, model):
         super().process_model_after_weight_loading(model)
+        if self.quantization_config.do_fuse:
+            from ..integrations import fuse_awq_modules
+            model = fuse_awq_modules(model, self.quantization_config)
+            model._awq_is_fused = True
 
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return False
