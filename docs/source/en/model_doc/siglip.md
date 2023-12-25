@@ -35,7 +35,33 @@ The original code can be found [here](https://github.com/google-research/big_vis
 
 ## Usage example
 
-An example of how one can compute image-text similarity is shown below.
+There are 2 main ways to use SigLIP: either using the pipeline API, which abstracts away all the complexity for you, or by using the `SiglipModel` class yourself.
+
+### Pipeline API
+
+The pipeline allows to use the model in a few lines of code:
+
+```python
+>>> from transformers import pipeline
+>>> from PIL import Image
+>>> import requests
+
+>>> # load pipe
+>>> image_classifier = pipeline(task="zero-shot-image-classification", model="nielsr/siglip-base-patch16-224")
+
+>>> # load image
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> # inference
+>>> output = image_classifier(image, candidate_labels=["2 cats", "a plane", "a remote"])
+>>> print(output)
+[{'score': 0.19791047275066376, 'label': '2 cats'}, {'score': 1.8337435903958976e-05, 'label': 'a remote'}, {'score': 2.3004151472605372e-08, 'label': 'a plane'}]
+```
+
+### Using the model yourself
+
+If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 ```python
 >>> from PIL import Image
