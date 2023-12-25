@@ -240,7 +240,7 @@ class AwqTest(unittest.TestCase):
         )
 
         output = quantized_model.generate(dummy_input, max_new_tokens=10)
-        self.assertEqual(EXPECTED_OUTPUT, output)
+        self.assertTrue((EXPECTED_OUTPUT == output).all())
 
 
 @slow
