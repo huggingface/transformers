@@ -415,7 +415,8 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
+MULTI_MODEL_SPEECH_CONFIGS = {"SpeechEncoderDecoderConfig"}
+MULTI_MODEL_VISION_CONFIGS = {"VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -896,7 +897,10 @@ def pipeline(
         and not load_tokenizer
         and normalized_task not in NO_TOKENIZER_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and (
+            model_config.__class__.__name__ in MULTI_MODEL_SPEECH_CONFIGS
+            or model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
+        )
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
@@ -907,8 +911,7 @@ def pipeline(
         and not load_image_processor
         and normalized_task not in NO_IMAGE_PROCESSOR_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
-        and normalized_task != "automatic-speech-recognition"
+        and model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
@@ -919,7 +922,7 @@ def pipeline(
         and not load_feature_extractor
         and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+        and model_config.__class__.__name__ in MULTI_MODEL_SPEECH_CONFIGS
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
@@ -967,6 +970,9 @@ def pipeline(
             tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
             )
+
+    print("Load image processor:", load_image_processor)
+    print("Load feature extractor:", load_feature_extractor)
 
     if load_image_processor:
         # Try to infer image processor from model or config name (if provided as str)
