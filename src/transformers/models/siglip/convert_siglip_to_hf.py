@@ -38,17 +38,29 @@ logger = logging.get_logger(__name__)
 
 
 model_name_to_checkpoint = {
+    # base checkpoints
     "siglip-base-patch16-224": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_224_63724782.npz",
     "siglip-base-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_256_60500360.npz",
+    "siglip-base-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_384_68578854.npz",
+    "siglip-base-patch16-512": "/Users/nielsrogge/Documents/SigLIP/webli_en_b16_512_68580893.npz",
+    # large checkpoints
+    "siglip-large-patch16-256": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_256_60552751.npz",
+    "siglip-large-patch16-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_l16_384_63634585.npz",
+    # multilingual checkpoint
     "siglip-base-patch16-256-i18n": "/Users/nielsrogge/Documents/SigLIP/webli_i18n_b16_256_66117334.npz",
-    "siglip-large-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
+    # so400m checkpoints
+    "siglip-so400m-patch14-384": "/Users/nielsrogge/Documents/SigLIP/webli_en_so400m_384_58765454.npz",
 }
 
 model_name_to_image_size = {
     "siglip-base-patch16-224": 224,
     "siglip-base-patch16-256": 256,
+    "siglip-base-patch16-384": 384,
+    "siglip-base-patch16-512": 512,
+    "siglip-large-patch16-256": 256,
+    "siglip-large-patch16-384": 384,
     "siglip-base-patch16-256-i18n": 256,
-    "siglip-large-patch14-384": 384,
+    "siglip-so400m-patch14-384": 384,
 }
 
 
@@ -67,6 +79,15 @@ def get_siglip_config(model_name):
     if "base" in model_name:
         pass
     elif "large" in model_name:
+        config.text_config.hidden_size = 1024
+        config.text_config.intermediate_size = 4096
+        config.text_config.num_hidden_layers = 24
+        config.text_config.num_attention_heads = 16
+        config.vision_config.hidden_size = 1024
+        config.vision_config.intermediate_size = 4096
+        config.vision_config.num_hidden_layers = 24
+        config.vision_config.num_attention_heads = 16
+    elif "so400m" in model_name:
         config.text_config.hidden_size = 1152
         config.text_config.intermediate_size = 4304
         config.text_config.num_hidden_layers = 27
@@ -290,6 +311,8 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
         filename = "siglip_pixel_values_256.pt"
     elif image_size == 384:
         filename = "siglip_pixel_values_384.pt"
+    elif image_size == 512:
+        filename = "siglip_pixel_values_512.pt"
     else:
         raise ValueError("Image size not supported")
 
@@ -326,12 +349,28 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
             expected_slice = torch.tensor(
                 [[-3.1146, -1.9894], [-0.7312, 0.6387]],
             )
+        elif model_name == "siglip-base-patch16-384":
+            expected_slice = torch.tensor(
+                [[-2.8098, -2.1891], [-0.4242, 0.4102]],
+            )
+        elif model_name == "siglip-base-patch16-512":
+            expected_slice = torch.tensor(
+                [[-2.7899, -2.2668], [-0.4295, -0.0735]],
+            )
+        elif model_name == "siglip-large-patch16-256":
+            expected_slice = torch.tensor(
+                [[-1.5827, -0.5801], [-0.9153, 0.1363]],
+            )
+        elif model_name == "siglip-large-patch16-384":
+            expected_slice = torch.tensor(
+                [[-2.1523, -0.2899], [-0.2959, 0.7884]],
+            )
+        elif model_name == "siglip-so400m-patch14-384":
+            expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
         elif model_name == "siglip-base-patch16-256-i18n":
             expected_slice = torch.tensor(
                 [[-0.9064, 0.1073], [-0.0299, 0.5304]],
             )
-        elif model_name == "siglip-large-patch14-384":
-            expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
 
         assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
         print("Looks ok!")
