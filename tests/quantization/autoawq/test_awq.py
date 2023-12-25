@@ -254,6 +254,9 @@ class AwqFusedTest(unittest.TestCase):
     custom_mapping_model_id = "TheBloke/Yi-34B-AWQ"
     custom_model_revision = "f1b2cd1b7459ceecfdc1fac5bb8725f13707c589"
 
+    mixtral_model_name = "casperhansen/mixtral-instruct-awq"
+    mixtral_model_revision = "87dd4ec502dde74fb3a624835c776b000d190c3b"
+
     prompt = (
         "You're standing on the surface of the Earth. "
         "You walk one mile south, one mile west and one mile north. "
@@ -262,6 +265,7 @@ class AwqFusedTest(unittest.TestCase):
 
     EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
+    EXPECTED_GENERATION_MIXTRAL = prompt + "\n\nThe answer is the North Pole. You can"
 
     def tearDown(self):
         gc.collect()
@@ -382,3 +386,24 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
+
+    @require_torch_multi_gpu
+    def test_generation_mixtral_fused(self):
+        """
+        Text generation test for Mixtral + AWQ + fused
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=1024, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.mixtral_model_name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            revision=self.mixtral_model_revision,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12)
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)
