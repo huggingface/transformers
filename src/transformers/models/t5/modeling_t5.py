@@ -732,9 +732,10 @@ class T5Attention(nn.Module):
         add_to_scores = None
 
         if position_bias is None:
-            pos_embedding_found_in_add_bias = False
+            ### experiments showed that when using xformers AttentionBias the training is NOT stable! 
+            xattn_AttentionBias_forbidden = torch.cuda.get_device_capability('cuda') < (8, 0)
         else:
-            position_bias, pos_embedding_found_in_add_bias = position_bias
+            position_bias, xattn_AttentionBias_forbidden = position_bias
 
         # Note: we are skipping all positional attention injection here if position_bias is not None,
         # possibly because that's how it is cached for decoder layers
@@ -746,7 +747,7 @@ class T5Attention(nn.Module):
                     if pos_emb_type in [POSITION_EMBEDDING_T5_DEFAULT_RELATIVE, POSITION_EMBEDDING_T5_RELATIVE]:
                         curr_position_bias = self.compute_bias_for_relative_position_embedding_name(position_embedding_name=position_embedding_name, position_ids=position_ids, query_length=real_seq_length, key_length=key_length, device=query_states.device)
                         position_bias = curr_position_bias if position_bias is None else (position_bias+curr_position_bias)  # michal: shape don't match
-                        pos_embedding_found_in_add_bias = True
+                        xattn_AttentionBias_forbidden = True
                     elif pos_emb_type == POSITION_EMBEDDING_ROTARY:
                         query_states, key_states = self.rotary_op(
                             query_states.permute(0,2,1,3).reshape(B,M,H*K), 
@@ -757,7 +758,7 @@ class T5Attention(nn.Module):
                         key_states = key_states.reshape(B,M,H,K).permute(0,2,1,3)
                     else:
                         raise Exception(f'Encountered pos_emb_type={pos_emb_type} but the only supported options to be injected inside attention are {SUPPORTED_POS_ENC_TYPES_INJECTED_IN_ATTENTION}')
-  
+                        
 
             if position_bias is None: # if it's STILL None (so no one requested POSITION_EMBEDDING_T5_RELATIVE)
                 position_bias = torch.zeros(
@@ -812,30 +813,26 @@ class T5Attention(nn.Module):
         
 
         attn_bias_for_xformers = None
-
+        
 
         if self.memory_efficient_attention:
                         
-            if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
-                original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
-                actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                if not pos_embedding_found_in_add_bias: 
-                    #we can express the the attention bias as xformers AttentionBias class, which would enabled Flash V2 (assuming additional conditions are met as well)
-                    #the reason that we're also requiring FLASH support here is because we've seen unexplained divergence when using v100 (full precision) and combined with AttentionBias type of add_bias.
-
-                    if isinstance(position_bias, xattn.AttentionBias):
-                        attn_bias_for_xformers = position_bias
-                    else:
-                        attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)                        
-                    query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
-                    key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
-                    value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
-                else:
-                    #TODO: also warn about half precision and "too old" GPU 
-                    warnings.warn("Since the default T5 relative positional encoding was requested, Flash V2 will NOT be used. You can use a different positional encoding method if you want to use Flash V2, for example, RoPE (additionally, you'll need to use at least A100 and half precision)")                    
-                    attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype) #TODO: is contiguous necessary here?                
+            if xattn_AttentionBias_forbidden:
+                warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
+                attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)
             else:
-                raise Exception("not supporting causal attention yet")
+                if isinstance(position_bias, xattn.AttentionBias):
+                    attn_bias_for_xformers = position_bias
+                elif (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
+                    original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
+                    actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
+                    attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
+                    banana = 123                                                    
+                query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
+                key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
+                value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
+
 
             memory_efficient_attention_kwargs = dict(
                 query=query_states.permute(0,2,1,3), # -> BHMK -> BMHK
@@ -847,17 +844,14 @@ class T5Attention(nn.Module):
                 scale = 1.0,
             )
 
-            #flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))
-
-            if (torch.cuda.get_device_capability('cuda') < (8, 0)) and isinstance(attn_bias_for_xformers, xattn.AttentionBias):
-                raise Exception('This setting was shown to be unstable convergance wise. Either meet the requirements for FLASH in xformers (mainly A100 or better and using half precision) or use t5_default_relative')
+            #flash_not_supported_reasons =  fmha.flash.FwOp.not_supported_reasons(fmha.Inputs(**memory_efficient_attention_kwargs))           
                       
             attn_output = xops.memory_efficient_attention(
                 **memory_efficient_attention_kwargs,
-                op = None, #(fmha.flash.FwOp, fmha.flash.BwOp, ) #allowing only FLASH, because I've seen issues with convergance when using v100 + providing AttentionBias attn_bias. It will crash if conditions aren't met. Consider checking A100 instead.
+                op = None, #(fmha.flash.FwOp, fmha.flash.BwOp, ) 
             )
 
-            if not pos_embedding_found_in_add_bias:
+            if not xattn_AttentionBias_forbidden:
                 attn_output = _convert_to_single_padded_tensor(attn_output, sizes=actual_lengths, pad_to_size=original_max_seq_len)            
             attn_output = attn_output.reshape(B, M, H*K)     
        
@@ -874,7 +868,7 @@ class T5Attention(nn.Module):
         else:
             return_pos_bias = position_bias
 
-        outputs = (attn_output, present_key_value_state, (return_pos_bias,pos_embedding_found_in_add_bias))
+        outputs = (attn_output, present_key_value_state, (return_pos_bias,xattn_AttentionBias_forbidden))
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -1354,7 +1348,7 @@ class T5Stack(T5PreTrainedModel):
 
         if position_ids_dict is None:
             position_ids_dict = {}
-        print('TODO: remember to TURN OFF the RNG SEED I changed in bmfm workbench!!!')
+        
         positional_indices_for_pos_emb_injection_in_attention = []
 
         for position_ids, position_embedding_names in position_ids_dict.values():
