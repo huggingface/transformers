@@ -30,6 +30,12 @@ AWQ_FUSED_MAPPINGS = {
         "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
         "use_alibi": False,
     },
+    "mixtral": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["w1", "w3", "w2"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    },
     "llama": {
         "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
         "mlp": ["gate_proj", "up_proj", "down_proj"],
