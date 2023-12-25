@@ -485,9 +485,6 @@ class BnbHFQuantizer(HFQuantizer):
                 """
             )
 
-    def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
-        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
-
     def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
         super().process_model_before_weight_loading(model, **kwargs)
         model.is_loaded_in_4bit = False
@@ -643,6 +640,9 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         if fp16_statistics is not None:
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
 
+    def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
+
 
 class Bnb4BitHFQuantizer(BnbHFQuantizer):
     """
@@ -687,6 +687,9 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
                 "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map"
                 "calculation. You may encounter unexpected behavior, or pass your own device map"
             )
+
+    def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
+        return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
 
     def process_model_before_weight_loading(
         self,
