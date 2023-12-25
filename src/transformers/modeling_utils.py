@@ -3859,14 +3859,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
-                                if not (is_quantized):
+                                if quantizer is None:
                                     set_module_tensor_to_device(
                                         model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
-                                    set_module_quantized_tensor_to_device(
-                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                    raise NotImplementedError(
+                                        "Loading quantized parameters outside base model is not supported."
                                     )
+                                    # TODO: consider whether to support this (e.g. quantized model head).
+                                    # may need to create such model with quantized head for testing.
+                                    # was:
+                                    # set_module_quantized_tensor_to_device(
+                                    #     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                    # )
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
