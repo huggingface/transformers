@@ -70,7 +70,7 @@ class QuantizationConfigMixin:
     quant_method: QuantizationMethod
 
     @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs=False, config_origin="config", **kwargs):
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """
         Instantiates a [`QuantizationConfigMixin`] from a Python dictionary of parameters.
 
@@ -237,16 +237,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         self.post_init()
-
-    @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs=False, config_origin="config", **kwargs):
-        if (config_origin == "args") and any(set(kwargs).intersection(inspect.signature(cls).parameters)):
-            raise ValueError(
-                "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
-                "`quantization_config` argument at the same time."
-            )
-
-        return super().from_dict(config_dict, return_unused_kwargs, **kwargs)
 
     def post_init(self):
         r"""
