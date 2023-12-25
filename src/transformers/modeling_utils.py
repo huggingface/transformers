@@ -1574,7 +1574,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if getattr(module, "_is_hf_initialized", False):
             return
-        self._init_weights(module)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(list(module.parameters()), modifier_rank=0):
+                self._init_weights(module)
+        else:
+            self._init_weights(module)
+
         module._is_hf_initialized = True
 
     def tie_weights(self):
