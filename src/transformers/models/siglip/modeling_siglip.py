@@ -1123,10 +1123,7 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
-        >>> # important: make sure to set padding="max_length" as that's how the model was trained
-        >>> inputs = processor(
-        ...     text=texts, images=image, return_tensors="pt", padding="max_length"
-        ... )
+        >>> inputs = processor(text=texts, images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

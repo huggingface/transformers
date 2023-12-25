@@ -26,9 +26,9 @@ The abstract from the paper is the following:
 
 ## Usage tips
 
-- Make sure to pass `padding="max_length"` when preparing texts for the model, as that's how the model was trained.
 - Usage of SigLIP is similar to [CLIP](clip). The main difference is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
 - Training is not yet supported. If you want to fine-tune SigLIP or train from scratch, refer to the loss function from [OpenCLIP](https://github.com/mlfoundations/open_clip/blob/73ad04ae7fb93ede1c02dc9040a828634cb1edf1/src/open_clip/loss.py#L307), which leverages various `torch.distributed` utilities.
+- When using the standalone [`SiglipTokenizer`], make sure to pass `padding="max_length"` as that's how the model was trained. The multimodal [`SiglipProcessor`] takes care of this behind the scenes.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
@@ -50,7 +50,7 @@ An example of how one can compute image-text similarity is shown below.
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
->>> inputs = processor(text=texts, images=image, return_tensors="pt", padding="max_length")
+>>> inputs = processor(text=texts, images=image, return_tensors="pt")
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)

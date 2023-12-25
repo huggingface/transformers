@@ -82,7 +82,7 @@ class SiglipProcessor(ProcessorMixin):
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, padding="max_length", return_tensors=return_tensors, **kwargs)
 
         if images is not None:
             image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
