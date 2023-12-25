@@ -14,9 +14,7 @@
 # limitations under the License.
 """Image processor class for SigLIP."""
 
-from typing import Dict, Optional, Union
-
-import numpy as np
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -66,10 +64,13 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
             `do_normalize` in the `preprocess` method.
-        mean (`float` or `np.ndarray`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use for normalization. Can be overridden by `mean` in the `preprocess` method.
-        std (`float` or `np.ndarray`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use for normalization. Can be overridden by `std` in the `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -82,14 +83,14 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
-        mean: Optional[Union[float, np.ndarray]] = None,
-        std: Optional[Union[float, np.ndarray]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
-        mean = mean if mean is not None else IMAGENET_STANDARD_MEAN
-        std = std if std is not None else IMAGENET_STANDARD_STD
+        image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
         self.do_resize = do_resize
         self.size = size
@@ -97,8 +98,8 @@ class SiglipImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.mean = mean
-        self.std = std
+        self.image_mean = image_mean
+        self.image_std = image_std
 
     def preprocess(
         self,
@@ -109,8 +110,8 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
-        mean: Optional[Union[float, np.ndarray]] = None,
-        std: Optional[Union[float, np.ndarray]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -136,10 +137,11 @@ class SiglipImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
                 Whether to normalize the image.
-            mean (`float` or `np.ndarray`, *optional*, defaults to `self.mean`):
-                Mean to use for normalization.
-            std (`float` or `np.ndarray`, *optional*, defaults to `self.std`):
-                Standard deviation to use for normalization.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
+                `True`.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
@@ -166,8 +168,8 @@ class SiglipImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        mean = mean if mean is not None else self.mean
-        std = std if std is not None else self.std
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
 
         images = make_list_of_images(images)
 
@@ -211,7 +213,7 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=mean, std=std, input_data_format=input_data_format)
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
 

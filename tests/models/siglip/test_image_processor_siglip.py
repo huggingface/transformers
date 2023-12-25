@@ -39,6 +39,9 @@ class SiglipImageProcessingTester(unittest.TestCase):
         size=None,
         do_rescale=True,
         rescale_factor=1 / 255,
+        do_normalize=True,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -51,6 +54,9 @@ class SiglipImageProcessingTester(unittest.TestCase):
         self.size = size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
 
     def prepare_image_processor_dict(self):
         return {
@@ -58,6 +64,9 @@ class SiglipImageProcessingTester(unittest.TestCase):
             "size": self.size,
             "do_rescale": self.do_rescale,
             "rescale_factor": self.rescale_factor,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
         }
 
     def expected_output_image_shape(self, images):
@@ -96,6 +105,9 @@ class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "resample"))
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
+        self.assertTrue(hasattr(image_processing, "do_normalize"))
+        self.assertTrue(hasattr(image_processing, "image_mean"))
+        self.assertTrue(hasattr(image_processing, "image_std"))
 
     # Ignore copy
     def test_image_processor_from_dict_with_kwargs(self):

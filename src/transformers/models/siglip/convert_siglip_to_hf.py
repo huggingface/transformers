@@ -301,6 +301,9 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     if "i18n" not in model_name:
         assert inputs.input_ids.tolist() == original_input_ids.tolist()
 
+    print("Mean of original pixel values:", original_pixel_values.mean())
+    print("Mean of new pixel values:", inputs.pixel_values.mean())
+
     # note: we're testing with original pixel values here since we don't have exact pixel values
     with torch.no_grad():
         outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
