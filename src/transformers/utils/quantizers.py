@@ -559,7 +559,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         model.config.quantization_config = self.quantization_config
         model.is_8bit_serializable = self.is_model_serializeable()
 
-        model.is_loaded_in_8bit = True  # TODO: consider replacing with ref to Q-config
+        model.is_loaded_in_8bit = True
         return model
 
     def adjust_target_dtype(self, target_dtype: torch.dtype) -> torch.dtype:
