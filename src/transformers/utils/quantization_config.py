@@ -16,7 +16,6 @@
 # limitations under the License.
 import copy
 import importlib.metadata
-import inspect
 import json
 import os
 from dataclasses import dataclass
