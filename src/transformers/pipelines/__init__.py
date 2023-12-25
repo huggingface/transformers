@@ -971,9 +971,6 @@ def pipeline(
                 tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
             )
 
-    print("Load image processor:", load_image_processor)
-    print("Load feature extractor:", load_feature_extractor)
-
     if load_image_processor:
         # Try to infer image processor from model or config name (if provided as str)
         if image_processor is None:
