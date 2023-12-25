@@ -89,20 +89,18 @@ def replace_keys(state_dict):
 
 
 def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_hub_id="ybelkada/segment-anything"):
-    checkpoint_path = hf_hub_download(model_hub_id, f"checkpoints/{model_name}.pth")
+    # checkpoint_path = hf_hub_download(model_hub_id, f"checkpoints/{model_name}.pth")
 
-    if "sam_vit_b" in model_name:
-        config = SamConfig()
+    checkpoint_path = "/Users/nielsrogge/Downloads/slimsam_weights.pth"
+
+    if "sam_vit_b" in model_name or "slimsam_weights" in checkpoint_path:
+        vision_config = SamVisionConfig()
     elif "sam_vit_l" in model_name:
         vision_config = SamVisionConfig(
             hidden_size=1024,
             num_hidden_layers=24,
             num_attention_heads=16,
             global_attn_indexes=[5, 11, 17, 23],
-        )
-
-        config = SamConfig(
-            vision_config=vision_config,
         )
     elif "sam_vit_h" in model_name:
         vision_config = SamVisionConfig(
@@ -112,7 +110,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_h
             global_attn_indexes=[7, 15, 23, 31],
         )
 
-        config = SamConfig(
+    config = SamConfig(
             vision_config=vision_config,
         )
 
@@ -124,7 +122,9 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_h
     processor = SamProcessor(image_processor=image_processor)
     hf_model = SamModel(config)
 
-    hf_model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
     hf_model = hf_model.to("cuda")
 
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
