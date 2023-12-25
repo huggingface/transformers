@@ -43,9 +43,10 @@ class QuantizationStatus(str, Enum):
 
 class QuantizationConfigParser:
     """
-    Parser for quantization configuration during model loading. Resolves conflicts between quantization config passed
-    via `from_pretrained` and the one present in the model. Returns a quantizer instance to be used for model loading
-    or None for not-quantized model.
+    Parser for quantization configuration during model loading.
+    Resolves conflicts between quantization config passed via `from_pretrained` and the one present in the model.
+    Works in 2 stages: from args, and then from model.config, possibly overriding values from args.
+    Returns a quantizer instance to be used for model loading or None for not-quantized model.
     """
 
     def __init__(self):
@@ -53,12 +54,19 @@ class QuantizationConfigParser:
 
     def parse_config_from_args(self, quantization_config_from_args=None, **kwargs) -> Dict[str, Any]:
         """
-        Parse quantization config from the arguments passed to `from_pretrained`. Sets the `quantization_config` and
-        `quantization_method` attributes based on args.
-            quantization_config_from_args: The `quantization_config` passed to `from_pretrained`. **kwargs: Additional
-            kwargs passed to `from_pretrained`, like `load_in_8bit`.
+        Parses the quantization configuration from arguments provided to `from_pretrained`.
+        This method sets the `quantization_config` and `quantization_method` based on the provided arguments. It also handles deprecated arguments and issues warnings.
+
+        Args:
+            quantization_config_from_args: A dict or instance of `quantization_config` passed to `from_pretrained`.
+            **kwargs: Additional keyword arguments passed to `from_pretrained`, such as `load_in_8bit`.
+        Sets:
+            self.quantization_config: parsed quantization config from args
+            self.quantization_method: QuantizationMethod enum, detected quantization method.
         Returns:
-            Additional kwargs with quantization kwargs popped.
+            A dictionary of remaining keyword arguments with quantization-related kwargs removed.
+        Raises:
+            ValueError: If conflicting arguments are provided or unsupported quantization methods are specified.
         """
         self.quantization_config = quantization_config_from_args
         # note that we remove `load_in_4bit, load_in_8bit` from kwargs here.
