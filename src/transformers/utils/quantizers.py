@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import importlib
 import inspect
 from abc import ABC, abstractmethod
@@ -111,7 +113,7 @@ class QuantizationConfigParser:
 
         return kwargs
 
-    def get_quantizer(self, config: PretrainedConfig) -> "HFQuantizer":
+    def get_quantizer(self, config: PretrainedConfig) -> HFQuantizer:
         """
         Detect quantization type from model config, resolve conflicts with config from args.
 
