@@ -629,9 +629,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
         new_value = param_value.to("cpu")
-        if (
-            self.quantization_status == QuantizationStatus.PREQUANTIZED and not self.is_model_serializeable()
-        ):
+        if self.quantization_status == QuantizationStatus.PREQUANTIZED and not self.is_model_serializeable():
             raise ValueError(
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -662,7 +660,14 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
             need to locate `quant_state` components and pass to Param4bit constructor
     """
 
-    aux_keys_suffixes = ('bitsandbytes__nf4', 'bitsandbytes__fp4', 'quant_map', 'nested_absmax', 'absmax', 'nested_quant_map')
+    aux_keys_suffixes = (
+        "bitsandbytes__nf4",
+        "bitsandbytes__fp4",
+        "quant_map",
+        "nested_absmax",
+        "absmax",
+        "nested_quant_map",
+    )
 
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
@@ -810,7 +815,9 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
             if (param_name + ".quant_state.bitsandbytes__fp4" not in state_dict) and (
                 param_name + ".quant_state.bitsandbytes__nf4" not in state_dict
             ):
-                raise ValueError(f"Supplied state dict for {param_name} does not contain `bitsandbytes__*` and possibly other `quantized_stats` components.")
+                raise ValueError(
+                    f"Supplied state dict for {param_name} does not contain `bitsandbytes__*` and possibly other `quantized_stats` components."
+                )
 
             quantized_stats = {}
             for k, v in state_dict.items():
@@ -904,6 +911,7 @@ class AWQHFQuantizer(HFQuantizer):
         super().process_model_after_weight_loading(model)
         if self.quantization_config.do_fuse:
             from ..integrations import fuse_awq_modules
+
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True
 
