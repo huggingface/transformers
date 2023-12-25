@@ -869,8 +869,8 @@ class T5Attention(nn.Module):
         
         attn_output = self.o(attn_output)
 
-        if self.is_decoder:
-            print(f'is_decoder=True debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
+        #if self.is_decoder:
+        #    print(f'is_decoder=True debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
 
         #print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
         #print('------------\n')
