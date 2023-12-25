@@ -734,6 +734,9 @@ class T5Attention(nn.Module):
         if position_bias is None:
             ### experiments showed that when using xformers AttentionBias the training is NOT stable! 
             xattn_AttentionBias_forbidden = torch.cuda.get_device_capability('cuda') < (8, 0)
+
+            print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
+            xattn_AttentionBias_forbidden = False
         else:
             position_bias, xattn_AttentionBias_forbidden = position_bias
 
@@ -820,15 +823,23 @@ class T5Attention(nn.Module):
             if xattn_AttentionBias_forbidden:
                 warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
                 attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)
-            else:
-                if isinstance(position_bias, xattn.AttentionBias):
-                    attn_bias_for_xformers = position_bias
-                elif (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case
-                    original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it
+            else:   
+                original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it             
+                if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
                     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                    attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                    if isinstance(position_bias, xattn.AttentionBias):
+                        attn_bias_for_xformers = position_bias
+                    else:
+                        attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
                 elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
-                    banana = 123                                                    
+                    actual_lengths = mask.argmin(3)[:,0,:].argmax(1).tolist()
+
+                    if isinstance(position_bias, xattn.AttentionBias):
+                        attn_bias_for_xformers = position_bias
+                    else:
+                        attn_bias_for_xformers = xattn.BlockDiagonalCausalMask.from_seqlens(q_seqlen=actual_lengths)
+                    
+
                 query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
                 key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
                 value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
