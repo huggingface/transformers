@@ -653,7 +653,7 @@ class T5Attention(nn.Module):
         real_seq_length = seq_length
 
         #self.dropout = 0
-        #print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!')
+        #print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!\n'*3)
 
         if past_key_value is not None:
             if len(past_key_value) != 2:
@@ -735,14 +735,14 @@ class T5Attention(nn.Module):
             ### experiments showed that when using xformers AttentionBias the training is NOT stable! 
             xattn_AttentionBias_forbidden = torch.cuda.get_device_capability('cuda') < (8, 0)
 
-            print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
-            xattn_AttentionBias_forbidden = False
+            #print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
+            #xattn_AttentionBias_forbidden = False
         else:
             position_bias, xattn_AttentionBias_forbidden = position_bias
 
-        # Note: we are skipping all positional attention injection here if position_bias is not None,
-        # possibly because that's how it is cached for decoder layers
-        # verify that changes here still make sense after adding support for causal in FLASH attention        
+        
+        
+        
         if position_bias is None: 
             if position_ids_info_list:                
                 for position_ids, position_embedding_name in position_ids_info_list:
@@ -838,7 +838,7 @@ class T5Attention(nn.Module):
                         attn_bias_for_xformers = position_bias
                     else:
                         attn_bias_for_xformers = xattn.BlockDiagonalCausalMask.from_seqlens(q_seqlen=actual_lengths)
-                    
+                #materialized = attn_bias_for_xformers.materialize(shape=(sum(actual_lengths),sum(actual_lengths))) #for debugging
 
                 query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
                 key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
@@ -868,6 +868,9 @@ class T5Attention(nn.Module):
        
         
         attn_output = self.o(attn_output)
+
+        if self.is_decoder:
+            print(f'is_decoder=True debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
 
         #print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
         #print('------------\n')
@@ -921,9 +924,9 @@ class T5LayerSelfAttention(nn.Module):
 
 
 class T5LayerCrossAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, positional_embedding_injected_in_attention=None):
         super().__init__()
-        self.EncDecAttention = T5Attention(config)
+        self.EncDecAttention = T5Attention(config, positional_embedding_injected_in_attention=positional_embedding_injected_in_attention)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
