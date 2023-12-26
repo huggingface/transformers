@@ -56,7 +56,7 @@ class QuantizationConfigParser:
     def parse_config_from_args(self, quantization_config_from_args=None, **kwargs) -> Dict[str, Any]:
         """
         Parses the quantization configuration from arguments provided to `from_pretrained`.
-        This method sets the `quantization_config` and `quantization_method` based on the provided arguments. It also handles deprecated arguments and issues warnings.
+        This method sets the `quantization_config` and `quantization_method` based on the provided arguments.
 
         Args:
             quantization_config_from_args: A dict or instance of `quantization_config` passed to `from_pretrained`.
@@ -73,12 +73,6 @@ class QuantizationConfigParser:
         # note that we remove `load_in_4bit, load_in_8bit` from kwargs here.
         load_in_4bit = kwargs.pop("load_in_4bit", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        if load_in_4bit or load_in_8bit:
-            logger.warning(
-                "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
-                "Please, pass a `quantization_config` dict or instance instead.",
-                FutureWarning,
-            )
 
         self.quantization_method = None
         if self.quantization_config is not None:
