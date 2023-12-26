@@ -851,7 +851,12 @@ class CAVMAEDecoder(nn.Module):
         self.decoder_norm = nn.LayerNorm(
             config.decoder_hidden_size, eps=config.layer_norm_eps
         )
-        self.decoder_pred = nn.Linear(
+        self.decoder_pred_a = nn.Linear(
+            config.decoder_hidden_size,
+            config.patch_size**2 * config.num_channels,
+            bias=True,
+        )  # encoder to decoder
+        self.decoder_pred_v = nn.Linear(
             config.decoder_hidden_size,
             config.patch_size**2 * config.num_channels,
             bias=True,
