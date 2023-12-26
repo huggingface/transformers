@@ -311,8 +311,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0 or (
                 # last step in epoch but step is always smaller than gradient_accumulation_steps
-                len(epoch_iterator) <= args.gradient_accumulation_steps
-                and (step + 1) == len(epoch_iterator)
+                len(epoch_iterator) <= args.gradient_accumulation_steps and (step + 1) == len(epoch_iterator)
             ):
                 if args.fp16:
                     nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
@@ -671,7 +670,7 @@ def main():
         default=1,
         type=int,
         help=(
-            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays "
             "at its `initial_threshold` value (sparsity schedule)."
         ),
     )
@@ -680,7 +679,7 @@ def main():
         default=2,
         type=int,
         help=(
-            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays "
             "at its final_threshold value (sparsity schedule)."
         ),
     )
@@ -799,7 +798,7 @@ def main():
         type=str,
         default="O1",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )

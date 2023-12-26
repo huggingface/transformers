@@ -18,17 +18,17 @@ import inspect
 import math
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.checkpoint import checkpoint
 
 from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -47,6 +47,9 @@ from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen import MusicgenConfig, MusicgenDecoderConfig
 
+
+if TYPE_CHECKING:
+    from ...generation.streamers import BaseStreamer
 
 logger = logging.get_logger(__name__)
 
@@ -76,39 +79,6 @@ class MusicgenUnconditionalInput(ModelOutput):
     encoder_outputs: Tuple[torch.FloatTensor] = None
     attention_mask: torch.LongTensor = None
     guidance_scale: float = None
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
-    mask_cond = torch.arange(mask.size(-1), device=device)
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
@@ -175,7 +145,7 @@ class MusicgenSinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Musicgen
 class MusicgenAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -186,12 +156,15 @@ class MusicgenAttention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[MusicgenConfig] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -200,6 +173,7 @@ class MusicgenAttention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -472,10 +446,6 @@ class MusicgenPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MusicgenDecoder):
-            module.gradient_checkpointing = value
-
 
 MUSICGEN_START_DOCSTRING = r"""
 
@@ -569,10 +539,11 @@ MUSICGEN_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -656,10 +627,11 @@ MUSICGEN_DECODER_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -708,30 +680,6 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape,
-                inputs_embeds.dtype,
-                device=inputs_embeds.device,
-                past_key_values_length=past_key_values_length,
-            )
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
     @add_start_docstrings_to_model_forward(MUSICGEN_DECODER_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -775,14 +723,16 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
@@ -823,16 +773,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.forward,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -840,6 +782,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1135,21 +1079,33 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             torch.ones((bsz, num_codebooks, max_length), dtype=torch.long, device=input_ids.device) * -1
         )
 
+        channel_codebooks = num_codebooks // 2 if self.config.audio_channels == 2 else num_codebooks
         # we only apply the mask if we have a large enough seq len - otherwise we return as is
-        if max_length < 2 * num_codebooks - 1:
+        if max_length < 2 * channel_codebooks - 1:
             return input_ids.reshape(bsz * num_codebooks, -1), input_ids_shifted.reshape(bsz * num_codebooks, -1)
 
         # fill the shifted ids with the prompt entries, offset by the codebook idx
-        for codebook in range(num_codebooks):
-            input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
+        for codebook in range(channel_codebooks):
+            if self.config.audio_channels == 1:
+                # mono channel - loop over the codebooks one-by-one
+                input_ids_shifted[:, codebook, codebook : seq_len + codebook] = input_ids[:, codebook]
+            else:
+                # left/right channels are interleaved in the generated codebooks, so handle one then the other
+                input_ids_shifted[:, 2 * codebook, codebook : seq_len + codebook] = input_ids[:, 2 * codebook]
+                input_ids_shifted[:, 2 * codebook + 1, codebook : seq_len + codebook] = input_ids[:, 2 * codebook + 1]
 
         # construct a pattern mask that indicates the positions of padding tokens for each codebook
         # first fill the upper triangular part (the EOS padding)
         delay_pattern = torch.triu(
-            torch.ones((num_codebooks, max_length), dtype=torch.bool), diagonal=max_length - num_codebooks + 1
+            torch.ones((channel_codebooks, max_length), dtype=torch.bool), diagonal=max_length - channel_codebooks + 1
         )
         # then fill the lower triangular part (the BOS padding)
-        delay_pattern = delay_pattern + torch.tril(torch.ones((num_codebooks, max_length), dtype=torch.bool))
+        delay_pattern = delay_pattern + torch.tril(torch.ones((channel_codebooks, max_length), dtype=torch.bool))
+
+        if self.config.audio_channels == 2:
+            # for left/right channel we need to duplicate every row of the pattern mask in an interleaved fashion
+            delay_pattern = delay_pattern.repeat_interleave(2, dim=0)
+
         mask = ~delay_pattern.to(input_ids.device)
         input_ids = mask * input_ids_shifted + ~mask * pad_token_id
 
@@ -1185,6 +1141,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -1225,6 +1182,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1303,8 +1263,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -1335,6 +1294,9 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
             pad_token_id=generation_config.decoder_start_token_id,
             max_length=generation_config.max_length,
         )
+
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
 
         # stash the delay mask so that we don't have to recompute it in each forward pass
         model_kwargs["delay_pattern_mask"] = delay_pattern_mask
@@ -1387,6 +1349,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -1412,12 +1375,13 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -1442,7 +1406,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder,"
+    "The composite MusicGen model with a text encoder, audio encoder and Musicgen decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
@@ -1550,11 +1514,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             self._tie_encoder_decoder_weights(
                 self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.text_encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
 
     def get_audio_encoder(self):
         return self.audio_encoder
@@ -1911,6 +1870,11 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                     f"Expected 1 frame in the audio code outputs, got {frames} frames. Ensure chunking is "
                     "disabled by setting `chunk_length=None` in the audio encoder."
                 )
+
+            if self.config.decoder.audio_channels == 2 and audio_codes.shape[2] == self.decoder.num_codebooks // 2:
+                # mono input through encodec that we convert to stereo
+                audio_codes = audio_codes.repeat_interleave(2, dim=2)
+
             decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         # Decode
@@ -1984,9 +1948,17 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
 
-        # cut decoder_input_ids if past is used
         if past_key_values is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
+            past_length = past_key_values[0][0].shape[2]
+
+            # Some generation methods already pass only the last input ID
+            if decoder_input_ids.shape[1] > past_length:
+                remove_prefix_length = past_length
+            else:
+                # Default to old behavior: keep only final ID
+                remove_prefix_length = decoder_input_ids.shape[1] - 1
+
+            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -2121,12 +2093,42 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # 3. make sure that encoder returns `ModelOutput`
         model_input_name = model_input_name if model_input_name is not None else self.audio_encoder.main_input_name
         encoder_kwargs["return_dict"] = True
-        encoder_kwargs[model_input_name] = input_values
 
-        audio_encoder_outputs = encoder.encode(**encoder_kwargs)
+        if self.decoder.config.audio_channels == 1:
+            encoder_kwargs[model_input_name] = input_values
+            audio_encoder_outputs = encoder.encode(**encoder_kwargs)
+            audio_codes = audio_encoder_outputs.audio_codes
+            audio_scales = audio_encoder_outputs.audio_scales
 
-        audio_codes = audio_encoder_outputs.audio_codes
-        frames, bsz, codebooks, seq_len = audio_codes.shape
+            frames, bsz, codebooks, seq_len = audio_codes.shape
+
+        else:
+            if input_values.shape[1] != 2:
+                raise ValueError(
+                    f"Expected stereo audio (2-channels) but example has {input_values.shape[1]} channel."
+                )
+
+            encoder_kwargs[model_input_name] = input_values[:, :1, :]
+            audio_encoder_outputs_left = encoder.encode(**encoder_kwargs)
+            audio_codes_left = audio_encoder_outputs_left.audio_codes
+            audio_scales_left = audio_encoder_outputs_left.audio_scales
+
+            encoder_kwargs[model_input_name] = input_values[:, 1:, :]
+            audio_encoder_outputs_right = encoder.encode(**encoder_kwargs)
+            audio_codes_right = audio_encoder_outputs_right.audio_codes
+            audio_scales_right = audio_encoder_outputs_right.audio_scales
+
+            frames, bsz, codebooks, seq_len = audio_codes_left.shape
+            # copy alternating left/right channel codes into stereo codebook
+            audio_codes = audio_codes_left.new_ones((frames, bsz, 2 * codebooks, seq_len))
+
+            audio_codes[:, :, ::2, :] = audio_codes_left
+            audio_codes[:, :, 1::2, :] = audio_codes_right
+
+            if audio_scales_left != [None] or audio_scales_right != [None]:
+                audio_scales = torch.stack([audio_scales_left, audio_scales_right], dim=1)
+            else:
+                audio_scales = [None] * bsz
 
         if frames != 1:
             raise ValueError(
@@ -2137,7 +2139,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         decoder_input_ids = audio_codes[0, ...].reshape(bsz * self.decoder.num_codebooks, seq_len)
 
         model_kwargs["decoder_input_ids"] = decoder_input_ids
-        model_kwargs["audio_scales"] = audio_encoder_outputs.audio_scales
+        model_kwargs["audio_scales"] = audio_scales
         return model_kwargs
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
@@ -2186,6 +2188,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -2226,6 +2229,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2334,8 +2340,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if has_default_max_length and generation_config.max_new_tokens is None:
             logger.warning(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
-                UserWarning,
+                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
             )
         elif generation_config.max_new_tokens is not None:
             if not has_default_max_length:
@@ -2367,6 +2372,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         )
         # stash the delay mask so that we don't have to recompute in each forward pass
         model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
+
+        # input_ids are ready to be placed on the streamer (if used)
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
 
         # 7. determine generation mode
         is_greedy_gen_mode = (
@@ -2416,6 +2425,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -2442,12 +2452,13 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
         else:
             raise ValueError(
-                "Got incompatible mode for generation, should be one of greedy or sampling."
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
                 "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
             )
 
@@ -2471,16 +2482,25 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         if audio_scales is None:
             audio_scales = [None] * batch_size
 
-        output_values = self.audio_encoder.decode(
-            output_ids,
-            audio_scales=audio_scales,
-        )
+        if self.decoder.config.audio_channels == 1:
+            output_values = self.audio_encoder.decode(
+                output_ids,
+                audio_scales=audio_scales,
+            ).audio_values
+        else:
+            codec_outputs_left = self.audio_encoder.decode(output_ids[:, :, ::2, :], audio_scales=audio_scales)
+            output_values_left = codec_outputs_left.audio_values
+
+            codec_outputs_right = self.audio_encoder.decode(output_ids[:, :, 1::2, :], audio_scales=audio_scales)
+            output_values_right = codec_outputs_right.audio_values
+
+            output_values = torch.cat([output_values_left, output_values_right], dim=1)
 
         if generation_config.return_dict_in_generate:
-            outputs.sequences = output_values.audio_values
+            outputs.sequences = output_values
             return outputs
         else:
-            return output_values.audio_values
+            return output_values
 
     def get_unconditional_inputs(self, num_samples=1):
         """

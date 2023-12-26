@@ -225,7 +225,7 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.build()  # may be needed for the get_bias() call below
+            model.build_in_name_scope()  # may be needed for the get_bias() call below
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in list_lm_models:
@@ -257,7 +257,7 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 class TFCTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
-        model = TFCTRLLMHeadModel.from_pretrained("ctrl")
+        model = TFCTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         input_ids = tf.convert_to_tensor([[11859, 0, 1611, 8]], dtype=tf.int32)  # Legal the president is
         expected_output_ids = [
             11859,

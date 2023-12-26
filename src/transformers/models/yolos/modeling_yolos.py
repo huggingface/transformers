@@ -492,17 +492,11 @@ class YolosEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -550,10 +544,6 @@ class YolosPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: YolosEncoder, value: bool = False) -> None:
-        if isinstance(module, YolosEncoder):
-            module.gradient_checkpointing = value
 
 
 YOLOS_START_DOCSTRING = r"""
@@ -766,7 +756,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
@@ -914,9 +904,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # Copied from transformers.models.detr.modeling_detr.DetrLoss with Detr->Yolos
 class YolosLoss(nn.Module):
     """
-    This class computes the losses for YolosForObjectDetection/YolosForSegmentation. The process happens in two steps:
-    1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each
-    pair of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for YolosForObjectDetection/YolosForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
 
     A note on the `num_classes` argument (copied from original repo in detr.py): "the naming of the `num_classes`
     parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is

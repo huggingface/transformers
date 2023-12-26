@@ -15,12 +15,19 @@
 """ Testing suite for the PyTorch Falcon model. """
 
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, FalconConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    FalconConfig,
+    is_torch_available,
+    set_seed,
+)
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_sdpa, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -292,6 +299,12 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return True
+
     def setUp(self):
         self.model_tester = FalconModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FalconConfig, hidden_size=37)
@@ -333,24 +346,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-
-    def test_cache_conversions(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = input_dict["input_ids"]
-        model = FalconForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, use_cache=True)
-        batch_size = input_ids.shape[0]
-        rw_cache = model._convert_to_rw_cache(result.past_key_values)
-        standard_cache = model._convert_cache_to_standard_format(rw_cache, batch_size)
-        for layer in range(len(rw_cache)):
-            for tensor_idx in range(2):
-                self.assertTrue(rw_cache[layer][tensor_idx].ndim == 3)
-                self.assertTrue(result.past_key_values[layer][tensor_idx].ndim == 4)
-                self.assertTrue(
-                    torch.all(result.past_key_values[layer][tensor_idx] == standard_cache[layer][tensor_idx])
-                )
 
     def test_falcon_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -443,6 +438,76 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @require_torch_sdpa
+    @slow
+    def test_eager_matches_sdpa_generate(self):
+        max_new_tokens = 30
+
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"{self.__class__.__name__} tests a model that does support generate: skipping this test")
+
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_sdpa:
+                self.skipTest(f"{model_class.__name__} does not support SDPA")
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            dummy_input = inputs_dict[model_class.main_input_name]
+            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
+                dummy_input = dummy_input.to(torch.float16)
+
+            # make sure that all models have enough positions for generation
+            if hasattr(config, "max_position_embeddings"):
+                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
+
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
+
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                ).to(torch_device)
+
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+
+                model_eager = model_class.from_pretrained(
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    low_cpu_mem_usage=True,
+                    attn_implementation="eager",
+                ).to(torch_device)
+
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+
+                # NOTE: This check is disabled for Falcon as the non-SDPA/SDPA implementation is in the same class (legacy reason).
+                # for name, submodule in model_eager.named_modules():
+                #     if "SdpaAttention" in submodule.__class__.__name__:
+                #         raise ValueError("The eager model should not have SDPA attention layers")
+
+                # has_sdpa = False
+                # for name, submodule in model_sdpa.named_modules():
+                #     if "SdpaAttention" in submodule.__class__.__name__:
+                #         has_sdpa = True
+                #         break
+                # if not has_sdpa:
+                #     raise ValueError("The SDPA model should have SDPA attention layers")
+
+                # Just test that a large cache works as expected
+                res_eager = model_eager.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                res_sdpa = model_sdpa.generate(
+                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=max_new_tokens, do_sample=False
+                )
+
+                self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
 
 @require_torch
 class FalconLanguageGenerationTest(unittest.TestCase):
@@ -500,3 +565,30 @@ class FalconLanguageGenerationTest(unittest.TestCase):
                 outputs_no_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=False)
                 outputs_cache = model.generate(**inputs, do_sample=False, max_new_tokens=20, use_cache=True)
                 self.assertTrue((outputs_cache - outputs_no_cache).sum().item() == 0)
+
+    @require_bitsandbytes
+    @slow
+    def test_batched_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b", padding_side="left")
+        tokenizer.pad_token = tokenizer.eos_token
+        model = AutoModelForCausalLM.from_pretrained(
+            "tiiuae/falcon-7b",
+            device_map="auto",
+            load_in_4bit=True,
+        )
+
+        test_text = "A sequence: 1, 2"  # should generate the rest of the sequence
+
+        unpadded_inputs = tokenizer([test_text], return_tensors="pt").to("cuda:0")
+        unpadded_gen_out = model.generate(**unpadded_inputs, max_new_tokens=20)
+        unpadded_gen_text = tokenizer.batch_decode(unpadded_gen_out, skip_special_tokens=True)
+
+        dummy_text = "This is a longer text " * 2  # forces left-padding on `test_text`
+        padded_inputs = tokenizer([test_text, dummy_text], return_tensors="pt", padding=True).to("cuda:0")
+        padded_gen_out = model.generate(**padded_inputs, max_new_tokens=20)
+        padded_gen_text = tokenizer.batch_decode(padded_gen_out, skip_special_tokens=True)
+
+        expected_output = "A sequence: 1, 2, 3, 4, 5, 6, 7, 8, "
+        self.assertLess(unpadded_inputs.input_ids.shape[-1], padded_inputs.input_ids.shape[-1])  # left-padding exists
+        self.assertEqual(unpadded_gen_text[0], expected_output)
+        self.assertEqual(padded_gen_text[0], expected_output)

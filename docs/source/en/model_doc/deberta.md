@@ -94,6 +94,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
     - build_inputs_with_special_tokens
     - create_token_type_ids_from_sequences
 
+<frameworkcontent>
+<pt>
+
 ## DebertaModel
 
 [[autodoc]] DebertaModel
@@ -122,6 +125,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] DebertaForQuestionAnswering
     - forward
+
+</pt>
+<tf>
 
 ## TFDebertaModel
 
@@ -152,3 +158,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] TFDebertaForQuestionAnswering
     - call
+
+</tf>
+</frameworkcontent>
+

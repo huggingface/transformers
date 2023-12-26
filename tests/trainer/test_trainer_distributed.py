@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pathlib import Path
 from typing import Dict
 
 import numpy as np
@@ -22,6 +23,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
+    require_torch_multi_xpu,
     require_torch_neuroncore,
     require_torch_npu,
 )
@@ -158,6 +160,20 @@ class TestTrainerDistributed(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
 
+@require_torch_multi_xpu
+class TestTrainerDistributedXPU(TestCasePlus):
+    def test_trainer(self):
+        distributed_args = f"""--nproc_per_node={torch.xpu.device_count()}
+            --master_port={get_torch_dist_unique_port()}
+            {self.test_file_dir}/test_trainer_distributed.py
+        """.split()
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"--output_dir {output_dir}".split()
+        cmd = ["torchrun"] + distributed_args + args
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+
 if __name__ == "__main__":
     # The script below is meant to be run under torch.distributed, on a machine with multiple GPUs:
     #
@@ -220,6 +236,20 @@ if __name__ == "__main__":
             exit(1)
 
         trainer.args.eval_accumulation_steps = None
+
+    # Check that saving does indeed work with temp dir rotation
+    # If this fails, will see a FileNotFoundError
+    model = RegressionModel()
+    training_args.max_steps = 1
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda x: 1)
+    trainer = Trainer(
+        model, training_args, optimizers=(opt, sched), data_collator=DummyDataCollator(), eval_dataset=dataset
+    )
+    trainer._save_checkpoint(model=None, trial=None)
+    # Check that the temp folder does not exist
+    assert not (Path(training_args.output_dir) / "tmp-checkpoint-0").exists()
+    assert (Path(training_args.output_dir) / "checkpoint-0").exists()
 
     # Check that `dispatch_batches=False` will work on a finite iterable dataset
 

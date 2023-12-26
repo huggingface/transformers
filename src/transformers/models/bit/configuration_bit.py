@@ -52,7 +52,7 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
             are supported.
         global_padding (`str`, *optional*):
             Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
-        num_groups (`int`, *optional*, defaults to `32`):
+        num_groups (`int`, *optional*, defaults to 32):
             Number of groups used for the `BitGroupNormActivation` layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             The drop path rate for the stochastic depth.
@@ -65,11 +65,13 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
     ```python
@@ -85,6 +87,7 @@ class BitConfig(BackboneConfigMixin, PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "bit"
     layer_types = ["preactivation", "bottleneck"]
     supported_padding = ["SAME", "VALID"]

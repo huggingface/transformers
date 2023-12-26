@@ -61,7 +61,28 @@ class FillMaskPipeline(Pipeline):
     masks. The returned values are raw model output, and correspond to disjoint probabilities where one might expect
     joint probabilities (See [discussion](https://github.com/huggingface/transformers/pull/10222)).
 
-    </Tip>"""
+    </Tip>
+
+    <Tip>
+
+    This pipeline now supports tokenizer_kwargs. For example try:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> fill_masker = pipeline(model="bert-base-uncased")
+    >>> tokenizer_kwargs = {"truncation": True}
+    >>> fill_masker(
+    ...     "This is a simple [MASK]. " + "...with a large amount of repeated text appended. " * 100,
+    ...     tokenizer_kwargs=tokenizer_kwargs,
+    ... )
+    ```
+
+
+    </Tip>
+
+
+    """
 
     def get_masked_index(self, input_ids: GenericTensor) -> np.ndarray:
         if self.framework == "tf":
@@ -90,10 +111,15 @@ class FillMaskPipeline(Pipeline):
             for input_ids in model_inputs["input_ids"]:
                 self._ensure_exactly_one_mask_token(input_ids)
 
-    def preprocess(self, inputs, return_tensors=None, **preprocess_parameters) -> Dict[str, GenericTensor]:
+    def preprocess(
+        self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
+    ) -> Dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors)
+        if tokenizer_kwargs is None:
+            tokenizer_kwargs = {}
+
+        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
 
@@ -198,7 +224,12 @@ class FillMaskPipeline(Pipeline):
         target_ids = np.array(target_ids)
         return target_ids
 
-    def _sanitize_parameters(self, top_k=None, targets=None):
+    def _sanitize_parameters(self, top_k=None, targets=None, tokenizer_kwargs=None):
+        preprocess_params = {}
+
+        if tokenizer_kwargs is not None:
+            preprocess_params["tokenizer_kwargs"] = tokenizer_kwargs
+
         postprocess_params = {}
 
         if targets is not None:
@@ -212,7 +243,7 @@ class FillMaskPipeline(Pipeline):
             raise PipelineException(
                 "fill-mask", self.model.base_model_prefix, "The tokenizer does not define a `mask_token`."
             )
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
     def __call__(self, inputs, *args, **kwargs):
         """

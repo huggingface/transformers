@@ -59,6 +59,11 @@ class TrainerState:
             Run an evaluation every X steps.
         save_steps (`int`, *optional*, defaults to 500):
             Save checkpoint every X updates steps.
+        train_batch_size (`int`, *optional*):
+            The batch size for the training dataloader. Only needed when
+            `auto_find_batch_size` has been used.
+        num_input_tokens_seen (`int`, *optional*, defaults to 0):
+            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -86,7 +91,9 @@ class TrainerState:
     logging_steps: int = 500
     eval_steps: int = 500
     save_steps: int = 500
+    train_batch_size: int = None
     num_train_epochs: int = 0
+    num_input_tokens_seen: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
@@ -166,6 +173,7 @@ class TrainerControl:
 
 
 class TrainerCallback:
+    # no-format
     """
     A class for objects that will inspect the state of the training loop at some events and take some decisions. At
     each of those events the following arguments are available:
@@ -203,7 +211,7 @@ class TrainerCallback:
 
     The argument `args`, `state` and `control` are positionals for all events, all the others are grouped in `kwargs`.
     You can unpack the ones you need in the signature of the event using them. As an example, see the code of the
-    simple [`~transformer.PrinterCallback`].
+    simple [`~transformers.PrinterCallback`].
 
     Example:
 
@@ -537,10 +545,10 @@ class EarlyStoppingCallback(TrainerCallback):
     A [`TrainerCallback`] that handles early stopping.
 
     Args:
-       early_stopping_patience (`int`):
+        early_stopping_patience (`int`):
             Use with `metric_for_best_model` to stop training when the specified metric worsens for
             `early_stopping_patience` evaluation calls.
-       early_stopping_threshold(`float`, *optional*):
+        early_stopping_threshold(`float`, *optional*):
             Use with TrainingArguments `metric_for_best_model` and `early_stopping_patience` to denote how much the
             specified metric must improve to satisfy early stopping conditions. `
 

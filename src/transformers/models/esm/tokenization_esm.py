@@ -64,17 +64,23 @@ class EsmTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.all_tokens = load_vocab_file(vocab_file)
         self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
-        self.unk_token = unk_token
-        self.cls_token = cls_token
-        self.pad_token = pad_token
-        self.mask_token = mask_token
-        self.eos_token = eos_token
+        super().__init__(
+            unk_token=unk_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            eos_token=eos_token,
+            **kwargs,
+        )
+
+        # TODO, all the tokens are added? But they are also part of the vocab... bit strange.
+        # none of them are special, but they all need special splitting.
+
         self.unique_no_split_tokens = self.all_tokens
-        self._create_trie(self.unique_no_split_tokens)
+        self._update_trie(self.unique_no_split_tokens)
 
     def _convert_id_to_token(self, index: int) -> str:
         return self._id_to_token.get(index, self.unk_token)

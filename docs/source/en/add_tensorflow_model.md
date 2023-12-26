@@ -229,7 +229,6 @@ documentation pages. You can complete this part entirely following the patterns 
 changes:
 - Include all public classes of *BrandNewBert* in `src/transformers/__init__.py`
 - Add *BrandNewBert* classes to the corresponding Auto classes in `src/transformers/models/auto/modeling_tf_auto.py`
-- Include the modeling file in the documentation test file list in `utils/documentation_tests.txt`
 - Add the lazy loading classes related to *BrandNewBert* in `src/transformers/utils/dummy_tf_objects.py`
 - Update the import structures for the public classes in `src/transformers/models/brand_new_bert/__init__.py`
 - Add the documentation pointers to the public methods of *BrandNewBert* in `docs/source/en/model_doc/brand_new_bert.md`

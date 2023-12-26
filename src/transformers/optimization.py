@@ -53,19 +53,22 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
     return LambdaLR(optimizer, _get_constant_lambda, last_epoch=last_epoch)
 
 
-def get_reduce_on_plateau_schedule(optimizer: Optimizer):
+def get_reduce_on_plateau_schedule(optimizer: Optimizer, **kwargs):
     """
     Create a schedule with a constant learning rate that decreases when a metric has stopped improving.
 
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
+        kwargs (`dict`, *optional*):
+            Extra parameters to be passed to the scheduler. See `torch.optim.lr_scheduler.ReduceLROnPlateau`
+            for possible parameters.
 
     Return:
         `torch.optim.lr_scheduler.ReduceLROnPlateau` with the appropriate schedule.
     """
 
-    return ReduceLROnPlateau(optimizer)
+    return ReduceLROnPlateau(optimizer, **kwargs)
 
 
 def _get_constant_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_steps: int):
@@ -337,6 +340,7 @@ def get_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: Optional[int] = None,
     num_training_steps: Optional[int] = None,
+    scheduler_specific_kwargs: Optional[dict] = None,
 ):
     """
     Unified API to get any scheduler from its name.
@@ -352,11 +356,20 @@ def get_scheduler(
         num_training_steps (`int``, *optional*):
             The number of training steps to do. This is not required by all schedulers (hence the argument being
             optional), the function will raise an error if it's unset and the scheduler type requires it.
+        scheduler_specific_kwargs (`dict`, *optional*):
+            Extra parameters for schedulers such as cosine with restarts. Mismatched scheduler types and scheduler
+            parameters will cause the scheduler function to raise a TypeError.
     """
     name = SchedulerType(name)
     schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
-    if name == SchedulerType.CONSTANT or name == SchedulerType.REDUCE_ON_PLATEAU:
+    if name == SchedulerType.CONSTANT:
         return schedule_func(optimizer)
+
+    if scheduler_specific_kwargs is None:
+        scheduler_specific_kwargs = {}
+
+    if name == SchedulerType.REDUCE_ON_PLATEAU:
+        return schedule_func(optimizer, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
@@ -372,7 +385,12 @@ def get_scheduler(
     if num_training_steps is None:
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
-    return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+    return schedule_func(
+        optimizer,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+        **scheduler_specific_kwargs,
+    )
 
 
 class AdamW(Optimizer):
@@ -383,13 +401,13 @@ class AdamW(Optimizer):
     Parameters:
         params (`Iterable[nn.parameter.Parameter]`):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
-        lr (`float`, *optional*, defaults to 1e-3):
+        lr (`float`, *optional*, defaults to 0.001):
             The learning rate to use.
-        betas (`Tuple[float,float]`, *optional*, defaults to (0.9, 0.999)):
+        betas (`Tuple[float,float]`, *optional*, defaults to `(0.9, 0.999)`):
             Adam's betas parameters (b1, b2).
-        eps (`float`, *optional*, defaults to 1e-6):
+        eps (`float`, *optional*, defaults to 1e-06):
             Adam's epsilon for numerical stability.
-        weight_decay (`float`, *optional*, defaults to 0):
+        weight_decay (`float`, *optional*, defaults to 0.0):
             Decoupled weight decay to apply.
         correct_bias (`bool`, *optional*, defaults to `True`):
             Whether or not to correct bias in Adam (for instance, in Bert TF repository they use `False`).
@@ -504,15 +522,15 @@ class Adafactor(Optimizer):
             Iterable of parameters to optimize or dictionaries defining parameter groups.
         lr (`float`, *optional*):
             The external learning rate.
-        eps (`Tuple[float, float]`, *optional*, defaults to (1e-30, 1e-3)):
+        eps (`Tuple[float, float]`, *optional*, defaults to `(1e-30, 0.001)`):
             Regularization constants for square gradient and parameter scale respectively
-        clip_threshold (`float`, *optional*, defaults 1.0):
+        clip_threshold (`float`, *optional*, defaults to 1.0):
             Threshold of root mean square of final gradient update
         decay_rate (`float`, *optional*, defaults to -0.8):
             Coefficient used to compute running averages of square
         beta1 (`float`, *optional*):
             Coefficient used for computing running averages of gradient
-        weight_decay (`float`, *optional*, defaults to 0):
+        weight_decay (`float`, *optional*, defaults to 0.0):
             Weight decay (L2 penalty)
         scale_parameter (`bool`, *optional*, defaults to `True`):
             If True, learning rate is scaled by root mean square

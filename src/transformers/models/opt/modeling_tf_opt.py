@@ -61,17 +61,15 @@ _CAUSAL_LM_EXPECTED_OUTPUT = (
 LARGE_NEGATIVE = -1e8
 
 
-# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz = input_ids_shape[0]
     tgt_len = input_ids_shape[1]
-    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
-
-    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    # We need triu with k = 1 but TF expects known compile-time dims for that, so we hack around it
+    mask = tf.fill((tgt_len, tgt_len), tf.cast(LARGE_NEGATIVE, tf.float32))
+    mask = tf.linalg.band_part(mask, 0, -1) - tf.linalg.band_part(mask, 0, 0)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
@@ -93,7 +91,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
+class TFOPTLearnedPositionalEmbedding(tf.keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -270,6 +268,23 @@ class TFOPTAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 class TFOPTDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: OPTConfig, **kwargs):
@@ -290,6 +305,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -355,6 +371,26 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
             hidden_states = self.final_layer_norm(hidden_states)
 
         return (hidden_states, self_attn_weights, present_key_value)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 OPT_START_DOCSTRING = r"""
@@ -516,16 +552,22 @@ class TFOPTDecoder(tf.keras.layers.Layer):
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
         # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+        _, seq_length = input_shape
+        tf.debugging.assert_equal(
+            seq_length + past_key_values_length,
+            shape_list(attention_mask)[1],
+            message="Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
+            f" but is {shape_list(attention_mask)[1]} with input_ids shape {input_shape} and past length"
+            f" {past_key_values_length}.",
+        )
 
-        if attention_mask is not None:
-            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+        if seq_length > 1:
+            combined_attention_mask = (
+                _make_causal_mask(input_shape, past_key_values_length=past_key_values_length) + expanded_attn_mask
+            )
+        else:
+            combined_attention_mask = expanded_attn_mask
 
         return combined_attention_mask
 
@@ -615,17 +657,16 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
-            attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
+            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.bool)
         else:
             tf.debugging.assert_equal(
-                tf.shape(attention_mask)[1],
+                shape_list(attention_mask)[1],
                 past_key_values_length + input_shape[1],
                 message=(
-                    f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                    f"The provided attention mask has length {tf.shape(attention_mask)[1]}, but its length should be "
                     f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
                 ),
             )
-
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
@@ -693,6 +734,30 @@ class TFOPTDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "project_out", None) is not None:
+            with tf.name_scope(self.project_out.name):
+                self.project_out.build([None, None, self.config.hidden_size])
+        if getattr(self, "project_in", None) is not None:
+            with tf.name_scope(self.project_in.name):
+                self.project_in.build([None, None, self.config.word_embed_proj_dim])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFOPTMainLayer(tf.keras.layers.Layer):
@@ -753,6 +818,14 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
 
 
 @add_start_docstrings(
@@ -837,6 +910,14 @@ class TFOPTModel(TFOPTPreTrainedModel):
             hidden_states=hs,
             attentions=attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 @add_start_docstrings(
@@ -1003,3 +1084,11 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             loss=output.loss,
             logits=output.logits,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)

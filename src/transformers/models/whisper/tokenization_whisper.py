@@ -15,18 +15,15 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from functools import lru_cache
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from .english_normalizer import EnglishTextNormalizer
-
-
-if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
+from .english_normalizer import BasicTextNormalizer, EnglishTextNormalizer
 
 
 VOCAB_FILES_NAMES = {
@@ -194,6 +191,7 @@ LANGUAGES = {
     "ba": "bashkir",
     "jw": "javanese",
     "su": "sundanese",
+    "yue": "cantonese",
 }
 
 # language code lookup by name, with a few language aliases
@@ -210,6 +208,7 @@ TO_LANGUAGE_CODE = {
     "moldovan": "ro",
     "sinhalese": "si",
     "castilian": "es",
+    "mandarin": "zh",
 }
 
 TASK_IDS = ["translate", "transcribe"]
@@ -222,12 +221,12 @@ class WhisperTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
 
-     Args:
+    Args:
         vocab_file (`str`):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        normalizer_file (`str`, *optional*, defaults to `None`):
+        normalizer_file (`str`, *optional*):
             Path to the normalizer_file file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
@@ -240,6 +239,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
@@ -275,18 +276,25 @@ class WhisperTokenizer(PreTrainedTokenizer):
         predict_timestamps=False,
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, normalized=False, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
         )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -310,19 +318,30 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        self.timestamp_pat = re.compile(r"<\|(\d+\.\d+)\|>")
 
         self.language = language
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
         self.task = task
         self.predict_timestamps = predict_timestamps
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.encoder)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.encoder)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
     def bpe(self, token):
@@ -393,11 +412,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     @property
     def prefix_tokens(self) -> List[int]:
-        all_special_ids = self.all_special_ids
-        bos_token_id = all_special_ids[-106]
-        translate_token_id = all_special_ids[-6]
-        transcribe_token_id = all_special_ids[-5]
-        notimestamps_token_id = all_special_ids[-1]
+        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
+        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
+        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
         langs = tuple(LANGUAGES.keys())
 
         if self.language is not None:
@@ -496,6 +514,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
+    @staticmethod
+    def _basic_normalize(text, remove_diacritics=False):
+        """
+        Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
+        multilingual text.
+        """
+        normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
+        return normalizer(text)
+
     def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
@@ -546,9 +573,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
             if len(sliced_tokens) > 1:
                 start_timestamp_position = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_position = sliced_tokens[-1].item() - timestamp_begin
+                # strip timestamp tokens from the text output
+                sliced_tokens = self._preprocess_token_ids(sliced_tokens)
+                text = self._decode(sliced_tokens)
+                text = self._filter_timestamp_ids(text)
                 offsets.append(
                     {
-                        "text": self._decode(sliced_tokens),
+                        "text": text,
                         "timestamp": (
                             start_timestamp_position * time_precision,
                             end_timestamp_position * time_precision,
@@ -559,6 +590,38 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return offsets
 
+    @lru_cache
+    def timestamp_ids(self, time_precision=0.02):
+        """
+        Compute the timestamp token ids for a given precision and save to least-recently used (LRU) cache.
+
+        Args:
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
+        """
+        return self.convert_tokens_to_ids([("<|%.2f|>" % (i * time_precision)) for i in range(1500 + 1)])
+
+    def _preprocess_token_ids(self, token_ids, skip_special_tokens: bool = False):
+        """
+        Pre-process the token ids for decoding by removing the prompt tokens ids and timestamp token ids.
+
+        Args:
+            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Typically, obtained using the `__call__` method of the tokenizer.
+            skip_special_tokens (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove special tokens from the token ids. If `True`, the prompt token ids will be
+                removed.
+        """
+        if skip_special_tokens:
+            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
+            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+            token_ids = self._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
+
+        return token_ids
+
+    def _filter_timestamp_ids(self, token_ids):
+        return re.sub(self.timestamp_pat, "", token_ids)
+
     def decode(
         self,
         token_ids,
@@ -567,6 +630,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         output_offsets: bool = False,
         time_precision=0.02,
         decode_with_timestamps: bool = False,
+        normalize: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -583,43 +649,65 @@ class WhisperTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces (`bool`, *optional*):
                 Whether or not to clean up the tokenization spaces. If `None`, will default to
                 `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
             output_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
+            time_precision (`float`, `optional`, defaults to 0.02):
+                The time ratio to convert from token to time.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
                 Whether or not to decode with timestamps included in the raw text.
+            normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the English text normalizer to the decoded text. Only applicable when the
+                target text is in English. Otherwise, the basic text normalizer should be applied.
+            basic_normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to apply the Basic text normalizer to the decoded text. Applicable to multilingual
+                target text.
+            remove_diacritics (`bool`, *optional*, defaults to `False`):
+                Whether or not to remove diacritics when applying the Basic text normalizer. Removing diacritics may
+                destroy information in the decoded text, hence it should be used with caution.
+            kwargs (additional keyword arguments, *optional*):
+                Will be passed to the underlying model specific decode method.
         Returns:
             `str`: The decoded sentence.
         """
-        text = super().decode(
+        filtered_ids = self._preprocess_token_ids(
             token_ids,
             skip_special_tokens=skip_special_tokens,
+        )
+
+        text = super().decode(
+            filtered_ids,
+            skip_special_tokens=skip_special_tokens,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            normalize=normalize,
+            basic_normalize=basic_normalize,
+            remove_diacritics=remove_diacritics,
             **kwargs,
         )
         if decode_with_timestamps:
+            # legacy method to decode timestamps when not included in the tokenizer vocabulary
             text = self._decode_with_timestamps(
-                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+                filtered_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
             )
+        else:
+            text = self._filter_timestamp_ids(text)
+
         # retrieve offsets
         if output_offsets:
-            offsets = None
             offsets = self._compute_offsets(token_ids, time_precision=time_precision)
             return {"text": text, "offsets": offsets}
         return text
 
     def _decode(
-        self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        normalize: bool = False,
+        basic_normalize: bool = False,
+        remove_diacritics: bool = False,
+        **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        if skip_special_tokens:
-            prompt_token_id = self.convert_tokens_to_ids("<|startofprev|>")
-            decoder_start_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
-            token_ids = self._strip_prompt(token_ids, prompt_token_id, decoder_start_token_id)
-
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
@@ -644,6 +732,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if normalize:
             clean_text = self._normalize(text)
+            return clean_text
+        elif basic_normalize:
+            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
@@ -700,14 +791,19 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._build_conversation_input_ids with GPT2 -> Whisper
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+    @property
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
+    def default_chat_template(self):
+        """
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
@@ -1112,7 +1208,7 @@ def _combine_tokens_into_words(
     if language is None:
         language = "english"
 
-    if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar", "cantonese"}:
         # These languages don't typically use spaces.
         words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
     else:

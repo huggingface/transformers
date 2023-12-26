@@ -19,16 +19,40 @@ rendered properly in your Markdown viewer.
 [[open-in-colab]]
 
 Text-to-speech (TTS) is the task of creating natural-sounding speech from text, where the speech can be generated in multiple 
-languages and for multiple speakers. The only text-to-speech model currently available in 🤗 Transformers 
-is [SpeechT5](model_doc/speecht5), though more will be added in the future. SpeechT5 is pre-trained on a combination of 
+languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as 
+[Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5). 
+
+You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Bark, 
+can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
+Here's an example of how you would use the `"text-to-speech"` pipeline with Bark: 
+
+```py
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-speech", model="suno/bark-small")
+>>> text = "[clears throat] This is a test ... and I just took a long pause."
+>>> output = pipe(text)
+```
+
+Here's a code snippet you can use to listen to the resulting audio in a notebook: 
+
+```python
+>>> from IPython.display import Audio
+>>> Audio(output["audio"], rate=output["sampling_rate"])
+```
+
+For more examples on what Bark and other pretrained TTS models can do, refer to our 
+[Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models). 
+
+If you are looking to fine-tune a TTS model, you can currently fine-tune SpeechT5 only. SpeechT5 is pre-trained on a combination of 
 speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text 
 and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 
 supports multiple speakers through x-vector speaker embeddings. 
 
-This guide illustrates how to:
+The remainder of this guide illustrates how to:
 
-1. Fine-tune [SpeechT5](model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
-2. Use your fine-tuned model for inference.
+1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
+2. Use your refined model for inference in one of two ways: using a pipeline or directly.
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -48,6 +72,12 @@ To follow this guide you will need a GPU. If you're working in a notebook, run t
 
 ```bash
 !nvidia-smi
+```
+
+or alternatively for AMD GPUs:
+
+```bash
+!rocm-smi
 ```
 
 </Tip>
@@ -485,6 +515,12 @@ the `per_device_train_batch_size` incrementally by factors of 2 and increase `gr
 >>> trainer.train()
 ```
 
+To be able to use your checkpoint with a pipeline, make sure to save the processor with the checkpoint: 
+
+```py
+>>> processor.save_pretrained("YOUR_ACCOUNT_NAME/speecht5_finetuned_voxpopuli_nl")
+```
+
 Push the final model to the 🤗 Hub:
 
 ```py
@@ -493,29 +529,70 @@ Push the final model to the 🤗 Hub:
 
 ## Inference
 
+### Inference with a pipeline
+
 Great, now that you've fine-tuned a model, you can use it for inference!
-Load the model from the 🤗 Hub (make sure to use your account name in the following code snippet): 
+First, let's see how you can use it with a corresponding pipeline. Let's create a `"text-to-speech"` pipeline with your 
+checkpoint: 
+
+```py
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-speech", model="YOUR_ACCOUNT_NAME/speecht5_finetuned_voxpopuli_nl")
+```
+
+Pick a piece of text in Dutch you'd like narrated, e.g.:
+
+```py
+>>> text = "hallo allemaal, ik praat nederlands. groetjes aan iedereen!"
+```
+
+To use SpeechT5 with the pipeline, you'll need a speaker embedding. Let's get it from an example in the test dataset: 
+
+```py
+>>> example = dataset["test"][304]
+>>> speaker_embeddings = torch.tensor(example["speaker_embeddings"]).unsqueeze(0)
+```
+
+Now you can pass the text and speaker embeddings to the pipeline, and it will take care of the rest: 
+
+```py
+>>> forward_params = {"speaker_embeddings": speaker_embeddings}
+>>> output = pipe(text, forward_params=forward_params)
+>>> output
+{'audio': array([-6.82714235e-05, -4.26525949e-04,  1.06134125e-04, ...,
+        -1.22392643e-03, -7.76011671e-04,  3.29112721e-04], dtype=float32),
+ 'sampling_rate': 16000}
+```
+
+You can then listen to the result:
+
+```py
+>>> from IPython.display import Audio
+>>> Audio(output['audio'], rate=output['sampling_rate']) 
+```
+
+### Run inference manually
+
+You can achieve the same inference results without using the pipeline, however, more steps will be required. 
+
+Load the model from the 🤗 Hub: 
 
 ```py
 >>> model = SpeechT5ForTextToSpeech.from_pretrained("YOUR_ACCOUNT/speecht5_finetuned_voxpopuli_nl")
 ```
 
-Pick an example, here we'll take one from the test dataset. Obtain a speaker embedding. 
+Pick an example from the test dataset obtain a speaker embedding. 
 
 ```py 
 >>> example = dataset["test"][304]
 >>> speaker_embeddings = torch.tensor(example["speaker_embeddings"]).unsqueeze(0)
 ```
 
-Define some input text and tokenize it.
+Define the input text and tokenize it.
 
 ```py 
 >>> text = "hallo allemaal, ik praat nederlands. groetjes aan iedereen!"
-```
-
-Preprocess the input text: 
-
-```py
 >>> inputs = processor(text=text, return_tensors="pt")
 ```
 

@@ -42,7 +42,11 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
-    from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
+    from transformers.models.whisper.modeling_tf_whisper import (
+        TFWhisperDecoder,
+        TFWhisperEncoder,
+        sinusoidal_embedding_init,
+    )
 
 
 def prepare_whisper_inputs_dict(
@@ -286,7 +290,7 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            model.build()
+            model.build_in_name_scope()
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
@@ -296,6 +300,23 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_requires_grad_encoder_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            encoder = model.get_encoder()
+            self.assertFalse(encoder.embed_positions.trainable)
+
+    def test_encoder_sinusoidal_embed_positions(self):
+        config = self.model_tester.get_config()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.build_in_name_scope()
+
+            embeds = model.get_encoder().embed_positions.get_weights()[0]
+            sinusoids = sinusoidal_embedding_init(embeds.shape).numpy()
+            self.assertTrue(np.allclose(embeds, sinusoids))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

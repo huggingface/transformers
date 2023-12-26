@@ -55,12 +55,10 @@ When you load a model explicitly, you can inspect the generation configuration t
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
->>> model.generation_config  # doctest: +IGNORE_RESULT
+>>> model.generation_config
 GenerationConfig {
-    "_from_model_config": true,
     "bos_token_id": 50256,
     "eos_token_id": 50256,
-    "transformers_version": "4.26.0.dev0"
 }
 ```
 
@@ -84,7 +82,8 @@ Even if the default decoding strategy mostly works for your task, you can still 
 commonly adjusted parameters include:
 
 - `max_new_tokens`: the maximum number of tokens to generate. In other words, the size of the output sequence, not
-including the tokens in the prompt.
+including the tokens in the prompt. As an alternative to using the output's length as a stopping criteria, you can choose
+to stop generation whenever the full generation exceeds some amount of time. To learn more, check [`StoppingCriteria`].
 - `num_beams`: by specifying a number of beams higher than 1, you are effectively switching from greedy search to
 beam search. This strategy evaluates several hypotheses at each time step and eventually chooses the hypothesis that
 has the overall highest probability for the entire sequence. This has the advantage of identifying high-probability
@@ -340,13 +339,16 @@ This guide illustrates the main parameters that enable various decoding strategi
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
 For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
 
-### Assisted Decoding
+### Speculative Decoding
 
-Assisted decoding is a modification of the decoding strategies above that uses an assistant model with the same
-tokenizer (ideally a much smaller model) to greedily generate a few candidate tokens. The main model then validates
-the candidate tokens in a single forward pass, which speeds up the decoding process. Currently, only greedy search
-and sampling are supported with assisted decoding, and doesn't support batched inputs. To learn more about assisted
-decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
+Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
+assistant model (ideally a much smaller one) with the same tokenizer, to generate a few candidate tokens. The main
+model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
+`do_sample=True`, then the token validation with resampling introduced in the
+[speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+
+Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
+To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
 
 To enable assisted decoding, set the `assistant_model` argument with a model.
 
@@ -367,8 +369,8 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
-When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness
-just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
+When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
+just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed

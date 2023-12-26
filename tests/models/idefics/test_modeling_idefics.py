@@ -16,11 +16,14 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -71,11 +74,10 @@ class IdeficsModelTester:
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
+        alpha_initializer="ones",
         num_labels=3,
         scope=None,
         modality_type_vocab_size=2,
-        add_multiple_images=False,
-        num_images=-1,
         vision_embed_dim=32,
         vision_patch_size=2,
         vision_image_size=30,
@@ -110,11 +112,10 @@ class IdeficsModelTester:
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
+        self.alpha_initializer = alpha_initializer
         self.num_labels = num_labels
         self.scope = scope
         self.modality_type_vocab_size = modality_type_vocab_size
-        self.add_multiple_images = add_multiple_images
-        self.num_images = num_images
 
         self.vision_embed_dim = vision_embed_dim
         self.vision_patch_size = vision_patch_size
@@ -150,14 +151,17 @@ class IdeficsModelTester:
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
-    def prepare_config_and_inputs(self):
-        self.seq_length = 42
-
+    def prepare_config_and_inputs(self, num_images=1, interpolate_pos_encoding=False, image_expansion=0):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        num_images = 2 if self.add_multiple_images else 1
         pixel_values = floats_tensor(
-            [self.batch_size, num_images, self.num_channels, self.image_size, self.image_size]
+            [
+                self.batch_size,
+                num_images,
+                self.num_channels,
+                self.image_size + image_expansion,
+                self.image_size + image_expansion,
+            ]
         )
         input_mask = None
         if self.use_input_mask:
@@ -166,8 +170,58 @@ class IdeficsModelTester:
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
 
         config = self.get_config()
+        return (config, input_ids, input_mask, pixel_values, image_attention_mask, interpolate_pos_encoding)
 
-        return (config, input_ids, input_mask, pixel_values, image_attention_mask)
+    def prepare_config_and_inputs_gate_tests(self):
+        # Create a list of configs and inputs, to test 2 things:
+        # 1. For the same image, the output should be different when image_attention_mask is filled with 0s vs filled with 1s.
+        # 2. For 2 different images, the output should be the same when image_attention_mask is filled with 0s.
+
+        interpolate_pos_encoding = False
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        pixel_values = floats_tensor(
+            [
+                self.batch_size,
+                1,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
+        )
+        pixel_values_list = [
+            pixel_values.clone(),
+            pixel_values.clone(),
+            pixel_values.clone().fill_(0.6),
+            pixel_values.clone().fill_(0.3),
+        ]
+        attention_mask = None
+        if self.use_input_mask:
+            attention_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, 1])
+        image_attention_mask_list = [
+            image_attention_mask.clone().fill_(0),
+            image_attention_mask.clone().fill_(1),
+            image_attention_mask.clone().fill_(0),
+            image_attention_mask.clone().fill_(0),
+        ]
+
+        config = self.get_config()
+        inputs_list = []
+        for pixel_values, image_attention_mask in zip(pixel_values_list, image_attention_mask_list):
+            inputs_list.append(
+                {
+                    "input_ids": input_ids,
+                    "attention_mask": attention_mask,
+                    "pixel_values": pixel_values,
+                    "image_attention_mask": image_attention_mask,
+                    "interpolate_pos_encoding": interpolate_pos_encoding,
+                }
+            )
+
+        inputs_w_same_img = inputs_list[:2]
+        inputs_w_0_img_attn = inputs_list[2:]
+        return config, inputs_w_same_img, inputs_w_0_img_attn
 
     def get_config(self):
         return IdeficsConfig(
@@ -186,9 +240,9 @@ class IdeficsModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            alpha_initializer=self.alpha_initializer,
             num_labels=self.num_labels,
             modality_type_vocab_size=self.modality_type_vocab_size,
-            num_images=self.num_images,
             vision_config=self.vision_config,
         )
 
@@ -199,15 +253,41 @@ class IdeficsModelTester:
         input_mask,
         pixel_values,
         image_attention_mask,
+        interpolate_pos_encoding,
     ):
         model = IdeficsModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, attention_mask=input_mask, pixel_values=pixel_values, image_attention_mask=image_attention_mask
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
         )
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
+        )
+
+    def create_and_check_model_gen(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        pixel_values,
+        image_attention_mask,
+        interpolate_pos_encoding,
+    ):
+        model = IdeficsForVisionText2Text(config)
+        model.to(torch_device)
+        model.eval()
+        model.generate(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            max_length=self.seq_length + 2,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -218,24 +298,32 @@ class IdeficsModelTester:
             input_mask,
             pixel_values,
             image_attention_mask,
+            interpolate_pos_encoding,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
             "pixel_values": pixel_values,
             "image_attention_mask": image_attention_mask,
+            "interpolate_pos_encoding": interpolate_pos_encoding,
         }
         return config, inputs_dict
 
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {}
+    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -268,9 +356,69 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+    def test_model_single_image(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=False, image_expansion=0
+        )
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=False, image_expansion=0
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_image_pos_embeddings_interpolation_single_image(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=0
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_image_pos_embeddings_interpolation_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=0
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_generate_with_image_pos_embeddings_interpolation_single_image(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=1, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
+
+    def test_generate_with_image_pos_embeddings_interpolation_multiple_images(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_images=2, interpolate_pos_encoding=True, image_expansion=2
+        )
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
+
+    def test_cross_attention_gates(self):
+        config, inputs_w_same_img, inputs_w_0_img_attn = self.model_tester.prepare_config_and_inputs_gate_tests()
+
+        model = IdeficsModel(config=config).to(torch_device)
+        model.eval()
+        test_1_results = []
+        for inputs in inputs_w_same_img:
+            with torch.no_grad():
+                last_hidden_states = model(**inputs).last_hidden_state
+            last_hidden_states = model(**inputs).last_hidden_state
+            test_1_results.append(last_hidden_states)
+        self.assertNotEqual(test_1_results[0].sum().item(), test_1_results[1].sum().item())
+
+        test_2_results = []
+        for inputs in inputs_w_0_img_attn:
+            with torch.no_grad():
+                last_hidden_states = model(**inputs).last_hidden_state
+            test_2_results.append(last_hidden_states)
+        self.assertEqual(test_2_results[0].sum().item(), test_2_results[1].sum().item())
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -289,8 +437,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            for k, v in inputs.items():
-                print(k, v.shape)
             loss = model(**inputs).loss
             loss.backward()
 
@@ -315,6 +461,18 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
 
     @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
     def test_retain_grad_hidden_states_attentions(self):
@@ -408,6 +566,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model = IdeficsModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
@@ -416,7 +580,8 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
-            self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2
+            self,
+            modality_type_vocab_size=3,
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
@@ -432,6 +597,18 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
@@ -439,7 +616,11 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 class IdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b") if is_vision_available() else None
+        return (
+            IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b", revision="refs/pr/11")
+            if is_vision_available()
+            else None
+        )
 
     @require_bitsandbytes
     @slow

@@ -119,6 +119,7 @@ class IdeficsProcessor(ProcessorMixin):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
@@ -280,7 +281,7 @@ class IdeficsProcessor(ProcessorMixin):
             else:
                 return fake_token + image_token + fake_token
 
-        all_texts = []
+        all_prompts = []
         all_images = []
         for sample in prompts:
             # the model was trained on samples starting with <s>
@@ -321,16 +322,17 @@ class IdeficsProcessor(ProcessorMixin):
 
             image_objects = self.image_processor(image_objects, transform=transform)
 
-            text_encoding = self.tokenizer(
-                text=full_text,
-                add_special_tokens=False,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-            )
-
-            all_texts.append(text_encoding["input_ids"])
+            all_prompts.append(full_text)
             all_images.append(image_objects)
+
+        text_encoding = self.tokenizer(
+            text=all_prompts,
+            add_special_tokens=False,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+        )
+        all_texts = text_encoding["input_ids"]
 
         max_seq_len = max(len(x) for x in all_texts)
 

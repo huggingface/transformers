@@ -60,7 +60,7 @@
     - local: tasks/image_classification
       title: Image classification
     - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+      title: Image segmentation
     - local: tasks/video_classification
       title: Video classification
     - local: tasks/object_detection
@@ -71,6 +71,10 @@
       title: Zero-shot image classification
     - local: tasks/monocular_depth_estimation
       title: Depth estimation
+    - local: tasks/image_to_image
+      title: Image-to-Image
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
   - isExpanded: false
     sections:
@@ -88,6 +92,13 @@
     - local: generation_strategies
       title: Customize the generation strategy
     title: Generation
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
+    title: Prompting
   title: Task Guides
 - sections:
   - local: fast_tokenizers
@@ -98,6 +109,10 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
+  - local: chat_templating
+    title: Templates for chat models
+  - local: trainer
+    title: Trainer
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization
@@ -120,21 +135,23 @@
 - sections:
   - local: performance
     title: Overview
+  - local: quantization
+    title: Quantization
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: Multiple GPUs and parallelism
+    - local: fsdp
+      title: Fully Sharded Data Parallel
     - local: perf_train_cpu
       title: Efficient training on CPU
     - local: perf_train_cpu_many
       title: Distributed CPU training
-    - local: perf_train_tpu
-      title: Training on TPUs
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: PyTorch training on Apple silicon
     - local: perf_hardware
       title: Custom hardware for training
     - local: hpo_train
@@ -142,18 +159,14 @@
     title: Efficient training techniques
   - sections:
     - local: perf_infer_cpu
-      title: Inference on CPU
+      title: CPU inference
     - local: perf_infer_gpu_one
-      title: Inference on one GPU
-    - local: perf_infer_gpu_many
-      title: Inference on many GPUs
-    - local: perf_infer_special
-      title: Inference on Specialized Hardware
+      title: GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiating a big model
   - local: debugging
-    title: Troubleshooting
+    title: Debugging
   - local: tf_xla
     title: XLA Integration for TensorFlow Models
   - local: perf_torch_compile
@@ -198,6 +211,8 @@
     title: Pipelines for webserver inference
   - local: model_memory_anatomy
     title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
@@ -205,6 +220,8 @@
       title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
+    - local: main_classes/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -313,6 +330,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -325,6 +344,8 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -363,6 +384,8 @@
         title: LUKE
       - local: model_doc/m2m_100
         title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
@@ -375,6 +398,10 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
+      - local: model_doc/mixtral
+        title: Mixtral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
@@ -405,6 +432,10 @@
         title: Pegasus
       - local: model_doc/pegasus_x
         title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
+      - local: model_doc/phi
+        title: Phi
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -495,7 +526,7 @@
       - local: model_doc/dinat
         title: DiNAT
       - local: model_doc/dinov2
-        title: DINO V2
+        title: DINOV2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -562,6 +593,8 @@
         title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
       - local: model_doc/vivit
@@ -589,6 +622,10 @@
         title: MusicGen
       - local: model_doc/pop2piano
         title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -603,6 +640,8 @@
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -632,12 +671,16 @@
         title: BLIP-2
       - local: model_doc/bridgetower
         title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
       - local: model_doc/clipseg
         title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
@@ -654,6 +697,8 @@
         title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
       - local: model_doc/layoutlm
         title: LayoutLM
       - local: model_doc/layoutlmv2
@@ -664,16 +709,22 @@
         title: LayoutXLM
       - local: model_doc/lilt
         title: LiLT
+      - local: model_doc/llava
+        title: Llava
       - local: model_doc/lxmert
         title: LXMERT
       - local: model_doc/matcha
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/nougat
+        title: Nougat
       - local: model_doc/oneformer
         title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/pix2struct
@@ -688,8 +739,12 @@
         title: TrOCR
       - local: model_doc/tvlt
         title: TVLT
+      - local: model_doc/tvp
+        title: TVP
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder
@@ -712,6 +767,10 @@
         title: Autoformer
       - local: model_doc/informer
         title: Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models

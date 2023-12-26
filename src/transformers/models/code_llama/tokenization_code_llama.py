@@ -17,7 +17,7 @@
 """Tokenization classes for Code LLaMA."""
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
@@ -25,9 +25,6 @@ from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging, requires_backends
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -71,6 +68,11 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
 
@@ -81,23 +83,18 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             </Tip>
 
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
         prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
             Prefix token used for infilling.
-        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
-            Suffix token used for infilling.
         middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
             Middle token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
         eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
             End of text token used for infilling.
         fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
             The token used to split the input between the prefix and suffix.
-        suffix_first (`bool`, *optional*, default to `False`):
+        suffix_first (`bool`, *optional*, defaults to `False`):
             Whether the input prompt and suffix should be formatted with the suffix first.
-        additional_special_tokens (`List[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -113,6 +110,14 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        add_bos_token (`bool`, *optional*, defaults to `True`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        add_eos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add an end of sequence token at the end of sequences.
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to clean up the tokenization spaces.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not the default system prompt for Llama should be used.
     """
@@ -144,15 +149,26 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     ):
         requires_backends(self, "protobuf")
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
 
         self.use_default_system_prompt = use_default_system_prompt
         # mark tokens special to skip them
         additional_special_tokens = additional_special_tokens or []
         for token in [prefix_token, middle_token, suffix_token, eot_token]:
             additional_special_tokens += [token] if token is not None else []
+
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self._prefix_token = prefix_token
+        self._middle_token = middle_token
+        self._suffix_token = suffix_token
+        self._eot_token = eot_token
+        self.fill_token = fill_token
+        self.suffix_first = suffix_first
+        self.sp_model = self.get_spm_processor()
 
         super().__init__(
             bos_token=bos_token,
@@ -172,16 +188,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self._prefix_token = prefix_token
-        self._middle_token = middle_token
-        self._suffix_token = suffix_token
-        self._eot_token = eot_token
-        self.fill_token = fill_token
-        self.suffix_first = suffix_first
-        self.sp_model = self.get_spm_processor()
 
     @property
     def unk_token_length(self):
@@ -295,6 +301,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         tokens = self.sp_model.encode(text, out_type=str)
+        if not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
@@ -441,70 +449,66 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        r"""Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
-        ... )  # doctest: +IGNORE_RESULT
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
+    @property
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
+    def default_chat_template(self):
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
+        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
+        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
+        rather than needing special tokens. The system message is partly 'embedded' in the first user message, which
+        results in an unusual token ordering when it is present. This template should definitely be changed if you wish
+        to fine-tune a model with more flexible role ordering!
 
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
+        The output should look something like:
 
-        dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
+        <bos>[INST] B_SYS SystemPrompt E_SYS Prompt [/INST] Answer <eos><bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
+
+        The reference for this chat template is [this code
+        snippet](https://github.com/facebookresearch/llama/blob/556949fdfb72da27c2f4a40b7f0e4cf0b8153a28/llama/generation.py#L320-L362)
+        in the original repository.
+        """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
         )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+        template = (
+            "{% if messages[0]['role'] == 'system' %}"
+            "{% set loop_messages = messages[1:] %}"  # Extract system message if it's present
+            "{% set system_message = messages[0]['content'] %}"
+            "{% elif USE_DEFAULT_PROMPT == true and not '<<SYS>>' in messages[0]['content'] %}"
+            "{% set loop_messages = messages %}"  # Or use the default system message if the flag is set
+            "{% set system_message = 'DEFAULT_SYSTEM_MESSAGE' %}"
+            "{% else %}"
+            "{% set loop_messages = messages %}"
+            "{% set system_message = false %}"
+            "{% endif %}"
+            "{% for message in loop_messages %}"  # Loop over all non-system messages
+            "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
+            "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
+            "{% endif %}"
+            "{% if loop.index0 == 0 and system_message != false %}"  # Embed system message in first message
+            "{% set content = '<<SYS>>\\n' + system_message + '\\n<</SYS>>\\n\\n' + message['content'] %}"
+            "{% else %}"
+            "{% set content = message['content'] %}"
+            "{% endif %}"
+            "{% if message['role'] == 'user' %}"  # After all of that, handle messages/roles in a fairly normal way
+            "{{ bos_token + '[INST] ' + content.strip() + ' [/INST]' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<<SYS>>\\n' + content.strip() + '\\n<</SYS>>\\n\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ ' '  + content.strip() + ' ' + eos_token }}"
+            "{% endif %}"
+            "{% endfor %}"
         )
-        return dialog_tokens
+        template = template.replace("USE_DEFAULT_PROMPT", "true" if self.use_default_system_prompt else "false")
+        default_message = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+        template = template.replace("DEFAULT_SYSTEM_MESSAGE", default_message)
+
+        return template
 
     def __getstate__(self):
         state = self.__dict__.copy()

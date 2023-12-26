@@ -9,8 +9,8 @@ modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
 	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
-		black $(modified_py_files); \
-		ruff $(modified_py_files) --fix; \
+		ruff check $(modified_py_files) --fix; \
+		ruff format $(modified_py_files);\
 	else \
 		echo "No library .py files were modified"; \
 	fi
@@ -43,15 +43,16 @@ repo-consistency:
 	python utils/check_doctest_list.py
 	python utils/update_metadata.py --check-only
 	python utils/check_task_guides.py
+	python utils/check_docstrings.py
+	python utils/check_support_list.py
 
 # this target runs checks on all files
 
 quality:
-	black --check $(check_dirs) setup.py conftest.py
+	ruff check $(check_dirs) setup.py conftest.py
+	ruff format --check $(check_dirs) setup.py conftest.py
 	python utils/custom_init_isort.py --check_only
 	python utils/sort_auto_mappings.py --check_only
-	ruff $(check_dirs) setup.py conftest.py
-	doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
 	python utils/check_doc_toc.py
 
 # Format source code automatically and check is there are any problems left that need manual fixing
@@ -59,14 +60,13 @@ quality:
 extra_style_checks:
 	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-	doc-builder style src/transformers docs/source --max_len 119 --path_to_docs docs/source
 	python utils/check_doc_toc.py --fix_and_overwrite
 
 # this target runs checks on all files and potentially modifies some of them
 
 style:
-	black $(check_dirs) setup.py conftest.py
-	ruff $(check_dirs) setup.py conftest.py --fix
+	ruff check $(check_dirs) setup.py conftest.py --fix
+	ruff format $(check_dirs) setup.py conftest.py
 	${MAKE} autogenerate_code
 	${MAKE} extra_style_checks
 
@@ -82,6 +82,7 @@ fix-copies:
 	python utils/check_dummies.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_task_guides.py --fix_and_overwrite
+	python utils/check_docstrings.py --fix_and_overwrite
 
 # Run tests for the library
 

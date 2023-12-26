@@ -17,7 +17,7 @@ import unittest
 from transformers import (
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
     TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
-    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
     is_vision_available,
 )
 from transformers.pipelines import ImageClassificationPipeline, pipeline
@@ -72,7 +72,9 @@ class ImageClassificationPipelineTests(unittest.TestCase):
 
         import datasets
 
-        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", split="test", revision="refs/pr/1")
 
         # Accepts URL + PIL.Image + lists
         outputs = image_classifier(
@@ -80,11 +82,11 @@ class ImageClassificationPipelineTests(unittest.TestCase):
                 Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "http://images.cocodataset.org/val2017/000000039769.jpg",
                 # RGBA
-                dataset[0]["file"],
+                dataset[0]["image"],
                 # LA
-                dataset[1]["file"],
+                dataset[1]["image"],
                 # L
-                dataset[2]["file"],
+                dataset[2]["image"],
             ]
         )
         self.assertEqual(
@@ -166,7 +168,7 @@ class ImageClassificationPipelineTests(unittest.TestCase):
         )
 
     def test_custom_tokenizer(self):
-        tokenizer = PreTrainedTokenizer()
+        tokenizer = PreTrainedTokenizerBase()
 
         # Assert that the pipeline can be initialized with a feature extractor that is not in any mapping
         image_classifier = pipeline(

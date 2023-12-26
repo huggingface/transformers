@@ -25,10 +25,6 @@ The abstract from the paper is the following:
 
 *Can Transformer perform 2D object- and region-level recognition from a pure sequence-to-sequence perspective with minimal knowledge about the 2D spatial structure? To answer this question, we present You Only Look at One Sequence (YOLOS), a series of object detection models based on the vanilla Vision Transformer with the fewest possible modifications, region priors, as well as inductive biases of the target task. We find that YOLOS pre-trained on the mid-sized ImageNet-1k dataset only can already achieve quite competitive performance on the challenging COCO object detection benchmark, e.g., YOLOS-Base directly adopted from BERT-Base architecture can obtain 42.0 box AP on COCO val. We also discuss the impacts as well as limitations of current pre-train schemes and model scaling strategies for Transformer in vision through YOLOS.*
 
-Tips:
-
-- One can use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](detr), YOLOS doesn't require a `pixel_mask` to be created.
-
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/yolos_architecture.png"
 alt="drawing" width="600"/>
 
@@ -46,6 +42,12 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - See also: [Object detection task guide](../tasks/object_detection)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<Tip>
+
+Use [`YolosImageProcessor`] for preparing images (and optional targets) for the model. Contrary to [DETR](detr), YOLOS doesn't require a `pixel_mask` to be created.
+
+</Tip>
 
 ## YolosConfig
 
@@ -65,12 +67,10 @@ If you're interested in submitting a resource to be included here, please feel f
     - pad
     - post_process_object_detection
 
-
 ## YolosModel
 
 [[autodoc]] YolosModel
     - forward
-
 
 ## YolosForObjectDetection
 

@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 import pytest
-from datasets import load_dataset
+from datasets import Audio, load_dataset
 from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers import (
@@ -39,9 +39,10 @@ from transformers.testing_utils import (
     require_pyctcdecode,
     require_tf,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
     slow,
+    torch_device,
 )
 
 from .test_pipelines_common import ANY
@@ -166,13 +167,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
     @slow
-    @require_torch
+    @require_torch_accelerator
     def test_whisper_fp16(self):
-        if not torch.cuda.is_available():
-            self.skipTest("Cuda is necessary for this test")
         speech_recognizer = pipeline(
             model="openai/whisper-base",
-            device=0,
+            device=torch_device,
             torch_dtype=torch.float16,
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
@@ -299,7 +298,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @slow
     @require_torch
+    @slow
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
@@ -318,28 +319,28 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             res,
             {
                 "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
+                "chunks": [{"timestamp": (0.0, 3.36), "text": " Conquered returned to its place amidst the tents."}],
             },
         )
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
+
         # fmt: off
-        # Note that the word-level timestamps predicted here are pretty bad.
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [
-                    {'text': ' Conquered', 'timestamp': (29.78, 29.9)},
-                    {'text': ' returned', 'timestamp': (29.9, 29.9)},
-                    {'text': ' to', 'timestamp': (29.9, 29.9)},
-                    {'text': ' its', 'timestamp': (29.9, 29.9)},
-                    {'text': ' place', 'timestamp': (29.9, 29.9)},
-                    {'text': ' amidst', 'timestamp': (29.9, 29.9)},
-                    {'text': ' the', 'timestamp': (29.9, 29.9)},
-                    {'text': ' tents.', 'timestamp': (29.9, 29.9)}
-                ]
-            }
+                'text': ' Conquered returned to its place amidst the tents.',
+                'chunks': [
+                    {'text': ' Conquered', 'timestamp': (0.5, 1.2)},
+                    {'text': ' returned', 'timestamp': (1.2, 1.64)},
+                    {'text': ' to', 'timestamp': (1.64, 1.84)},
+                    {'text': ' its', 'timestamp': (1.84, 2.02)},
+                    {'text': ' place', 'timestamp': (2.02, 2.28)},
+                    {'text': ' amidst', 'timestamp': (2.28, 2.8)},
+                    {'text': ' the', 'timestamp': (2.8, 2.98)},
+                    {'text': ' tents.', 'timestamp': (2.98, 3.48)},
+                ],
+            },
         )
         # fmt: on
 
@@ -516,9 +517,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
 
         # Merge when the previous sequence is not included in the current sequence
-        # fmt: off
-        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]
-        # fmt: on
+        next_sequences_3 = [[50364, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50584, 50257]]  # fmt: skip
         # {'text': ' His instant panic was followed by a small, sharp blow high on his chest.','timestamp': (0.0, 9.4)}
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 120_000, 0)]],
@@ -526,12 +525,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51832],
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
@@ -549,23 +546,19 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
         # last case is when the sequence is not in the first next predicted start and end of timestamp
-        # fmt: off
         next_sequences_3 = [
             [50364, 2812, 9836, 14783, 390, 406, 3163, 1953, 466, 13, 50634, 50634, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 50934]
-        ]
-        # fmt: on
+        ]  # fmt: skip
         merge = _find_timestamp_sequence(
             [[previous_sequence, (480_000, 0, 0)], [next_sequences_3, (480_000, 167_000, 0)]],
             processor.tokenizer,
             processor.feature_extractor,
             max_source_positions,
         )
-        # fmt: off
         self.assertEqual(
             merge,
             [51492, 406, 3163, 1953, 466, 13, 51612, 51612, 2812, 9836, 14783, 390, 6263, 538, 257, 1359, 11, 8199, 6327, 1090, 322, 702, 7443, 13, 51912]
-        )
-        # fmt: on
+        )  # fmt: skip
         self.assertEqual(
             processor.decode(merge, output_offsets=True),
             {
@@ -681,6 +674,50 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
 
+    @slow
+    @require_torch
+    def test_whisper_word_timestamps_batched(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=3,
+            return_timestamps="word",
+        )
+        data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = data[0]["audio"]
+
+        # not the same output as test_simple_whisper_asr because of chunking
+        EXPECTED_OUTPUT = {
+            "text": " Mr. Quilder is the apostle of the middle classes and we are glad to welcome his gospel.",
+            "chunks": [
+                {"text": " Mr.", "timestamp": (0.48, 0.96)},
+                {"text": " Quilder", "timestamp": (0.96, 1.24)},
+                {"text": " is", "timestamp": (1.24, 1.5)},
+                {"text": " the", "timestamp": (1.5, 1.72)},
+                {"text": " apostle", "timestamp": (1.72, 1.98)},
+                {"text": " of", "timestamp": (1.98, 2.32)},
+                {"text": " the", "timestamp": (2.32, 2.5)},
+                {"text": " middle", "timestamp": (2.5, 2.68)},
+                {"text": " classes", "timestamp": (2.68, 3.2)},
+                {"text": " and", "timestamp": (3.2, 3.56)},
+                {"text": " we", "timestamp": (3.56, 3.68)},
+                {"text": " are", "timestamp": (3.68, 3.8)},
+                {"text": " glad", "timestamp": (3.8, 4.1)},
+                {"text": " to", "timestamp": (4.1, 4.34)},
+                {"text": " welcome", "timestamp": (4.3, 4.6)},
+                {"text": " his", "timestamp": (4.6, 4.94)},
+                {"text": " gospel.", "timestamp": (4.94, 5.82)},
+            ],
+        }
+
+        # batch size 1: copy the audio sample since pipeline consumes it
+        output = pipe(sample.copy(), batch_size=1)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
+        # batch size 2: input audio is chunked into smaller pieces so it's testing batching
+        output = pipe(sample, batch_size=2)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):
@@ -783,27 +820,27 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             output,
             {
-                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
-                "chunks": [
-                    {'text': ' Mr.', 'timestamp': (0.0, 1.02)},
-                    {'text': ' Quilter', 'timestamp': (1.02, 1.18)},
+                'text': ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.',
+                'chunks': [
+                    {'text': ' Mr.', 'timestamp': (0.38, 1.04)},
+                    {'text': ' Quilter', 'timestamp': (1.04, 1.18)},
                     {'text': ' is', 'timestamp': (1.18, 1.44)},
                     {'text': ' the', 'timestamp': (1.44, 1.58)},
                     {'text': ' apostle', 'timestamp': (1.58, 1.98)},
-                    {'text': ' of', 'timestamp': (1.98, 2.3)},
-                    {'text': ' the', 'timestamp': (2.3, 2.46)},
+                    {'text': ' of', 'timestamp': (1.98, 2.32)},
+                    {'text': ' the', 'timestamp': (2.32, 2.46)},
                     {'text': ' middle', 'timestamp': (2.46, 2.56)},
-                    {'text': ' classes,', 'timestamp': (2.56, 3.38)},
-                    {'text': ' and', 'timestamp': (3.38, 3.52)},
-                    {'text': ' we', 'timestamp': (3.52, 3.6)},
-                    {'text': ' are', 'timestamp': (3.6, 3.72)},
+                    {'text': ' classes,', 'timestamp': (2.56, 3.4)},
+                    {'text': ' and', 'timestamp': (3.4, 3.54)},
+                    {'text': ' we', 'timestamp': (3.54, 3.62)},
+                    {'text': ' are', 'timestamp': (3.62, 3.72)},
                     {'text': ' glad', 'timestamp': (3.72, 4.0)},
                     {'text': ' to', 'timestamp': (4.0, 4.26)},
-                    {'text': ' welcome', 'timestamp': (4.26, 4.54)},
-                    {'text': ' his', 'timestamp': (4.54, 4.92)},
-                    {'text': ' gospel.', 'timestamp': (4.92, 6.66)},
-                ],
-            },
+                    {'text': ' welcome', 'timestamp': (4.26, 4.56)},
+                    {'text': ' his', 'timestamp': (4.56, 4.92)},
+                    {'text': ' gospel.', 'timestamp': (4.92, 5.84)}
+                ]
+            }
         )
         # fmt: on
 
@@ -850,6 +887,44 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         output_3 = speech_translator(filename)
         self.assertEqual(output_3, {"text": " Un uomo ha detto all'universo, Sir, esiste."})
+
+    @slow
+    @require_torch
+    def test_whisper_language(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny.en",
+            framework="pt",
+        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        filename = ds[0]["file"]
+
+        # 1. English-only model compatible with no language argument
+        output = speech_recognizer(filename)
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."},
+        )
+
+        # 2. English-only Whisper does not accept the language argument
+        with self.assertRaisesRegex(
+            ValueError,
+            "Cannot specify `task` or `language` for an English-only model. If the model is intended to be multilingual, "
+            "pass `is_multilingual=True` to generate, or update the generation config.",
+        ):
+            _ = speech_recognizer(filename, generate_kwargs={"language": "en"})
+
+        # 3. Multilingual model accepts language argument
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            framework="pt",
+        )
+        output = speech_recognizer(filename, generate_kwargs={"language": "en"})
+        self.assertEqual(
+            output,
+            {"text": " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel."},
+        )
 
     @slow
     @require_torch
@@ -900,6 +975,26 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
+
+    @slow
+    @require_torch_accelerator
+    def test_wav2vec2_conformer_float16(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="facebook/wav2vec2-conformer-rope-large-960h-ft",
+            device=torch_device,
+            torch_dtype=torch.float16,
+            framework="pt",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        output = speech_recognizer(sample)
+        self.assertEqual(
+            output,
+            {"text": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"},
+        )
 
     @require_torch
     def test_chunking_fast(self):
@@ -1038,6 +1133,51 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     @slow
+    def test_whisper_longform(self):
+        # fmt: off
+        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out of fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!"""
+        # fmt: on
+
+        processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to("cuda")
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            device="cuda:0",
+        )
+
+        ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
+        ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+        audio = ds[:1]["audio"]
+
+        result = pipe(audio)[0]["text"]
+
+        assert result == EXPECTED_RESULT
+
+    @require_torch
+    @slow
+    def test_seamless_v2(self):
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="facebook/seamless-m4t-v2-large",
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        result = pipe(sample, generate_kwargs={"tgt_lang": "eng"})
+        EXPECTED_RESULT = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+
+        assert result["text"] == EXPECTED_RESULT
+
+    @require_torch
+    @slow
     def test_chunking_and_timestamps(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer = AutoTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
@@ -1150,7 +1290,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
         with self.assertRaisesRegex(
             ValueError,
-            "^CTC can either predict character level timestamps, or word level timestamps."
+            "^CTC can either predict character level timestamps, or word level timestamps. "
             "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
         ):
             _ = speech_recognizer(audio, return_timestamps=True)
@@ -1282,14 +1422,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, {"text": "XB"})
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_slow_unfinished_sequence(self):
         from transformers import GenerationConfig
 
         pipe = pipeline(
             "automatic-speech-recognition",
             model="vasista22/whisper-hindi-large-v2",
-            device="cuda:0",
+            device=torch_device,
         )
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
@@ -1304,7 +1444,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             out,
             {
                 "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.0)},
+                    {"text": "", "timestamp": (18.94, 0.02)},
                     {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
                 ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",

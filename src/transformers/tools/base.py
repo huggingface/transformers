@@ -226,7 +226,7 @@ class Tool:
         resolved_config_file = cached_file(
             repo_id,
             TOOL_CONFIG_FILE,
-            use_auth_token=token,
+            token=token,
             **hub_kwargs,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
@@ -236,7 +236,7 @@ class Tool:
             resolved_config_file = cached_file(
                 repo_id,
                 CONFIG_NAME,
-                use_auth_token=token,
+                token=token,
                 **hub_kwargs,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
@@ -259,7 +259,7 @@ class Tool:
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
@@ -348,7 +348,7 @@ class RemoteTool(Tool):
     A [`Tool`] that will make requests to an inference endpoint.
 
     Args:
-        endpoint_url (`str`):
+        endpoint_url (`str`, *optional*):
             The url of the endpoint to use.
         token (`str`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
@@ -599,6 +599,10 @@ def launch_gradio_demo(tool_class: Tool):
 
 # TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
 def get_default_device():
+    logger.warning(
+        "`get_default_device` is deprecated and will be replaced with `accelerate`'s `PartialState().default_device` "
+        "in version 4.38 of 🤗 Transformers. "
+    )
     if not is_torch_available():
         raise ImportError("Please install torch in order to use this tool.")
 

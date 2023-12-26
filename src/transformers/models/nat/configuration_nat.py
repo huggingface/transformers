@@ -44,9 +44,9 @@ class NatConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 64):
             Dimensionality of patch embedding.
-        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
+        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 5]`):
             Number of layers in each level of the encoder.
-        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
+        num_heads (`List[int]`, *optional*, defaults to `[2, 4, 8, 16]`):
             Number of attention heads in each layer of the Transformer encoder.
         kernel_size (`int`, *optional*, defaults to 7):
             Neighborhood Attention kernel size.
@@ -65,18 +65,20 @@ class NatConfig(BackboneConfigMixin, PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         layer_scale_init_value (`float`, *optional*, defaults to 0.0):
             The initial value for the layer scale. Disabled if <=0.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
 
@@ -92,6 +94,7 @@ class NatConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "nat"
 
     attribute_map = {

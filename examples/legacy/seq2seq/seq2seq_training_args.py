@@ -31,7 +31,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
         label_smoothing (:obj:`float`, `optional`, defaults to 0):
             The label smoothing epsilon to apply (if not zero).
         sortish_sampler (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to SortishSamler or not. It sorts the inputs according to lenghts in-order to minimizing the padding size.
+            Whether to SortishSamler or not. It sorts the inputs according to lengths in-order to minimizing the padding size.
         predict_with_generate (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use generate to calculate generative metrics (ROUGE, BLEU).
     """

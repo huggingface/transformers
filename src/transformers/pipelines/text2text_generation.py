@@ -39,8 +39,10 @@ class Text2TextGenerationPipeline(Pipeline):
     [{'generated_text': 'question: Who created the RuPERTa-base?'}]
     ```
 
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
-
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This Text2TextGenerationPipeline pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"text2text-generation"`.
@@ -181,9 +183,11 @@ class Text2TextGenerationPipeline(Pipeline):
         elif self.framework == "tf":
             in_b, input_length = tf.shape(model_inputs["input_ids"]).numpy()
 
-        generate_kwargs["min_length"] = generate_kwargs.get("min_length", self.model.config.min_length)
-        generate_kwargs["max_length"] = generate_kwargs.get("max_length", self.model.config.max_length)
-        self.check_inputs(input_length, generate_kwargs["min_length"], generate_kwargs["max_length"])
+        self.check_inputs(
+            input_length,
+            generate_kwargs.get("min_length", self.model.config.min_length),
+            generate_kwargs.get("max_length", self.model.config.max_length),
+        )
         output_ids = self.model.generate(**model_inputs, **generate_kwargs)
         out_b = output_ids.shape[0]
         if self.framework == "pt":

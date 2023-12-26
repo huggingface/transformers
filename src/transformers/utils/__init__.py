@@ -16,6 +16,7 @@
 # limitations under the License.
 
 from huggingface_hub import get_full_repo_name  # for backward compatibility
+from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -60,7 +61,6 @@ from .generic import (
 )
 from .hub import (
     CLOUDFRONT_DISTRIB_PREFIX,
-    DISABLE_TELEMETRY,
     HF_MODULES_CACHE,
     HUGGINGFACE_CO_PREFIX,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
@@ -90,6 +90,7 @@ from .hub import (
     try_to_load_from_cache,
 )
 from .import_utils import (
+    ACCELERATE_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
@@ -104,27 +105,36 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_cv2_available,
     is_cython_available,
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
     is_essentia_available,
     is_faiss_available,
+    is_flash_attn_2_available,
+    is_flash_attn_available,
+    is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
+    is_fsdp_available,
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
+    is_jinja_available,
     is_jumanpp_available,
     is_kenlm_available,
     is_keras_nlp_available,
+    is_levenshtein_available,
     is_librosa_available,
     is_natten_available,
     is_ninja_available,
+    is_nltk_available,
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
@@ -160,18 +170,22 @@ from .import_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_bf16_available_on_device,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_compile_available,
     is_torch_cuda_available,
+    is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     is_torchaudio_available,
     is_torchdistx_available,
     is_torchdynamo_available,
@@ -179,7 +193,9 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
+    tf_required,
     torch_only_method,
+    torch_required,
 )
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,

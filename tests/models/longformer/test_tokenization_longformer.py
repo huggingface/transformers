@@ -27,9 +27,10 @@ from transformers.testing_utils import require_tokenizers, slow
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-# Copied from transformers.tests.roberta.test_modeling_roberta.py with Roberta->Longformer
 @require_tokenizers
+# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
 class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    # Ignore copy
     tokenizer_class = LongformerTokenizer
     test_slow_tokenizer = True
     rust_tokenizer_class = LongformerTokenizerFast
