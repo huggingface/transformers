@@ -20,7 +20,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import CAVMAEConfig, CAVMAEForPreTraining, CAVMAEImageProcessor
+from .modeling_cav_mae import CAVMAEConfig, CAVMAEForPreTraining, CAVMAEImageProcessor
 
 
 def rename_key(name):
@@ -33,7 +33,9 @@ def rename_key(name):
     if "pos_embed" in name and "decoder" not in name:
         name = name.replace("pos_embed", "vit.embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "vit.embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "vit.embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "vit.embeddings.norm")
     if "decoder_blocks" in name:
@@ -77,24 +79,48 @@ def convert_state_dict(orig_state_dict, config):
                 dim = config.decoder_hidden_size
                 prefix = "decoder.decoder_layers."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.weight"
+                    ] = val[-dim:, :]
                 elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.bias"
+                    ] = val[:dim]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.bias"
+                    ] = val[dim : dim * 2]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.bias"
+                    ] = val[-dim:]
             else:
                 dim = config.hidden_size
                 prefix = "vit.encoder.layer."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.weight"
+                    ] = val[-dim:, :]
                 elif "bias" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.bias"] = val[:dim]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.bias"
+                    ] = val[:dim]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.bias"
+                    ] = val[dim : dim * 2]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.bias"
+                    ] = val[-dim:]
 
         else:
             orig_state_dict[rename_key(key)] = val
@@ -118,7 +144,9 @@ def convert_cav_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     model = CAVMAEForPreTraining(config)
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")[
+        "model"
+    ]
 
     image_processor = CAVMAEImageProcessor(size=config.image_size)
 
@@ -140,15 +168,27 @@ def convert_cav_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     if "large" in checkpoint_url:
         expected_slice = torch.tensor(
-            [[-0.7309, -0.7128, -1.0169], [-1.0161, -0.9058, -1.1878], [-1.0478, -0.9411, -1.1911]]
+            [
+                [-0.7309, -0.7128, -1.0169],
+                [-1.0161, -0.9058, -1.1878],
+                [-1.0478, -0.9411, -1.1911],
+            ]
         )
     elif "huge" in checkpoint_url:
         expected_slice = torch.tensor(
-            [[-1.1599, -0.9199, -1.2221], [-1.1952, -0.9269, -1.2307], [-1.2143, -0.9337, -1.2262]]
+            [
+                [-1.1599, -0.9199, -1.2221],
+                [-1.1952, -0.9269, -1.2307],
+                [-1.2143, -0.9337, -1.2262],
+            ]
         )
     else:
         expected_slice = torch.tensor(
-            [[-0.9192, -0.8481, -1.1259], [-1.1349, -1.0034, -1.2599], [-1.1757, -1.0429, -1.2726]]
+            [
+                [-0.9192, -0.8481, -1.1259],
+                [-1.1349, -1.0034, -1.2599],
+                [-1.1757, -1.0429, -1.2726],
+            ]
         )
 
     # verify logits
@@ -171,7 +211,10 @@ if __name__ == "__main__":
         help="URL of the checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
 
     args = parser.parse_args()

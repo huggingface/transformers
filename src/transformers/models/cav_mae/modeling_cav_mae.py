@@ -51,7 +51,6 @@ CAVMAE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 # Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEModelOutput with ViTMAE->CAVMAE
 class CAVMAEModelOutput(ModelOutput):
@@ -215,7 +214,8 @@ class CAVMAEEmbeddings(nn.Module):
         self.num_patches = self.patch_embeddings.num_patches
         # fixed sin-cos embedding
         self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.num_patches + 1, config.hidden_size), requires_grad=False
+            torch.zeros(1, self.num_patches + 1, config.hidden_size),
+            requires_grad=False,
         )
         self.config = config
         self.initialize_weights()
@@ -223,9 +223,13 @@ class CAVMAEEmbeddings(nn.Module):
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
+            self.position_embeddings.shape[-1],
+            int(self.patch_embeddings.num_patches**0.5),
+            add_cls_token=True,
         )
-        self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
+        self.position_embeddings.data.copy_(
+            torch.from_numpy(pos_embed).float().unsqueeze(0)
+        )
 
         # initialize patch_embeddings like nn.Linear (instead of nn.Conv2d)
         w = self.patch_embeddings.projection.weight.data
@@ -248,15 +252,21 @@ class CAVMAEEmbeddings(nn.Module):
         len_keep = int(seq_length * (1 - self.config.mask_ratio))
 
         if noise is None:
-            noise = torch.rand(batch_size, seq_length, device=sequence.device)  # noise in [0, 1]
+            noise = torch.rand(
+                batch_size, seq_length, device=sequence.device
+            )  # noise in [0, 1]
 
         # sort noise for each sample
-        ids_shuffle = torch.argsort(noise, dim=1)  # ascend: small is keep, large is remove
+        ids_shuffle = torch.argsort(
+            noise, dim=1
+        )  # ascend: small is keep, large is remove
         ids_restore = torch.argsort(ids_shuffle, dim=1)
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        sequence_unmasked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
+        sequence_unmasked = torch.gather(
+            sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim)
+        )
 
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([batch_size, seq_length], device=sequence.device)
@@ -296,15 +306,27 @@ class CAVMAEPatchEmbeddings(nn.Module):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        image_size = (
+            image_size
+            if isinstance(image_size, collections.abc.Iterable)
+            else (image_size, image_size)
+        )
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(
+            num_channels, hidden_size, kernel_size=patch_size, stride=patch_size
+        )
 
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
@@ -324,7 +346,9 @@ class CAVMAEPatchEmbeddings(nn.Module):
 class CAVMAESelfAttention(nn.Module):
     def __init__(self, config: CAVMAEConfig) -> None:
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
@@ -334,19 +358,31 @@ class CAVMAESelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
+        self.key = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
+        self.value = nn.Linear(
+            config.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
+        self,
+        hidden_states,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -376,7 +412,9 @@ class CAVMAESelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -393,7 +431,9 @@ class CAVMAESelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -412,7 +452,10 @@ class CAVMAEAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+            heads,
+            self.attention.num_attention_heads,
+            self.attention.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -422,8 +465,12 @@ class CAVMAEAttention(nn.Module):
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(
+            heads
+        )
+        self.attention.all_head_size = (
+            self.attention.attention_head_size * self.attention.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -436,7 +483,9 @@ class CAVMAEAttention(nn.Module):
 
         attention_output = self.output(self_outputs[0], hidden_states)
 
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -464,7 +513,9 @@ class CAVMAEOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -484,8 +535,12 @@ class CAVMAELayer(nn.Module):
         self.attention = CAVMAEAttention(config)
         self.intermediate = CAVMAEIntermediate(config)
         self.output = CAVMAEOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_before = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_after = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
@@ -494,12 +549,16 @@ class CAVMAELayer(nn.Module):
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in CAVMAE, layernorm is applied before self-attention
+            self.layernorm_before(
+                hidden_states
+            ),  # in CAVMAE, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -521,7 +580,9 @@ class CAVMAEEncoder(nn.Module):
     def __init__(self, config: CAVMAEConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([CAVMAELayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [CAVMAELayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -549,7 +610,9 @@ class CAVMAEEncoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, layer_head_mask, output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -560,7 +623,11 @@ class CAVMAEEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -657,7 +724,9 @@ class CAVMAEModel(CAVMAEPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(CAVMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CAVMAEModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CAVMAEModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -687,11 +756,19 @@ class CAVMAEModel(CAVMAEPreTrainedModel):
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -731,10 +808,13 @@ class CAVMAEModel(CAVMAEPreTrainedModel):
 class CAVMAEDecoder(nn.Module):
     def __init__(self, config, num_patches):
         super().__init__()
-        self.decoder_embed = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=True)
+        self.decoder_embed = nn.Linear(
+            config.hidden_size, config.decoder_hidden_size, bias=True
+        )
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
         self.decoder_pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches + 1, config.decoder_hidden_size), requires_grad=False
+            torch.zeros(1, num_patches + 1, config.decoder_hidden_size),
+            requires_grad=False,
         )  # fixed sin-cos embedding
 
         decoder_config = deepcopy(config)
@@ -743,12 +823,19 @@ class CAVMAEDecoder(nn.Module):
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
         self.decoder_layers = nn.ModuleList(
-            [CAVMAELayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
+            [
+                CAVMAELayer(decoder_config)
+                for _ in range(config.decoder_num_hidden_layers)
+            ]
         )
 
-        self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
+        self.decoder_norm = nn.LayerNorm(
+            config.decoder_hidden_size, eps=config.layer_norm_eps
+        )
         self.decoder_pred = nn.Linear(
-            config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
+            config.decoder_hidden_size,
+            config.patch_size**2 * config.num_channels,
+            bias=True,
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
@@ -757,9 +844,13 @@ class CAVMAEDecoder(nn.Module):
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
+            self.decoder_pos_embed.shape[-1],
+            int(num_patches**0.5),
+            add_cls_token=True,
         )
-        self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+        self.decoder_pos_embed.data.copy_(
+            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0)
+        )
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
         torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
@@ -776,9 +867,13 @@ class CAVMAEDecoder(nn.Module):
         x = self.decoder_embed(hidden_states)
 
         # append mask tokens to sequence
-        mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
+        mask_tokens = self.mask_token.repeat(
+            x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1
+        )
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
-        x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
+        x_ = torch.gather(
+            x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2])
+        )  # unshuffle
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
 
         # add pos embed
@@ -799,7 +894,9 @@ class CAVMAEDecoder(nn.Module):
                     output_attentions,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
+                layer_outputs = layer_module(
+                    hidden_states, head_mask=None, output_attentions=output_attentions
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -818,7 +915,11 @@ class CAVMAEDecoder(nn.Module):
         logits = logits[:, 1:, :]
 
         if not return_dict:
-            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [logits, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return CAVMAEDecoderOutput(
             logits=logits,
             hidden_states=all_hidden_states,
@@ -846,7 +947,9 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         self.config = config
 
         self.vit = CAVMAEModel(config)
-        self.decoder = CAVMAEDecoder(config, num_patches=self.vit.embeddings.num_patches)
+        self.decoder = CAVMAEDecoder(
+            config, num_patches=self.vit.embeddings.num_patches
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -874,8 +977,12 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         # sanity checks
-        if (pixel_values.shape[2] != pixel_values.shape[3]) or (pixel_values.shape[2] % patch_size != 0):
-            raise ValueError("Make sure the pixel values have a squared size that is divisible by the patch size")
+        if (pixel_values.shape[2] != pixel_values.shape[3]) or (
+            pixel_values.shape[2] % patch_size != 0
+        ):
+            raise ValueError(
+                "Make sure the pixel values have a squared size that is divisible by the patch size"
+            )
         if pixel_values.shape[1] != num_channels:
             raise ValueError(
                 "Make sure the number of channels of the pixel values is equal to the one set in the configuration"
@@ -885,11 +992,20 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         batch_size = pixel_values.shape[0]
         num_patches_one_direction = pixel_values.shape[2] // patch_size
         patchified_pixel_values = pixel_values.reshape(
-            batch_size, num_channels, num_patches_one_direction, patch_size, num_patches_one_direction, patch_size
+            batch_size,
+            num_channels,
+            num_patches_one_direction,
+            patch_size,
+            num_patches_one_direction,
+            patch_size,
         )
-        patchified_pixel_values = torch.einsum("nchpwq->nhwpqc", patchified_pixel_values)
+        patchified_pixel_values = torch.einsum(
+            "nchpwq->nhwpqc", patchified_pixel_values
+        )
         patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels
+            batch_size,
+            num_patches_one_direction * num_patches_one_direction,
+            patch_size**2 * num_channels,
         )
         return patchified_pixel_values
 
@@ -919,7 +1035,9 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
             patch_size,
             num_channels,
         )
-        patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
+        patchified_pixel_values = torch.einsum(
+            "nhwpqc->nchpwq", patchified_pixel_values
+        )
         pixel_values = patchified_pixel_values.reshape(
             batch_size,
             num_channels,
@@ -954,7 +1072,9 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         return loss
 
     @add_start_docstrings_to_model_forward(CAVMAE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CAVMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CAVMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -986,7 +1106,9 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         >>> mask = outputs.mask
         >>> ids_restore = outputs.ids_restore
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.vit(
             pixel_values,
@@ -1002,7 +1124,9 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         mask = outputs.mask
 
         decoder_outputs = self.decoder(latent, ids_restore)
-        logits = decoder_outputs.logits  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
+        logits = (
+            decoder_outputs.logits
+        )  # shape (batch_size, num_patches, patch_size*patch_size*num_channels)
 
         loss = self.forward_loss(pixel_values, logits, mask)
 

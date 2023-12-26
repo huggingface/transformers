@@ -25,7 +25,6 @@ CAVMAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class CAVMAEConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CAVMAEModel`]. It is used to instantiate an ViT
