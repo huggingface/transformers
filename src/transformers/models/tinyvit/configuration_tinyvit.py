@@ -41,19 +41,19 @@ class TinyVitConfig(BackboneConfigMixin, PretrainedConfig):
             The size (resolution) of each image.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
+        hidden_sizes (`List[int]`, *optional*, defaults to `[96, 192, 384, 768]`):
             Dimensionality of the embeddings in each of the stages.
-        depths (`List[int]`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`List[int]`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`List[int]`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`List[int]`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
-        window_sizes (`List[int]`, *optional*, defaults to [7, 7, 14, 7]):
+        window_sizes (`List[int]`, *optional*, defaults to `[7, 7, 14, 7]`):
             Size of the windows.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
-        drop_path_rate (`float`, *optional*, defaults to 0.1):
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
@@ -87,6 +87,7 @@ class TinyVitConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "tinyvit"
 
     attribute_map = {

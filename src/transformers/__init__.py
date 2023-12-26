@@ -815,13 +815,6 @@ _import_structure = {
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.tinyvit": ["TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyVitConfig"],
-    "models.transfo_xl": [
-        "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TransfoXLConfig",
-        "TransfoXLCorpus",
-        "TransfoXLTokenizer",
-    ],
-    "models.timm_backbone": ["TimmBackboneConfig"],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
@@ -3293,7 +3286,6 @@ else:
             "TinyVitPreTrainedModel",
         ]
     )
-    _import_structure["models.transfo_xl"].extend(
     _import_structure["models.trocr"].extend(
         [
             "TROCR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5498,11 +5490,6 @@ if TYPE_CHECKING:
     )
     from .models.timm_backbone import TimmBackboneConfig
     from .models.tinyvit import TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, TinyVitConfig
-    from .models.transfo_xl import (
-        TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TransfoXLConfig,
-        TransfoXLCorpus,
-        TransfoXLTokenizer,
     from .models.trocr import (
         TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrOCRConfig,
@@ -7623,14 +7610,6 @@ if TYPE_CHECKING:
             TinyVitModel,
             TinyVitPreTrainedModel,
         )
-        from .models.transfo_xl import (
-            TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
-            AdaptiveEmbedding,
-            TransfoXLForSequenceClassification,
-            TransfoXLLMHeadModel,
-            TransfoXLModel,
-            TransfoXLPreTrainedModel,
-            load_tf_weights_in_transfo_xl,
         from .models.trocr import (
             TROCR_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrOCRForCausalLM,

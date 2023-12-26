@@ -8040,7 +8040,7 @@ class TinyVitPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+TROCR_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TrOCRForCausalLM(metaclass=DummyObject):
