@@ -110,7 +110,9 @@ class CAVMAEConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         image_size=224,
         patch_size=16,
-        num_channels=3,
+        audio_size=512,
+        num_channels_v=3,
+        num_channels_a=1,
         qkv_bias=True,
         decoder_num_attention_heads=16,
         decoder_hidden_size=512,
@@ -135,7 +137,9 @@ class CAVMAEConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
+        self.audio_size = audio_size
+        self.num_channels_v = num_channels_v
+        self.num_channels_a = num_channels_a
         self.qkv_bias = qkv_bias
         self.decoder_num_attention_heads = decoder_num_attention_heads
         self.decoder_hidden_size = decoder_hidden_size

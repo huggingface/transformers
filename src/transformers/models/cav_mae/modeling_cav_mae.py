@@ -211,8 +211,8 @@ class CAVMAEEmbeddings(nn.Module):
         super().__init__()
 
         # self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings_a = CAVMAEPatchEmbeddings(config)
-        self.patch_embeddings_v = CAVMAEPatchEmbeddings(config)
+        self.patch_embeddings_a = CAVMAEPatchEmbeddings(config, "a")
+        self.patch_embeddings_v = CAVMAEPatchEmbeddings(config, "v")
         self.num_patches_a = self.patch_embeddings_a.num_patches
         self.num_patches_v = self.patch_embeddings_v.num_patches
         # fixed sin-cos embedding
@@ -321,10 +321,18 @@ class CAVMAEPatchEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, modality: str):
         super().__init__()
+        if modality not in {"a", "v"}:
+            raise ValueError(
+                f"`modality` must be either 'a' or 'v', but got {modality}"
+            )
         image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        hidden_size = config.hidden_size
+        if modality == "a":
+            num_channels = config.num_channels_a
+        else:
+            num_channels = config.num_channels_v
         image_size = (
             image_size
             if isinstance(image_size, collections.abc.Iterable)
@@ -875,12 +883,12 @@ class CAVMAEDecoder(nn.Module):
         )
         self.decoder_pred_a = nn.Linear(
             config.decoder_hidden_size,
-            config.patch_size**2 * config.num_channels,
+            config.patch_size**2 * config.num_channels_a,
             bias=True,
         )  # encoder to decoder
         self.decoder_pred_v = nn.Linear(
             config.decoder_hidden_size,
-            config.patch_size**2 * config.num_channels,
+            config.patch_size**2 * config.num_channels_v,
             bias=True,
         )  # encoder to decoder
         self.gradient_checkpointing = False
