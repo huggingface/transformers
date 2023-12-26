@@ -35,10 +35,14 @@ def rename_key(name):
         name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
     if "pos_embed" in name and "decoder" not in name:
         name = name.replace("pos_embed", "vit.embeddings.position_embeddings")
-    if "patch_embed.proj" in name:
+    if "patch_embed_a.proj" in name:
         name = name.replace(
-            "patch_embed.proj", "vit.embeddings.patch_embeddings.projection"
+            "patch_embed_a.proj", "vit.embeddings.patch_embeddings_a.projection"
         )
+    if "patch_embed_v.proj" in name:
+        name = name.replace(
+                "patch_embed_v.proj", "vit.embeddings.patch_embeddings_v.projection"
+            )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "vit.embeddings.norm")
     if "decoder_blocks" in name:

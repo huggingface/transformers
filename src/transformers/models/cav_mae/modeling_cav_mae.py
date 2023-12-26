@@ -210,12 +210,18 @@ class CAVMAEEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.patch_embeddings = CAVMAEPatchEmbeddings(config)
-        self.num_patches = self.patch_embeddings.num_patches
+        # self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.patch_embeddings_a = CAVMAEPatchEmbeddings(config)
+        self.patch_embeddings_v = CAVMAEPatchEmbeddings(config)
+        self.num_patches_a = self.patch_embeddings_a.num_patches
+        self.num_patches_v = self.patch_embeddings_v.num_patches
         # fixed sin-cos embedding
-        self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.num_patches + 1, config.hidden_size),
+        self.position_embeddings_a = nn.Parameter(
+            torch.zeros(1, self.num_patches_a + 1, config.hidden_size),
+            requires_grad=False,
+        )
+        self.position_embeddings_v = nn.Parameter(
+            torch.zeros(1, self.num_patches_v + 1, config.hidden_size),
             requires_grad=False,
         )
         self.config = config
@@ -223,21 +229,33 @@ class CAVMAEEmbeddings(nn.Module):
 
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
-        pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1],
-            int(self.patch_embeddings.num_patches**0.5),
+        pos_embed_a = get_2d_sincos_pos_embed(
+            self.position_embeddings_a.shape[-1],
+            int(self.patch_embeddings_a.num_patches**0.5),
             add_cls_token=True,
         )
-        self.position_embeddings.data.copy_(
-            torch.from_numpy(pos_embed).float().unsqueeze(0)
+        self.position_embeddings_a.data.copy_(
+            torch.from_numpy(pos_embed_a).float().unsqueeze(0)
+        )
+        # initialize (and freeze) position embeddings by sin-cos embedding
+        pos_embed_v = get_2d_sincos_pos_embed(
+            self.position_embeddings_v.shape[-1],
+            int(self.patch_embeddings_v.num_patches**0.5),
+            add_cls_token=True,
+        )
+        self.position_embeddings_v.data.copy_(
+            torch.from_numpy(pos_embed_v).float().unsqueeze(0)
         )
 
         # initialize patch_embeddings like nn.Linear (instead of nn.Conv2d)
-        w = self.patch_embeddings.projection.weight.data
+        w = self.patch_embeddings_a.projection.weight.data
+        torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+
+        w = self.patch_embeddings_v.projection.weight.data
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
+        # torch.nn.init.normal_(self.cls_token, std=self.config.initializer_range)
 
     def random_masking(self, sequence, noise=None):
         """
@@ -825,14 +843,18 @@ class CAVMAEModel(CAVMAEPreTrainedModel):
 
 # Copied from transformers.models.vit_mae.modeling_vit_mae.ViTMAEDecoder with ViTMAE->CAVMAE
 class CAVMAEDecoder(nn.Module):
-    def __init__(self, config, num_patches):
+    def __init__(self, config, num_patches_a, num_patches_v):
         super().__init__()
         self.decoder_embed = nn.Linear(
             config.hidden_size, config.decoder_hidden_size, bias=True
         )
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-        self.decoder_pos_embed = nn.Parameter(
-            torch.zeros(1, num_patches + 1, config.decoder_hidden_size),
+        self.decoder_pos_embed_a = nn.Parameter(
+            torch.zeros(1, num_patches_a + 1, config.decoder_hidden_size),
+            requires_grad=False,
+        )  # fixed sin-cos embedding
+        self.decoder_pos_embed_v = nn.Parameter(
+            torch.zeros(1, num_patches_v + 1, config.decoder_hidden_size),
             requires_grad=False,
         )  # fixed sin-cos embedding
 
@@ -863,17 +885,25 @@ class CAVMAEDecoder(nn.Module):
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
-        self.initialize_weights(num_patches)
+        self.initialize_weights(num_patches_a, num_patches_v)
 
-    def initialize_weights(self, num_patches):
+    def initialize_weights(self, num_patches_a, num_patches_v):
         # initialize (and freeze) position embeddings by sin-cos embedding
-        decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1],
-            int(num_patches**0.5),
+        decoder_pos_embed_a = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed_a.shape[-1],
+            int(num_patches_a ** 0.5),
             add_cls_token=True,
         )
-        self.decoder_pos_embed.data.copy_(
-            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0)
+        self.decoder_pos_embed_a.data.copy_(
+            torch.from_numpy(decoder_pos_embed_a).float().unsqueeze(0)
+        )
+        decoder_pos_embed_v = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed_v.shape[-1],
+            int(num_patches_v ** 0.5),
+            add_cls_token=True,
+        )
+        self.decoder_pos_embed_v.data.copy_(
+            torch.from_numpy(decoder_pos_embed_v).float().unsqueeze(0)
         )
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
@@ -971,9 +1001,16 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
         self.config = config
 
         self.vit = CAVMAEModel(config)
+
+        self.modality_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.modality_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+
         self.decoder = CAVMAEDecoder(
-            config, num_patches=self.vit.embeddings.num_patches
+            config, num_patches_v=self.vit.embeddings.num_patches_v,  num_patches_a=self.vit.embeddings.num_patches_a
         )
+
+        self.decoder_modality_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.decoder_modality_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
         # Initialize weights and apply final processing
         self.post_init()
