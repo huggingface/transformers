@@ -1334,11 +1334,11 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerModelOutput:
         r"""
-            observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
-                    - 1 for values that are **observed**,
-                    - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
         Returns:
 
@@ -1446,13 +1446,13 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForPreTrainingOutput:
         r"""
-            observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
-                    - 1 for values that are **observed**,
-                    - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            return_loss (`bool`,  *optional*):
-                Whether to return the loss in the `forward` call.
+        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
 
         Returns:
 
@@ -1650,24 +1650,23 @@ class PatchTSMixerForPrediction(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForPredictionOutput:
         r"""
-            observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
-                Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
-                in `[0, 1]`:
-                    - 1 for values that are **observed**,
-                    - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
-            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
-                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `future_values` is what the
-                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
-                required for a pretraining task.
+        observed_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_input_channels)`, *optional*):
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+                - 1 for values that are **observed**,
+                - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,:
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
-                pass the target data with all channels, as channel Filtering for both prediction and target will be
-                manually applied before the loss computation.
-
-            return_loss (`bool`,  *optional*):
-                Whether to return the loss in the `forward` call.
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
+        return_loss (`bool`,  *optional*):
+            Whether to return the loss in the `forward` call.
 
         Returns:
 
@@ -1871,22 +1870,22 @@ class PatchTSMixerForTimeSeriesClassification(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForTimeSeriesClassificationOutput:
         r"""
-            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `future_values` is what the
-                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
-                required for a pretraining task.
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
-                pass the target data with all channels, as channel Filtering for both prediction and target will be
-                manually applied before the loss computation.
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
 
-                For a classification task, it has a shape of `(batch_size,)`.
+            For a classification task, it has a shape of `(batch_size,)`.
 
-                For a regression task, it has a shape of `(batch_size, num_targets)`.
-            return_loss (`bool`, *optional*):
-                Whether to return the loss in the `forward` call.
+            For a regression task, it has a shape of `(batch_size, num_targets)`.
+        return_loss (`bool`, *optional*):
+            Whether to return the loss in the `forward` call.
 
         Returns:
 
@@ -2061,22 +2060,22 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> PatchTSMixerForRegressionOutput:
         r"""
-            future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
-                `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
-                values of the time series, that serve as labels for the model. The `future_values` is what the
-                Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
-                required for a pretraining task.
+        future_values (`torch.FloatTensor` of shape `(batch_size, target_len, num_input_channels)` for forecasting,
+            `(batch_size, num_targets)` for regression, or `(batch_size,)` for classification, *optional*): Target
+            values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs during training to learn to output, given the `past_values`. Note that, this is NOT
+            required for a pretraining task.
 
-                For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
-                to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
-                pass the target data with all channels, as channel Filtering for both prediction and target will be
-                manually applied before the loss computation.
+            For a forecasting task, the shape is be `(batch_size, target_len, num_input_channels)`. Even if we want
+            to forecast only specific channels by setting the indices in `prediction_channel_indices` parameter,
+            pass the target data with all channels, as channel Filtering for both prediction and target will be
+            manually applied before the loss computation.
 
-                For a classification task, it has a shape of `(batch_size,)`.
+            For a classification task, it has a shape of `(batch_size,)`.
 
-                For a regression task, it has a shape of `(batch_size, num_targets)`.
-            return_loss (`bool`, *optional*):
-                Whether to return the loss in the `forward` call.
+            For a regression task, it has a shape of `(batch_size, num_targets)`.
+        return_loss (`bool`, *optional*):
+            Whether to return the loss in the `forward` call.
 
         Returns:
 

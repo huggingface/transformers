@@ -1517,7 +1517,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     outputs = model.image_guided_detection(**inputs)
         >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
         >>> target_sizes = torch.Tensor([image.size[::-1]])
-        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> results = processor.post_process_image_guided_detection(
         ...     outputs=outputs, threshold=0.6, nms_threshold=0.3, target_sizes=target_sizes
         ... )

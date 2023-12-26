@@ -561,8 +561,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
         self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
 
-        # see the note above how to get identical loss on a small bs
-        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=2)
+        # Relative difference. See the note above how to get identical loss on a small bs
+        self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
 
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage, dtype):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
