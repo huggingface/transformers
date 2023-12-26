@@ -378,11 +378,6 @@ class GPTQHFQuantizer(HFQuantizer):
     def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
         super().process_model_after_weight_loading(model, **kwargs)
 
-        # Note: optimum.gptq.GPTQQuantizer.post_init_model()
-        # creates model.config.quantize_config
-        # which splits functionality with model.quantization_config
-        # (also inserted by optimum.gptq.GPTQQuantizer as dict)
-
         if self.quantization_status == QuantizationStatus.FRESH:
             if self.quantization_config.tokenizer is None:
                 self.quantization_config.tokenizer = model.name_or_path
