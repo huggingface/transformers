@@ -23,12 +23,12 @@ import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
@@ -281,18 +281,26 @@ class ChatGlmRotaryEmbedding(nn.Module):
         )
 
 
-# TODO: refactor this
 class ChatGlmAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
+        self.multi_query_attention = config.multi_query_attention
 
-        projection_size = config.kv_channels * config.num_attention_heads
-        hidden_size_per_attention_head = projection_size // config.num_attention_heads
+        self.projection_size = config.kv_channels * config.num_attention_heads
+        self.hidden_size_per_attention_head = self.projection_size // config.num_attention_heads
+
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
+                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -304,15 +312,18 @@ class ChatGlmAttention(nn.Module):
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
         self.beta = 1.0
 
-        if not config.multi_query_attention:
+        if not self.multi_query_attention:
             qkv_size = 3 * self.hidden_size
+            self.num_key_value_heads = 1
         else:
-            self.num_multi_query_groups_per_partition = config.multi_query_group_num
-            qkv_size = projection_size + 2 * hidden_size_per_attention_head * config.multi_query_group_num
+            self.num_key_value_heads = config.multi_query_group_num
+            qkv_size = self.projection_size + 2 * self.hidden_size_per_attention_head * self.num_key_value_heads
+
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         self.query_key_value = nn.Linear(self.hidden_size, qkv_size, bias=True)
         self.dense = nn.Linear(self.hidden_size, self.hidden_size, bias=config.mlp_bias)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.attention_dropout = config.attention_dropout
 
         self.rotary_emb = ChatGlmRotaryEmbedding(self.head_dim)
 
@@ -328,9 +339,22 @@ class ChatGlmAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
-        return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        if not self.multi_query_attention:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+            query_layer, key_layer, value_layer = fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        else:
+            kv_split_dim = self.hidden_size_per_attention_head * self.num_key_value_heads
+
+            (query_layer, key_layer, value_layer) = fused_qkv.split(
+                [
+                    self.num_heads * self.hidden_size_per_attention_head,
+                    kv_split_dim,
+                    kv_split_dim,
+                ],
+                dim=-1,
+            )
+        return query_layer, key_layer, value_layer
 
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -360,90 +384,87 @@ class ChatGlmAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        residual: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        use_cache: bool = False,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
-    ):
+        use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        bsz, q_len, _ = hidden_states.size()
+
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
 
         # 3 x [batch_size, seq_length, num_heads, head_dim]
-        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
+        (query_states, key_states, value_states) = self._split_heads(fused_qkv)
 
-        batch_size, q_length, _, _ = query_layer.shape
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
-        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            # concatenate along seq_length dimension:
-            #  - key: [batch_size * self.num_heads, head_dim, kv_length]
-            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
-            key_layer = torch.cat((past_key, key_layer), dim=2)
-            value_layer = torch.cat((past_value, value_layer), dim=1)
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            if self.layer_idx is None:
+                raise ValueError(
+                    f"The cache structure has changed since version v4.36. If you are using {self.__class__.__name__} "
+                    "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
+                    "with a layer index."
+                )
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        _, _, kv_length = key_layer.shape
+        if past_key_value is not None:
+            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if use_cache is True:
-            present = (key_layer, value_layer)
-        else:
-            present = None
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # [batch_size * num_heads, q_length, kv_length]
-        matmul_result = (
-            torch.bmm(
-                query_layer,
-                key_layer,
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+
+        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+                f" {attn_weights.size()}"
             )
-            * self.beta
-        )
 
-        # change view to [batch_size, num_heads, q_length, kv_length]
-        attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights + attention_mask
 
-        # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-        input_dtype = attention_scores.dtype
-        # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
-        if input_dtype == torch.float16:
-            attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
-        attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
 
-        # [batch_size, num_heads, q_length, kv_length]
-        attention_probs = self.attention_dropout(attention_probs)
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
 
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+        attn_output = attn_output.transpose(1, 2).contiguous()
 
-        # change view [batch_size x num_heads, q_length, kv_length]
-        attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, kv_length)
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
-        # matmul: [batch_size * num_heads, q_length, head_dim]
-        context_layer = torch.bmm(attention_probs_reshaped, value_layer)
+        attn_output = self.dense(attn_output)
 
-        # change view [batch_size, q_length, num_heads * head_dim]
-        context_layer = self._merge_heads(context_layer)
+        if not output_attentions:
+            attn_weights = None
 
-        output_tensor = self.dense(context_layer)
-
-        output_tensor = output_tensor + residual
-
-        outputs = (output_tensor, present)
-        if output_attentions:
-            outputs += (attention_probs,)
-
-        return outputs
+        return attn_output, attn_weights, past_key_value
 
 
 # TODO: leverage copied from here by adding fa2
 class ChatGlmDecoderLayer(nn.Module):
-    def __init__(self, config: ChatGlmConfig):
+    def __init__(self, config: ChatGlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attention = ChatGlmAttention(config=config)
+        self.self_attention = ChatGlmAttention(config=config, layer_idx=layer_idx)
         self.mlp = ChatGlmMLP(config)
         self.input_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -635,7 +656,9 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([ChatGlmDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [ChatGlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
@@ -856,12 +879,8 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        if self.config.pretraining_tp > 1:
-            lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.config.pretraining_tp, dim=0)
-            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.config.pretraining_tp)]
-            logits = torch.cat(logits, dim=-1)
-        else:
-            logits = self.lm_head(hidden_states)
+
+        logits = self.lm_head(hidden_states)
         logits = logits.float()
 
         loss = None
