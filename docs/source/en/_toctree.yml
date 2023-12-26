@@ -507,6 +507,8 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/cavmae
+        title: CAVMAE
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext

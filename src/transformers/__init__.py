@@ -875,6 +875,7 @@ _import_structure = {
         "ViTHybridConfig",
     ],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
+    "models.cav_mae": ["CAVMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CAVMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
@@ -3417,6 +3418,15 @@ else:
             "ViTMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.cav_mae"].extend(
+        [
+            "CAVMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CAVMAEForPreTraining",
+            "CAVMAELayer",
+            "CAVMAEModel",
+            "CAVMAEPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_msn"].extend(
         [
             "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4295,6 +4305,13 @@ else:
             "TFViTMAEForPreTraining",
             "TFViTMAEModel",
             "TFViTMAEPreTrainedModel",
+        ]
+    )
+    _import_structure["models.cav_mae"].extend(
+        [
+            "TFCAVMAEForPreTraining",
+            "TFCAVMAEModel",
+            "TFCAVMAEPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -5540,6 +5557,7 @@ if TYPE_CHECKING:
         ViTHybridConfig,
     )
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
+    from .models.cav_mae import CAVMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, CAVMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
@@ -7700,6 +7718,13 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
+        from .models.cav_mae import (
+            CAVMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CAVMAEForPreTraining,
+            CAVMAELayer,
+            CAVMAEModel,
+            CAVMAEPreTrainedModel,
+        )
         from .models.vit_msn import (
             VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTMSNForImageClassification,
@@ -8437,6 +8462,11 @@ if TYPE_CHECKING:
             TFViTMAEForPreTraining,
             TFViTMAEModel,
             TFViTMAEPreTrainedModel,
+        )
+        from .models.cav_mae import (
+            TFCAVMAEForPreTraining,
+            TFCAVMAEModel,
+            TFCAVMAEPreTrainedModel,
         )
         from .models.wav2vec2 import (
             TF_WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
