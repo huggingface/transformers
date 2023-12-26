@@ -1002,6 +1002,13 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
 
         self.vit = CAVMAEModel(config)
 
+        self.norm_a = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.norm_v = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+
         self.modality_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.modality_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
