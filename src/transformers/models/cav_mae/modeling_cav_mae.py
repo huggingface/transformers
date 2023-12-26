@@ -217,11 +217,11 @@ class CAVMAEEmbeddings(nn.Module):
         self.num_patches_v = self.patch_embeddings_v.num_patches
         # fixed sin-cos embedding
         self.position_embeddings_a = nn.Parameter(
-            torch.zeros(1, self.num_patches_a + 1, config.hidden_size),
+            torch.zeros(1, self.num_patches_a, config.hidden_size),
             requires_grad=False,
         )
         self.position_embeddings_v = nn.Parameter(
-            torch.zeros(1, self.num_patches_v + 1, config.hidden_size),
+            torch.zeros(1, self.num_patches_v, config.hidden_size),
             requires_grad=False,
         )
         self.config = config
@@ -232,7 +232,7 @@ class CAVMAEEmbeddings(nn.Module):
         pos_embed_a = get_2d_sincos_pos_embed(
             self.position_embeddings_a.shape[-1],
             int(self.patch_embeddings_a.num_patches**0.5),
-            add_cls_token=True,
+            add_cls_token=False,
         )
         self.position_embeddings_a.data.copy_(
             torch.from_numpy(pos_embed_a).float().unsqueeze(0)
@@ -241,7 +241,7 @@ class CAVMAEEmbeddings(nn.Module):
         pos_embed_v = get_2d_sincos_pos_embed(
             self.position_embeddings_v.shape[-1],
             int(self.patch_embeddings_v.num_patches**0.5),
-            add_cls_token=True,
+            add_cls_token=False,
         )
         self.position_embeddings_v.data.copy_(
             torch.from_numpy(pos_embed_v).float().unsqueeze(0)
@@ -850,11 +850,11 @@ class CAVMAEDecoder(nn.Module):
         )
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
         self.decoder_pos_embed_a = nn.Parameter(
-            torch.zeros(1, num_patches_a + 1, config.decoder_hidden_size),
+            torch.zeros(1, num_patches_a, config.decoder_hidden_size),
             requires_grad=False,
         )  # fixed sin-cos embedding
         self.decoder_pos_embed_v = nn.Parameter(
-            torch.zeros(1, num_patches_v + 1, config.decoder_hidden_size),
+            torch.zeros(1, num_patches_v, config.decoder_hidden_size),
             requires_grad=False,
         )  # fixed sin-cos embedding
 
@@ -892,7 +892,7 @@ class CAVMAEDecoder(nn.Module):
         decoder_pos_embed_a = get_2d_sincos_pos_embed(
             self.decoder_pos_embed_a.shape[-1],
             int(num_patches_a ** 0.5),
-            add_cls_token=True,
+            add_cls_token=False,
         )
         self.decoder_pos_embed_a.data.copy_(
             torch.from_numpy(decoder_pos_embed_a).float().unsqueeze(0)
@@ -900,7 +900,7 @@ class CAVMAEDecoder(nn.Module):
         decoder_pos_embed_v = get_2d_sincos_pos_embed(
             self.decoder_pos_embed_v.shape[-1],
             int(num_patches_v ** 0.5),
-            add_cls_token=True,
+            add_cls_token=False,
         )
         self.decoder_pos_embed_v.data.copy_(
             torch.from_numpy(decoder_pos_embed_v).float().unsqueeze(0)
@@ -1016,8 +1016,8 @@ class CAVMAEForPreTraining(CAVMAEPreTrainedModel):
             config, num_patches_v=self.vit.embeddings.num_patches_v,  num_patches_a=self.vit.embeddings.num_patches_a
         )
 
-        self.decoder_modality_a = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.decoder_modality_v = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.decoder_modality_a = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
+        self.decoder_modality_v = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
 
         # Initialize weights and apply final processing
         self.post_init()
