@@ -20,6 +20,7 @@ import requests
 import torch
 from PIL import Image
 
+from transformers import ViTImageProcessor
 from .modeling_cav_mae import CAVMAEConfig, CAVMAEForPreTraining, CAVMAEForAudioVisualClassification
 
 
@@ -74,7 +75,7 @@ def convert_state_dict(orig_state_dict, config):
 
         if "qkv" in key:
             key_split = key.split(".")
-            layer_num = int(key_split[1])
+            layer_num = int(key_split[2])
             if "decoder_blocks" in key:
                 dim = config.decoder_hidden_size
                 prefix = "decoder.decoder_layers."
@@ -144,11 +145,9 @@ def convert_cav_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     model = CAVMAEForPreTraining(config)
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")[
-        "model"
-    ]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
-    image_processor = CAVMAEForAudioVisualClassification(size=config.image_size)
+    image_processor = ViTImageProcessor(size=config.image_size)
 
     new_state_dict = convert_state_dict(state_dict, config)
 
@@ -158,7 +157,7 @@ def convert_cav_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
     image = Image.open(requests.get(url, stream=True).raw)
-    image_processor = CAVMAEForAudioVisualClassification(size=config.image_size)
+    image_processor = ViTImageProcessor(size=config.image_size)
     inputs = image_processor(images=image, return_tensors="pt")
 
     # forward pass
