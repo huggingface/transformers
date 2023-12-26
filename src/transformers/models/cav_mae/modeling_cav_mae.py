@@ -139,28 +139,30 @@ class CAVMAEForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def get_2d_sincos_pos_embed(embed_dim, grid_size, add_cls_token=False):
+def get_2d_sincos_pos_embed(embed_dim, grid_size_h, grid_size_w, add_cls_token=False):
     """
     Create 2D sin/cos positional embeddings.
 
     Args:
         embed_dim (`int`):
             Embedding dimension.
-        grid_size (`int`):
-            The grid height and width.
+        grid_size_h (`int`):
+            The grid height.
+        grid_size_w (`int`):
+            The grid width.
         add_cls_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add a classification (CLS) token.
 
     Returns:
-        (`torch.FloatTensor` of shape (grid_size*grid_size, embed_dim) or (1+grid_size*grid_size, embed_dim): the
+        (`torch.FloatTensor` of shape (grid_size_h*grid_size_w, embed_dim) or (1+grid_size_h*grid_size_w, embed_dim): the
         position embeddings (with or without classification token)
     """
-    grid_h = np.arange(grid_size, dtype=np.float32)
-    grid_w = np.arange(grid_size, dtype=np.float32)
+    grid_h = np.arange(grid_size_h, dtype=np.float32)
+    grid_w = np.arange(grid_size_w, dtype=np.float32)
     grid = np.meshgrid(grid_w, grid_h)  # here w goes first
     grid = np.stack(grid, axis=0)
 
-    grid = grid.reshape([2, 1, grid_size, grid_size])
+    grid = grid.reshape([2, 1, grid_size_h, grid_size_w])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
     if add_cls_token:
         pos_embed = np.concatenate([np.zeros([1, embed_dim]), pos_embed], axis=0)
@@ -213,6 +215,7 @@ class CAVMAEEmbeddings(nn.Module):
         # self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings_a = CAVMAEPatchEmbeddings(config, "a")
         self.patch_embeddings_v = CAVMAEPatchEmbeddings(config, "v")
+        self.patch_embeddings_a.num_patches = config.audio_size
         self.num_patches_a = self.patch_embeddings_a.num_patches
         self.num_patches_v = self.patch_embeddings_v.num_patches
         # fixed sin-cos embedding
@@ -231,16 +234,17 @@ class CAVMAEEmbeddings(nn.Module):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed_a = get_2d_sincos_pos_embed(
             self.position_embeddings_a.shape[-1],
-            int(self.patch_embeddings_a.num_patches**0.5),
+            8, self.patch_embeddings_a.num_patches // 8,
             add_cls_token=False,
         )
         self.position_embeddings_a.data.copy_(
             torch.from_numpy(pos_embed_a).float().unsqueeze(0)
         )
+        grid_size = int(self.patch_embeddings_v.num_patches**0.5)
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed_v = get_2d_sincos_pos_embed(
             self.position_embeddings_v.shape[-1],
-            int(self.patch_embeddings_v.num_patches**0.5),
+            grid_size, grid_size,
             add_cls_token=False,
         )
         self.position_embeddings_v.data.copy_(
@@ -297,18 +301,18 @@ class CAVMAEEmbeddings(nn.Module):
 
     def forward(self, pixel_values, noise=None):
         batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values)
+        embeddings = self.patch_embeddings_v(pixel_values)
 
         # add position embeddings w/o cls token
-        embeddings = embeddings + self.position_embeddings[:, 1:, :]
+        embeddings = embeddings + self.position_embeddings_v[:, :, :]
 
         # masking: length -> length * config.mask_ratio
         embeddings, mask, ids_restore = self.random_masking(embeddings, noise)
 
         # append cls token
-        cls_token = self.cls_token + self.position_embeddings[:, :1, :]
-        cls_tokens = cls_token.expand(embeddings.shape[0], -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        # cls_token = self.cls_token + self.position_embeddings_v[:, :1, :]
+        # cls_tokens = cls_token.expand(embeddings.shape[0], -1, -1)
+        embeddings = torch.cat((embeddings, ), dim=1)
 
         return embeddings, mask, ids_restore
 
@@ -823,7 +827,7 @@ class CAVMAEModel(CAVMAEPreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_head_mask(head_mask, self.config.num_visual_layers)
 
         embedding_output, mask, ids_restore = self.embeddings(pixel_values, noise=noise)
 
@@ -899,15 +903,16 @@ class CAVMAEDecoder(nn.Module):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed_a = get_2d_sincos_pos_embed(
             self.decoder_pos_embed_a.shape[-1],
-            int(num_patches_a ** 0.5),
+            8, int(num_patches_a / 8),
             add_cls_token=False,
         )
         self.decoder_pos_embed_a.data.copy_(
             torch.from_numpy(decoder_pos_embed_a).float().unsqueeze(0)
         )
+        grid_size = int(num_patches_v ** 0.5)
         decoder_pos_embed_v = get_2d_sincos_pos_embed(
             self.decoder_pos_embed_v.shape[-1],
-            int(num_patches_v ** 0.5),
+            grid_size, grid_size,
             add_cls_token=False,
         )
         self.decoder_pos_embed_v.data.copy_(
@@ -932,14 +937,14 @@ class CAVMAEDecoder(nn.Module):
         mask_tokens = self.mask_token.repeat(
             x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1
         )
-        x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
+        x_ = torch.cat([x[:, :, :], mask_tokens], dim=1)  # no cls token
         x_ = torch.gather(
             x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2])
         )  # unshuffle
-        x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+        # x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
 
         # add pos embed
-        hidden_states = x + self.decoder_pos_embed
+        hidden_states = x + self.decoder_pos_embed_v
 
         # apply Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
