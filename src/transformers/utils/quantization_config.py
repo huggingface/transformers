@@ -209,6 +209,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         bnb_4bit_compute_dtype=None,
         bnb_4bit_quant_type="fp4",
         bnb_4bit_use_double_quant=False,
+        disable_exllama=False, # New parameter
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITS_AND_BYTES
@@ -220,6 +221,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
         self.bnb_4bit_quant_type = bnb_4bit_quant_type
         self.bnb_4bit_use_double_quant = bnb_4bit_use_double_quant
+        self.disable_exllama = disable_exllama  # New parameter
 
         if bnb_4bit_compute_dtype is None:
             self.bnb_4bit_compute_dtype = torch.float32
