@@ -228,6 +228,7 @@ class HFQuantizer(ABC):
     aux_keys_suffixes = ()
 
     def __init__(self, quantization_config: QuantizationConfig, quantization_status: QuantizationStatus, **kwargs):
+        self.quantization_config = quantization_config
         self.quantization_status = quantization_status
         self.modules_to_not_convert = []
 
@@ -337,9 +338,6 @@ class GPTQHFQuantizer(HFQuantizer):
         super().__init__(quantization_config, **kwargs)
         from optimum.gptq import GPTQQuantizer
 
-        if isinstance(quantization_config, dict):
-            quantization_config = GPTQConfig.from_dict(quantization_config)
-        self.quantization_config = quantization_config
         self.quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict())
 
     def validate_environment(self, *args, **kwargs):
@@ -404,16 +402,6 @@ class BnbHFQuantizer(HFQuantizer):
 
     def __init__(self, quantization_config: QuantizationConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
-
-        if isinstance(quantization_config, dict):
-            self.quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
-        elif isinstance(quantization_config, BitsAndBytesConfig):
-            self.quantization_config = quantization_config
-        else:
-            raise ValueError(
-                f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
-                " `BitsAndBytesConfig` instance."
-            )
 
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
@@ -842,9 +830,6 @@ class AWQHFQuantizer(HFQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        if isinstance(quantization_config, dict):
-            self.quantization_config = AwqConfig.from_dict(quantization_config)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, torch_dtype, from_tf, from_flax):
         if not torch.cuda.is_available():
