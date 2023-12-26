@@ -581,8 +581,14 @@ class CAVMAEEncoder(nn.Module):
     def __init__(self, config: CAVMAEConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [CAVMAELayer(config) for _ in range(config.num_hidden_layers)]
+        self.layer_v = nn.ModuleList(
+            [CAVMAELayer(config) for _ in range(config.num_visual_layers)]
+        )
+        self.layer_a = nn.ModuleList(
+            [CAVMAELayer(config) for _ in range(config.num_audio_layers)]
+        )
+        self.layer_u = nn.ModuleList(
+            [CAVMAELayer(config) for _ in range(config.num_joint_layers)]
         )
         self.gradient_checkpointing = False
 
@@ -597,7 +603,7 @@ class CAVMAEEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        for i, layer_module in enumerate(self.layer):
+        for i, layer_module in enumerate(self.layer_v):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 

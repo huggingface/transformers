@@ -25,6 +25,8 @@ from .modeling_cav_mae import CAVMAEConfig, CAVMAEForPreTraining, CAVMAEForAudio
 
 
 def rename_key(name):
+    if "module." in name:
+        name = name.replace("module.", "")
     if "cls_token" in name:
         name = name.replace("cls_token", "vit.embeddings.cls_token")
     if "mask_token" in name:
@@ -101,7 +103,16 @@ def convert_state_dict(orig_state_dict, config):
                     ] = val[-dim:]
             else:
                 dim = config.hidden_size
-                prefix = "vit.encoder.layer."
+                if '_v' in key:
+                    layer_type = "v"
+                elif '_a' in key:
+                    layer_type = "a"
+                elif '_u' in key:
+                    layer_type = "u"
+                else:
+                    raise ValueError("Unknown layer type: %s" % key)
+                prefix = "vit.encoder.layer_%s." % layer_type
+
                 if "weight" in key:
                     orig_state_dict[
                         f"{prefix}{layer_num}.attention.attention.query.weight"

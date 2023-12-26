@@ -98,7 +98,9 @@ class CAVMAEConfig(PretrainedConfig):
     def __init__(
         self,
         hidden_size=768,
-        num_hidden_layers=12,
+        num_visual_layers=11,
+        num_audio_layers=11,
+        num_joint_layers=1,
         num_attention_heads=12,
         intermediate_size=3072,
         hidden_act="gelu",
@@ -121,7 +123,9 @@ class CAVMAEConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
+        self.num_visual_layers = num_visual_layers
+        self.num_audio_layers = num_audio_layers
+        self.num_joint_layers = num_joint_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
