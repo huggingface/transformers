@@ -542,6 +542,18 @@ class CAVMAELayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(
             config.hidden_size, eps=config.layer_norm_eps
         )
+        self.layernorm_before_a = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_before_v = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_after_a = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
+        self.layernorm_after_v = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(
         self,
