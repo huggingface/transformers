@@ -3680,13 +3680,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ) or not quantizer.check_quantized_param(model, param_value=value, param_name=key, state_dict={}):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        raise NotImplementedError("Loading quantized parameters outside base model is not supported.")
-                        # TODO: consider whether to support this (e.g. quantized model head).
-                        # may need to create such model with quantized head for testing.
-                        # Was: `set_module_quantized_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))`
-                        # in most cases this is now handled by `set_module_tensor_to_device()` above.
-                        # To implement, use `quantizer.create_quantized_param()`
-                        # but need to provide param_device and pass state_dict with Q-components.
+                        quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -3866,15 +3860,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                         model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
-                                    raise NotImplementedError(
-                                        "Loading quantized parameters outside base model is not supported."
-                                    )
-                                    # TODO: consider whether to support this (e.g. quantized model head).
-                                    # may need to create such model with quantized head for testing.
-                                    # was:
-                                    # set_module_quantized_tensor_to_device(
-                                    #     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
-                                    # )
+                                    quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
