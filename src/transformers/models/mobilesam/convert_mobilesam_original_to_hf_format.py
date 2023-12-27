@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Convert SAM checkpoints from the original repository.
+Convert MOBILESAM checkpoints from the original repository.
 """
 import argparse
 import re
@@ -25,11 +25,11 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
-    SamConfig,
+    MobileSamConfig,
     SamImageProcessor,
-    SamModel,
+    MobileSamModel,
     SamProcessor,
-    SamVisionConfig,
+    MobileSamVisionConfig,
 )
 
 
@@ -48,14 +48,24 @@ KEYS_TO_MODIFY_MAPPING = {
     "point_embeddings": "point_embed",
     "pe_layer.positional_encoding_gaussian_matrix": "shared_embedding.positional_embedding",
     "image_encoder": "vision_encoder",
+    "backbone.patch_embed": "patch_embed",
+    "backbone.neck": "neck",
     "neck.0": "neck.conv1",
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
     "neck.3": "neck.layer_norm2",
-    "patch_embed.proj": "patch_embed.projection",
+    # "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
     "blocks": "layers",
+    ".bn.": ".batch_norm.",
+    ".c.": ".conv.",
+    "fc1": "lin1",
+    "fc2": "lin2",
+    "mlp.layer_norm": "attn.post_attention_layer_norm",
+    "attn.layer_norm": "attn.pre_attention_layer_norm"
 }
+
+# vision_encoder.backbone._backbone.stages_3
 
 
 def replace_keys(state_dict):
@@ -64,6 +74,7 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
+    vision_layers_pattern = r"vision_encoder.*.seq.(\d+).*"
 
     for key, value in state_dict.items():
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
@@ -79,6 +90,15 @@ def replace_keys(state_dict):
             elif layer_nb == 2:
                 key = key.replace("layers.2", "proj_out")
 
+        if re.match(vision_layers_pattern, key):
+            layer_nb = int(re.match(vision_layers_pattern, key).group(1))
+            if layer_nb == 2:
+                transformers_layer_nb = 2
+            else:
+                transformers_layer_nb = 1
+
+            key = key.replace(f"seq.{layer_nb}", f"conv{transformers_layer_nb}")
+
         model_state_dict[key] = value
 
     model_state_dict["shared_image_embedding.positional_embedding"] = model_state_dict[
@@ -88,33 +108,17 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_hub_id="ybelkada/segment-anything"):
+def convert_mobilesam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_hub_id="ybelkada/segment-anything"):
     checkpoint_path = hf_hub_download(model_hub_id, f"checkpoints/{model_name}.pth")
 
-    if "sam_vit_b" in model_name:
-        config = SamConfig()
-    elif "sam_vit_l" in model_name:
-        vision_config = SamVisionConfig(
-            hidden_size=1024,
-            num_hidden_layers=24,
-            num_attention_heads=16,
-            global_attn_indexes=[5, 11, 17, 23],
-        )
+    vision_config = MobileSamVisionConfig(
+        hidden_size=320,
+        num_hidden_layers=4,
+    )
 
-        config = SamConfig(
-            vision_config=vision_config,
-        )
-    elif "sam_vit_h" in model_name:
-        vision_config = SamVisionConfig(
-            hidden_size=1280,
-            num_hidden_layers=32,
-            num_attention_heads=16,
-            global_attn_indexes=[7, 15, 23, 31],
-        )
-
-        config = SamConfig(
-            vision_config=vision_config,
-        )
+    config = MobileSamConfig(
+        vision_config=vision_config,
+    )
 
     state_dict = torch.load(checkpoint_path, map_location="cpu")
     state_dict = replace_keys(state_dict)
@@ -122,7 +126,7 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_h
     image_processor = SamImageProcessor()
 
     processor = SamProcessor(image_processor=image_processor)
-    hf_model = SamModel(config)
+    hf_model = MobileSamModel(config)
 
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to("cuda")
@@ -139,50 +143,13 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub, model_h
         output = hf_model(**inputs)
     scores = output.iou_scores.squeeze()
 
-    if model_name == "sam_vit_h_4b8939":
-        assert scores[-1].item() == 0.579890251159668
-
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.9712603092193604
-
-        input_boxes = ((75, 275, 1725, 850),)
-
-        inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.8686015605926514
-
-        # Test with 2 points and 1 image.
-        input_points = [[[400, 650], [800, 650]]]
-        input_labels = [[1, 1]]
-
-        inputs = processor(
-            images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
-        ).to("cuda")
-
-        with torch.no_grad():
-            output = hf_model(**inputs)
-        scores = output.iou_scores.squeeze()
-
-        assert scores[-1].item() == 0.9936047792434692
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = ["sam_vit_b_01ec64", "sam_vit_h_4b8939", "sam_vit_l_0b3195", "mobile_sam"]
+    choices = ["mobile_sam"]
     parser.add_argument(
         "--model_name",
-        default="sam_vit_h_4b8939",
+        default="mobile_sam",
         choices=choices,
         type=str,
         help="Path to hf config.json of model to convert",
@@ -203,4 +170,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    convert_sam_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.model_hub_id)
+    convert_mobilesam_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.model_hub_id)

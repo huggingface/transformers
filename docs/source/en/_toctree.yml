@@ -717,6 +717,8 @@
         title: MatCha
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/mobilesam
+        title: MobileSam
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/oneformer
