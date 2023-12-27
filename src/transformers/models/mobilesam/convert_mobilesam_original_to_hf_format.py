@@ -54,7 +54,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "neck.1": "neck.layer_norm1",
     "neck.2": "neck.conv2",
     "neck.3": "neck.layer_norm2",
-    # "patch_embed.proj": "patch_embed.projection",
     ".norm": ".layer_norm",
     "blocks": "layers",
     ".bn.": ".batch_norm.",
@@ -64,8 +63,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "mlp.layer_norm": "attn.post_attention_layer_norm",
     "attn.layer_norm": "attn.pre_attention_layer_norm"
 }
-
-# vision_encoder.backbone._backbone.stages_3
 
 
 def replace_keys(state_dict):

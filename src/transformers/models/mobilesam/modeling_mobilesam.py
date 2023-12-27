@@ -199,7 +199,10 @@ class MobileSamVisionBlock(nn.Module):
         self.local_conv = MobileSamVisionConv(hidden_dim, hidden_dim, kernel_size=3, stride=1, pad=1, groups=hidden_dim)
 
     def forward(self, hidden_states):
-        pass    
+        hidden_states = self.attn(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.local_conv(hidden_states)
+        return hidden_states
 
 
 class MobileSamVisionPatchEmbed(nn.Module):
@@ -230,54 +233,52 @@ class MobileSamVisionAttention(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
 
-        hidden_dim = config.embed_dims[layer_idx]
+        self.hidden_dim = config.embed_dims[layer_idx]
 
         self.num_attention_heads = config.num_attention_heads[layer_idx]
         self.attention_offsets = config.attention_offsets[layer_idx]
 
-        head_dim = hidden_dim // config.num_attention_heads[layer_idx]
+        head_dim = self.hidden_dim // config.num_attention_heads[layer_idx]
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.qkv = nn.Linear(hidden_dim, hidden_dim * 3, bias=config.qkv_bias)
-        self.proj = nn.Linear(hidden_dim, hidden_dim)
+        self.qkv = nn.Linear(self.hidden_dim, self.hidden_dim * 3, bias=config.qkv_bias)
+        self.proj = nn.Linear(self.hidden_dim, self.hidden_dim)
 
-        self.post_attention_layer_norm = nn.LayerNorm(hidden_dim)
-        self.pre_attention_layer_norm = nn.LayerNorm(hidden_dim)
+        self.post_attention_layer_norm = nn.LayerNorm(self.hidden_dim)
+        self.pre_attention_layer_norm = nn.LayerNorm(self.hidden_dim)
 
         self.attention_biases = torch.nn.Parameter(
             torch.zeros(self.num_attention_heads, self.attention_offsets)
         )
 
+    # TODO: completely refactor this as it has been copied from the authors code directly
+    def forward(self, x):  # x (B,N,C)
+        B, N, _ = x.shape
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
-        batch_size, height, width, _ = hidden_states.shape
-        # qkv with shape (3, batch_size, nHead, height * width, channel)
-        qkv = (
-            self.qkv(hidden_states)
-            .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
-            .permute(2, 0, 3, 1, 4)
+        # Normalization
+        x = self.pre_attention_layer_norm(x)
+
+        qkv = self.qkv(x)
+        # (B, N, num_heads, d)
+        q, k, v = qkv.view(B, N, self.num_attention_heads, -
+                           1).split([self.hidden_dim, self.hidden_dim, self.d], dim=3)
+        # (B, num_heads, N, d)
+        q = q.permute(0, 2, 1, 3)
+        k = k.permute(0, 2, 1, 3)
+        v = v.permute(0, 2, 1, 3)
+
+        attn = (
+            (q @ k.transpose(-2, -1)) * self.scale
+            +
+            (self.attention_biases[:, self.attention_bias_idxs]
+             if self.training else self.ab)
         )
-        # q, k, v with shape (batch_size * nHead, height * width, channel)
-        query, key, value = qkv.reshape(3, batch_size * self.num_attention_heads, height * width, -1).unbind(0)
-
-        attn_weights = (query * self.scale) @ key.transpose(-2, -1)
-
-        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query.dtype)
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = (attn_probs @ value).reshape(batch_size, self.num_attention_heads, height, width, -1)
-        attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, height, width, -1)
-
-        attn_output = self.proj(attn_output)
-
-        if output_attentions:
-            outputs = (attn_output, attn_weights)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        attn = attn.softmax(dim=-1)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, self.dh)
+        x = self.proj(x)
+        x = self.post_attention_layer_norm(x)
+        return x
 
 
 # Copied from transformers.models.sam.modeling_sam.SamMLPBlock with Sam->MobileSam
@@ -927,7 +928,7 @@ class MobileSamVisionConvLayer(nn.Module):
 
 
     def forward(self, x):
-        for blk in self.blocks:
+        for blk in self.layers:
             x = blk(x)
         if self.downsample is not None:
             x = self.downsample(x)
@@ -963,7 +964,7 @@ class MobileSamVisionLayer(nn.Module):
 
 
     def forward(self, x):
-        for block in self.blocks:
+        for block in self.layers:
             x = block(x)
         if self.downsample is not None:
             x = self.downsample(x)
@@ -1037,7 +1038,10 @@ class MobileSamVisionEncoder(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.patch_embed(pixel_values)
-        hidden_states = self.backbone(hidden_states)
+        
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+
         hidden_states = self.neck(hidden_states)
 
         if not return_dict:
