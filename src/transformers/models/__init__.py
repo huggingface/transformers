@@ -210,7 +210,6 @@ from . import (
     timesformer,
     timm_backbone,
     tinyvit,
-    transfo_xl,
     trocr,
     tvlt,
     tvp,
