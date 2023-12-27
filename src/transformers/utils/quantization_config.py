@@ -215,7 +215,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         if load_in_4bit and load_in_8bit:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
-        
+
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
@@ -233,7 +233,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             self.bnb_4bit_compute_dtype = bnb_4bit_compute_dtype
         else:
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
-
 
         self.post_init()
 
