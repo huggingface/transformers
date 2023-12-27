@@ -114,6 +114,10 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
             key = key.replace("norm_head", "layernorm")
         if "head" in key:
             key = key.replace("head", "classifier")
+        if "bn" in key:
+            key = key.replace("bn", "batch_norm")
+        if "c.weight" in key:
+            key = key.replace("c.weight", "convolution.weight")
         state_dict[key] = val
 
     model.load_state_dict(state_dict)

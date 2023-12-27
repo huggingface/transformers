@@ -91,30 +91,41 @@ class TinyVitEncoderOutput(ModelOutput):
     reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class TinyVitConv2dBatchNorm(torch.nn.Sequential):
-    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1, groups=1):
+class TinyVitConv2dBatchNorm(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=1, stride=1, padding=0, dilation=1, groups=1):
         super().__init__()
-        self.c = torch.nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False)
-        self.bn = torch.nn.BatchNorm2d(b)
+        self.convolution = torch.nn.Conv2d(
+            in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias=False
+        )
+        self.batch_norm = torch.nn.BatchNorm2d(out_channels)
 
     @torch.no_grad()
     def fuse(self):
-        c, bn = self.c, self.bn
-        w = bn.weight / (bn.running_var + bn.eps) ** 0.5
-        w = c.weight * w[:, None, None, None]
-        b = bn.bias - bn.running_mean * bn.weight / (bn.running_var + bn.eps) ** 0.5
-        m = torch.nn.Conv2d(
-            w.size(1) * self.c.groups,
-            w.size(0),
-            w.shape[2:],
-            stride=self.c.stride,
-            padding=self.c.padding,
-            dilation=self.c.dilation,
-            groups=self.c.groups,
+        convolution, batch_norm = self.convolution, self.batch_norm
+        weight = batch_norm.weight / (batch_norm.running_var + batch_norm.eps) ** 0.5
+        weight = convolution.weight * weight[:, None, None, None]
+        bias = (
+            batch_norm.bias
+            - batch_norm.running_mean * batch_norm.weight / (batch_norm.running_var + batch_norm.eps) ** 0.5
         )
-        m.weight.data.copy_(w)
-        m.bias.data.copy_(b)
-        return m
+        module = torch.nn.Conv2d(
+            weight.size(1) * self.convolution.groups,
+            weight.size(0),
+            weight.shape[2:],
+            stride=self.cconvolution.stride,
+            padding=self.convolution.padding,
+            dilation=self.convolution.dilation,
+            groups=self.convolution.groups,
+        )
+        module.weight.data.copy_(weight)
+        module.bias.data.copy_(bias)
+        return module
+
+    def forward(self, hidden_state):
+        hidden_state = self.convolution(hidden_state)
+        hidden_state = self.batch_norm(hidden_state)
+
+        return hidden_state
 
 
 class TinyVitEmbeddings(nn.Module):
@@ -144,15 +155,15 @@ class TinyVitMBConv(nn.Module):
         expand_ratio = config.mbconv_expand_ratio
         self.hidden_chans = int(in_channels * expand_ratio)
 
-        self.conv1 = TinyVitConv2dBatchNorm(in_channels, self.hidden_chans, ks=1)
+        self.conv1 = TinyVitConv2dBatchNorm(in_channels, self.hidden_chans, kernel_size=1)
         self.activation1 = ACT2FN[config.hidden_act]
 
         self.conv2 = TinyVitConv2dBatchNorm(
-            self.hidden_chans, self.hidden_chans, ks=3, stride=1, pad=1, groups=self.hidden_chans
+            self.hidden_chans, self.hidden_chans, kernel_size=3, stride=1, padding=1, groups=self.hidden_chans
         )
         self.activation2 = ACT2FN[config.hidden_act]
 
-        self.conv3 = TinyVitConv2dBatchNorm(self.hidden_chans, out_channels, ks=1)
+        self.conv3 = TinyVitConv2dBatchNorm(self.hidden_chans, out_channels, kernel_size=1)
         self.activation3 = ACT2FN[config.hidden_act]
 
         self.drop_path = TinyVitDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -192,7 +203,7 @@ class TinyVitPatchMerging(nn.Module):
         if hidden_state.ndim == 3:
             height, width = self.input_resolution
             batch_size = len(hidden_state)
-            # (batch_size, num_channels, height, width)
+            # reshape to (batch_size, num_channels, height, width)
             hidden_state = hidden_state.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
 
         hidden_state = self.conv1(hidden_state)
@@ -284,9 +295,6 @@ class TinyVitConvStage(nn.Module):
             hidden_state = self.downsample(hidden_state)
         else:
             output_dimensions = (height, width, height, width)
-
-        print("Shape of hidden state:", hidden_state.shape)
-        print("Shape of hidden state before downsampling:", hidden_state_before_downsampling.shape)
 
         return (hidden_state, hidden_state_before_downsampling, output_dimensions)
 
@@ -428,7 +436,9 @@ class TinyViTLayer(nn.Module):
 
         local_conv_size = config.local_conv_size
         pad = local_conv_size // 2
-        self.local_conv = TinyVitConv2dBatchNorm(dim, dim, ks=local_conv_size, stride=1, pad=pad, groups=dim)
+        self.local_conv = TinyVitConv2dBatchNorm(
+            dim, dim, kernel_size=local_conv_size, stride=1, padding=pad, groups=dim
+        )
 
     def forward(self, x, output_attentions):
         height, width = self.input_resolution
@@ -699,11 +709,11 @@ class TinyVitPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, TinyVitMBConv):
-            module.conv3.bn.weight.data.zero_()
-            module.conv3.bn.bias.data.zero_()
+            module.conv3.batch_norm.weight.data.zero_()
+            module.conv3.batch_norm.bias.data.zero_()
         elif isinstance(module, TinyVitConv2dBatchNorm):
-            torch.nn.init.constant_(module.bn.weight, 1.0)
-            torch.nn.init.constant_(module.bn.bias, 0)
+            torch.nn.init.constant_(module.batch_norm.weight, 1.0)
+            torch.nn.init.constant_(module.batch_norm.bias, 0)
 
 
 TINYVIT_START_DOCSTRING = r"""
