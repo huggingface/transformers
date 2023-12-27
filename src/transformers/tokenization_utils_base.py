@@ -3560,16 +3560,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for _ in range(num_tokens_to_remove):
                 if pair_ids is None or len(ids) > len(pair_ids):
                     if self.truncation_side == "right":
-                        ids = ids[:-1]
+                        del ids[-1]
                     elif self.truncation_side == "left":
-                        ids = ids[1:]
+                        del ids[0]
                     else:
                         raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
                 else:
                     if self.truncation_side == "right":
-                        pair_ids = pair_ids[:-1]
+                        del pair_ids[-1]
                     elif self.truncation_side == "left":
-                        pair_ids = pair_ids[1:]
+                        del pair_ids[0]
                     else:
                         raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
