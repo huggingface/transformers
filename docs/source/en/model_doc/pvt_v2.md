@@ -15,13 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The PVT v2 model was proposed in
-[PVT v2: Improved Baselines with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797)
-by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, and Ling Shao.
-As an improved variant of PVT v1, it eschews positional encoding, relying instead on positional 
-information encoded through zero-padding and overlapping patch embeddings. The lack of reliance on
-positional encoding simplifies the architecture and avoids the need for interpolating positional
-encodings. The same encoder structure is used in [Segformer](https://arxiv.org/abs/2105.15203) for
-semantic segmentation.
+[PVT v2: Improved Baselines with Pyramid Vision Transformer](https://arxiv.org/abs/2106.13797) by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, and Ling Shao. As an improved variant of PVT v1, it eschews positional encoding, relying instead on positional  information encoded through zero-padding and overlapping patch embeddings. The lack of reliance on positional encoding simplifies the architecture and avoids the need for interpolating positional encodings. The same encoder structure is used in [Segformer (https://arxiv.org/abs/2105.15203) for semantic segmentation.
 
 Abstract from the paper:
 
