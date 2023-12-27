@@ -90,6 +90,7 @@ from .hub import (
     try_to_load_from_cache,
 )
 from .import_utils import (
+    ACCELERATE_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
