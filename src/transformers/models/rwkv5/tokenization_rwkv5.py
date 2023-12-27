@@ -43,7 +43,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-# Compared to the trie provided by HuggingFace, the main difference in the trie implemented here is that it has special encoding and decoding logic, and it needs to handle token that are not encoded in ASCII.
+# Compared to the trie provided by HuggingFace, the main difference in the RWKVTOKENIZERTRIE implemented here is that it has special encoding and decoding logic, and it needs to handle token that are not encoded in ASCII.
 class RWKVTOKENIZERTRIE:
     __slots__ = tuple("ch,to,values,front".split(","))
     to: list
@@ -141,7 +141,7 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def add_tokens(self, new_tokens, special_tokens: bool = False):
+    def add_tokens_to_vocab(self, new_tokens, special_tokens: bool = False):
         for token in new_tokens:
             token_id = self.convert_tokens_to_ids(token)
             self.added_tokens_decoder[token_id] = token
@@ -232,14 +232,11 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        def remove_zeros_from_first_segment(token_ids, first_max_length):
-            first_segment = token_ids[:first_max_length]
-            first_segment_cleaned = [token for token in first_segment if token != 0]
-            return first_segment_cleaned + token_ids[first_max_length:]
-
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
-        token_ids = remove_zeros_from_first_segment(token_ids, self.first_max_length)
+        first_segment = token_ids[:self.first_max_length]
+        first_segment_cleaned = [token for token in first_segment if token != 0]
+        token_ids = first_segment_cleaned + token_ids[self.first_max_length:]
         if isinstance(token_ids, int):
             if token_ids in self.all_special_ids and skip_special_tokens:
                 return ""
