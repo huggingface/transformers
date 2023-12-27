@@ -216,8 +216,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if load_in_4bit and load_in_8bit:
             raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
 
-        self.load_in_8bit = load_in_8bit
-        self.load_in_4bit = load_in_4bit
+        self._load_in_8bit = load_in_8bit
+        self._load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
         self.llm_int8_skip_modules = llm_int8_skip_modules
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
@@ -235,6 +235,26 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_compute_dtype must be a string or a torch.dtype")
 
         self.post_init()
+
+    @property
+    def load_in_4bit(self):
+        return self._load_in_4bit
+
+    @load_in_4bit.setter
+    def load_in_4bit(self, value: bool):
+        if self.load_in_8bit and value:
+            raise ValueError("load_in_8bit and load_in_4bit are both True, but only one can be used at the same time")
+        self._load_in_4bit = value
+
+    @property
+    def load_in_8bit(self):
+        return self._load_in_8bit
+
+    @load_in_8bit.setter
+    def load_in_8bit(self, value: bool):
+        if self.load_in_4bit and value:
+            raise ValueError("load_in_8bit and load_in_4bit are both True, but only one can be used at the same time")
+        self._load_in_8bit = value
 
     def post_init(self):
         r"""
