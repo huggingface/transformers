@@ -77,9 +77,6 @@ class MoE(torch.nn.Module):
         self.values = torch.nn.Parameter(
             torch.empty(self.n_experts, self.expert_size, self.v_dim)
         )
-        # self.expert_sel = torch.nn.Parameter(
-        #     torch.empty(self.n_experts, self.k_vec_dim)
-        # )
         self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
         torch.nn.init.normal_(self.keys, std=d_model**-0.5 * weight_std_scale)
         torch.nn.init.normal_(self.values, std=self.size**-0.5 * weight_std_scale)
@@ -120,9 +117,6 @@ class MoE(torch.nn.Module):
             scores = scores + index * self.bias
 
         scores = self.activation(scores)
-
-        # NOTE: Shouldn't we apply the routing proabilities after the complete FFN?
-        # here they are applied at an intermediate stage
         scores = scores * expert_scores[..., None]
 
         if self.dropout > 0:
@@ -170,8 +164,8 @@ class MoE(torch.nn.Module):
 
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Reshape the keys and values into one big matrix
-        self.keys.data = torch.reshape(self.keys, (int(self.n_experts * self.expert_size), self.k_vec_dim))
-        self.values.data = torch.reshape(self.values, (self.k_vec_dim, int(self.n_experts * self.expert_size)))
+        self.keys.data = torch.reshape(self.keys.transpose(1,2), (int(self.n_experts * self.expert_size), self.k_vec_dim))
+        self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
 
         # Selection score calculation
         # sel = sel_raw = F.linear(input, self.expert_sel, None)
@@ -227,3 +221,43 @@ class MoE(torch.nn.Module):
         if self.o_bias is not None:
             res = res + self.o_bias
         return res, reg_loss
+
+
+if __name__ == "__main__":
+    import torch
+    from transformers.models.sigma_moe.cpu_src.moe_layer import MoE as CPUMoE
+    from transformers.models.sigma_moe.cuda_src.moe_layer import MoE as CUDAMoE
+
+    torch.manual_seed(0)
+
+    d_model = 128
+    n_experts = 4
+    expert_size = 64
+    k = 2
+
+    cpu_moe = CPUMoE(
+        d_model=d_model,
+        n_experts=n_experts,
+        expert_size=expert_size,
+        k=k,
+    )
+
+    cuda_moe = CUDAMoE(
+        d_model=d_model,
+        n_experts=n_experts,
+        expert_size=expert_size,
+        k=k,
+    ).cuda()
+
+    cuda_moe.load_state_dict(cpu_moe.state_dict())
+
+    inp = torch.randn(1, 1, 128)
+    cpu_x, _ = cpu_moe(inp)
+    cuda_x, _ = cuda_moe(inp.cuda())
+
+    cuda_x: torch.Tensor
+
+    if torch.allclose(cpu_x, cuda_x.cpu(), atol=1e-5):
+        print("✅ CPU and CUDA match")
+    else:
+        print("❌ CPU and CUDA differ")
