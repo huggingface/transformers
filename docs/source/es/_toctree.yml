@@ -64,6 +64,8 @@
     title: Los recursos de la comunidad
   title: Guías para desarrolladores
 - sections:
+  - local: performance
+    title: Descripción general
   - local: debugging
     title: Debugging
   title: Rendimiento y escalabilidad
