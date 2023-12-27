@@ -164,8 +164,10 @@ class MoE(torch.nn.Module):
 
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Reshape the keys and values into one big matrix
-        self.keys.data = torch.reshape(self.keys.transpose(1,2), (int(self.n_experts * self.expert_size), self.k_vec_dim))
-        self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
+        if self.keys.ndim > 2:
+            self.keys.data = torch.reshape(self.keys.transpose(1,2), (int(self.n_experts * self.expert_size), self.k_vec_dim))
+        if self.values.ndim > 2:
+            self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
 
         # Selection score calculation
         # sel = sel_raw = F.linear(input, self.expert_sel, None)
