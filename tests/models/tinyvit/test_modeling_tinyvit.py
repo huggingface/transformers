@@ -342,6 +342,18 @@ class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip(reason="TinyVit does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="TinyVit does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="TinyVit does not support gradient checkpointing yet")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
 
 @require_vision
 @require_torch
