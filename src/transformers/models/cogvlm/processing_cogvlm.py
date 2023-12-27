@@ -33,19 +33,19 @@ class CogVLMProcessor(ProcessorMixin):
     r"""
     Constructs a CogVLM processor which wraps a CLIP image processor and a LLaMa tokenizer into a single processor.
 
-    [`CogVLMProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizer`]. See the docstring
+    [`CogVLMProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the docstring
     of [`~CogVLMProcessor.__call__`] and [`~CogVLMProcessor.decode`] for more information.
 
     Args:
         image_processor (`CLIPImageProcessor`):
             An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['LlamaTokenizer`]. The tokenizer is a required input.
+        tokenizer (`LlamaTokenizer` or `LlamaTokenizerFast`):
+            An instance of ['LlamaTokenizer`] or ['LlamaTokenizerFast`]. The tokenizer is a required input.
     """
 
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = "LlamaTokenizer"
+    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -54,50 +54,35 @@ class CogVLMProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = None,
-        return_special_tokens_mask: bool = None,
-        return_offsets_mapping: bool = None,
-        return_token_type_ids: bool = None,
-        return_length: bool = False,
-        verbose: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
+        [`LlamaTokenizer.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
 
-        if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-        else:
-            pixel_values = None
-        text_inputs = self.tokenizer(
-            text,
-            add_special_tokens=add_special_tokens,
-            return_tensors=return_tensors,
-            return_token_type_ids=return_token_type_ids,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-        )
+        if text is None and images is None:
+            raise ValueError("You have to specify either text or images. Both cannot be none.")
 
-        return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
+        if text is not None:
+            text_features = self.tokenizer(
+                text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
+            )
+
+        if images is not None:
+            image_features = self.image_processor(images, return_tensors=return_tensors)
+
+        if text is not None and images is not None:
+            return BatchFeature(data=dict(**text_features, **image_features), tensor_type=return_tensors)
+        elif text is not None:
+            return text_features
+        else:
+            return BatchFeature(data=dict(**image_features), tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """

@@ -674,9 +674,9 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 )
         else:
             # not allow for inputs_embeds, because we want to process image feature
-            assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
+            # assert input_ids is not None and inputs_embeds is None, f"{input_ids} {inputs_embeds}"
 
-            if pixel_values is not None:
+            if pixel_values is not None and input_ids is not None:
                 # multi-modality
                 if len(input_ids) != len(pixel_values):
                     raise ValueError("Make sure to pass as many texts as images")
@@ -714,7 +714,8 @@ class CogVLMModel(CogVLMPreTrainedModel):
                 assert not (
                     token_type_ids == VISION_TOKEN_TYPE
                 ).any(), f"{(token_type_ids == VISION_TOKEN_TYPE).sum()}"
-                inputs_embeds = self.embed_tokens(input_ids)
+                if inputs_embeds is None:
+                    inputs_embeds = self.embed_tokens(input_ids)
 
             if position_ids is None:
                 position_ids = build_position_ids(token_type_ids, attention_mask)
