@@ -467,41 +467,6 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(batch_outputs)
 
-    def decode(
-        self,
-        token_ids: Union[int, List[int]],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = None,
-        **kwargs,
-    ) -> str:
-        """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
-        tokens and clean up tokenization spaces.
-
-        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
-
-        Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
-
-        Returns:
-            `str`: The decoded sentence.
-        """
-        # Convert inputs to python lists
-        return self._decode(
-            token_ids=token_ids,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
-        )
-
     def batch_decode(
         self,
         sequences: Union[List[int], List[List[int]]],
