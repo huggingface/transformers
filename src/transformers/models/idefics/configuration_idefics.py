@@ -257,6 +257,7 @@ class IdeficsConfig(PretrainedConfig):
         alphas_initializer_range=0.0,
         alpha_type="float",
         rms_norm_eps=1e-6,
+        layer_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=0,
         bos_token_id=1,
@@ -287,6 +288,7 @@ class IdeficsConfig(PretrainedConfig):
         self.alphas_initializer_range = alphas_initializer_range
         self.alpha_type = alpha_type
         self.rms_norm_eps = rms_norm_eps
+        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
 
         self.cross_layer_interval = cross_layer_interval
