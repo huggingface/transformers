@@ -25,6 +25,7 @@ from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import shape_list, TFPreTrainedModel
 from ...utils import ModelOutput, logging
+from ...tf_utils import flatten
 from .configuration_idefics import IdeficsVisionConfig
 
 
@@ -77,10 +78,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             kernel_size=self.patch_size,
             strides=self.patch_size,
             use_bias=False,
-            # TODO: Alazar, channel_first data format isn't supported on CPU
-            # but I was getting a weird crash when it is set to channels_last
-            # I will investigate later, just a temporary hack
-            data_format="channels_first",
+            data_format="channels_last",
             name="patch_embedding",
         )
 
@@ -104,15 +102,25 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         num_h_patches = height // self.config.patch_size
         num_w_patches = width // self.config.patch_size
         num_h_patches, num_w_patches = num_h_patches + 0.1, num_w_patches + 0.1
-        sqrt_num_positions = tf.math.sqrt(float(num_positions))
+        sqrt_num_positions = math.sqrt(float(num_positions))
         patch_pos_embed = tf.reshape(patch_pos_embed, (1, int(sqrt_num_positions), int(sqrt_num_positions), embed_dim))
-        patch_pos_embed = tf.transpose(patch_pos_embed, perm=[0, 3, 1, 2])
+
+        scale_height = num_h_patches / sqrt_num_positions
+        scale_width = num_w_patches / sqrt_num_positions
+        original_height = tf.cast(tf.shape(patch_pos_embed)[1], tf.float32)
+        original_width = tf.cast(tf.shape(patch_pos_embed)[2], tf.float32)
+        # Apply scaling
+        new_height = tf.cast(original_height * scale_height, tf.int32)
+        new_width = tf.cast(original_width * scale_width, tf.int32)
+
         patch_pos_embed = tf.image.resize(
-            patch_pos_embed, (int(num_h_patches), int(num_w_patches)), method=tf.image.ResizeMethod.BICUBIC
+            patch_pos_embed, size=[new_height, new_width],
+            method=tf.image.ResizeMethod.BICUBIC
         )
+
         if (
-            int(num_h_patches) != shape_list(patch_pos_embed)[-2]
-            or int(num_w_patches) != shape_list(patch_pos_embed)[-1]
+            int(num_h_patches) != shape_list(patch_pos_embed)[-3]
+            or int(num_w_patches) != shape_list(patch_pos_embed)[-2]
         ):
             raise ValueError(
                 f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
@@ -122,7 +130,11 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         return tf.concat((class_pos_embed[tf.newaxis, :], patch_pos_embed), axis=1)
 
     def call(self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        # Input `pixel_values` is NCHW format which doesn't run on CPU so first thing we do is
+        # transpose it to change it to NHWC
+        # TODO: Alazar don't forget to change format back to NCHW
+        pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
+        batch_size, height, width, num_channels = shape_list(pixel_values)
         if not interpolate_pos_encoding:
             if height != self.image_size or width != self.image_size:
                 raise ValueError(
@@ -130,10 +142,8 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
                     f" ({self.image_size}*{self.image_size}). You should try to set `interpolate_pos_encoding=True`"
                 )
 
-        #pixel_values = tf.transpose(pixel_values, perm=[0, 3, 1, 2])
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-
-        patch_embeds = tf.reshape(patch_embeds, [batch_size, self.num_patches, -1])
+        patch_embeds = flatten(patch_embeds, 1, 2)
 
         class_embeds = tf.broadcast_to(
             self.class_embedding[tf.newaxis, tf.newaxis, :], [batch_size, 1, self.embed_dim]
