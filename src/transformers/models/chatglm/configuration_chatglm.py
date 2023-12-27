@@ -135,7 +135,8 @@ class ChatGlmConfig(PretrainedConfig):
         rope_scaling=None,
         attention_bias=False,
         attention_dropout=0.0,
-        partial_rotary_factor=0.5,
+        partial_rotary_factor=0.25,
+        apply_query_key_layer_scaling=True,
         mlp_bias=False,
         multi_query_group_num=2,
         kv_channels=128,
@@ -143,6 +144,7 @@ class ChatGlmConfig(PretrainedConfig):
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
+        self.apply_query_key_layer_scaling = apply_query_key_layer_scaling
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers

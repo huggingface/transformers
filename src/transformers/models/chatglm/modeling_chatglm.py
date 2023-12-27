@@ -28,7 +28,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_causal_attention_mask,
 )
@@ -172,15 +172,13 @@ class ChatGlmDynamicNTKScalingRotaryEmbedding(ChatGlmRotaryEmbedding):
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    x1 = x[..., : x.shape[-2] // 2, :]
+    x2 = x[..., x.shape[-2] // 2 :, :]
+    return torch.cat((-x2, x1), dim=-2)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -204,8 +202,32 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+
+    batch_size, num_q_heads, seq_len, head_dim = q.shape
+    _, num_k_heads, _, _ = k.shape
+
+    rot_shape = cos.shape
+
+    # TODO: explain why do we need this.
+    q = q.reshape(batch_size, num_q_heads, seq_len, head_dim // 2, 2)
+    k = k.reshape(batch_size, num_k_heads, seq_len, head_dim // 2, 2)
+
+    q_embed = torch.stack(
+        [
+            q[..., 0] * cos[..., : rot_shape[-1] // 2] - q[..., 1] * sin[..., : rot_shape[-1] // 2],
+            q[..., 1] * cos[..., : rot_shape[-1] // 2] + q[..., 0] * sin[..., : rot_shape[-1] // 2],
+        ],
+        dim=-1,
+    ).flatten(-2)
+
+    k_embed = torch.stack(
+        [
+            k[..., 0] * cos[..., : rot_shape[-1] // 2] - k[..., 1] * sin[..., : rot_shape[-1] // 2],
+            k[..., 1] * cos[..., : rot_shape[-1] // 2] + k[..., 0] * sin[..., : rot_shape[-1] // 2],
+        ],
+        dim=-1,
+    ).flatten(-2)
+
     return q_embed, k_embed
 
 
@@ -285,6 +307,8 @@ class ChatGlmAttention(nn.Module):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__()
 
+        self.config = config
+        self.apply_query_key_layer_scaling = config.apply_query_key_layer_scaling
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -308,9 +332,18 @@ class ChatGlmAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        # Layer-wise attention scaling
-        self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
-        self.beta = 1.0
+        # Layer-wise attention scaling it is important to keep this for numerical stability
+        # to get the same results as the original `trust_remote_code` model.
+        if self.apply_query_key_layer_scaling:
+            self.coeff = layer_idx + 1
+        else:
+            self.coeff = 1
+
+        # in the `trust_remote_code` model the inverse norm factor is multiplied
+        # by `self.coeff` and `self.coeff` is used back when computing the final
+        # attention scores
+        self.inv_norm_factor = 1.0 / (math.sqrt(self.head_dim) * self.coeff)
+        self.partial_rotary_factor = config.partial_rotary_factor
 
         if not self.multi_query_attention:
             qkv_size = 3 * self.hidden_size
@@ -325,7 +358,32 @@ class ChatGlmAttention(nn.Module):
         self.dense = nn.Linear(self.hidden_size, self.hidden_size, bias=config.mlp_bias)
         self.attention_dropout = config.attention_dropout
 
-        self.rotary_emb = ChatGlmRotaryEmbedding(self.head_dim)
+        self._init_rope()
+
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            self.rotary_emb = ChatGlmRotaryEmbedding(
+                int(self.partial_rotary_factor * self.head_dim),
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = ChatGlmLinearScalingRotaryEmbedding(
+                    int(self.partial_rotary_factor * self.head_dim),
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = ChatGlmDynamicNTKScalingRotaryEmbedding(
+                    int(self.partial_rotary_factor * self.head_dim),
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -387,7 +445,22 @@ class ChatGlmAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        # Partial rotary embedding
+        query_rot, query_pass = (
+            query_states[..., : self.rotary_emb.dim],
+            query_states[..., self.rotary_emb.dim :],
+        )
+        key_rot, key_pass = (
+            key_states[..., : self.rotary_emb.dim],
+            key_states[..., self.rotary_emb.dim :],
+        )
+        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+
+        # [batch_size, seq_length, num_heads, head_dim]
+        query_states = torch.cat((query_rot, query_pass), dim=-1)
+        key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -396,7 +469,7 @@ class ChatGlmAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.inv_norm_factor
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
@@ -412,7 +485,9 @@ class ChatGlmAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(attn_weights.float() * self.coeff, dim=-1, dtype=torch.float32).to(
+            query_states.dtype
+        )
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -680,8 +755,11 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         past_key_values_length = 0
-        if past_key_values is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -717,15 +795,13 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            past_key_value = past_key_values[idx] if past_key_values is not None else None
-
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    past_key_value,
+                    past_key_values,
                     output_attentions,
                     use_cache,
                 )
@@ -734,7 +810,7 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
                     hidden_states,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
-                    past_key_value=past_key_value,
+                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
@@ -742,7 +818,7 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
+                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -753,7 +829,9 @@ class ChatGlmModel(ChatGlmPreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
+        next_cache = None
+        if use_cache:
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -889,16 +967,33 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
+            if isinstance(past_key_values, Cache):
+                cache_length = past_key_values.get_seq_length()
+                past_length = past_key_values.seen_tokens
+                max_cache_length = past_key_values.get_max_length()
             else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
+                cache_length = past_length = past_key_values[0][0].shape[2]
+                max_cache_length = None
 
-            input_ids = input_ids[:, remove_prefix_length:]
+            # Keep only the unprocessed tokens:
+            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
+            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # input)
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
+                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
+            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
+            # input_ids based on the past_length.
+            elif past_length < input_ids.shape[1]:
+                input_ids = input_ids[:, past_length:]
+            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
+
+            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
+            if (
+                max_cache_length is not None
+                and attention_mask is not None
+                and cache_length + input_ids.shape[1] > max_cache_length
+            ):
+                attention_mask = attention_mask[:, -max_cache_length:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
