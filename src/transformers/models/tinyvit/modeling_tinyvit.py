@@ -16,6 +16,7 @@
 
 import collections
 import itertools
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -24,9 +25,10 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -56,19 +58,48 @@ TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+@dataclass
+class TinyVitEncoderOutput(ModelOutput):
+    """
+    TinyViT encoder's outputs, with potential hidden states and attentions.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+            shape `(batch_size, hidden_size, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
+            include the spatial dimensions.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class TinyVitConv2dBatchNorm(torch.nn.Sequential):
-    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1, groups=1, bn_weight_init=1):
+    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1, groups=1):
         super().__init__()
-        self.add_module("c", torch.nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False))
-        bn = torch.nn.BatchNorm2d(b)
-        # TODO define in init_weights
-        # torch.nn.init.constant_(bn.weight, bn_weight_init)
-        # torch.nn.init.constant_(bn.bias, 0)
-        self.add_module("bn", bn)
+        self.c = torch.nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False)
+        self.bn = torch.nn.BatchNorm2d(b)
 
     @torch.no_grad()
     def fuse(self):
-        c, bn = self._modules.values()
+        c, bn = self.c, self.bn
         w = bn.weight / (bn.running_var + bn.eps) ** 0.5
         w = c.weight * w[:, None, None, None]
         b = bn.bias - bn.running_mean * bn.weight / (bn.running_var + bn.eps) ** 0.5
@@ -121,7 +152,7 @@ class TinyVitMBConv(nn.Module):
         )
         self.activation2 = ACT2FN[config.hidden_act]
 
-        self.conv3 = TinyVitConv2dBatchNorm(self.hidden_chans, out_channels, ks=1, bn_weight_init=0.0)
+        self.conv3 = TinyVitConv2dBatchNorm(self.hidden_chans, out_channels, ks=1)
         self.activation3 = ACT2FN[config.hidden_act]
 
         self.drop_path = TinyVitDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
@@ -159,10 +190,10 @@ class TinyVitPatchMerging(nn.Module):
 
     def forward(self, hidden_state):
         if hidden_state.ndim == 3:
-            H, W = self.input_resolution
-            B = len(hidden_state)
-            # (B, C, H, W)
-            hidden_state = hidden_state.view(B, H, W, -1).permute(0, 3, 1, 2)
+            height, width = self.input_resolution
+            batch_size = len(hidden_state)
+            # (batch_size, num_channels, height, width)
+            hidden_state = hidden_state.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
 
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.activation(hidden_state)
@@ -236,14 +267,15 @@ class TinyVitConvStage(nn.Module):
         else:
             self.downsample = None
 
+        self.gradient_checkpointing = False
+
     def forward(self, hidden_state, input_dimensions, output_attentions=False):
         height, width = input_dimensions
         for layer in self.layers:
-            # TODO support gradient checkpointing
-            # if self.gradient_checkpointing:
-            #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
-            # else
-            hidden_state = layer(hidden_state)
+            if self.gradient_checkpointing and self.training:
+                hidden_state = self._gradient_checkpointing_func(layer.__call__, hidden_state)
+            else:
+                hidden_state = layer(hidden_state)
 
         hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
@@ -252,6 +284,9 @@ class TinyVitConvStage(nn.Module):
             hidden_state = self.downsample(hidden_state)
         else:
             output_dimensions = (height, width, height, width)
+
+        print("Shape of hidden state:", hidden_state.shape)
+        print("Shape of hidden state before downsampling:", hidden_state_before_downsampling.shape)
 
         return (hidden_state, hidden_state_before_downsampling, output_dimensions)
 
@@ -509,15 +544,16 @@ class TinyVitStage(nn.Module):
         else:
             self.downsample = None
 
+        self.gradient_checkpointing = False
+
     def forward(self, hidden_state, input_dimensions, output_attentions=False):
         height, width = input_dimensions
-        for idx, layer in enumerate(self.layers):
-            # TODO support gradient checkpointing
-            # if self.gradient_checkpointing:
-            #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
-            # else:
-            layer_outputs = layer(hidden_state, output_attentions)
-            hidden_state = layer_outputs[0]
+        for layer in self.layers:
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(layer.__call__, hidden_state, output_attentions)
+            else:
+                layer_outputs = layer(hidden_state, output_attentions)
+                hidden_state = layer_outputs[0]
 
         hidden_state_before_downsampling = hidden_state
         if self.downsample is not None:
@@ -572,12 +608,11 @@ class TinyVitEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, TinyVitEncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -587,21 +622,11 @@ class TinyVitEncoder(nn.Module):
             all_reshaped_hidden_states += (hidden_states,)
 
         for i, stage_module in enumerate(self.stages):
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                stage_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(stage_module), hidden_states, input_dimensions, layer_head_mask
+                stage_outputs = self._gradient_checkpointing_func(
+                    stage_module.__call__, hidden_states, input_dimensions, output_attentions
                 )
             else:
-                # TODO support layer_head_mask similar to Swin
                 stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = stage_outputs[0]
@@ -620,36 +645,39 @@ class TinyVitEncoder(nn.Module):
                     )
                     reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
                 else:
-                    hidden_state_before_downsampling = hidden_state_before_downsampling.flatten(2).transpose(1, 2)
+                    reshaped_hidden_state = hidden_state_before_downsampling.flatten(2).transpose(1, 2)
 
                 all_hidden_states += (hidden_state_before_downsampling,)
                 all_reshaped_hidden_states += (
                     (hidden_state_before_downsampling,) if i == 0 else (reshaped_hidden_state,)
                 )
             elif output_hidden_states and not output_hidden_states_before_downsampling:
-                if i != 0:
-                    batch_size, _, hidden_size = hidden_states.shape
-                    # rearrange b (h w) c -> b c h w
-                    reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
-                    reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                batch_size, _, hidden_size = hidden_states.shape
+                # rearrange b (h w) c -> b c h w
+                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
 
                 all_hidden_states += (hidden_states,)
-                all_reshaped_hidden_states += (hidden_states,) if i == 0 else (reshaped_hidden_state,)
+                all_reshaped_hidden_states += (reshaped_hidden_state,)
 
-            if output_attentions and i != 0:
+            if output_attentions:
                 all_self_attentions += stage_outputs[3:]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_reshaped_hidden_states]
+                if v is not None
+            )
 
-        return BaseModelOutput(
+        return TinyVitEncoderOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
+            reshaped_hidden_states=all_reshaped_hidden_states,
         )
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinPreTrainedModel with Swin->TinyVit,swin->tinyvit
 class TinyVitPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -664,14 +692,18 @@ class TinyVitPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, TinyVitMBConv):
+            module.conv3.bn.weight.data.zero_()
+            module.conv3.bn.bias.data.zero_()
+        elif isinstance(module, TinyVitConv2dBatchNorm):
+            torch.nn.init.constant_(module.bn.weight, 1.0)
+            torch.nn.init.constant_(module.bn.bias, 0)
 
 
 TINYVIT_START_DOCSTRING = r"""
@@ -690,11 +722,6 @@ TINYVIT_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -740,8 +767,7 @@ class TinyVitModel(TinyVitPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -752,22 +778,11 @@ class TinyVitModel(TinyVitPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, len(self.config.depths))
-
         embedding_output, input_dimensions = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -787,8 +802,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            # TODO add reshaped hidden states
-            # reshaped_hidden_states=encoder_outputs.reshaped_hidden_states,
         )
 
 
@@ -825,7 +838,6 @@ class TinyVitForImageClassification(TinyVitPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -841,7 +853,6 @@ class TinyVitForImageClassification(TinyVitPreTrainedModel):
 
         outputs = self.tinyvit(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -962,13 +973,13 @@ class TinyVitBackbone(TinyVitPreTrainedModel, BackboneMixin):
         outputs = self.encoder(
             embedding_output,
             input_dimensions,
-            head_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=True,
-            return_dict=True,
+            output_hidden_states_before_downsampling=True,
+            return_dict=return_dict,
         )
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.reshaped_hidden_states if return_dict else outputs[-1]
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -978,7 +989,9 @@ class TinyVitBackbone(TinyVitPreTrainedModel, BackboneMixin):
         if not return_dict:
             output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
+                output += (outputs[1],)
+            if output_attentions:
+                output += (outputs[2],)
             return output
 
         return BackboneOutput(

@@ -157,7 +157,7 @@ class TinyVitModelTester:
 
 @require_torch
 class TinyVitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TinyVitModel, TinyVitForImageClassification) if is_torch_available() else ()
+    all_model_classes = (TinyVitModel, TinyVitBackbone, TinyVitForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": TinyVitModel, "image-classification": TinyVitForImageClassification}
         if is_torch_available()
