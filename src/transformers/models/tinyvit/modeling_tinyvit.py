@@ -628,6 +628,7 @@ class TinyVitEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if output_hidden_states:
+            # note: this line makes the retain_grad test fail
             all_hidden_states += (hidden_states.flatten(2).transpose(1, 2),)
             all_reshaped_hidden_states += (hidden_states,)
 
