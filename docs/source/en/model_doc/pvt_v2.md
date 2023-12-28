@@ -23,8 +23,31 @@ Abstract from the paper:
 
 This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea). The original code can be found [here](https://github.com/whai362/PVT).
 
+## Usage tips
 
-- PVTv2 on ImageNet-1K
+- [PVTv2](https://arxiv.org/abs/2106.13797) is a hierarchical transformer model which has demonstrated powerful performance in image classification and multiple other tasks, used as a backbone for semantic segmentation in [Segformer](https://arxiv.org/abs/2105.15203), monocular depth estimation in [GLPN](https://arxiv.org/abs/2201.07436), and panoptic segmentation in [Panoptic Segformer](https://arxiv.org/abs/2109.03814).
+- Hierarchical transformers like PVTv2 achieve superior data and parameter efficiency on image data compared with pure transformer architectures by incorporating convolution operations into the encoder layers. This creates a best-of-both-worlds architecture that infuses the useful inductive biases of CNNs like translation equivariance and locality into the network while still enjoying the benefits of dynamic data response and global relationship modeling provided by the self-attention mechanism of [transformers](https://arxiv.org/abs/1706.03762).
+- PVTv2 uses overlapping patch embeddings to create multi-scale feature maps, which are infused with location information using zero-padding and depth-wise convolutions.
+- To reduce the complexity in the attention layers, PVTv2 has the option of using strided 2D convolution or fixed-size average pooling on the intermediary feature maps, the latter of which provides impressive performance with a linear complexity with respect to image size. To use the average pooling for linear complexity, set `linear_attention=True` in the `PvtV2Config`.
+- [`PvtV2Model`] is the hierarchical Transformer encoder (which is also often referred to as Mix Transformer or MiT in the literature). [`PvtV2ForImageClassification`] adds a simple classifier head on top to perform Image Classification.
+- ImageNet pretrained weights for all model sizes can be found on the [hub](https://huggingface.co/models?other=pvt_v2).
+- The best way to get started with the PVTv2 is to load the pretrained checkpoint with the size of your choosing using `AutoModelForImageClassification`:
+```python
+import requests
+import torch
+
+from transformers import AutoModelForImageClassification, AutoImageProcessor
+from PIL import Image
+
+model = AutoModelForImageClassification.from_pretrained("FoamoftheSea/pvt_v2_b0")
+image_processor = AutoImageProcessor.from_pretrained("FoamoftheSea/pvt_v2_b0")
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+image = Image.open(requests.get(url, stream=True).raw)
+processed = image_processor(image)
+outputs = model(torch.tensor(processed["pixel_values"]))
+```
+
+[PVTv2](https://github.com/whai362/PVT/tree/v2) performance on ImageNet-1K by model size (B0-B5):
 
 | Method           | Size | Acc@1 | #Params (M) |
 |------------------|:----:|:-----:|:-----------:|
