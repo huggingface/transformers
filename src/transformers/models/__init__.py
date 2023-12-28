@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    narrow_bert,
     albert,
     align,
     altclip,

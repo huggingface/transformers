@@ -129,6 +129,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.narrow_bert": ["NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "NarrowBertConfig", "NarrowBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1120,6 +1121,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.narrow_bert"].append("NarrowBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1373,6 +1375,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.narrow_bert"].extend(
+        [
+            "NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NarrowBertForMaskedLM",
+            "NarrowBertForCausalLM",
+            "NarrowBertForMultipleChoice",
+            "NarrowBertForQuestionAnswering",
+            "NarrowBertForSequenceClassification",
+            "NarrowBertForTokenClassification",
+            "NarrowBertLayer",
+            "NarrowBertModel",
+            "NarrowBertPreTrainedModel",
+            "load_tf_weights_in_narrow_bert",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -4796,6 +4814,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.narrow_bert import NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, NarrowBertConfig, NarrowBertTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -5777,6 +5796,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.narrow_bert import NarrowBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -7436,6 +7456,20 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
+
+        from .models.narrow_bert import (
+            NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NarrowBertForMaskedLM,
+            NarrowBertForCausalLM,
+            NarrowBertForMultipleChoice,
+            NarrowBertForQuestionAnswering,
+            NarrowBertForSequenceClassification,
+            NarrowBertForTokenClassification,
+            NarrowBertLayer,
+            NarrowBertModel,
+            NarrowBertPreTrainedModel,
+            load_tf_weights_in_narrow_bert,
+        )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
