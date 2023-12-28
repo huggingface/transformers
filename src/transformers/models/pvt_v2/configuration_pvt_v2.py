@@ -17,7 +17,7 @@
 """ Pvt V2 model configuration"""
 
 import warnings
-from typing import Callable, List, Mapping, Tuple, Union
+from typing import Callable, List, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
