@@ -208,7 +208,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 
     rot_shape = cos.shape
 
-    # TODO: explain why do we need this.
+    # In the original ChatGLM repository the query and key states are manually
+    # reshaped into a shape `batch_size, num_q_heads, seq_len, head_dim // 2, 2` changing the order
+    # of the hidden states for query and key. Therefore we need to perform the same reshaping
+    # in order to ensure numerical reproducibility.
     q = q.reshape(batch_size, num_q_heads, seq_len, head_dim // 2, 2)
     k = k.reshape(batch_size, num_k_heads, seq_len, head_dim // 2, 2)
 
@@ -516,7 +519,6 @@ class ChatGlmDecoderLayer(nn.Module):
     def __init__(self, config: ChatGlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        # TODO copied from here
         self.self_attention = ChatGlmAttention(config=config, layer_idx=layer_idx)
         self.mlp = ChatGlmMLP(config)
         self.input_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
