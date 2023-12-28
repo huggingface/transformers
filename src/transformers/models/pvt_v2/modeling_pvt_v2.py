@@ -128,7 +128,7 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-class PvTV2DWConv(nn.Module):
+class PvtV2DepthWiseConv(nn.Module):
     """
     Depth-wise (DW) convolution to infuse positional information using zero-padding. Depth-wise convolutions
     have an equal number of groups to the number of input channels, meaning one filter per input channel. This
@@ -252,7 +252,7 @@ class PvtV2SelfAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
 
-class PvtV2ConvFFN(nn.Module):
+class PvtV2ConvFeedForwardNetwork(nn.Module):
     def __init__(
         self,
         config: PvtV2Config,
@@ -263,7 +263,7 @@ class PvtV2ConvFFN(nn.Module):
         super().__init__()
         out_features = out_features if out_features is not None else in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
-        self.dwconv = PvTV2DWConv(config, hidden_features)
+        self.dwconv = PvtV2DepthWiseConv(config, hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -304,7 +304,7 @@ class PvtV2BlockLayer(nn.Module):
         self.drop_path = PvtV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = PvtV2ConvFFN(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = PvtV2ConvFeedForwardNetwork(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False):
         self_attention_outputs = self.attention(
