@@ -243,7 +243,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     @load_in_4bit.setter
     def load_in_4bit(self, value: bool):
         if self.load_in_8bit and value:
-            raise ValueError("load_in_8bit and load_in_4bit are both True, but only one can be used at the same time")
+            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_4bit = value
 
     @property
@@ -253,7 +253,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     @load_in_8bit.setter
     def load_in_8bit(self, value: bool):
         if self.load_in_4bit and value:
-            raise ValueError("load_in_8bit and load_in_4bit are both True, but only one can be used at the same time")
+            raise ValueError("load_in_4bit and load_in_8bit are both True, but only one can be used at the same time")
         self._load_in_8bit = value
 
     def post_init(self):
