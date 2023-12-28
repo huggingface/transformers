@@ -153,7 +153,7 @@ class PvtV2SelfAttention(nn.Module):
 
     def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int):
         super().__init__()
-        self.attn_reduce = config.attn_reduce
+        self.attn_reduce = config.sr_type
         self.pruned_heads = set()
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -270,7 +270,7 @@ class PvtV2ConvFFN(nn.Module):
             self.intermediate_act_fn = config.hidden_act
         self.dense2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.relu = nn.ReLU() if config.attn_reduce == "averagepooling" else nn.Identity()
+        self.relu = nn.ReLU() if config.sr_type == "averagepooling" else nn.Identity()
 
     def forward(self, hidden_states: torch.Tensor, height, width) -> torch.Tensor:
         hidden_states = self.dense1(hidden_states)

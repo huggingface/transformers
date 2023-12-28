@@ -65,7 +65,7 @@ def create_rename_keys(config):
                 (f"block{i + 1}.{j}.attn.kv.bias", f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.kv.bias")
             )
 
-            if config.attn_reduce == "averagepooling" or config.sr_ratios[i] > 1:
+            if config.sr_type == "averagepooling" or config.sr_ratios[i] > 1:
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.norm.weight",

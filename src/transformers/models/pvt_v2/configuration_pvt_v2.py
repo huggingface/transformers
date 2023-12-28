@@ -84,8 +84,9 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
-        attn_reduce (`str`, *optional*, defaults to `"spatialreduction"`):
-            Attention complexity reduction type. Choice of 'spatialreduction' or 'averagepooling' .
+        sr_type (`str`, *optional*, defaults to `"spatialreduction"`):
+            Attention complexity reduction type. Choice of 'spatialreduction' or 'averagepooling'.
+            If set to "averagepooling", `sr_ratio` is ignored.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -130,7 +131,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         drop_path_rate: float = 0.0,
         layer_norm_eps: float = 1e-6,
         qkv_bias: bool = True,
-        attn_reduce: str = "spatialreduction",
+        sr_type: str = "spatialreduction",
         out_features=None,
         out_indices=None,
         **kwargs,
@@ -167,7 +168,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
-        self.attn_reduce = attn_reduce
+        self.sr_type = sr_type
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
