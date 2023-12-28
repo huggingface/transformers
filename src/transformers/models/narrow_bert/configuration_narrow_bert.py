@@ -47,6 +47,8 @@ class NarrowBertConfig(PretrainedConfig):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
+        full_length_layers (`int`, *optional*, defaults to 2):
+            Number of fully contextualized layers. 12 is equivalent to normal BERT. 
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -94,6 +96,7 @@ class NarrowBertConfig(PretrainedConfig):
         vocab_size=30522,
         hidden_size=768,
         num_hidden_layers=12,
+        full_length_layers=2,
         num_attention_heads=12,
         intermediate_size=3072,
         hidden_act="gelu",
@@ -104,15 +107,16 @@ class NarrowBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        classifier_dropout=None,
+        position_embedding_type="absolute",
         **kwargs
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.full_length_layers = full_length_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -122,10 +126,11 @@ class NarrowBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+        self.classifier_dropout = classifier_dropout
+        self.position_embedding_type = position_embedding_type
+
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             **kwargs
         )
 
