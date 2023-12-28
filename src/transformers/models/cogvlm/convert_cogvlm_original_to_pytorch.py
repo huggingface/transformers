@@ -43,7 +43,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     Copy/paste/tweak model's weights to Transformers design.
     """
     # load original model
-    revision="refs/pr/3" if model_name == "THUDM/cogvlm-chat-hf" else None
+    revision = "refs/pr/3" if model_name == "THUDM/cogvlm-chat-hf" else None
     original_model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.bfloat16,
@@ -69,12 +69,20 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     if model_name == "THUDM/cogvlm-chat-hf":
         # chat mode
         inputs = original_model.build_conversation_input_ids(
-            tokenizer, query=query, history=[], images=[image], template_version="chat",
-        ) 
-    elif model_name == "THUDM/cogvlm-base-224-hf":
+            tokenizer,
+            query=query,
+            history=[],
+            images=[image],
+            template_version="chat",
+        )
+    elif model_name in ["THUDM/cogvlm-base-224-hf", "THUDM/cogvlm-grounding-generalist-hf"]:
         # base mode
         inputs = original_model.build_conversation_input_ids(
-            tokenizer, query=query, history=[], images=[image], template_version="base",
+            tokenizer,
+            query=query,
+            history=[],
+            images=[image],
+            template_version="base",
         )
 
     def gather_inputs(inputs, device, use_bfloat16=True):
@@ -129,10 +137,10 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     if model_name == "THUDM/cogvlm-chat-hf":
         # chat history template
         prompt = f"Question: {query} Answer:"
-    elif model_name == "THUDM/cogvlm-base-224-hf":
+    elif model_name in ["THUDM/cogvlm-base-224-hf", "THUDM/cogvlm-grounding-generalist-hf"]:
         # base history template
         prompt = f"{query}"
-    
+
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
     for k, v in inputs.items():
@@ -179,7 +187,13 @@ if __name__ == "__main__":
         "--model_name",
         default="THUDM/cogvlm-chat-hf",
         type=str,
-        choices=["THUDM/cogvlm-chat-hf", "THUDM/cogvlm-base-490-hf", "THUDM/cogvlm-base-224-hf"],
+        choices=[
+            "THUDM/cogvlm-chat-hf",
+            "THUDM/cogvlm-base-490-hf",
+            "THUDM/cogvlm-base-224-hf",
+            "THUDM/cogvlm-grounding-base-hf", # TODO check this one
+            "THUDM/cogvlm-grounding-generalist-hf", # TODO check this one
+        ],
         help="Name of the model to convert",
     )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
