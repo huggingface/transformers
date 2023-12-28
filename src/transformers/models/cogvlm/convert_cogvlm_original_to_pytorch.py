@@ -43,13 +43,14 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     Copy/paste/tweak model's weights to Transformers design.
     """
     # load original model
+    revision="refs/pr/3" if model_name == "THUDM/cogvlm-chat-hf" else None
     original_model = AutoModelForCausalLM.from_pretrained(
-        "THUDM/cogvlm-chat-hf",
+        model_name,
         torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
         # load_in_4bit=True,
-        revision="refs/pr/3",
+        revision=revision,
     )
     original_model.to(original_device)
 
@@ -60,15 +61,21 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     url = "https://raw.githubusercontent.com/THUDM/CogVLM/main/assets/metrics-min.png"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    # query = "Please extract all text from this image"
-    # image = Image.open("/home/niels/python_projects/transformers/src/transformers/models/cogvlm/img_3805.jpeg").convert("RGB")
 
     tokenizer = LlamaTokenizer.from_pretrained(
         "lmsys/vicuna-7b-v1.5", model_input_names=["input_ids", "attention_mask", "token_type_ids"]
     )
-    inputs = original_model.build_conversation_input_ids(
-        tokenizer, query=query, history=[], images=[image]
-    )  # chat mode
+
+    if model_name == "THUDM/cogvlm-chat-hf":
+        # chat mode
+        inputs = original_model.build_conversation_input_ids(
+            tokenizer, query=query, history=[], images=[image], template_version="chat",
+        ) 
+    elif model_name == "THUDM/cogvlm-base-224-hf":
+        # base mode
+        inputs = original_model.build_conversation_input_ids(
+            tokenizer, query=query, history=[], images=[image], template_version="base",
+        )
 
     def gather_inputs(inputs, device, use_bfloat16=True):
         dtype = torch.bfloat16 if use_bfloat16 else torch.float32
@@ -82,6 +89,8 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     original_inputs = gather_inputs(inputs, device=original_device)
     gen_kwargs = {"max_length": 2048, "do_sample": False}  # TODO set to max_length: 2048
+
+    print("Original input_ids:", tokenizer.decode(original_inputs["input_ids"][0]))
 
     with torch.no_grad():
         outputs = original_model.generate(**original_inputs, **gen_kwargs)
@@ -117,13 +126,19 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_inputs = gather_inputs(inputs, device=hf_device)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
 
-    prompt = f"Question: {query} Answer:"
+    if model_name == "THUDM/cogvlm-chat-hf":
+        # chat history template
+        prompt = f"Question: {query} Answer:"
+    elif model_name == "THUDM/cogvlm-base-224-hf":
+        # base history template
+        prompt = f"{query}"
+    
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
     for k, v in inputs.items():
         print(k, v.shape)
 
-    print("Decoded input_ids:", processor.batch_decode(inputs["input_ids"]))
+    print("HF input_ids:", tokenizer.decode(inputs.input_ids[0]))
 
     # verify inputs
     # for k, v in inputs.items():
@@ -164,6 +179,7 @@ if __name__ == "__main__":
         "--model_name",
         default="THUDM/cogvlm-chat-hf",
         type=str,
+        choices=["THUDM/cogvlm-chat-hf", "THUDM/cogvlm-base-490-hf", "THUDM/cogvlm-base-224-hf"],
         help="Name of the model to convert",
     )
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
