@@ -57,6 +57,7 @@ class ChatGlmModelTester:
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
+        num_key_value_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -68,6 +69,10 @@ class ChatGlmModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        multi_query_attention=True,
+        kv_channels=8,
+        multi_query_group_num=4,
+        partial_rotary_factor=1,
         scope=None,
     ):
         self.parent = parent
@@ -80,6 +85,7 @@ class ChatGlmModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
+        self.num_key_value_heads = num_key_value_heads
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -93,6 +99,11 @@ class ChatGlmModelTester:
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
         self.scope = scope
+        self.multi_query_attention = multi_query_attention
+        self.multi_query_group_num = multi_query_group_num
+        self.kv_channels = kv_channels
+        self.max_position_embeddings = max_position_embeddings
+        self.partial_rotary_factor = partial_rotary_factor
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -132,6 +143,11 @@ class ChatGlmModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            multi_query_attention=self.multi_query_attention,
+            num_key_value_heads=self.num_key_value_heads,
+            kv_channels=self.kv_channels,
+            multi_query_group_num=self.multi_query_group_num,
+            partial_rotary_factor=self.partial_rotary_factor,
         )
 
     def create_and_check_model(

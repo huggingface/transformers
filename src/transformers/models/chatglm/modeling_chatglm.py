@@ -314,6 +314,7 @@ class ChatGlmAttention(nn.Module):
         self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         self.multi_query_attention = config.multi_query_attention
+        self.max_position_embeddings = config.max_position_embeddings
 
         self.projection_size = config.kv_channels * config.num_attention_heads
         self.hidden_size_per_attention_head = self.projection_size // config.num_attention_heads
@@ -344,6 +345,8 @@ class ChatGlmAttention(nn.Module):
         # attention scores
         self.inv_norm_factor = 1.0 / (math.sqrt(self.head_dim) * self.coeff)
         self.partial_rotary_factor = config.partial_rotary_factor
+
+        self.rope_theta = config.rope_theta
 
         if not self.multi_query_attention:
             qkv_size = 3 * self.hidden_size
@@ -509,11 +512,11 @@ class ChatGlmAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# TODO: leverage copied from here by adding fa2
 class ChatGlmDecoderLayer(nn.Module):
     def __init__(self, config: ChatGlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        # TODO copied from here
         self.self_attention = ChatGlmAttention(config=config, layer_idx=layer_idx)
         self.mlp = ChatGlmMLP(config)
         self.input_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -693,7 +696,6 @@ CHATGLM_INPUTS_DOCSTRING = r"""
     "The bare ChatGLM Model outputting raw hidden-states without any specific head on top.",
     CHATGLM_START_DOCSTRING,
 )
-# TODO: support copied from here by adding FA2
 class ChatGlmModel(ChatGlmPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`ChatGlmDecoderLayer`]
@@ -875,6 +877,7 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CHATGLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore Copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
