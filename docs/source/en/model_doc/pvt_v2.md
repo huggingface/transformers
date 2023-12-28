@@ -19,20 +19,7 @@ The PVT v2 model was proposed in
 
 Abstract from the paper:
 
-*Transformer recently has presented encouraging
-progress in computer vision. In this work, we present
-new baselines by improving the original Pyramid Vision
-Transformer (PVT v1) by adding three designs, including
-(1) linear complexity attention layer, (2) overlapping
-patch embedding, and (3) convolutional feed-forward
-network. With these modifications, PVT v2 reduces the
-computational complexity of PVT v1 to linear and achieves
-significant improvements on fundamental vision tasks such
-as classification, detection, and segmentation. Notably, the
-proposed PVT v2 achieves comparable or better performances than recent works such as Swin Transformer. We
-hope this work will facilitate state-of-the-art Transformer
-researches in computer vision. Code is available at
-https://github.com/whai362/PVT.*
+*Transformer recently has presented encouraging progress in computer vision. In this work, we present new baselines by improving the original Pyramid Vision Transformer (PVT v1) by adding three designs, including (1) linear complexity attention layer, (2) overlapping patch embedding, and (3) convolutional feed-forward network. With these modifications, PVT v2 reduces the computational complexity of PVT v1 to linear and achieves significant improvements on fundamental vision tasks such as classification, detection, and segmentation. Notably, the proposed PVT v2 achieves comparable or better performances than recent works such as Swin Transformer. We hope this work will facilitate state-of-the-art Transformer researches in computer vision. Code is available at https://github.com/whai362/PVT.*
 
 This model was contributed by [FoamoftheSea](https://huggingface.co/FoamoftheSea). The original code can be found [here](https://github.com/whai362/PVT).
 
