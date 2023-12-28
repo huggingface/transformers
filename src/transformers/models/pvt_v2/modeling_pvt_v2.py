@@ -103,13 +103,14 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
     def __init__(
         self,
         config: PvtV2Config,
-        patch_size: Union[int, Iterable[int]],
-        stride: int,
-        num_channels: int,
-        hidden_size: int,
+        layer_idx: int,
     ):
         super().__init__()
+        patch_size: Union[int, Iterable[int]] = config.patch_sizes[layer_idx]
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
+        stride: int = config.strides[layer_idx]
+        num_channels: int = config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1]
+        hidden_size: int = config.hidden_sizes[layer_idx]
         self.patch_size = patch_size
         self.proj = nn.Conv2d(
             num_channels,
@@ -284,13 +285,14 @@ class PvtV2BlockLayer(nn.Module):
     def __init__(
         self,
         config: PvtV2Config,
-        hidden_size: int,
-        num_attention_heads: int,
-        drop_path: float,
-        sr_ratio: int,
-        mlp_ratio: float,
+        layer_idx: int,
+        drop_path: float = 0.0,
     ):
         super().__init__()
+        hidden_size: int = config.hidden_sizes[layer_idx]
+        num_attention_heads: int = config.num_attention_heads[layer_idx]
+        sr_ratio: int = config.sr_ratios[layer_idx]
+        mlp_ratio: float = config.mlp_ratios[layer_idx]
         self.layer_norm_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.attention = PvtV2SelfAttention(
             config=config,
@@ -336,10 +338,7 @@ class PvtV2EncoderLayer(nn.Module):
         # Patch embedding
         self.patch_embedding = PvtV2OverlapPatchEmbeddings(
             config=config,
-            patch_size=config.patch_sizes[layer_idx],
-            stride=config.strides[layer_idx],
-            num_channels=config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1],
-            hidden_size=config.hidden_sizes[layer_idx],
+            layer_idx=layer_idx,
         )
 
         # Transformer block
@@ -347,15 +346,12 @@ class PvtV2EncoderLayer(nn.Module):
         drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
         # each block consists of layers
         block_layers = []
-        for i in range(config.depths[layer_idx]):
+        for block_idx in range(config.depths[layer_idx]):
             block_layers.append(
                 PvtV2BlockLayer(
                     config=config,
-                    hidden_size=config.hidden_sizes[layer_idx],
-                    num_attention_heads=config.num_attention_heads[layer_idx],
-                    drop_path=drop_path_decays[sum(config.depths[:layer_idx]) + i],
-                    sr_ratio=config.sr_ratios[layer_idx],
-                    mlp_ratio=config.mlp_ratios[layer_idx],
+                    layer_idx=layer_idx,
+                    drop_path=drop_path_decays[sum(config.depths[:layer_idx]) + block_idx],
                 )
             )
         self.blocks = nn.ModuleList(block_layers)
