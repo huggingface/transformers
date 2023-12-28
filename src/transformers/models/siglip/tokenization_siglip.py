@@ -329,7 +329,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         Thus we always encode `f"{unk_token}text"` and strip the `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        text = self.canonicalize_text(text, keep_punctuation_exact_string="{}")
+        text = self.canonicalize_text(text, keep_punctuation_exact_string=None)
         tokens = self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"
