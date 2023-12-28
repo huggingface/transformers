@@ -652,7 +652,6 @@ class GPTSerializationTest(BaseSerializationTest):
 
 @require_bitsandbytes
 @require_accelerate
-@require_torch
 @require_torch_gpu
 @slow
 class Bnb4BitTestBasicConfigTest(unittest.TestCase):
