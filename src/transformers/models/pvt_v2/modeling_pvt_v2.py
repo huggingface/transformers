@@ -153,7 +153,7 @@ class PvtV2SelfAttention(nn.Module):
 
     def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, sr_ratio: int):
         super().__init__()
-        self.attn_reduce = config.sr_type
+        self.sr_type = config.sr_type
         self.pruned_heads = set()
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
@@ -175,7 +175,7 @@ class PvtV2SelfAttention(nn.Module):
         self.proj_drop = nn.Dropout(config.hidden_dropout_prob)
 
         self.sr_ratio = sr_ratio
-        if self.attn_reduce == "averagepooling":
+        if self.sr_type == "averagepooling":
             self.pool = nn.AdaptiveAvgPool2d(7)
             self.sr = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=1, stride=1)
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
@@ -199,7 +199,7 @@ class PvtV2SelfAttention(nn.Module):
         batch_size, seq_len, num_channels = hidden_states.shape
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-        if self.attn_reduce == "averagepooling":
+        if self.sr_type == "averagepooling":
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
             hidden_states = self.sr(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.act(self.layer_norm(hidden_states))
