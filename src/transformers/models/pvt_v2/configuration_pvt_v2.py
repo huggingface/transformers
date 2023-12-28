@@ -69,7 +69,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         mlp_ratios (`List[int]`, *optional*, defaults to `[8, 8, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
             encoder blocks.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
@@ -124,7 +124,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         strides: List[int] = [4, 2, 2, 2],
         num_attention_heads: List[int] = [1, 2, 5, 8],
         mlp_ratios: List[int] = [8, 8, 4, 4],
-        hidden_act: Union[str, Mapping[str, Callable]] = "gelu",
+        hidden_act: Union[str, Callable] = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
         initializer_range: float = 0.02,
