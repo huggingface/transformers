@@ -1482,7 +1482,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
         - **model_input_names** (`List[str]`) -- A list of inputs expected in the forward pass of the model.
         - **padding_side** (`str`) -- The default value for the side on which the model should have padding applied.
           Should be `'right'` or `'left'`.
-        - **self.truncation_side** (`str`) -- The default value for the side on which the model should have truncation
+        - **truncation_side** (`str`) -- The default value for the side on which the model should have truncation
           applied. Should be `'right'` or `'left'`.
 
     Args:
@@ -1494,7 +1494,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
         padding_side (`str`, *optional*):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
-        self.truncation_side (`str`, *optional*):
+        truncation_side (`str`, *optional*):
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         chat_template (`str`, *optional*):
@@ -1557,7 +1557,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     # to make sure `tokenizer.pad(...)` works correctly
     model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask"]
     padding_side: str = "right"
-    self.truncation_side: str = "right"
+    truncation_side: str = "right"
     slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
@@ -1579,10 +1579,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
             )
 
-        self.self.truncation_side = kwargs.pop("self.truncation_side", self.self.truncation_side)
-        if self.self.truncation_side not in ["right", "left"]:
+        self.truncation_side = kwargs.pop("truncation_side", self.truncation_side)
+        if self.truncation_side not in ["right", "left"]:
             raise ValueError(
-                f"Padding side should be selected between 'right' and 'left', current value: {self.self.truncation_side}"
+                f"Padding side should be selected between 'right' and 'left', current value: {self.truncation_side}"
             )
 
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
@@ -1654,7 +1654,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
-            f" padding_side='{self.padding_side}', self.truncation_side='{self.self.truncation_side}',"
+            f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
             " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}"
         )
@@ -3530,14 +3530,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ):
             if len(ids) > num_tokens_to_remove:
                 window_len = min(len(ids), stride + num_tokens_to_remove)
-                if self.self.truncation_side == "left":
+                if self.truncation_side == "left":
                     overflowing_tokens = ids[:window_len]
                     ids = ids[num_tokens_to_remove:]
-                elif self.self.truncation_side == "right":
+                elif self.truncation_side == "right":
                     overflowing_tokens = ids[-window_len:]
                     ids = ids[:-num_tokens_to_remove]
                 else:
-                    raise ValueError(f"invalid truncation strategy: {self.self.truncation_side}, use 'left' or 'right'.")
+                    raise ValueError(f"invalid truncation strategy: {self.truncation_side}, use 'left' or 'right'.")
 
             else:
                 error_msg = (
@@ -3580,14 +3580,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
-                if self.self.truncation_side == "right":
+                if self.truncation_side == "right":
                     overflowing_tokens = pair_ids[-window_len:]
                     pair_ids = pair_ids[:-num_tokens_to_remove]
-                elif self.self.truncation_side == "left":
+                elif self.truncation_side == "left":
                     overflowing_tokens = pair_ids[:window_len]
                     pair_ids = pair_ids[num_tokens_to_remove:]
                 else:
-                    raise ValueError("invalid truncation strategy:" + str(self.self.truncation_side))
+                    raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
             else:
                 logger.error(
                     f"We need to remove {num_tokens_to_remove} to truncate the input "
