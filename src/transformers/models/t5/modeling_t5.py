@@ -685,8 +685,8 @@ class T5Attention(nn.Module):
 
         real_seq_length = seq_length
 
-        #self.dropout = 0
-        #print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!\n'*3)
+        self.dropout = 0
+        print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!\n'*3)
 
         if past_key_value is not None:
             if len(past_key_value) != 2:
@@ -810,9 +810,10 @@ class T5Attention(nn.Module):
 
             add_to_scores = position_bias_masked            
         else:
-            assert isinstance(position_bias, tuple)
-            position_bias, q_seqlen, kv_seqlen = position_bias
-            #position_bias was provided from outside, so it was cached from an earlier layer.
+            if self.memory_efficient_attention:
+                assert isinstance(position_bias, tuple)
+                position_bias, q_seqlen, kv_seqlen = position_bias
+                #position_bias was provided from outside, so it was cached from an earlier layer.
             add_to_scores = position_bias
             
         if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
@@ -840,7 +841,6 @@ class T5Attention(nn.Module):
 
         attn_bias_for_xformers = None
         
-
         if self.memory_efficient_attention:
 
             if xattn_AttentionBias_forbidden: # or (query_states.shape != key_states.shape):
@@ -853,7 +853,7 @@ class T5Attention(nn.Module):
                 #     assert False
 
                 attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)      
-                xattn_AttentionBias_forbidden = True
+                #xattn_AttentionBias_forbidden = True
             else:                 
                 original_max_seq_len = mask.shape[-1] 
 
@@ -913,6 +913,9 @@ class T5Attention(nn.Module):
             use_op = None
             if isinstance(attn_bias_for_xformers, xattn.AttentionBias):
                 use_op = (fmha.flash.FwOp, fmha.flash.BwOp, ) 
+
+            # use_op = None
+            # print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
                       
             attn_output = xops.memory_efficient_attention(
                 **memory_efficient_attention_kwargs,
@@ -932,7 +935,7 @@ class T5Attention(nn.Module):
         attn_output = self.o(attn_output)
 
         #if self.is_decoder:
-        #    print(f'is_decoder=True debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
+        print(f'is_decoder={self.is_decoder} cross_attention={self.cross_attention} debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
 
         #print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
         #print('------------\n')
@@ -944,7 +947,10 @@ class T5Attention(nn.Module):
         else:
             return_pos_bias = position_bias
 
-        outputs = (attn_output, present_key_value_state, (return_pos_bias, q_seqlen, kv_seqlen))
+        if self.memory_efficient_attention:
+            outputs = (attn_output, present_key_value_state, (return_pos_bias, q_seqlen, kv_seqlen))
+        else:
+            outputs = (attn_output, present_key_value_state, return_pos_bias)
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
