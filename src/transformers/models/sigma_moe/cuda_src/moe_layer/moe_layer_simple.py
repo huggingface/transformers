@@ -1,3 +1,5 @@
+# Copyright Robert Csordas: https://github.com/RobertCsordas/moe_layer
+
 import torch
 import torch.distributed
 import torch.nn.functional as F

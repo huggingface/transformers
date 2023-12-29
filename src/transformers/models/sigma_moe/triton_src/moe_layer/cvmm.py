@@ -5,7 +5,7 @@ import triton
 import triton.language as tl
 
 # Based on https://github.com/openai/triton/blob/main/python/tutorials/03-matrix-multiplication.py
-
+# Based on https://github.com/RobertCsordas/moe_layer
 
 @dataclass
 class CVMMSel:
@@ -25,12 +25,6 @@ def cvmm_prepare_sel(sel: torch.Tensor, n_experts: int) -> CVMMSel:
     return CVMMSel(sel, ssel.view_as(sel), sel_index, None)
 
 
-
-# `triton.jit`'ed functions can be auto-tuned by using the `triton.autotune` decorator, which consumes:
-#   - A list of `triton.Config` objects that define different configurations of
-#       meta-parameters (e.g., `BLOCK_SIZE_M`) and compilation options (e.g., `num_warps`) to try
-#   - An auto-tuning *key* whose change in values will trigger evaluation of all the
-#       provided configs
 @triton.autotune(
     configs=[
         triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=3, num_warps=8),
@@ -59,6 +53,7 @@ def cvmm_kernel(
     stride_bo, stride_bk, stride_bn,
     stride_cm, stride_cn,
     stride_index, stride_sel, stride_out_index,
+    out_index_is_none: tl.constexpr,
     float32: tl.constexpr, allow_tf32: tl.constexpr,
     # Meta-parameters
     BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
@@ -138,20 +133,15 @@ def cvmm_kernel(
         # Write back the block of the output matrix C with masks.
         offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
 
-        if out_index_ptr is not None:
-            remap_offs_cm = tl.load(out_index_ptr + stride_out_index * offs_am)
-        else:
+        if out_index_is_none:
             remap_offs_cm = remap_offs_am
+        else:
+            remap_offs_cm = tl.load(out_index_ptr + stride_out_index * offs_am)
 
         offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
         c_ptrs = c_ptr + stride_cm * remap_offs_cm[:, None] + stride_cn * offs_cn[None, :]
         c_mask = ((offs_cm[:, None] < M) & (sel_all[:, None] == matrix_id)) & (offs_cn[None, :] < N)
         tl.store(c_ptrs, c, mask=c_mask)
-
-
-
-
-
 
 
 @triton.autotune(
@@ -190,6 +180,7 @@ def cvmm_backward_kernel3(
     stride_bk, stride_bn,
     stride_co, stride_cm, stride_cn,
     stride_index, stride_sel, stride_out_index,
+    out_index_is_none: tl.constexpr,
     float32_out: tl.constexpr, allow_tf32: tl.constexpr, op_float16: tl.constexpr,
     # Meta-parameters
     BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
@@ -289,10 +280,10 @@ def cvmm_backward_kernel3(
                 block_mem_indices_f = block_mem_indices_f_base + k * BLOCK_SIZE_K
                 block_mem_indices = block_mem_indices_f % K
                 a_index = tl.load(index_ptr + stride_index * block_mem_indices)
-                if out_index_ptr is not None:
-                    b_index = tl.load(out_index_ptr + stride_out_index * block_mem_indices)
-                else:
+                if out_index_is_none:
                     b_index = a_index
+                else:
+                    b_index = tl.load(out_index_ptr + stride_out_index * block_mem_indices)
                 sel_ok = block_mem_indices_f < end_i
 
                 a_ptrs = a_ptrs_this + a_index[None, :] * stride_ak
@@ -325,11 +316,17 @@ def cvmm_backward_kernel3(
             tl.atomic_add(c_ptrs, c, mask=c_mask)
 
 
-torch.library.define("mylib::cvmm_triton", "(Tensor x, Tensor sel_idx, Tensor sel, Tensor keys, ScalarType out_dtype, Tensor? out_index) -> Tensor")
+torch.library.define("mylib::cvmm_triton", "(Tensor x, Tensor sel_index, Tensor sel, Tensor keys, ScalarType out_dtype, Tensor out_index) -> Tensor")
 
 @torch.library.impl("mylib::cvmm_triton", "default")
-def cvmm_triton(x: torch.Tensor, sel_index: torch.Tensor, sel: torch.Tensor, keys: torch.Tensor, out_dtype: torch.dtype, out_index: Optional[torch.Tensor] = None):
-    xorig = x
+def cvmm_triton(
+    x: torch.Tensor,
+    sel_index: torch.Tensor,
+    sel: torch.Tensor,
+    keys: torch.Tensor,
+    out_dtype: torch.dtype,
+    out_index: torch.Tensor
+):
     x = x.flatten(end_dim=-2)
     assert x.shape[-1] == keys.shape[1]
 
@@ -350,13 +347,18 @@ def cvmm_triton(x: torch.Tensor, sel_index: torch.Tensor, sel: torch.Tensor, key
         triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']),
     )
 
+    out_index_is_none = False
+    if out_index.numel() == 1 and out_index == -1:
+        out_index_is_none = True
+
     cvmm_kernel[grid](
         x, keys, out, sel_index, sel, out_index,
         M, N, K,
         x.stride(0), x.stride(1),
         keys.stride(0), keys.stride(1), keys.stride(2),
         out.stride(0), out.stride(1),
-        sel_index.stride(0), sel.stride(0), out_index.stride(0) if out_index is not None else 0,
+        sel_index.stride(0), sel.stride(0), 0 if out_index_is_none else out_index.stride(0),
+        out_index_is_none=out_index_is_none,
         float32=out.dtype==torch.float32, allow_tf32=False, #torch.backends.cuda.matmul.allow_tf32
     )
 
@@ -374,22 +376,32 @@ def cvmm_triton_abstract(x, sel_idx, sel, keys, out_dtype, out_index):
     return out.view(*sel_shape, N)
 
 
-def cvmm_triton_backward(x: torch.Tensor, sel_index: torch.Tensor, sel: torch.Tensor, grads: torch.Tensor, n_experts: int, key_dtype: torch.dtype,
-                         op_float16: bool, out_index: Optional[torch.Tensor] = None):
+torch.library.define("mylib::cvmm_triton_backward", "(Tensor x, Tensor sel_index, Tensor sel, Tensor grads, int n_experts, ScalarType key_dtype, bool op_float16, Tensor out_index) -> Tensor")
+
+@torch.library.impl("mylib::cvmm_triton_backward", "default")
+def cvmm_triton_backward(
+    x: torch.Tensor,
+    sel_index: torch.Tensor,
+    sel: torch.Tensor,
+    grads: torch.Tensor,
+    n_experts: int,
+    key_dtype: torch.dtype,
+    op_float16: bool,
+    out_index: torch.Tensor
+):
     x = x.flatten(end_dim=-2)
     x = x.transpose(0, 1)
-
     grads = grads.flatten(end_dim=-2)
     sel = sel.flatten()
-
     M, _ = x.shape
     K, N = grads.shape
-
     out = torch.zeros((n_experts, M, N), device=x.device, dtype=key_dtype)
-
     grid = lambda META: (
         triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']), triton.cdiv(K, META['BLOCK_SIZE_K'] * META['K_BLOCKS'])
     )
+    out_index_is_none = False
+    if out_index.numel() == 1 and out_index == -1:
+        out_index_is_none = True
 
     cvmm_backward_kernel3[grid](
         x, grads, out, sel_index, sel, out_index,
@@ -397,27 +409,53 @@ def cvmm_triton_backward(x: torch.Tensor, sel_index: torch.Tensor, sel: torch.Te
         x.stride(0), x.stride(1),
         grads.stride(0), grads.stride(1),
         out.stride(0), out.stride(1), out.stride(2),
-        sel_index.stride(0), sel.stride(0), out_index.stride(0) if out_index is not None else 0,
+        sel_index.stride(0), sel.stride(0), 0 if out_index_is_none else out_index.stride(0),
+        out_index_is_none=out_index_is_none,
         float32_out=out.dtype == torch.float32,
         op_float16=op_float16,
         allow_tf32=False #torch.backends.cuda.matmul.allow_tf32
     )
-
     return out
 
+
+@torch.library.impl_abstract("mylib::cvmm_triton_backward", cvmm_triton_backward)
+def cvmm_triton_backward_abstract(
+    x: torch.Tensor,
+    sel_index: torch.Tensor,
+    sel: torch.Tensor,
+    grads: torch.Tensor,
+    n_experts: int,
+    key_dtype: torch.dtype,
+    op_float16: bool,
+    out_index: torch.Tensor
+):
+    x = x.flatten(end_dim=-2)
+    x = x.transpose(0, 1)
+    grads = grads.flatten(end_dim=-2)
+    M, _ = x.shape
+    _, N = grads.shape
+    out = torch.zeros((n_experts, M, N), device=x.device, dtype=key_dtype)
+    return out
 
 
 class CVMM(torch.autograd.Function):
     warned = False
 
     @staticmethod
-    def forward(ctx, x: torch.Tensor, sel_index: torch.Tensor, sel: torch.Tensor, keys: torch.Tensor, out_index: Optional[torch.Tensor] = None, reduction_weight: Optional[torch.Tensor] = None):
+    def forward(
+        ctx,
+        x: torch.Tensor,
+        sel_index: torch.Tensor,
+        sel: torch.Tensor,
+        keys: torch.Tensor,
+        out_index: Optional[torch.Tensor] = None,
+        reduction_weight: Optional[torch.Tensor] = None
+    ):
         ctx.save_for_backward(x, keys, sel, sel_index, out_index, reduction_weight)
-
         out_type = torch.float16 if torch.is_autocast_enabled() else x.dtype
-        # if torch.is_autocast_enabled():
-        #     x = x.half()
-        #     keys = keys.half()
+        if out_index is None:
+            out_index = torch.tensor(-1).cuda()
+
         res = torch.ops.mylib.cvmm_triton(x, sel_index, sel, keys, out_type, out_index)
         # res = cvmm_triton(x, sel_index, sel, keys, out_type, out_index)
         if reduction_weight is not None:
@@ -432,37 +470,62 @@ class CVMM(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         x, keys, sel, sel_index, out_index, reduction_weight = ctx.saved_tensors
-
-        # if torch.is_autocast_enabled():
-        #     x = x.half()
-        #     keys = keys.half()
-        #     grad_output = grad_output.half()
-
-        # x = x.type(ctx.op_type)
-        # keys_dt = keys.type_as(x)
         keys_dt = keys
 
         # Backward for weight
         if reduction_weight is not None:
             # Project back the grads with he reduction weight, so the grad for the weight matrix is ok
             grad_output_w = reduction_weight.unsqueeze(-1).type_as(grad_output) @ grad_output.unsqueeze(-2)
+            # print("no none", grad_output_w.shape)
         else:
             grad_output_w  = grad_output
+            # print("none", grad_output_w.shape)
 
-        grad_w = cvmm_triton_backward(x, sel_index, sel, grad_output_w, keys_dt.shape[0], ctx.keys_type, ctx.is_autocast, out_index=out_index)
+        out_index_is_none = False
+        if out_index is None:
+            out_index_is_none = True
+            out_index = torch.tensor(-1).cuda()
+
+        # grad_w = cvmm_triton_backward(
+        #     x,
+        #     sel_index,
+        #     sel,
+        #     grad_output_w,
+        #     keys_dt.shape[0],
+        #     ctx.keys_type,
+        #     ctx.is_autocast,
+        #     out_index=out_index
+        # ) 
+
+        grad_w = torch.ops.mylib.cvmm_triton_backward(
+            x,
+            sel_index,
+            sel,
+            grad_output_w,
+            keys_dt.shape[0],
+            ctx.keys_type,
+            ctx.is_autocast,
+            out_index=out_index
+        )
 
         # Backward for input and reduction weight
         grad_w_off = None
 
-        bw_index = sel_index if out_index is None else out_index
-        bw_index_out = None
+        bw_index = sel_index if out_index_is_none else out_index
+        bw_index_out = torch.tensor(-1).cuda()
         if reduction_weight is not None:
             # Hack the output indices to emulate repeats
             bw_index_out = bw_index
             bw_index = bw_index // reduction_weight.shape[-1]
 
-        grad_x_full = torch.ops.mylib.cvmm_triton(grad_output, bw_index, sel, keys_dt.transpose(1,2), ctx.op_type, bw_index_out)
-
+        grad_x_full = torch.ops.mylib.cvmm_triton(
+            grad_output,
+            bw_index,
+            sel,
+            keys_dt.transpose(1,2),
+            ctx.op_type,
+            bw_index_out
+        )
 
         grad_x_full = grad_x_full.view(*x.shape[:-1], -1, x.shape[-1])
         if reduction_weight is not None:
@@ -501,3 +564,64 @@ def cvmm_prepare_sel2(sel: torch.Tensor, w: Optional[torch.Tensor] = None) -> CV
     in_index = sel_index // n_per_batch
 
     return CVMMSel(sel, ssel.view_as(sel), in_index, sel_index, w)
+
+
+class Model(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.n_heads = 8
+        self.n_experts = 8
+        self.expert_size = 64
+        self.k_vec_dim = 128
+        self.v_dim = 128
+        self.keys = torch.nn.Parameter(
+            torch.empty(self.n_experts, self.k_vec_dim, self.expert_size)
+        )
+        self.values = torch.nn.Parameter(
+            torch.empty(self.n_experts, self.expert_size, self.v_dim)
+        )
+        self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
+        self.sel_activation = torch.nn.Sigmoid()
+
+    def compute_scores(self, input: torch.Tensor, index: CVMMSel) -> torch.Tensor:
+        scores = cvmm(input, index, self.keys)
+        return scores
+
+    def forward(self, input: torch.Tensor):
+        sel = sel_raw = self.expert_sel(input)
+        sel = self.sel_activation(sel)
+        sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
+        # Preprocess the selection indices. They will be needed for both layers and save some time
+        sel_indices = cvmm_prepare_sel2(sel_index.int())
+        # "Up-projection" layer for each head
+        scores = self.compute_scores(input, sel_indices)
+        # Down projection layer for each head
+        sel_indices = sel_indices.clone()
+        sel_indices.reduction_weight = sel_val
+        sel_indices.sel_index = sel_indices.out_index
+        sel_indices.out_index = None
+        out = cvmm(scores, sel_indices, self.values)
+        return out
+
+
+model = Model().to(torch.float16).cuda()
+model = torch.compile(model)
+
+torch.manual_seed(0)
+n_experts = 8
+n_channels = 128
+expert_size = 64
+bs = 64
+
+device = torch.device("cuda")
+dtype = torch.float16
+
+testvec = torch.randn(bs, n_channels, dtype=dtype, device=device)
+
+out = model(testvec)
+loss = out.sum()
+loss.backward()
+
+print(model.keys.grad.shape)
+
+print(out.shape)
