@@ -787,9 +787,7 @@ class T5Attention(nn.Module):
                                              key_states=key_states,
                                              query_states=query_states)
                 xattn_AttentionBias_forbidden |= xattn_AttentionBias_forbidden_pos_emb
-
-            #xattn_AttentionBias_forbidden = False
-            #print("DEBUG DEBUG DEBUG!!!! for debugging setting xattn_AttentionBias_forbidden = False")
+            
              
                         
             # if key and values are already calculated
@@ -816,6 +814,10 @@ class T5Attention(nn.Module):
                 #position_bias was provided from outside, so it was cached from an earlier layer.
             add_to_scores = position_bias
             
+
+        xattn_AttentionBias_forbidden = False
+        print("DEBUG DEBUG DEBUG!!!! for debugging setting xattn_AttentionBias_forbidden = False")
+
         if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
             scores = torch.matmul(
@@ -854,6 +856,9 @@ class T5Attention(nn.Module):
 
                 attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)      
                 #xattn_AttentionBias_forbidden = True
+
+                q_seqlen = None
+                kv_seqlen = None
             else:                 
                 original_max_seq_len = mask.shape[-1] 
 
@@ -914,8 +919,8 @@ class T5Attention(nn.Module):
             if isinstance(attn_bias_for_xformers, xattn.AttentionBias):
                 use_op = (fmha.flash.FwOp, fmha.flash.BwOp, ) 
 
-            # use_op = None
-            # print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
+            use_op = None
+            print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
                       
             attn_output = xops.memory_efficient_attention(
                 **memory_efficient_attention_kwargs,
