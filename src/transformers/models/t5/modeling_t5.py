@@ -881,11 +881,35 @@ class T5Attention(nn.Module):
                         if isinstance(position_bias, xattn.AttentionBias):
                             attn_bias_for_xformers = position_bias                            
                         else:                            
-                            q_seqlen = actual_lengths
+                            
+                            # q_seqlen = actual_lengths
+                            # if self.cross_attention:
+                            #     #kv_seqlen = [position_bias.shape[2] for _ in q_seqlen] 
+                            #     kv_seqlen = [position_bias.shape[3] for _ in q_seqlen] 
+                            # else:
+                            #     kv_seqlen  = q_seqlen
+
                             if self.cross_attention:
-                                kv_seqlen = [position_bias.shape[2] for _ in q_seqlen]                                
+                                #q_seqlen = actual_lengths
+                                #kv_seqlen = [position_bias.shape[2] for _ in actual_lengths]
+
+                                q_seqlen = [position_bias.shape[2] for _ in actual_lengths]
+                                kv_seqlen = actual_lengths
+
+                                actual_lengths = [position_bias.shape[2] for _ in actual_lengths]
                             else:
-                                kv_seqlen  = q_seqlen
+                                q_seqlen = actual_lengths
+                                kv_seqlen = actual_lengths
+
+                            
+
+                            # if self.cross_attention:
+                            #     #kv_seqlen = [position_bias.shape[2] for _ in q_seqlen] 
+                            #     kv_seqlen = [position_bias.shape[3] for _ in q_seqlen] 
+                            # else:
+                            #     kv_seqlen  = q_seqlen
+
+
                             attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=q_seqlen, kv_seqlen=kv_seqlen)
                 elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
                     actual_lengths = mask.argmin(3)[:,0,:].argmax(1).tolist()
