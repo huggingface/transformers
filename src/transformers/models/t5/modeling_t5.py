@@ -474,7 +474,7 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, positional_embedding_injected_in_attention=None):
+    def __init__(self, config: T5Config, positional_embedding_injected_in_attention=None, cross_attention:bool = False):
         super().__init__()
         self.is_decoder = config.is_decoder
         # print("attention block")
@@ -522,6 +522,8 @@ class T5Attention(nn.Module):
         self.memory_efficient_attention = config.memory_efficient_attention if hasattr(config, "memory_efficient_attention") else False
         #self.memory_efficient_attention = True
         #print('DEBUG DEBUG DEBUG! FORCING self.memory_efficient_attention=True for debugging !!!')
+
+        self.cross_attention = cross_attention
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -808,6 +810,8 @@ class T5Attention(nn.Module):
 
             add_to_scores = position_bias_masked            
         else:
+            assert isinstance(position_bias, tuple)
+            position_bias, q_seqlen, kv_seqlen = position_bias
             #position_bias was provided from outside, so it was cached from an earlier layer.
             add_to_scores = position_bias
             
@@ -839,27 +843,49 @@ class T5Attention(nn.Module):
 
         if self.memory_efficient_attention:
 
-            if xattn_AttentionBias_forbidden or (query_states.shape != key_states.shape):
-                if xattn_AttentionBias_forbidden:
-                    warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
-                elif (query_states.shape != key_states.shape):
-                    warnings.warn('workaround for the cross-attention case - until we solve the cross-attention usage in FlashV2')
-                else:
-                    assert False
+            if xattn_AttentionBias_forbidden: # or (query_states.shape != key_states.shape):
+                warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
+                # if xattn_AttentionBias_forbidden:
+                #     warnings.warn("Will NOT use FlashV2. To meet FlashV2 requirements you need 1. A100 or better 2. Use half precision 3. Avoid using Relative positional encoding (e.g. use RoPE or global sinusodial)")
+                # elif (query_states.shape != key_states.shape):
+                #     warnings.warn('workaround for the cross-attention case - until we solve the cross-attention usage in FlashV2')
+                # else:
+                #     assert False
 
                 attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)      
                 xattn_AttentionBias_forbidden = True
             else:                 
-                original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it             
+                original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it       
+
+                # if (query_states.shape != key_states.shape):
+                #     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
+                #     if not xattn_AttentionBias_forbidden:
+                #         if isinstance(position_bias, xattn.AttentionBias):
+                #             attn_bias_for_xformers = position_bias
+                #         else:
+                #             attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                # elif (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
+
+                if (query_states.shape != key_states.shape):
+                    banana = 123
                 if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
                     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
                     if not xattn_AttentionBias_forbidden:
+                        if self.cross_attention:
+                            original_max_seq_len = position_bias.shape[2]
                         if isinstance(position_bias, xattn.AttentionBias):
-                            attn_bias_for_xformers = position_bias
-                        else:
-                            attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=actual_lengths)
+                            attn_bias_for_xformers = position_bias                            
+                        else:                            
+                            q_seqlen = actual_lengths
+                            if self.cross_attention:
+                                kv_seqlen = [position_bias.shape[2] for _ in q_seqlen]                                
+                            else:
+                                kv_seqlen  = q_seqlen
+                            attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=q_seqlen, kv_seqlen=kv_seqlen)
                 elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
                     actual_lengths = mask.argmin(3)[:,0,:].argmax(1).tolist()
+                    q_seqlen = actual_lengths
+                    kv_seqlen  = q_seqlen
                     if not xattn_AttentionBias_forbidden:
                         if isinstance(position_bias, xattn.AttentionBias):
                             attn_bias_for_xformers = position_bias
@@ -867,9 +893,9 @@ class T5Attention(nn.Module):
                             attn_bias_for_xformers = xattn.BlockDiagonalCausalMask.from_seqlens(q_seqlen=actual_lengths)
                     #materialized = attn_bias_for_xformers.materialize(shape=(sum(actual_lengths),sum(actual_lengths))) #for debugging
 
-                query_states = _compress_to_single_unpadded_sample(query_states, actual_lengths)
-                key_states = _compress_to_single_unpadded_sample(key_states, actual_lengths)
-                value_states = _compress_to_single_unpadded_sample(value_states, actual_lengths)
+                query_states = _compress_to_single_unpadded_sample(query_states, q_seqlen)
+                key_states = _compress_to_single_unpadded_sample(key_states, kv_seqlen)
+                value_states = _compress_to_single_unpadded_sample(value_states, kv_seqlen)
 
             memory_efficient_attention_kwargs = dict(
                 query=query_states.permute(0,2,1,3), # -> BHMK -> BMHK
@@ -918,7 +944,7 @@ class T5Attention(nn.Module):
         else:
             return_pos_bias = position_bias
 
-        outputs = (attn_output, present_key_value_state, return_pos_bias)
+        outputs = (attn_output, present_key_value_state, (return_pos_bias, q_seqlen, kv_seqlen))
 
         if output_attentions:
             outputs = outputs + (attn_weights,)
@@ -962,7 +988,7 @@ class T5LayerSelfAttention(nn.Module):
 class T5LayerCrossAttention(nn.Module):
     def __init__(self, config, positional_embedding_injected_in_attention=None):
         super().__init__()
-        self.EncDecAttention = T5Attention(config, positional_embedding_injected_in_attention=None)
+        self.EncDecAttention = T5Attention(config, positional_embedding_injected_in_attention=None, cross_attention=True)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
