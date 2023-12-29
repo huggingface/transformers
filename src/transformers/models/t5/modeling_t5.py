@@ -855,7 +855,7 @@ class T5Attention(nn.Module):
                 attn_bias_for_xformers = add_to_scores.contiguous().to(query_states.dtype)      
                 xattn_AttentionBias_forbidden = True
             else:                 
-                original_max_seq_len = mask.shape[-1] ##it is also found in real_seq_length, possibly switch to it       
+                original_max_seq_len = mask.shape[-1] 
 
                 # if (query_states.shape != key_states.shape):
                 #     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
@@ -872,7 +872,7 @@ class T5Attention(nn.Module):
                     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
                     if not xattn_AttentionBias_forbidden:
                         if self.cross_attention:
-                            original_max_seq_len = position_bias.shape[2]
+                            original_max_seq_len = hidden_states.shape[1] #position_bias.shape[2]
                         if isinstance(position_bias, xattn.AttentionBias):
                             attn_bias_for_xformers = position_bias                            
                         else:                            
