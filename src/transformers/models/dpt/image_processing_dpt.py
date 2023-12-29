@@ -100,7 +100,7 @@ class DPTImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions. Can be overidden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the image after resizing. Can be overidden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
@@ -136,7 +136,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         do_rescale: bool = True,
@@ -202,6 +202,7 @@ class DPTImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
+
         output_size = get_resize_output_image_size(
             image,
             output_size=(size["height"], size["width"]),
@@ -381,7 +382,14 @@ class DPTImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    keep_aspect_ratio=keep_aspect_ratio,
+                    ensure_multiple_of=ensure_multiple_of,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 

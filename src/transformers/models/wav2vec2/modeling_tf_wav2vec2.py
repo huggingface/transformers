@@ -435,7 +435,6 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
         )
         self.explicit_padding = explicit_padding
         self.filter_axis = 2
-        self.initialized = False
         self.kernel_norm_axes = tf.constant([0, 1])
 
     def _init_norm(self):
@@ -462,13 +461,13 @@ class TFWav2Vec2WeightNormConv1D(tf.keras.layers.Conv1D):
                 dtype=self.weight_v.dtype,
                 trainable=True,
             )
+            self._init_norm()
             self.bias = self.add_weight(name="bias", shape=(self.filters,), initializer="zeros", trainable=True)
 
     def call(self, inputs):
-        if not self.initialized:
-            self._init_norm()
-            self.initialized = True
-
+        # TODO Matt: Assigning to attributes in call() is deeply sinful in TensorFlow, as it should be idempotent.
+        #            This whole layer should be replaced by a layer that doesn't inherit from Conv1D, but instead calls
+        #            a functional 1d convolution with normalized weights that it generates (but does not store!)
         self._normalize_kernel()
 
         padded_inputs = tf.pad(inputs, ((0, 0), (self.explicit_padding, self.explicit_padding), (0, 0)))
@@ -1208,13 +1207,13 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             self.encoder = TFWav2Vec2Encoder(config, name="encoder")
 
     def build(self, input_shape=None):
-        self.masked_spec_embed = self.add_weight(
-            shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
-        )
-
         if self.built:
             return
         self.built = True
+        if self.config.mask_time_prob > 0.0 or self.config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = self.add_weight(
+                shape=(self.config.hidden_size,), initializer="uniform", trainable=True, name="masked_spec_embed"
+            )
         if getattr(self, "feature_extractor", None) is not None:
             with tf.name_scope(self.feature_extractor.name):
                 self.feature_extractor.build(None)

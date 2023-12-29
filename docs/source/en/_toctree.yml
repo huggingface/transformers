@@ -111,6 +111,8 @@
     title: Share a custom model
   - local: chat_templating
     title: Templates for chat models
+  - local: trainer
+    title: Trainer
   - local: sagemaker
     title: Run training on Amazon SageMaker
   - local: serialization
@@ -140,16 +142,16 @@
       title: Methods and tools for efficient training on a single GPU
     - local: perf_train_gpu_many
       title: Multiple GPUs and parallelism
+    - local: fsdp
+      title: Fully Sharded Data Parallel
     - local: perf_train_cpu
       title: Efficient training on CPU
     - local: perf_train_cpu_many
       title: Distributed CPU training
-    - local: perf_train_tpu
-      title: Training on TPUs
     - local: perf_train_tpu_tf
       title: Training on TPU with TensorFlow
     - local: perf_train_special
-      title: Training on Specialized Hardware
+      title: PyTorch training on Apple silicon
     - local: perf_hardware
       title: Custom hardware for training
     - local: hpo_train
@@ -164,7 +166,7 @@
   - local: big_models
     title: Instantiating a big model
   - local: debugging
-    title: Troubleshooting
+    title: Debugging
   - local: tf_xla
     title: XLA Integration for TensorFlow Models
   - local: perf_torch_compile

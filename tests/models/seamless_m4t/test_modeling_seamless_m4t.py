@@ -20,7 +20,7 @@ import tempfile
 import unittest
 
 from transformers import SeamlessM4TConfig, is_speech_available, is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
@@ -610,9 +610,11 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @is_flaky()
+    @unittest.skip(
+        reason="In training model, the first speech encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
     def test_retain_grad_hidden_states_attentions(self):
-        super().test_retain_grad_hidden_states_attentions()
+        pass
 
 
 @require_torch
@@ -747,6 +749,12 @@ class SeamlessM4TModelWithTextInputTest(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
 
