@@ -74,7 +74,7 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "hf-internal-testing/Llama-2-7B-GPTQ"
+_CHECKPOINT_FOR_DOC = "TinyLlama/TinyLlama-1.1B-Chat-v0.3"
 _REAL_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b"
 
 
