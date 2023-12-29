@@ -215,7 +215,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
-        self.llm_int8_skip_modules = llm_int8_skip_modules
+        self.llm_int8_skip_modules = llm_int8_skip_modules or []
         self.llm_int8_enable_fp32_cpu_offload = llm_int8_enable_fp32_cpu_offload
         self.llm_int8_has_fp16_weight = llm_int8_has_fp16_weight
         self.bnb_4bit_quant_type = bnb_4bit_quant_type

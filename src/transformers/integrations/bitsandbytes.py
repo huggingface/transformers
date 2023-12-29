@@ -136,12 +136,83 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             module._parameters[tensor_name] = new_value
 
 
+def _create_new_module(module, name, quantization_config):
+    """
+    Create a new module based on the quantization configuration.
+    """
+    if isinstance(module, Conv1D):
+        in_features, out_features = module.weight.shape
+    else:
+        in_features, out_features = module.in_features, module.out_features
+
+    bias = module.bias is not None
+
+    new_module = None
+    with init_empty_weights():
+        if quantization_config.quantization_method() == "llm_int8":
+            new_module = bnb.nn.Linear8bitLt(
+                in_features,
+                out_features,
+                bias,
+                has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
+                threshold=quantization_config.llm_int8_threshold,
+            )
+
+        # TODO: this is to replicate the old behavior, but we should clean up by
+        #       deprecating llm_int8_skip_modules and replacing it with skip_modules.
+        #       There is also an overlap with modules_to_not_convert, but we likely
+        #       want to keep that as others are using it. Not touching this now as
+        #       PR #26610 is currently in progress and that should be merged first.
+        elif name not in quantization_config.llm_int8_skip_modules:
+            new_module = bnb.nn.Linear4bit(
+                in_features,
+                out_features,
+                bias,
+                quantization_config.bnb_4bit_compute_dtype,
+                compress_statistics=quantization_config.bnb_4bit_use_double_quant,
+                quant_type=quantization_config.bnb_4bit_quant_type,
+            )
+
+    if new_module:
+        # Store the module class in case we need to transpose the weight later
+        new_module.source_cls = type(module)
+        # Force requires grad to False to avoid unexpected errors
+        new_module.requires_grad_(False)
+
+        return new_module
+
+    return module
+
+
 def _replace_with_bnb_linear(
     model,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
     has_been_replaced=False,
+):
+    """
+    Private method that wraps the recursion for module replacement.
+
+    Returns the converted model and a boolean that indicates if the conversion has been successfull or not.
+    """
+    for module_name, module in model.named_children():
+        key_name = f"{current_key_name}.{module_name}" if current_key_name else module_name
+        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and module_name not in modules_to_not_convert:
+            has_been_replaced = True
+            model._modules[module_name] = _create_new_module(module, module_name, quantization_config)
+
+        if module.children():
+            _, has_been_replaced_child = _replace_with_bnb_linear(
+                module, modules_to_not_convert, key_name, quantization_config, has_been_replaced
+            )
+            has_been_replaced |= has_been_replaced_child
+
+    return model, has_been_replaced
+
+
+def old_replace_with_bnb_linear(
+    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, has_been_replaced=False
 ):
     """
     Private method that wraps the recursion for module replacement.
