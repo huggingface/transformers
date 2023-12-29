@@ -875,42 +875,23 @@ class T5Attention(nn.Module):
                     banana = 123
                 if (mask.shape[1]==1) and (mask.shape[2]==1): #non-causal case                    
                     actual_lengths = mask[:,0,0,:].argmin(1).tolist() #creates a cpu-gpu sync... we can probably get this information in the forward instead of reverse engineering it ...
-                    if not xattn_AttentionBias_forbidden:
-                        if self.cross_attention:
-                            original_max_seq_len = hidden_states.shape[1] #position_bias.shape[2]
+                    if not xattn_AttentionBias_forbidden:                        
                         if isinstance(position_bias, xattn.AttentionBias):
                             attn_bias_for_xformers = position_bias                            
                         else:                            
-                            
-                            # q_seqlen = actual_lengths
-                            # if self.cross_attention:
-                            #     #kv_seqlen = [position_bias.shape[2] for _ in q_seqlen] 
-                            #     kv_seqlen = [position_bias.shape[3] for _ in q_seqlen] 
-                            # else:
-                            #     kv_seqlen  = q_seqlen
 
                             if self.cross_attention:
-                                #q_seqlen = actual_lengths
-                                #kv_seqlen = [position_bias.shape[2] for _ in actual_lengths]
-
                                 q_seqlen = [position_bias.shape[2] for _ in actual_lengths]
-                                kv_seqlen = actual_lengths
-
-                                actual_lengths = [position_bias.shape[2] for _ in actual_lengths]
+                                kv_seqlen = actual_lengths                                
                             else:
                                 q_seqlen = actual_lengths
                                 kv_seqlen = actual_lengths
-
-                            
-
-                            # if self.cross_attention:
-                            #     #kv_seqlen = [position_bias.shape[2] for _ in q_seqlen] 
-                            #     kv_seqlen = [position_bias.shape[3] for _ in q_seqlen] 
-                            # else:
-                            #     kv_seqlen  = q_seqlen
-
-
+               
                             attn_bias_for_xformers = xattn.BlockDiagonalMask.from_seqlens(q_seqlen=q_seqlen, kv_seqlen=kv_seqlen)
+                        if self.cross_attention:
+                            actual_lengths = [hidden_states.shape[1] for _ in actual_lengths]
+                            original_max_seq_len = hidden_states.shape[1]
+
                 elif (len(mask.shape)==4) and (mask.shape[1]==1) and (mask.shape[2]==mask.shape[3]): #causal case
                     actual_lengths = mask.argmin(3)[:,0,:].argmax(1).tolist()
                     q_seqlen = actual_lengths
