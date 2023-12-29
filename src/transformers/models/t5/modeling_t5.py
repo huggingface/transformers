@@ -685,8 +685,8 @@ class T5Attention(nn.Module):
 
         real_seq_length = seq_length
 
-        self.dropout = 0
-        print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!\n'*3)
+        #self.dropout = 0
+        #print('DEBUG DEBUG DEBUG - REMOVE THIS! DO NOT COMMIT !!! DISABLED DROPOUT FOR EASIER DEBUGGING!\n'*3)
 
         if past_key_value is not None:
             if len(past_key_value) != 2:
@@ -769,8 +769,6 @@ class T5Attention(nn.Module):
         #print('DEBUG DEBUG DEBUG!!!! REMOVE!!! ALLOWING xformers AttentionBias also in unstable cases!!!\n'*3)
         #xattn_AttentionBias_forbidden = False
 
-        
-        
         B,H,M,K = query_states.shape
         if position_bias is None:
             if self.positional_embedding_injected_in_attention is None:
@@ -815,8 +813,8 @@ class T5Attention(nn.Module):
             add_to_scores = position_bias
             
 
-        xattn_AttentionBias_forbidden = False
-        print("DEBUG DEBUG DEBUG!!!! for debugging setting xattn_AttentionBias_forbidden = False")
+        #xattn_AttentionBias_forbidden = False
+        #print("DEBUG DEBUG DEBUG!!!! for debugging setting xattn_AttentionBias_forbidden = False")
 
         if not self.memory_efficient_attention: #attention as it was originally implemented in the transformers repo                                   
             # compute scores
@@ -924,8 +922,8 @@ class T5Attention(nn.Module):
             if isinstance(attn_bias_for_xformers, xattn.AttentionBias):
                 use_op = (fmha.flash.FwOp, fmha.flash.BwOp, ) 
 
-            use_op = None
-            print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
+            #use_op = None
+            #print('DEBUG DEBUG DEBUG!!!! REMOVE THIS!!!! allowing non flashv2 !!!')
                       
             attn_output = xops.memory_efficient_attention(
                 **memory_efficient_attention_kwargs,
@@ -944,11 +942,10 @@ class T5Attention(nn.Module):
         
         attn_output = self.o(attn_output)
 
-        #if self.is_decoder:
-        print(f'is_decoder={self.is_decoder} cross_attention={self.cross_attention} debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
+        #print(f'is_decoder={self.is_decoder} cross_attention={self.cross_attention} debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
 
-        #print(f'debug attn_output (post self.o) sum={attn_output.sum()},  part={attn_output[0,6:10,6:10]}')
-        #print('------------\n')
+        if self.cross_attention:
+            banana = 123
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
 
