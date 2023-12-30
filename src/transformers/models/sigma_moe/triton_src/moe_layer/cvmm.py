@@ -566,62 +566,64 @@ def cvmm_prepare_sel2(sel: torch.Tensor, w: Optional[torch.Tensor] = None) -> CV
     return CVMMSel(sel, ssel.view_as(sel), in_index, sel_index, w)
 
 
-class Model(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.n_heads = 8
-        self.n_experts = 8
-        self.expert_size = 64
-        self.k_vec_dim = 128
-        self.v_dim = 128
-        self.keys = torch.nn.Parameter(
-            torch.empty(self.n_experts, self.k_vec_dim, self.expert_size)
-        )
-        self.values = torch.nn.Parameter(
-            torch.empty(self.n_experts, self.expert_size, self.v_dim)
-        )
-        self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
-        self.sel_activation = torch.nn.Sigmoid()
+if __name__ == "__main__":
 
-    def compute_scores(self, input: torch.Tensor, index: CVMMSel) -> torch.Tensor:
-        scores = cvmm(input, index, self.keys)
-        return scores
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.n_heads = 8
+            self.n_experts = 8
+            self.expert_size = 64
+            self.k_vec_dim = 128
+            self.v_dim = 128
+            self.keys = torch.nn.Parameter(
+                torch.empty(self.n_experts, self.k_vec_dim, self.expert_size)
+            )
+            self.values = torch.nn.Parameter(
+                torch.empty(self.n_experts, self.expert_size, self.v_dim)
+            )
+            self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
+            self.sel_activation = torch.nn.Sigmoid()
 
-    def forward(self, input: torch.Tensor):
-        sel = sel_raw = self.expert_sel(input)
-        sel = self.sel_activation(sel)
-        sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
-        # Preprocess the selection indices. They will be needed for both layers and save some time
-        sel_indices = cvmm_prepare_sel2(sel_index.int())
-        # "Up-projection" layer for each head
-        scores = self.compute_scores(input, sel_indices)
-        # Down projection layer for each head
-        sel_indices = sel_indices.clone()
-        sel_indices.reduction_weight = sel_val
-        sel_indices.sel_index = sel_indices.out_index
-        sel_indices.out_index = None
-        out = cvmm(scores, sel_indices, self.values)
-        return out
+        def compute_scores(self, input: torch.Tensor, index: CVMMSel) -> torch.Tensor:
+            scores = cvmm(input, index, self.keys)
+            return scores
+
+        def forward(self, input: torch.Tensor):
+            sel = sel_raw = self.expert_sel(input)
+            sel = self.sel_activation(sel)
+            sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
+            # Preprocess the selection indices. They will be needed for both layers and save some time
+            sel_indices = cvmm_prepare_sel2(sel_index.int())
+            # "Up-projection" layer for each head
+            scores = self.compute_scores(input, sel_indices)
+            # Down projection layer for each head
+            sel_indices = sel_indices.clone()
+            sel_indices.reduction_weight = sel_val
+            sel_indices.sel_index = sel_indices.out_index
+            sel_indices.out_index = None
+            out = cvmm(scores, sel_indices, self.values)
+            return out
 
 
-model = Model().to(torch.float16).cuda()
-model = torch.compile(model)
+    model = Model().to(torch.float16).cuda()
+    model = torch.compile(model)
 
-torch.manual_seed(0)
-n_experts = 8
-n_channels = 128
-expert_size = 64
-bs = 64
+    torch.manual_seed(0)
+    n_experts = 8
+    n_channels = 128
+    expert_size = 64
+    bs = 64
 
-device = torch.device("cuda")
-dtype = torch.float16
+    device = torch.device("cuda")
+    dtype = torch.float16
 
-testvec = torch.randn(bs, n_channels, dtype=dtype, device=device)
+    testvec = torch.randn(bs, n_channels, dtype=dtype, device=device)
 
-out = model(testvec)
-loss = out.sum()
-loss.backward()
+    out = model(testvec)
+    loss = out.sum()
+    loss.backward()
 
-print(model.keys.grad.shape)
+    print(model.keys.grad.shape)
 
-print(out.shape)
+    print(out.shape)

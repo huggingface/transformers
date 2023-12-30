@@ -238,13 +238,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
 class SigmaMoEDenseActDense(torch.nn.Module):
     def __init__(self, config: SigmaMoEConfiguration):
         super().__init__()
+        self.dropout = torch.nn.Dropout(config.moe_dropout)
         self.wi = torch.nn.Linear(config.d_model, config.d_ff, bias=config.moe_bias)
         self.wo = torch.nn.Linear(config.d_ff, config.d_model, bias=config.moe_bias)
         self.act = ACT2FN[config.activation]
 
     def forward(self, hidden_states):
         hidden_states = self.wi(hidden_states)
-        hidden_states = self.act(hidden_states)
+        hidden_states = self.dropout(self.act(hidden_states))
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
