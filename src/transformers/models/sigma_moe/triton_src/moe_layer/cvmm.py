@@ -376,9 +376,9 @@ def cvmm_triton_abstract(x, sel_idx, sel, keys, out_dtype, out_index):
     return out.view(*sel_shape, N)
 
 
-torch.library.define("mylib::cvmm_triton_backward", "(Tensor x, Tensor sel_index, Tensor sel, Tensor grads, int n_experts, ScalarType key_dtype, bool op_float16, Tensor out_index) -> Tensor")
+# torch.library.define("mylib::cvmm_triton_backward", "(Tensor x, Tensor sel_index, Tensor sel, Tensor grads, int n_experts, ScalarType key_dtype, bool op_float16, Tensor out_index) -> Tensor")
 
-@torch.library.impl("mylib::cvmm_triton_backward", "default")
+# @torch.library.impl("mylib::cvmm_triton_backward", "default")
 def cvmm_triton_backward(
     x: torch.Tensor,
     sel_index: torch.Tensor,
@@ -418,24 +418,24 @@ def cvmm_triton_backward(
     return out
 
 
-@torch.library.impl_abstract("mylib::cvmm_triton_backward", cvmm_triton_backward)
-def cvmm_triton_backward_abstract(
-    x: torch.Tensor,
-    sel_index: torch.Tensor,
-    sel: torch.Tensor,
-    grads: torch.Tensor,
-    n_experts: int,
-    key_dtype: torch.dtype,
-    op_float16: bool,
-    out_index: torch.Tensor
-):
-    x = x.flatten(end_dim=-2)
-    x = x.transpose(0, 1)
-    grads = grads.flatten(end_dim=-2)
-    M, _ = x.shape
-    _, N = grads.shape
-    out = torch.zeros((n_experts, M, N), device=x.device, dtype=key_dtype)
-    return out
+# @torch.library.impl_abstract("mylib::cvmm_triton_backward", cvmm_triton_backward)
+# def cvmm_triton_backward_abstract(
+#     x: torch.Tensor,
+#     sel_index: torch.Tensor,
+#     sel: torch.Tensor,
+#     grads: torch.Tensor,
+#     n_experts: int,
+#     key_dtype: torch.dtype,
+#     op_float16: bool,
+#     out_index: torch.Tensor
+# ):
+#     x = x.flatten(end_dim=-2)
+#     x = x.transpose(0, 1)
+#     grads = grads.flatten(end_dim=-2)
+#     M, _ = x.shape
+#     _, N = grads.shape
+#     out = torch.zeros((n_experts, M, N), device=x.device, dtype=key_dtype)
+#     return out
 
 
 class CVMM(torch.autograd.Function):
@@ -486,18 +486,7 @@ class CVMM(torch.autograd.Function):
             out_index_is_none = True
             out_index = torch.tensor(-1).cuda()
 
-        # grad_w = cvmm_triton_backward(
-        #     x,
-        #     sel_index,
-        #     sel,
-        #     grad_output_w,
-        #     keys_dt.shape[0],
-        #     ctx.keys_type,
-        #     ctx.is_autocast,
-        #     out_index=out_index
-        # ) 
-
-        grad_w = torch.ops.mylib.cvmm_triton_backward(
+        grad_w = cvmm_triton_backward(
             x,
             sel_index,
             sel,
@@ -506,7 +495,18 @@ class CVMM(torch.autograd.Function):
             ctx.keys_type,
             ctx.is_autocast,
             out_index=out_index
-        )
+        ) 
+
+        # grad_w = torch.ops.mylib.cvmm_triton_backward(
+        #     x,
+        #     sel_index,
+        #     sel,
+        #     grad_output_w,
+        #     keys_dt.shape[0],
+        #     ctx.keys_type,
+        #     ctx.is_autocast,
+        #     out_index=out_index
+        # )
 
         # Backward for input and reduction weight
         grad_w_off = None
