@@ -1313,8 +1313,12 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             return_codebook_pixels=True,
             return_image_mask=True,
         )
+        # Create a clone of the input_ids tensor that will be its masked version
         inputs["input_ids_masked"] = inputs["input_ids"].clone()
+        # Mask the tokens "a" & "cat" from the "a photo of a cat" text using the special 103 value
         inputs["input_ids_masked"][0, 4:6] = 103
+        # MLM labels. It is a cloned version of input_ids where all values are -100 (i.e., ignored)
+        # except those that are masked, whose original values are stored
         inputs["mlm_labels"] = inputs["input_ids"].clone()
         inputs["mlm_labels"][:, :] = -100
         inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
@@ -1357,12 +1361,18 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             return_codebook_pixels=True,
             return_image_mask=True,
         )
+        # Create a clone of the input_ids tensor that will be its masked version
         inputs["input_ids_masked"] = inputs["input_ids"].clone()
+        # Mask the tokens "a" & "cat" from the "a photo of a cat" text using the special 103 value
         inputs["input_ids_masked"][0, 4:6] = 103
+        # MLM labels. It is a cloned version of input_ids where all values are -100 (i.e., ignored)
+        # except those that are masked, whose original values are stored
         inputs["mlm_labels"] = inputs["input_ids"].clone()
         inputs["mlm_labels"][:, :] = -100
         inputs["mlm_labels"][0, 4:6] = inputs["input_ids"][0, 4:6]
-        inputs["itm_labels"] = torch.tensor([1, 0])  # first pair matches, second one doesn't
+        # Manually create the itm_labels tensor that indicates if the image-text match.
+        # In this case, the firs pair matches and the second does not
+        inputs["itm_labels"] = torch.tensor([1, 0])
         inputs = inputs.to(torch_device)
         # forward pass
         with torch.no_grad():
