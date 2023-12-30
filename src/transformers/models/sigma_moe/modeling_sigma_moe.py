@@ -881,6 +881,13 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, MoE):
+            module.keys.data.normal_(mean=0.0, std=std)
+            module.values.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+            if module.o_bias is not None:
+                module.o_bias.data.zero_()
 
 
 SIGMA_MOE_INPUTS_DOCSTRING = r"""
