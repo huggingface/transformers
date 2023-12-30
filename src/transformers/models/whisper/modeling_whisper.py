@@ -2608,11 +2608,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Perform dynamic time warping on each element of the batch.
         for batch_idx in range(batch_size):
-            if num_frames is not None and isinstance(num_frames, (tuple, list)):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
-                std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
+                try:
+                    std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
+                except NotImplementedError:
+                    # With MPS backend torch.std_mean is not implemented yet, nor is scheduled for implementation
+                    std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
+                    mean = torch.mean(matrix, dim=-2, keepdim=True)
                 matrix = (matrix - mean) / std
                 matrix = _median_filter(matrix, self.config.median_filter_width)
 
@@ -2621,7 +2626,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             else:
                 matrix = weights[batch_idx]
 
-            text_indices, time_indices = _dynamic_time_warping(-matrix.double().cpu().numpy())
+            text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
             timestamps[batch_idx, 1:] = torch.tensor(jump_times)
