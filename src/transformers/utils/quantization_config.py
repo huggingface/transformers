@@ -564,6 +564,10 @@ class AwqConfig(QuantizationConfigMixin):
             The Maximum sequence length to generate when using fusing.
         modules_to_fuse (`dict`, *optional*, default to `None`):
             Overwrite the natively supported fusing scheme with the one specified by the users.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+            Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
     """
 
     def __init__(
@@ -576,6 +580,7 @@ class AwqConfig(QuantizationConfigMixin):
         do_fuse: Optional[bool] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
+        modules_to_not_convert: Optional[List] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -586,6 +591,7 @@ class AwqConfig(QuantizationConfigMixin):
         self.version = version
         self.backend = backend
         self.fuse_max_seq_len = fuse_max_seq_len
+        self.modules_to_not_convert = modules_to_not_convert
 
         self.modules_to_fuse = modules_to_fuse
         if do_fuse is None:
@@ -636,6 +642,19 @@ class AwqConfig(QuantizationConfigMixin):
             if not awq_version_supports_fusing:
                 raise ValueError(
                     f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+        if self.modules_to_not_convert is not None:
+            awq_version_supports_non_conversion = False
+            MIN_AWQ_VERSION = "0.1.8"
+            if is_auto_awq_available():
+                awq_version_supports_non_conversion = version.parse(
+                    importlib.metadata.version("autoawq")
+                ) >= version.parse(MIN_AWQ_VERSION)
+
+            if not awq_version_supports_non_conversion:
+                raise ValueError(
+                    f"You current version of `autoawq` does not support module quantization skipping, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
         if self.do_fuse and self.modules_to_fuse is not None:
