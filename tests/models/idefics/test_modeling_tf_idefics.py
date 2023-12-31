@@ -454,7 +454,7 @@ class TFIdeficsForVisionText2TextTest(TFIdeficsModelTest, unittest.TestCase):
 
 @require_tf
 @require_vision
-class IdeficsModelIntegrationTest(TestCasePlus):
+class TFIdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
         return (
@@ -491,12 +491,10 @@ class IdeficsModelIntegrationTest(TestCasePlus):
 
         # the CI gpu is small so using quantization to fit
         quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
+            load_in_8bit=True,
             bnb_4bit_compute_dtype="float16",
         )
-        model = IdeficsForVisionText2Text.from_pretrained(
-            "HuggingFaceM4/idefics-9b", quantization_config=quantization_config, device_map="auto"
-        )
+        model = TFIdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b", from_pt=True)
         processor = self.default_processor
         inputs = processor(prompts, return_tensors="tf")
         generated_ids = model.generate(**inputs, max_length=100)

@@ -351,7 +351,10 @@ class TFIdeficsDecoupledEmbedding(tf.keras.layers.Embedding):
 
         # for successful lookup replace input_ids with 0, the results of these will be discarded anyway
         input_ids = tf.tensor_scatter_nd_update(
-            input_ids, additional_vocab_indices, tf.zeros_like(additional_vocab_indices)
+            input_ids,
+            additional_vocab_indices,
+            # tensor filled with 0, having the same length as additional_vocab_indices
+            tf.zeros(tf.shape(additional_vocab_indices)[0], dtype=input_ids.dtype)
         )
         full_vector = super().call(input_ids)
 
