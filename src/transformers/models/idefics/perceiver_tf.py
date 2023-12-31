@@ -69,11 +69,6 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
         self.embed_dim, self.n_heads, self.head_dim, self.n_latents = embed_dim, n_heads, head_dim, n_latents
         self.qk_layer_norms = config.perceiver_config.qk_layer_norms_perceiver
 
-        # Create Latents for Perceiver
-        self.latents = self.add_weight(
-            shape=(self.n_latents, self.embed_dim), initializer="random_normal", trainable=True
-        )
-
         self.intermediate_dim = (
             self.embed_dim * 4
             if not hasattr(config.vision_config, "embed_dim")
@@ -89,11 +84,18 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
         ]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
+    def build(self, input_shape):
+        # Create Latents for Perceiver
+        self.latents = self.add_weight(
+            shape=(self.n_latents, self.embed_dim), initializer="random_normal", trainable=True
+        )
+        super().build(input_shape)
+
     def call(self, context: tf.Tensor) -> tf.Tensor:
         """Resample arbitrary length context & *compress* down to self.n_latents latent embeddings"""
         # tf.repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
-        latents = tf.repeat(self.latents, repeats=[context.shape[0]], axis=0)
-
+        latents = tf.expand_dims(self.latents, axis=0)
+        latents = tf.tile(latents, [tf.shape(context)[0], 1, 1])
         # Feed through Perceiver Attention blocks...
         for attn, ff in self.blocks:
             latents = attn(context, latents) + latents
