@@ -7,3 +7,10 @@ class TFGPT2Tokenizer(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["keras_nlp"])
+
+
+class TFMoTTokenizer(metaclass=DummyObject):
+    _backends = ["keras_nlp"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["keras_nlp"])

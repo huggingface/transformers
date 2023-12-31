@@ -22,6 +22,8 @@ class TFMoTTokenizer(tf.keras.layers.Layer):
     Args:
         vocab (Dict[str, int]): Vocabulary dict for Byte Pair Tokenizer
         merges (List[str]): Merges list for Byte Pair Tokenizer
+        max_length (`int`, *optional*): <fill_docstring>
+        pad_token_id (`int`, *optional*): <fill_docstring>
     """
 
     def __init__(self, vocab: Dict[str, int], merges: List[str], max_length: int = None, pad_token_id: int = None):

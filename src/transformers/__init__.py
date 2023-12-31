@@ -461,11 +461,6 @@ _import_structure = {
         "GPT2Config",
         "GPT2Tokenizer",
     ],
-    "models.mot": [
-        "MOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "MoTConfig",
-        "MoTTokenizer",
-    ],
     "models.gpt_bigcode": [
         "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPTBigCodeConfig",
@@ -619,6 +614,11 @@ _import_structure = {
     "models.mobilevitv2": [
         "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MobileViTV2Config",
+    ],
+    "models.mot": [
+        "MOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MoTConfig",
+        "MoTTokenizer",
     ],
     "models.mpnet": [
         "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1154,7 +1154,6 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
-    _import_structure["models.mot"].append("MoTTokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -1170,6 +1169,7 @@ else:
     _import_structure["models.mbart"].append("MBartTokenizerFast")
     _import_structure["models.mbart50"].append("MBart50TokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
+    _import_structure["models.mot"].append("MoTTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
@@ -2230,19 +2230,6 @@ else:
             "load_tf_weights_in_gpt2",
         ]
     )
-    _import_structure["models.mot"].extend(
-        [
-            "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MoTDoubleHeadsModel",
-            "MoTForQuestionAnswering",
-            "MoTForSequenceClassification",
-            "MoTForTokenClassification",
-            "MoTLMHeadModel",
-            "MoTModel",
-            "MoTPreTrainedModel",
-            "load_tf_weights_in_mot",
-        ]
-    )
     _import_structure["models.gpt_bigcode"].extend(
         [
             "GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2663,6 +2650,19 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.mot"].extend(
+        [
+            "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MoTDoubleHeadsModel",
+            "MoTForQuestionAnswering",
+            "MoTForSequenceClassification",
+            "MoTForTokenClassification",
+            "MoTLMHeadModel",
+            "MoTModel",
+            "MoTPreTrainedModel",
+            "load_tf_weights_in_mot",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -5139,11 +5139,6 @@ if TYPE_CHECKING:
         GPT2Config,
         GPT2Tokenizer,
     )
-    from .models.mot import (
-        MOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        MoTConfig,
-        MoTTokenizer,
-    )
     from .models.gpt_bigcode import (
         GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTBigCodeConfig,
@@ -5296,6 +5291,11 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileViTV2Config,
+    )
+    from .models.mot import (
+        MOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MoTConfig,
+        MoTTokenizer,
     )
     from .models.mpnet import (
         MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5829,7 +5829,6 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
-        from .models.mot import MoTTokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
@@ -5845,6 +5844,7 @@ if TYPE_CHECKING:
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
+        from .models.mot import MoTTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
@@ -6767,17 +6767,6 @@ if TYPE_CHECKING:
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
         )
-        from .models.mot import (
-            MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MoTDoubleHeadsModel,
-            MoTForQuestionAnswering,
-            MoTForSequenceClassification,
-            MoTForTokenClassification,
-            MoTLMHeadModel,
-            MoTModel,
-            MoTPreTrainedModel,
-            load_tf_weights_in_mot,
-        )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
             GPTBigCodeForCausalLM,
@@ -7113,6 +7102,17 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.mot import (
+            MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MoTDoubleHeadsModel,
+            MoTForQuestionAnswering,
+            MoTForSequenceClassification,
+            MoTForTokenClassification,
+            MoTLMHeadModel,
+            MoTModel,
+            MoTPreTrainedModel,
+            load_tf_weights_in_mot,
         )
         from .models.mpnet import (
             MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,

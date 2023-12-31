@@ -30,7 +30,6 @@ MOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class MoTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MoTModel`] or a [`TFMoTModel`]. It is used to
