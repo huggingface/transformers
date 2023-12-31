@@ -461,6 +461,11 @@ _import_structure = {
         "GPT2Config",
         "GPT2Tokenizer",
     ],
+    "models.mot": [
+        "MOT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "MoTConfig",
+        "MoTTokenizer",
+    ],
     "models.gpt_bigcode": [
         "GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GPTBigCodeConfig",
@@ -1149,6 +1154,7 @@ else:
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
+    _import_structure["models.mot"].append("MoTTokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
@@ -1227,6 +1233,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.gpt2"].append("TFGPT2Tokenizer")
+    _import_structure["models.mot"].append("TFMoTTokenizer")
 
 # Vision-specific objects
 try:
@@ -2221,6 +2228,19 @@ else:
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.mot"].extend(
+        [
+            "MOT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MoTDoubleHeadsModel",
+            "MoTForQuestionAnswering",
+            "MoTForSequenceClassification",
+            "MoTForTokenClassification",
+            "MoTLMHeadModel",
+            "MoTModel",
+            "MoTPreTrainedModel",
+            "load_tf_weights_in_mot",
         ]
     )
     _import_structure["models.gpt_bigcode"].extend(
@@ -5119,6 +5139,11 @@ if TYPE_CHECKING:
         GPT2Config,
         GPT2Tokenizer,
     )
+    from .models.mot import (
+        MOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MoTConfig,
+        MoTTokenizer,
+    )
     from .models.gpt_bigcode import (
         GPT_BIGCODE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPTBigCodeConfig,
@@ -5804,6 +5829,7 @@ if TYPE_CHECKING:
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.mot import MoTTokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
@@ -5867,6 +5893,7 @@ if TYPE_CHECKING:
         from .utils.dummy_keras_nlp_objects import *
     else:
         from .models.gpt2 import TFGPT2Tokenizer
+        from .models.mot import TFMoTTokenizer
 
     try:
         if not is_vision_available():
@@ -6739,6 +6766,17 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.mot import (
+            MOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MoTDoubleHeadsModel,
+            MoTForQuestionAnswering,
+            MoTForSequenceClassification,
+            MoTForTokenClassification,
+            MoTLMHeadModel,
+            MoTModel,
+            MoTPreTrainedModel,
+            load_tf_weights_in_mot,
         )
         from .models.gpt_bigcode import (
             GPT_BIGCODE_PRETRAINED_MODEL_ARCHIVE_LIST,
