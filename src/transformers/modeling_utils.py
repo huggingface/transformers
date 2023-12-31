@@ -3925,7 +3925,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
-        missing_keys = list(set(expected_keys) - set(loaded_keys))
+        missing_keys = sorted(set(expected_keys) - set(loaded_keys))
         unexpected_keys = set(loaded_keys) - set(expected_keys)
         # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
         # buffers
@@ -3934,10 +3934,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {key[len(_prefix) :] if key.startswith(_prefix) else key for key in model_buffers}
         elif add_prefix_to_model:
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
-        unexpected_keys = list(unexpected_keys - model_buffers)
+        unexpected_keys = sorted(unexpected_keys - model_buffers)
 
         model.tie_weights()
-        if device_map is None and not is_fsdp_enabled():
+        if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
             ptrs = collections.defaultdict(list)
             for name, tensor in model.state_dict().items():
                 id_tensor = id_tensor_storage(tensor)

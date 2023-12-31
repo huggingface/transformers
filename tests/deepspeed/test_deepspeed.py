@@ -272,6 +272,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -293,6 +294,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
