@@ -917,6 +917,7 @@ class GenerationMixin:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
                 assistant_model=assistant_model,
+                generation_config=generation_config,
                 logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
