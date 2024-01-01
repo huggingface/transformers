@@ -1293,13 +1293,13 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.freeze_feature_encoder
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.feature_extractor._freeze_parameters()
+        if self.feature_extractor:
+            self.feature_extractor._freeze_parameters()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
@@ -1436,13 +1436,13 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         """
         self.quantizer.temperature = temperature
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wav2vec2_conformer.feature_extractor._freeze_parameters()
+        if self.wav2vec2_conformer.feature_extractor:
+            self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     @staticmethod
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.compute_contrastive_logits
@@ -1657,13 +1657,13 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wav2vec2_conformer.feature_extractor._freeze_parameters()
+        if self.wav2vec2_conformer.feature_extractor:
+            self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1772,13 +1772,13 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wav2vec2_conformer.feature_extractor._freeze_parameters()
+        if self.wav2vec2_conformer.feature_extractor:
+            self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     def freeze_base_model(self):
         """
@@ -1882,13 +1882,13 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
         self.init_weights()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wav2vec2_conformer.feature_extractor._freeze_parameters()
+        if self.wav2vec2_conformer.feature_extractor:
+            self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification.freeze_base_model with wav2vec2->wav2vec2_conformer
     def freeze_base_model(self):
@@ -2038,13 +2038,13 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.freeze_feature_encoder with wav2vec2->wav2vec2_conformer
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
-        self.wav2vec2_conformer.feature_extractor._freeze_parameters()
+        if self.wav2vec2_conformer.feature_extractor:
+            self.wav2vec2_conformer.feature_extractor._freeze_parameters()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.freeze_base_model with wav2vec2->wav2vec2_conformer
     def freeze_base_model(self):
