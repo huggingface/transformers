@@ -195,9 +195,9 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         max_source_positions (`int`, *optional*, defaults to 5000):
             if `"relative"` position embeddings are used, defines the maximum source input positions.
         left_max_position_embeddings (`int`, *optional*, defaults to 64):
-            If `"relative_key"` (or Shaw) position embeddings are used, defines the left clipping value for relative positions.
+            If `"relative_key"` (aka Shaw) position embeddings are used, defines the left clipping value for relative positions.
         right_max_position_embeddings (`int`, *optional*, defaults to 8):
-            If `"relative_key"` (or Shaw) position embeddings are used, defines the right clipping value for relative positions.
+            If `"relative_key"` (aka Shaw) position embeddings are used, defines the right clipping value for relative positions.
         conv_depthwise_kernel_size (`int`, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):

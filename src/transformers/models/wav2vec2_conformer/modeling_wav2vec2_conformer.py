@@ -974,7 +974,7 @@ class Wav2Vec2ConformerEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        if self.layer_norm:
+        if self.layer_norm is not None:
             hidden_states = self.layer_norm(hidden_states)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
