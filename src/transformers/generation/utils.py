@@ -920,7 +920,6 @@ class GenerationMixin:
                 logits_processor=logits_processor,
                 model_kwargs=model_kwargs,
                 inputs_tensor=inputs_tensor,
-                eos_token_id=generation_config.eos_token_id,
             )
         return candidate_generator
 
