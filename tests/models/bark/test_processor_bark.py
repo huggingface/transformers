@@ -82,30 +82,88 @@ class BarkProcessorTest(unittest.TestCase):
         nb_codebooks_coarse = 2
         nb_codebooks_total = 8
 
-        voice_preset = {
+        voice_presets = {
             "semantic_prompt": np.ones(seq_len),
             "coarse_prompt": np.ones((nb_codebooks_coarse, seq_len)),
             "fine_prompt": np.ones((nb_codebooks_total, seq_len)),
         }
 
         # test providing already loaded voice_preset
-        inputs = processor(text=self.input_string, voice_preset=voice_preset)
+        inputs = processor(text=self.input_string, voice_presets=voice_presets)
 
         processed_voice_preset = inputs["history_prompt"]
-        for key in voice_preset:
-            self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
+        for key in voice_presets:
+            self.assertListEqual(
+                voice_presets[key].tolist(), processed_voice_preset.get(key, np.array([]))[0].tolist()
+            )
 
         # test loading voice preset from npz file
         tmpfilename = os.path.join(self.tmpdirname, "file.npz")
-        np.savez(tmpfilename, **voice_preset)
-        inputs = processor(text=self.input_string, voice_preset=tmpfilename)
+        np.savez(tmpfilename, **voice_presets)
+        inputs = processor(text=self.input_string, voice_presets=tmpfilename)
         processed_voice_preset = inputs["history_prompt"]
 
-        for key in voice_preset:
-            self.assertListEqual(voice_preset[key].tolist(), processed_voice_preset.get(key, np.array([])).tolist())
+        for key in voice_presets:
+            self.assertListEqual(
+                voice_presets[key].tolist(), processed_voice_preset.get(key, np.array([]))[0].tolist()
+            )
 
         # test loading voice preset from the hub
-        inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
+        inputs = processor(text=self.input_string, voice_presets=self.voice_preset)
+
+    def test_multiple_speaker_embeddings(self):
+        processor = BarkProcessor.from_pretrained(
+            pretrained_processor_name_or_path=self.checkpoint,
+            speaker_embeddings_dict_path=self.speaker_embeddings_dict_path,
+        )
+
+        seq_lens = [35, 45]
+        nb_codebooks_coarse = 2
+        nb_codebooks_total = 8
+        num_text = 21
+
+        voice_presets = [
+            {
+                "semantic_prompt": np.ones(seq_lens[0]),
+                "coarse_prompt": np.ones((nb_codebooks_coarse, seq_lens[0])),
+                "fine_prompt": np.ones((nb_codebooks_total, seq_lens[0])),
+            }
+        ] * 11
+        voice_presets += [
+            {
+                "semantic_prompt": np.ones(seq_lens[1]),
+                "coarse_prompt": np.ones((nb_codebooks_coarse, seq_lens[1])),
+                "fine_prompt": np.ones((nb_codebooks_total, seq_lens[1])),
+            }
+        ] * 10
+
+        # test providing already loaded voice_preset
+        inputs = processor(text=self.input_string, voice_presets=voice_presets)
+
+        processed_voice_presets = inputs["history_prompt"]
+        for i, voice_preset in enumerate(voice_presets):
+            for key in voice_preset:
+                self.assertListEqual(
+                    voice_preset[key].tolist(), processed_voice_presets.get(key, np.array([]))[i].tolist()
+                )
+
+        # test loading voice preset from npz file
+        tmpfilenames = []
+        for i in range(num_text):
+            tmpfilename = os.path.join(self.tmpdirname, f"file_{i}.npz")
+            np.savez(tmpfilename, **voice_presets[i])
+            tmpfilenames.append(tmpfilename)
+
+        inputs = processor(text=self.input_string, voice_presets=tmpfilenames)
+        processed_voice_presets = inputs["history_prompt"]
+
+        for i, voice_preset in enumerate(voice_presets):
+            for key in voice_preset:
+                self.assertListEqual(
+                    voice_preset[key].tolist(), processed_voice_presets.get(key, np.array([]))[i].tolist()
+                )
+        # test loading voice preset from the hub
+        inputs = processor(text=self.input_string, voice_presets=self.voice_preset)
 
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
