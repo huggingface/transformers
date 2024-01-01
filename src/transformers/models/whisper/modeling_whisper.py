@@ -45,6 +45,7 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
+    is_torch_mps_available,
 )
 from .configuration_whisper import WhisperConfig
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
@@ -2599,11 +2600,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
-            try:
-                std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-            except NotImplementedError:
+            if is_torch_mps_available():
+                # In the MPS backend torch.std_mean is not implemented yet
                 std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
                 mean = torch.mean(weights, dim=-2, keepdim=True)
+            else:
+                std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
             weights = (weights - mean) / std
             weights = _median_filter(weights, self.config.median_filter_width)
 
@@ -2616,12 +2618,12 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
-                try:
-                    std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
-                except NotImplementedError:
-                    # With MPS backend torch.std_mean is not implemented yet, nor is scheduled for implementation
+                if is_torch_mps_available():
+                    # In the MPS backend torch.std_mean is not implemented yet
                     std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
                     mean = torch.mean(matrix, dim=-2, keepdim=True)
+                else:
+                    std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
                 matrix = (matrix - mean) / std
                 matrix = _median_filter(matrix, self.config.median_filter_width)
 
