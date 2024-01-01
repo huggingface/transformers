@@ -239,6 +239,68 @@ class Wav2Vec2ConformerModelTester:
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_combination_without_feature_encoder(self, config, input_values, attention_mask):
+        # same as fbank causal model except it uses non causal depth-wise conv and it doesn't skip encoder layer norm
+        config.add_adapter = False
+        config.skip_feature_encoder = True
+        config.skip_encoder_layer_norm = False
+        config.skip_pos_conv_embed = True
+        config.non_causal_depth_wise_conv = True
+
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+        # same as fbank causal model except it uses an adapter
+        config.add_adapter = True
+        config.skip_feature_encoder = True
+        config.skip_encoder_layer_norm = True
+        config.skip_pos_conv_embed = True
+        config.non_causal_depth_wise_conv = False
+
+        adapter_output_seq_length = (self.seq_length - 1) // self.adapter_stride + 1
+
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, adapter_output_seq_length, self.hidden_size)
+        )
+
+    def create_and_check_combination_with_feature_encoder(self, config, input_values, attention_mask):
+        # same as fbank causal model except it uses non causal depth-wise conv and it doesn't skip encoder layer norm and feature encoder
+        config.add_adapter = False
+        config.skip_feature_encoder = False
+        config.skip_encoder_layer_norm = False
+        config.skip_pos_conv_embed = True
+        config.non_causal_depth_wise_conv = True
+
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
+
+        # same as fbank causal model except it uses an adapter and doesn't skip feature encoder
+        config.add_adapter = True
+        config.skip_feature_encoder = False
+        config.skip_encoder_layer_norm = True
+        config.skip_pos_conv_embed = True
+        config.non_causal_depth_wise_conv = False
+
+        model = Wav2Vec2ConformerModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
+        )
+
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 8
@@ -515,6 +577,14 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     def test_model_from_seamless_communication(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(create_mel_spectrogram=True)
         self.model_tester.create_and_check_causal_fbank_model(*config_and_inputs)
+
+    def test_model_combination_without_feature_encoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(create_mel_spectrogram=True)
+        self.model_tester.create_and_check_combination_without_feature_encoder(*config_and_inputs)
+
+    def test_model_combination_with_feature_encoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_combination_with_feature_encoder(*config_and_inputs)
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -919,29 +989,15 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def check_inference_pretrained(self, model_id, model, input_name, inputs, features_shape):
-        torch.manual_seed(0)
-        mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
-        )
-        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
+    def check_inference_pretrained(self, model_id, model, inputs):
         with torch.no_grad():
-            outputs = model(
-                inputs[input_name],
-                attention_mask=inputs["attention_mask"],
-                output_attentions=True,
-                mask_time_indices=mask_time_indices,
-            )
+            outputs = model(**inputs)
 
         # compute cosine similarity
         cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
 
         # retrieve cosine sim of masked features
-        cosine_sim_masked = cosine_sim[mask_time_indices]
+        cosine_sim_masked = cosine_sim[inputs["mask_time_indices"]]
 
         # ... now compare to randomly initialized model
 
@@ -949,12 +1005,7 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         model_rand = Wav2Vec2ConformerForPreTraining(config).to(torch_device).eval()
 
         with torch.no_grad():
-            outputs_rand = model_rand(
-                inputs[input_name],
-                attention_mask=inputs["attention_mask"],
-                output_attentions=True,
-                mask_time_indices=mask_time_indices,
-            )
+            outputs_rand = model_rand(**inputs)
 
         # compute cosine similarity
         cosine_sim_rand = torch.cosine_similarity(
@@ -962,7 +1013,7 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         )
 
         # retrieve cosine sim of masked features
-        cosine_sim_masked_rand = cosine_sim_rand[mask_time_indices]
+        cosine_sim_masked_rand = cosine_sim_rand[inputs["mask_time_indices"]]
 
         # a pretrained wav2vec2_conformer model has learned to predict the quantized latent states
         # => the cosine similarity between quantized states and predicted states > 0.5
@@ -1078,7 +1129,6 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         model = Wav2Vec2ConformerForPreTraining.from_pretrained(model_id)
         model.to(torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-        input_name = feature_extractor.model_input_names[0]
 
         input_speech = self._load_datasamples(2)
         inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
@@ -1087,14 +1137,27 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
         # apply augmentation
         model.wav2vec2_conformer.config.apply_spec_augment = True
 
-        self.check_inference_pretrained(model_id, model, input_name, inputs, features_shape)
+        torch.manual_seed(0)
+
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
+
+        inputs["input_values"] = inputs.pop("input_features")
+        inputs["output_attentions"] = True
+        inputs["mask_time_indices"] = mask_time_indices
+
+        self.check_inference_pretrained(model_id, model, inputs)
 
     def test_inference_pretrained(self):
         model_id = "facebook/wav2vec2-conformer-rel-pos-large"
         model = Wav2Vec2ConformerForPreTraining.from_pretrained(model_id)
         model.to(torch_device)
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_id, return_attention_mask=True)
-        input_name = feature_extractor.model_input_names[0]
         input_speech = self._load_datasamples(2)
 
         inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
@@ -1104,4 +1167,17 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         features_shape = (batch_size, feature_seq_length)
 
-        self.check_inference_pretrained(model_id, model, input_name, inputs, features_shape)
+        torch.manual_seed(0)
+
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
+
+        inputs["output_attentions"] = True
+        inputs["mask_time_indices"] = mask_time_indices
+
+        self.check_inference_pretrained(model_id, model, inputs)
