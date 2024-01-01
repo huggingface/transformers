@@ -242,24 +242,22 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
-        
 
-    
     def get_candidates(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         """
         Fetches the candidates to be tried for the current input.
-        
+
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-        
+
         Return:
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
         input_length = input_ids.size(1)
         if input_length < self.max_matching_ngram_size:
             raise ValueError("Input length is smaller than max_matching_ngram_size for Prompt Lookup Decoding")
-        
+
         chosen_ids = None
         match_found = False
         for ngram_size in range(self.max_matching_ngram_size, 0, -1):
@@ -288,16 +286,16 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             if match_found:
                 break
 
-        if chosen_ids == None or len(chosen_ids) == 0:
+        if chosen_ids is None or len(chosen_ids) == 0:
             # Need to make a dummy tensor to avoid errors
             chosen_ids = torch.tensor([0], dtype=torch.long, device=input_ids.device)
-        
+
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
         # assisted_generation expects logits as well, but we don't have those here, so returning empty list
-        return candidate_input_ids, [] 
-    
+        return candidate_input_ids, []
+
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes.

@@ -39,8 +39,8 @@ from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .candidate_generator import (
     AssistedCandidateGenerator,
-    PromptLookupCandidateGenerator,
     CandidateGenerator,
+    PromptLookupCandidateGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
