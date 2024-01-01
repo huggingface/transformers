@@ -674,6 +674,50 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
 
+    @slow
+    @require_torch
+    def test_whisper_word_timestamps_batched(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=3,
+            return_timestamps="word",
+        )
+        data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = data[0]["audio"]
+
+        # not the same output as test_simple_whisper_asr because of chunking
+        EXPECTED_OUTPUT = {
+            "text": " Mr. Quilder is the apostle of the middle classes and we are glad to welcome his gospel.",
+            "chunks": [
+                {"text": " Mr.", "timestamp": (0.48, 0.96)},
+                {"text": " Quilder", "timestamp": (0.96, 1.24)},
+                {"text": " is", "timestamp": (1.24, 1.5)},
+                {"text": " the", "timestamp": (1.5, 1.72)},
+                {"text": " apostle", "timestamp": (1.72, 1.98)},
+                {"text": " of", "timestamp": (1.98, 2.32)},
+                {"text": " the", "timestamp": (2.32, 2.5)},
+                {"text": " middle", "timestamp": (2.5, 2.68)},
+                {"text": " classes", "timestamp": (2.68, 3.2)},
+                {"text": " and", "timestamp": (3.2, 3.56)},
+                {"text": " we", "timestamp": (3.56, 3.68)},
+                {"text": " are", "timestamp": (3.68, 3.8)},
+                {"text": " glad", "timestamp": (3.8, 4.1)},
+                {"text": " to", "timestamp": (4.1, 4.34)},
+                {"text": " welcome", "timestamp": (4.3, 4.6)},
+                {"text": " his", "timestamp": (4.6, 4.94)},
+                {"text": " gospel.", "timestamp": (4.94, 5.82)},
+            ],
+        }
+
+        # batch size 1: copy the audio sample since pipeline consumes it
+        output = pipe(sample.copy(), batch_size=1)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
+        # batch size 2: input audio is chunked into smaller pieces so it's testing batching
+        output = pipe(sample, batch_size=2)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
     @require_torch
     @slow
     def test_torch_speech_encoder_decoder(self):
@@ -1114,6 +1158,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         result = pipe(audio)[0]["text"]
 
         assert result == EXPECTED_RESULT
+
+    @require_torch
+    @slow
+    def test_seamless_v2(self):
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="facebook/seamless-m4t-v2-large",
+            device="cuda:0",
+        )
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = dataset[0]["audio"]
+
+        result = pipe(sample, generate_kwargs={"tgt_lang": "eng"})
+        EXPECTED_RESULT = "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+
+        assert result["text"] == EXPECTED_RESULT
 
     @require_torch
     @slow

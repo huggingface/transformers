@@ -2022,11 +2022,11 @@ class SeamlessM4Tv2Decoder(SeamlessM4Tv2PreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -4596,7 +4596,11 @@ class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
         if tgt_lang is not None:
             # also accept __xxx__
             tgt_lang = tgt_lang.replace("__", "")
-            for key in ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]:
+            if generate_speech:
+                keys_to_check = ["text_decoder_lang_to_code_id", "t2u_lang_code_to_id", "vocoder_lang_code_to_id"]
+            else:
+                keys_to_check = ["text_decoder_lang_to_code_id"]
+            for key in keys_to_check:
                 lang_code_to_id = getattr(self.generation_config, key, None)
                 if lang_code_to_id is None:
                     raise ValueError(

@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -289,6 +290,15 @@ class MBartFlashAttention2(MBartAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -413,6 +423,12 @@ class MBartFlashAttention2(MBartAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -433,13 +449,13 @@ class MBartFlashAttention2(MBartAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal,
+                causal=causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
@@ -485,7 +501,7 @@ class MBartFlashAttention2(MBartAttention):
 
 
 MBART_ATTENTION_CLASSES = {
-    "default": MBartAttention,
+    "eager": MBartAttention,
     "flash_attention_2": MBartFlashAttention2,
 }
 
@@ -494,9 +510,8 @@ class MBartEncoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = MBART_ATTENTION_CLASSES[attn_type](
+        self.self_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -565,9 +580,8 @@ class MBartDecoderLayer(nn.Module):
     def __init__(self, config: MBartConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = MBART_ATTENTION_CLASSES[attn_type](
+        self.self_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -580,7 +594,7 @@ class MBartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MBART_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = MBART_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -862,10 +876,11 @@ MBART_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -919,6 +934,7 @@ class MBartEncoder(MBartPreTrainedModel):
             embed_dim,
         )
         self.layers = nn.ModuleList([MBartEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1007,7 +1023,7 @@ class MBartEncoder(MBartPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1096,6 +1112,7 @@ class MBartDecoder(MBartPreTrainedModel):
             config.d_model,
         )
         self.layers = nn.ModuleList([MBartDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1175,11 +1192,11 @@ class MBartDecoder(MBartPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1215,7 +1232,7 @@ class MBartDecoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
@@ -1226,7 +1243,7 @@ class MBartDecoder(MBartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

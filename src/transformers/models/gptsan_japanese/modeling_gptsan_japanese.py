@@ -187,7 +187,7 @@ class GPTSanJapaneseTop1Router(nn.Module):
         self.input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(self.dtype)
 
-        if self.jitter_noise > 0:
+        if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
 
