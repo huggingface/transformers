@@ -113,7 +113,6 @@ def convert_wav2vec2_conformer_checkpoint(
     pytorch_dump_folder_path,
     config_path=None,
     repo_id=None,
-    process_path=None,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -133,26 +132,78 @@ def convert_wav2vec2_conformer_checkpoint(
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
-        hf_wav2vec.push_to_hub(repo_id)
+        hf_wav2vec.push_to_hub(repo_id, create_pr=True)
 
     # save feature extractor
     fe = SeamlessM4TFeatureExtractor(padding_value=1)
     fe.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
-        fe.push_to_hub(repo_id)
+        fe.push_to_hub(repo_id, create_pr=True)
+
+    if args.audio_path:
+        import torchaudio
+        from fairseq2.data import Collater
+        from fairseq2.data.audio import WaveformToFbankConverter
+        from fairseq2.nn.padding import get_seqs_and_padding_mask
+
+        waveform, sample_rate = torchaudio.load(args.audio_path)
+        waveform = torchaudio.functional.resample(waveform, sample_rate, fe.sampling_rate)
+
+        fbank_converter = WaveformToFbankConverter(
+            num_mel_bins=80,
+            waveform_scale=2**15,
+            channel_last=True,
+            standardize=True,
+            dtype=torch.float32,
+        )
+        collater = Collater(pad_value=1)
+
+        decoded_audio = {"waveform": waveform.T, "sample_rate": fe.sampling_rate, "format": -1}
+        src = collater(fbank_converter(decoded_audio))["fbank"]
+        seqs, padding_mask = get_seqs_and_padding_mask(src)
+
+        with torch.inference_mode():
+            seqs, padding_mask = model.encoder_frontend(seqs, padding_mask)
+            original_output, padding_mask = model.encoder(seqs, padding_mask)
+
+        hf_wav2vec.eval()
+
+        inputs = fe(waveform, return_tensors="pt", padding=True)
+        with torch.no_grad():
+            outputs = hf_wav2vec.wav2vec2_conformer(inputs["input_features"], attention_mask=inputs["attention_mask"])
+
+        torch.testing.assert_close(original_output, outputs.last_hidden_state, atol=5e-3, rtol=5e-3)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default="/home/yoach/tmp/wav2vec_seamless",
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
     parser.add_argument(
         "--checkpoint_path", default="conformer_shaw", type=str, help="Path to seamless communication checkpoint"
     )
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
+    parser.add_argument(
+        "--config_path",
+        default="/home/yoach/tmp/wav2vec_seamless",
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--repo_id", default="facebook/w2v-bert-2.0", type=str, help="Push to this repo id if precised."
+    )
+    parser.add_argument(
+        "--audio_path",
+        default="/home/yoach/transformers/audio_vits.wav",
+        type=str,
+        help="If specified, check that the original model and the converted model produce the same outputs.",
+    )
 
     args = parser.parse_args()
     convert_wav2vec2_conformer_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.repo_id, args.process_path
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.repo_id
     )
