@@ -255,12 +255,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             `torch.LongTensor` of shape `(num_candidates, candidate_length)`: The candidate sequences to be tried.
         """
         input_length = input_ids.size(1)
-        if input_length < self.max_matching_ngram_size:
-            raise ValueError("Input length is smaller than max_matching_ngram_size for Prompt Lookup Decoding")
 
         chosen_ids = None
         match_found = False
-        for ngram_size in range(self.max_matching_ngram_size, 0, -1):
+        for ngram_size in range(min(self.max_matching_ngram_size, input_length - 1), 0, -1):
             # Create sliding windows of size ngram_size
             windows = input_ids.unfold(dimension=1, size=ngram_size, step=1)
 
