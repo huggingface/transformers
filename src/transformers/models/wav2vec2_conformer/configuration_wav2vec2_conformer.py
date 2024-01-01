@@ -322,6 +322,18 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
+
+        if position_embeddings_type is not None and position_embeddings_type not in [
+            "rotary",
+            "relative",
+            "relative_key",
+        ]:
+            raise ValueError(
+                """
+                `position_embeddings_type` is not valid. It must be one of the following values:
+                `["rotary", "relative", "relative_key"]` or left at `None`.
+                """
+            )
         self.position_embeddings_type = position_embeddings_type
         self.rotary_embedding_base = rotary_embedding_base
         self.left_max_position_embeddings = left_max_position_embeddings
