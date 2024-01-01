@@ -17,6 +17,7 @@ Processor class for Bark
 """
 import json
 import os
+from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -219,7 +220,7 @@ class BarkProcessor(ProcessorMixin):
     def __call__(
         self,
         text=None,
-        voice_preset=None,
+        voice_presets=None,
         return_tensors="pt",
         max_length=256,
         add_special_tokens=False,
@@ -238,7 +239,7 @@ class BarkProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            voice_preset (`str`, `Dict[np.ndarray]`):
+            voice_preset (`str`, `Dict[np.ndarray]`, List[Dict[np.ndarray]]):
                 The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
                 `"en_speaker_1"`, or directly a dictionnary of `np.ndarray` embeddings for each submodel of `Bark`. Or
                 it can be a valid file name of a local `.npz` single voice preset.
@@ -252,23 +253,42 @@ class BarkProcessor(ProcessorMixin):
             Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output of the
             `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
         """
-        if voice_preset is not None and not isinstance(voice_preset, dict):
-            if (
-                isinstance(voice_preset, str)
-                and self.speaker_embeddings is not None
-                and voice_preset in self.speaker_embeddings
-            ):
-                voice_preset = self._load_voice_preset(voice_preset)
+        output_voice_presets = None
+        if voice_presets is not None:
+            if isinstance(voice_presets, dict) or isinstance(voice_presets, str):
+                voice_presets = [voice_presets]
 
-            else:
-                if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
-                    voice_preset = voice_preset + ".npz"
+            batch_size = len(text)
+            n_voice_presets = len(voice_presets)
 
-                voice_preset = np.load(voice_preset)
+            if (batch_size != n_voice_presets) and (n_voice_presets != 1):
+                raise ValueError(
+                    f"The number of voice presets {n_voice_presets} does not match batch size of "
+                    f"size {batch_size}. The number of voice presets should either be 1 or {batch_size}."
+                )
 
-        if voice_preset is not None:
-            self._validate_voice_preset_dict(voice_preset, **kwargs)
-            voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
+            output_voice_presets = defaultdict(list)
+
+            for voice_preset in voice_presets:
+                if not isinstance(voice_preset, dict):
+                    if (
+                        isinstance(voice_preset, str)
+                        and self.speaker_embeddings is not None
+                        and voice_preset in self.speaker_embeddings
+                    ):
+                        voice_preset = self._load_voice_preset(voice_preset)
+
+                    else:
+                        if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
+                            voice_preset = voice_preset + ".npz"
+
+                        voice_preset = np.load(voice_preset)
+
+                self._validate_voice_preset_dict(voice_preset, **kwargs)
+                voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
+
+                for k, v in voice_preset.items():
+                    output_voice_presets[k].append(v)
 
         encoded_text = self.tokenizer(
             text,
@@ -281,7 +301,7 @@ class BarkProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if voice_preset is not None:
-            encoded_text["history_prompt"] = voice_preset
+        if output_voice_presets is not None:
+            encoded_text["history_prompt"] = output_voice_presets
 
         return encoded_text
