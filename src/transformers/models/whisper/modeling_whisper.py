@@ -2603,7 +2603,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
             except NotImplementedError:
                 std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
-                mean = torch.mean(weights, dim=-2, keepdim=True)                
+                mean = torch.mean(weights, dim=-2, keepdim=True)
             weights = (weights - mean) / std
             weights = _median_filter(weights, self.config.median_filter_width)
 
