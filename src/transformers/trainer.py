@@ -2165,7 +2165,7 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
-        elif self.is_fsdp_enabled:
+        elif self.is_fsdp_enabled and not _is_peft_model(unwrap_model(model)):
             load_result = load_fsdp_model(
                 self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
             )
@@ -2201,7 +2201,7 @@ class Trainer:
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
             else:
-                if _is_peft_model(model):
+                if _is_peft_model(unwrap_model(model)):
                     # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
                     if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
@@ -2486,7 +2486,8 @@ class Trainer:
                 self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
-            save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
+            if not _is_peft_model(unwrap_model(self.model)):
+                save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
