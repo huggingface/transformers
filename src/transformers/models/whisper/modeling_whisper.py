@@ -2599,7 +2599,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
-            std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+            try:
+                std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+            except NotImplementedError:
+                std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
+                mean = torch.mean(weights, dim=-2, keepdim=True)                
             weights = (weights - mean) / std
             weights = _median_filter(weights, self.config.median_filter_width)
 
