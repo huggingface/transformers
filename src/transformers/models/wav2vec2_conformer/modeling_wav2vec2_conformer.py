@@ -598,7 +598,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if config.non_causal_depth_wise_conv:
             self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         else:
-            self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size)
+            self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
