@@ -1569,7 +1569,7 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_assisted):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    @is_flaky() 
+    @is_flaky()
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         # This test ensures that the prompt lookup generation does not introduce output changes over greedy search.
         # This test is mostly a copy of test_assisted_decoding_matches_greedy_search
@@ -1621,7 +1621,7 @@ class GenerationTesterMixin:
 
             output_greedy = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
-            generation_kwargs.update({"prompt_lookup_num_tokens": 2}) # see b)
+            generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
             output_prompt_lookup = model.generate(input_ids, attention_mask=attention_mask, **generation_kwargs)
 
             # The two outputs must match and their shape must be as expected
