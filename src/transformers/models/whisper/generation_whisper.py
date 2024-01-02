@@ -1013,6 +1013,9 @@ class WhisperGenerationMixin:
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
             kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
+        else:
+            # make sure `"decoder_attention_mask"` is not passed to forward
+            kwargs.pop("decoder_attention_mask", None)
 
         return decoder_input_ids, kwargs
 
@@ -1071,7 +1074,7 @@ class WhisperGenerationMixin:
             raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
 
         for current_segment_list in current_segments:
-            if current_segment_list is not None:
+            if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
                 sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
 
                 if cut_off_length is not None:
