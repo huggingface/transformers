@@ -88,69 +88,73 @@ def load_wkv5_cuda_kernel(head_size):
 
 class WKV_5(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, B, T, C, H, r, k, v, w, u, s):
+    def forward(ctx, receptance, key, value, time_decay, time_first, state):
         with torch.no_grad():
-            ctx.B = B
-            ctx.T = T
-            ctx.C = C
-            ctx.H = H
-            ew = (-torch.exp(w.float())).contiguous()
-            eew = (torch.exp(ew)).contiguous()
-            ctx.save_for_backward(r, k, v, eew, ew, u)
-            y = torch.empty(
-                (B, T, C), device=r.device, dtype=torch.bfloat16, memory_format=torch.contiguous_format
+            Batch = key.shape[0]
+            SequenceLength = key.shape[1]
+            HiddenSize = key.shape[2]
+            HeadSize = HiddenSize // time_decay.shape[0]
+            ctx.Batch = Batch
+            ctx.SequenceLength = SequenceLength
+            ctx.HiddenSize = HiddenSize
+            ctx.HeadSize = HeadSize
+            e_time_decay = (-torch.exp(time_decay.float())).contiguous()
+            ee_time_decay = (torch.exp(e_time_decay)).contiguous()
+            ctx.save_for_backward(receptance, key, value, ee_time_decay, e_time_decay, time_first)
+            out = torch.empty(
+                (Batch, SequenceLength, HiddenSize), device=receptance.device, dtype=torch.bfloat16, memory_format=torch.contiguous_format
             )
-            rwkv5_cuda_kernel.forward(B, T, C, H, r, k, v, eew, u, y, s)
-            return y, s
+            rwkv5_cuda_kernel.forward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, time_first, y, state)
+            return out, state
 
     @staticmethod
-    def backward(ctx, gy):
+    def backward(ctx, gout):
         with torch.no_grad():
-            assert gy.dtype == torch.bfloat16
-            B = ctx.B
-            T = ctx.T
-            C = ctx.C
-            H = ctx.H
-            r, k, v, eew, ew, u = ctx.saved_tensors
-            gr = torch.empty(
-                (B, T, C),
-                device=gy.device,
+            assert gout.dtype == torch.bfloat16
+            Batch = ctx.Batch
+            SequenceLength = ctx.SequenceLength
+            HiddenSize = ctx.HiddenSize
+            HeadSize = ctx.HeadSize
+            receptance, key, value, ee_time_decay, e_time_decay, time_first = ctx.saved_tensors
+            greceptance = torch.empty(
+                (Batch, SequenceLength, HiddenSize),
+                device=gout.device,
                 requires_grad=False,
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            gk = torch.empty(
-                (B, T, C),
-                device=gy.device,
+            g_key = torch.empty(
+                (Batch, SequenceLength, HiddenSize),
+                device=gout.device,
                 requires_grad=False,
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            gv = torch.empty(
-                (B, T, C),
-                device=gy.device,
+            g_value = torch.empty(
+                (Batch, SequenceLength, HiddenSize),
+                device=gout.device,
                 requires_grad=False,
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            gw = torch.empty(
-                (B, C),
-                device=gy.device,
+            g_time_decay = torch.empty(
+                (Batch, HiddenSize),
+                device=gout.device,
                 requires_grad=False,
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            gu = torch.empty(
-                (B, C),
-                device=gy.device,
+            g_time_first = torch.empty(
+                (Batch, HiddenSize),
+                device=gout.device,
                 requires_grad=False,
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            rwkv5_cuda_kernel.backward(B, T, C, H, r, k, v, eew, ew, u, gy, gr, gk, gv, gw, gu)
-            gw = torch.sum(gw, 0).view(H, C // H)
-            gu = torch.sum(gu, 0).view(H, C // H)
-            return (None, None, None, None, gr, gk, gv, gw, gu)
+            rwkv5_cuda_kernel.backward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, e_time_decay, time_first, gout, greceptance, g_key, g_value, g_time_decay, gu)
+            g_time_decay = torch.sum(g_time_decay, 0).view(HeadSize, HiddenSize // HeadSize)
+            g_time_first = torch.sum(g_time_first, 0).view(HeadSize, HiddenSize // HeadSize)
+            return (None, None, None, None, greceptance, g_key, g_value, g_time_decay, g_time_first)
 
 
 def rwkv_linear_attention_v5_cpu(
@@ -161,9 +165,9 @@ def rwkv_linear_attention_v5_cpu(
     key,
     value,
     gate,
-    lxw,
-    lxb,
-    ow,
+    layer_norm_weight,
+    layer_norm_bias,
+    output_weight,
     state,
 ):
     Batch = hidden.shape[0]
@@ -175,8 +179,8 @@ def rwkv_linear_attention_v5_cpu(
     receptance = receptance.to(torch.float32).view(Batch, SequenceLength, AttentionHeads, HeadSize).transpose(1, 2)
     time_decay = torch.exp(-torch.exp(time_decay.float())).reshape(-1, 1, 1).reshape(AttentionHeads, -1, 1)
     time_first = time_first.float().reshape(-1, 1, 1).reshape(AttentionHeads, -1, 1)
-    lxw = lxw.float()
-    lxb = lxb.float()
+    layer_norm_weight = layer_norm_weight.float()
+    layer_norm_bias = layer_norm_bias.float()
     out = torch.zeros_like(key).reshape(Batch, SequenceLength, AttentionHeads, HeadSize)
     for t in range(SequenceLength):
         rt = receptance[:, :, t : t + 1, :]
@@ -188,9 +192,9 @@ def rwkv_linear_attention_v5_cpu(
             state = at + time_decay * state
 
     out = out.reshape(Batch * SequenceLength, AttentionHeads * HeadSize)
-    out = F.group_norm(out, num_groups=AttentionHeads, weight=lxw, bias=lxb).reshape(Batch, SequenceLength, AttentionHeads * HeadSize)
+    out = F.group_norm(out, num_groups=AttentionHeads, weight=layer_norm_weight, bias=layer_norm_bias).reshape(Batch, SequenceLength, AttentionHeads * HeadSize)
     out = out.to(dtype=hidden.dtype) * gate
-    out = out @ ow
+    out = out @ output_weight
 
     return out, state
 
@@ -203,9 +207,9 @@ def rwkv_linear_attention(
     key,
     value,
     gate,
-    lxw,
-    lxb,
-    ow,
+    layer_norm_weight,
+    layer_norm_bias,
+    output_weight,
     state,
 ):
     Batch = hidden.shape[0]
@@ -225,17 +229,17 @@ def rwkv_linear_attention(
             key,
             value,
             gate,
-            lxw,
-            lxb,
-            ow,
+            layer_norm_weight,
+            layer_norm_bias,
+            output_weight,
             state,
         )
     else:
         out, state = WKV_5.apply(Batch, SequenceLength, AttentionHeads * HeadSize, AttentionHeads, receptance, key, value, time_decay, time_first, state)
         out = out.reshape(Batch * SequenceLength, AttentionHeads * HeadSize)
-        out = F.group_norm(out, num_groups=AttentionHeads, weight=lxw, bias=lxb).reshape(Batch, SequenceLength, AttentionHeads * HeadSize)
+        out = F.group_norm(out, num_groups=AttentionHeads, weight=layer_norm_weight, bias=layer_norm_bias).reshape(Batch, SequenceLength, AttentionHeads * HeadSize)
         out = out.to(dtype=hidden.dtype) * gate
-        out = out @ ow
+        out = out @ output_weight
         return out, state
 
 
