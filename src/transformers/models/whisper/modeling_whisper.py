@@ -2613,12 +2613,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
 
                 # Normalize and smoothen the weights.
-                if is_torch_mps_available():
-                    # In the MPS backend torch.std_mean is not implemented yet
-                    std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
-                    mean = torch.mean(matrix, dim=-2, keepdim=True)
-                else:
-                    std, mean = torch.std_mean(matrix, dim=-2, keepdim=True, unbiased=False)
+                std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
+                mean = torch.mean(matrix, dim=-2, keepdim=True)
                 matrix = (matrix - mean) / std
                 matrix = _median_filter(matrix, self.config.median_filter_width)
 
