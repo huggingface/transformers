@@ -17,7 +17,7 @@ Audio processing functions to extract features from audio waveforms. This code i
 and remove unnecessary dependencies.
 """
 import warnings
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
@@ -479,7 +479,7 @@ def spectrogram(
 # This version of the spectrogram function is specifically optimized for batch processing.
 # It leverages broadcasting to efficiently handle multiple inputs simultaneously.
 def spectrogram_batch(
-    waveform: np.ndarray,
+    waveform_list: List[np.ndarray],
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
@@ -497,7 +497,7 @@ def spectrogram_batch(
     db_range: Optional[float] = None,
     remove_dc_offset: Optional[bool] = None,
     dtype: np.dtype = np.float32,
-) -> np.ndarray:
+) -> List[np.ndarray]:
     window_length = len(window)
 
     if fft_length is None:
@@ -513,25 +513,50 @@ def spectrogram_batch(
         raise ValueError("hop_length must be greater than zero")
 
     # Check the dimensions of the waveform
-    if waveform.ndim != 2:
-        raise ValueError(f"Input waveform must have two dimensions (batch, time), shape is {waveform.shape}")
+    for waveform in waveform_list:
+        if waveform.ndim != 1:
+            raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
 
     # Check if waveform is complex
-    if np.iscomplexobj(waveform):
-        raise ValueError("Complex-valued input waveforms are not currently supported")
+    for waveform in waveform_list:
+        if np.iscomplexobj(waveform):
+            raise ValueError("Complex-valued input waveforms are not currently supported")
 
     # Center pad the waveform
     if center:
-        padding = [(0, 0), (int(frame_length // 2), int(frame_length // 2))]
-        waveform = np.pad(waveform, padding, mode=pad_mode)
+        padding = [(int(frame_length // 2), int(frame_length // 2))]
+        padded_waveform_list = [
+            np.pad(
+                waveform,
+                padding,
+                mode=pad_mode,
+            )
+            for waveform in waveform_list
+        ]
+    original_waveform_lengths = [
+        len(waveform) for waveform in padded_waveform_list
+    ]  # these lengths will be used to remove padding later
+
+    # Batch pad the waveform
+    max_length = max(original_waveform_lengths)
+    padded_waveform_batch = np.array(
+        [
+            np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
+            for waveform in padded_waveform_list
+        ],
+        dtype=dtype,
+    )
 
     # Promote to float64, since np.fft uses float64 internally
-    waveform = waveform.astype(np.float64)
+    padded_waveform_batch = padded_waveform_batch.astype(np.float64)
     window = window.astype(np.float64)
 
     # Split waveform into frames of frame_length size
-    num_frames = int(1 + np.floor((waveform.shape[1] - frame_length) / hop_length))
-    num_batches = waveform.shape[0]
+    num_frames = int(1 + np.floor((padded_waveform_batch.shape[1] - frame_length) / hop_length))
+    true_num_frames = [
+        int(1 + np.floor((length - frame_length) / hop_length)) for length in original_waveform_lengths
+    ]  # these lengths will be used to remove padding later
+    num_batches = padded_waveform_batch.shape[0]
 
     num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
     spectrogram = np.empty((num_batches, num_frames, num_frequency_bins), dtype=np.complex64)
@@ -542,7 +567,7 @@ def spectrogram_batch(
 
     for frame_idx in range(num_frames):
         timestep = frame_idx * hop_length
-        buffer[:, :frame_length] = waveform[:, timestep : timestep + frame_length]
+        buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
 
         if remove_dc_offset:
             buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
@@ -580,9 +605,11 @@ def spectrogram_batch(
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
-    spectrogram = np.asarray(spectrogram, spectrogram.dtype).transpose(0, 2, 1)
+    spectrogram = np.asarray(spectrogram, dtype)
 
-    return spectrogram
+    spectrogram_list = [spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))]
+
+    return spectrogram_list
 
 
 def power_to_db(
