@@ -275,14 +275,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     config = hf_deepspeed_config.config
 
-    # Optimizer + Scheduler
-    # Currently supported combos:
-    # 1. DS scheduler + DS optimizer: Yes
-    # 2. HF scheduler + HF optimizer: Yes
-    # 3. DS scheduler + HF optimizer: Yes
-    # 4. HF scheduler + DS optimizer: No
-    #
-    # Unless Offload is enabled in which case it's:
+    # Mixing and matching DS schedulers and optimizers is supported unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
