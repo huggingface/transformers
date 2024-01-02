@@ -54,9 +54,10 @@ The pipeline allows to use the model in a few lines of code:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> # inference
->>> output = image_classifier(image, candidate_labels=["2 cats", "a plane", "a remote"])
->>> print(output)
-[{'score': 0.19791047275066376, 'label': '2 cats'}, {'score': 1.8337435903958976e-05, 'label': 'a remote'}, {'score': 2.3004151472605372e-08, 'label': 'a plane'}]
+>>> outputs = image_classifier(image, candidate_labels=["2 cats", "a plane", "a remote"])
+>>> outputs = [{"score": round(output["score"], 4), "label": output["label"] } for output in outputs]
+>>> print(outputs)
+[{'score': 0.1979, 'label': '2 cats'}, {'score': 0.0, 'label': 'a remote'}, {'score': 0.0, 'label': 'a plane'}]
 ```
 
 ### Using the model yourself
