@@ -1,6 +1,11 @@
 from typing import Dict
 
+from ..utils import is_vision_available
 from .base import GenericTensor, Pipeline
+
+
+if is_vision_available():
+    from ..image_utils import load_image
 
 
 # Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
@@ -14,10 +19,10 @@ class ImageFeatureExtractionPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> extractor = pipeline(model="bert-base-uncased", task="image-feature-extraction")
-    >>> result = extractor("This is a simple test.", return_tensors=True)
+    >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
+    >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
     >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input string.
-    torch.Size([1, 8, 768])
+    torch.Size([1, 197, 768])
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
@@ -65,7 +70,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
         return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, image, **preprocess_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, image, timeout=None, **preprocess_kwargs) -> Dict[str, GenericTensor]:
+        image = load_image(image, timeout=timeout)
         model_inputs = self.image_processor(image, return_tensors=self.framework, **preprocess_kwargs)
         return model_inputs
 
