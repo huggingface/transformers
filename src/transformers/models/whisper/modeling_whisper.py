@@ -2600,12 +2600,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         if num_frames is None or isinstance(num_frames, int):
             # Normalize and smoothen the weights.
-            if is_torch_mps_available():
-                # In the MPS backend torch.std_mean is not implemented yet
-                std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
-                mean = torch.mean(weights, dim=-2, keepdim=True)
-            else:
-                std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+            std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
+            mean = torch.mean(weights, dim=-2, keepdim=True)
             weights = (weights - mean) / std
             weights = _median_filter(weights, self.config.median_filter_width)
 
