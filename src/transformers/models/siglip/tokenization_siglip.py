@@ -116,12 +116,12 @@ class SiglipTokenizer(PreTrainedTokenizer):
             else pad_token
         )
         unk_token = (
-            AddedToken(unk_token, rstrip=True, lstrip=True, normalized=True, special=True)
+            AddedToken(unk_token, rstrip=True, lstrip=True, normalized=False, special=True)
             if isinstance(unk_token, str)
             else unk_token
         )
         eos_token = (
-            AddedToken(eos_token, rstrip=True, lstrip=True, normalized=True, special=True)
+            AddedToken(eos_token, rstrip=True, lstrip=True, normalized=False, special=True)
             if isinstance(eos_token, str)
             else eos_token
         )
