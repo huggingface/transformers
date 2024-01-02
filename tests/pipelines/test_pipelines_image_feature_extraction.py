@@ -18,9 +18,9 @@ import numpy as np
 from PIL import Image
 
 from transformers import (
-    TOKENIZER_MAPPING,
     MODEL_MAPPING,
     TF_MODEL_MAPPING,
+    TOKENIZER_MAPPING,
     ImageFeatureExtractionPipeline,
     is_tf_available,
     is_torch_available,
@@ -40,7 +40,6 @@ if is_tf_available():
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
-
 
 
 @is_pipeline_test

@@ -32,8 +32,12 @@ class ImageFeatureExtractionPipeline(Pipeline):
         model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
             The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
             [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        tokenizer (`Optional`, *optional*): <fill_docstring>
-        feature_extractor (`Optional`, *optional*): <fill_docstring>
+        tokenizer (`Optional`, *optional*):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            [`PreTrainedTokenizer`].
+        feature_extractor (`Optional`, *optional*):
+            The feature extractor that will be used by the pipeline to extract features from the model. This object
+            inherits from [`PreTrainedFeatureExtractor`].
         image_processor ([`PreTrainedImageProcessor`], *optional*):
             The image processor that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedImageProcessor`].
@@ -53,8 +57,11 @@ class ImageFeatureExtractionPipeline(Pipeline):
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
             the associated CUDA device id.
-        torch_dtype (`Union`, *optional*): <fill_docstring>
-        binary_output (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        torch_dtype (`str` or `torch.dtype`, *optional*):
+            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
+            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
+        binary_output (`bool`, *optional*, defaults to `False`):
+            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
     """
 
     def _sanitize_parameters(self, return_tensors=None, **kwargs):
