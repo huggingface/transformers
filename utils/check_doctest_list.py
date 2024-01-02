@@ -54,7 +54,7 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
     all_paths = []
     with open(doctest_file, "r", encoding="utf-8") as f:
         for line in f:
-            line = line.strip()
+            line = line.strip().split(" ")[0]
             path = os.path.join(REPO_PATH, line)
             if not (os.path.isfile(path) or os.path.isdir(path)):
                 non_existent_paths.append(line)

@@ -11,7 +11,7 @@ SHELL ["sh", "-lc"]
 
 ARG PYTORCH='2.1.0'
 # (not always a valid torch version)
-ARG INTEL_TORCH_EXT='1.11.0'
+ARG INTEL_TORCH_EXT='2.1.0'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -37,7 +37,7 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
 RUN python3 -m pip uninstall -y flax jax
 
-RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://developer.intel.com/ipex-whl-stable-cpu
+RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT -f https://developer.intel.com/ipex-whl-stable-cpu
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
 RUN python3 -m pip install -U "itsdangerous<2.1.0"
@@ -55,6 +55,9 @@ RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://hu
 # Add einops for additional model testing
 RUN python3 -m pip install --no-cache-dir einops
 
+# Add autoawq for quantization testing
+RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.8/autoawq-0.1.8+cu118-cp38-cp38-linux_x86_64.whl
+
 # For bettertransformer + gptq 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
@@ -63,6 +66,9 @@ RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
 RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+
+# For `nougat` tokenizer
+RUN python3 -m pip install --no-cache-dir python-Levenshtein
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

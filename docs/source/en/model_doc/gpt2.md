@@ -39,7 +39,13 @@ text. The diversity of the dataset causes this simple goal to contain naturally 
 across diverse domains. GPT-2 is a direct scale-up of GPT, with more than 10X the parameters and trained on more than
 10X the amount of data.*
 
-Tips:
+[Write With Transformer](https://transformer.huggingface.co/doc/gpt2-large) is a webapp created and hosted by
+Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
+different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
+
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
+
+## Usage tips
 
 - GPT-2 is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
@@ -53,12 +59,6 @@ Tips:
   [`TFGPT2Model.call`] method for more information on its usage.
 - Enabling the *scale_attn_by_inverse_layer_idx* and *reorder_and_upcast_attn* flags will apply the training stability
   improvements from [Mistral](https://github.com/stanford-crfm/mistral/) (for PyTorch only).
-
-[Write With Transformer](https://transformer.huggingface.co/doc/gpt2-large) is a webapp created and hosted by
-Hugging Face showcasing the generative capabilities of several models. GPT-2 is one of them and is available in five
-different sizes: small, medium, large, xl and a distilled version of the small checkpoint: *distilgpt-2*.
-
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://openai.com/blog/better-language-models/).
 
 ## Resources
 
@@ -100,6 +100,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
 
+<frameworkcontent>
+<pt>
+
 ## GPT2Model
 
 [[autodoc]] GPT2Model
@@ -130,6 +133,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] GPT2ForTokenClassification
     - forward
 
+</pt>
+<tf>
+
 ## TFGPT2Model
 
 [[autodoc]] TFGPT2Model
@@ -158,6 +164,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] TFGPT2Tokenizer
 
+</tf>
+<jax>
+
 ## FlaxGPT2Model
 
 [[autodoc]] FlaxGPT2Model
@@ -167,3 +176,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] FlaxGPT2LMHeadModel
     - __call__
+
+</jax>
+</frameworkcontent>

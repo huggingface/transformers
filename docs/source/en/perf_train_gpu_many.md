@@ -153,7 +153,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 ```
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -164,7 +164,7 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 
 ```
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -270,7 +270,7 @@ which is discussed next.
 
 Implementations:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer) ZeRO-DP stages 1+2+3
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/) ZeRO-DP stages 1+2+3
 - [`Accelerate` integration](https://huggingface.co/docs/accelerate/en/usage_guides/deepspeed) 
 - [`transformers` integration](main_classes/trainer#trainer-integrations)
 
@@ -434,7 +434,7 @@ This section is based on the original much more [detailed TP overview](https://g
 by [@anton-l](https://github.com/anton-l).
 
 Alternative names:
-- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/features/#model-parallelism)
+- DeepSpeed calls it [tensor slicing](https://www.deepspeed.ai/training/#model-parallelism)
 
 Implementations:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM) has an internal implementation, as it's very model-specific
@@ -577,3 +577,83 @@ for that. And then you can train. A different setup will have its own custom opt
 
 🤗 Transformers status: Transformers models are FX-trace-able via [transformers.utils.fx](https://github.com/huggingface/transformers/blob/master/src/transformers/utils/fx.py), 
 which is a prerequisite for FlexFlow, however, changes are required on the FlexFlow side to make it work with Transformers models.
+
+## GPU selection
+
+When training on multiple GPUs, you can specify the number of GPUs to use and in what order. This can be useful for instance when you have GPUs with different computing power and want to use the faster GPU first. The selection process works for both [DistributedDataParallel](https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html) and [DataParallel](https://pytorch.org/docs/stable/generated/torch.nn.DataParallel.html) to use only a subset of the available GPUs, and you don't need Accelerate or the [DeepSpeed integration](./main_classes/deepspeed).
+
+### Number of GPUs
+
+For example, if you have 4 GPUs and you only want to use the first 2:
+
+<hfoptions id="select-gpu">
+<hfoption id="torchrun">
+
+Use the `--nproc_per_node` to select how many GPUs to use.
+
+```bash
+torchrun --nproc_per_node=2  trainer-program.py ...
+```
+
+</hfoption>
+<hfoption id="Accelerate">
+
+Use `--num_processes` to select how many GPUs to use.
+
+```bash
+accelerate launch --num_processes 2 trainer-program.py ...
+```
+
+</hfoption>
+<hfoption id="DeepSpeed">
+
+Use `--num_gpus` to select how many GPUs to use.
+
+```bash
+deepspeed --num_gpus 2 trainer-program.py ...
+```
+
+</hfoption>
+</hfoptions>
+
+### Order of GPUs
+
+Now, to select which GPUs to use and their order, you'll use the `CUDA_VISIBLE_DEVICES` environment variable. It is easiest to set the environment variable in a `~/bashrc` or another startup config file. `CUDA_VISIBLE_DEVICES` is used to map which GPUs are used. For example, if you have 4 GPUs (0, 1, 2, 3) and you only want to run GPUs 0 and 2:
+
+```bash
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
+```
+
+Only the 2 physical GPUs (0 and 2) are "visible" to PyTorch and these are mapped to `cuda:0` and `cuda:1` respectively. You can also reverse the order of the GPUs to use 2 first. Now, the mapping is `cuda:1` for GPU 0 and `cuda:0` for GPU 2.
+
+```bash
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
+```
+
+You can also set the `CUDA_VISIBLE_DEVICES` environment variable to an empty value to create an environment without GPUs.
+
+```bash
+CUDA_VISIBLE_DEVICES= python trainer-program.py ...
+```
+
+<Tip warning={true}>
+
+As with any environment variable, they can be exported instead of being added to the command line. However, this is not recommended because it can be confusing if you forget how the environment variable was setup and you end up using the wrong GPUs. Instead, it is common practice to set the environment variable for a specific training run on the same command line.
+
+</Tip>
+
+`CUDA_DEVICE_ORDER` is an alternative environment variable you can use to control how the GPUs are ordered. You can either order them by:
+
+1. PCIe bus ID's that matches the order of [`nvidia-smi`](https://developer.nvidia.com/nvidia-system-management-interface) and [`rocm-smi`](https://rocm.docs.amd.com/projects/rocm_smi_lib/en/latest/.doxygen/docBin/html/index.html) for NVIDIA and AMD GPUs respectively
+
+```bash
+export CUDA_DEVICE_ORDER=PCI_BUS_ID
+```
+
+2. GPU compute ability
+
+```bash
+export CUDA_DEVICE_ORDER=FASTEST_FIRST
+```
+
+The `CUDA_DEVICE_ORDER` is especially useful if your training setup consists of an older and newer GPU, where the older GPU appears first, but you cannot physically swap the cards to make the newer GPU appear first. In this case, set `CUDA_DEVICE_ORDER=FASTEST_FIRST` to always use the newer and faster GPU first (`nvidia-smi` or `rocm-smi` still reports the GPUs in their PCIe order). Or you could also set `export CUDA_VISIBLE_DEVICES=1,0`.

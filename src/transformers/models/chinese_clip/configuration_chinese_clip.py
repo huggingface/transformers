@@ -106,6 +106,7 @@ class ChineseCLIPTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "chinese_clip_text_model"
 
     def __init__(
@@ -203,7 +204,7 @@ class ChineseCLIPVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1.0):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
     Example:
@@ -359,7 +360,7 @@ class ChineseCLIPConfig(PretrainedConfig):
                             f"`text_config_dict` is provided which will be used to initialize `ChineseCLIPTextConfig`. "
                             f'The value `text_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
@@ -391,7 +392,7 @@ class ChineseCLIPConfig(PretrainedConfig):
                             f"`vision_config_dict` is provided which will be used to initialize "
                             f'`ChineseCLIPVisionConfig`. The value `vision_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)

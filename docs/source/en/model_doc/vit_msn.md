@@ -33,7 +33,13 @@ while producing representations of a high semantic level that perform competitiv
 on ImageNet-1K, with only 5,000 annotated images, our base MSN model achieves 72.4% top-1 accuracy,
 and with 1% of ImageNet-1K labels, we achieve 75.7% top-1 accuracy, setting a new state-of-the-art for self-supervised learning on this benchmark.*
 
-Tips:
+<img src="https://i.ibb.co/W6PQMdC/Screenshot-2022-09-13-at-9-08-40-AM.png" alt="drawing" width="600"/> 
+
+<small> MSN architecture. Taken from the <a href="https://arxiv.org/abs/2204.07141">original paper.</a> </small>
+
+This model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/facebookresearch/msn). 
+
+## Usage tips
 
 - MSN (masked siamese networks) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training
 objective is to match the prototypes assigned to the unmasked views of the images to that of the masked views of the same images.
@@ -42,13 +48,6 @@ use the [`ViTMSNForImageClassification`] class which is initialized from [`ViTMS
 [this notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_classification.ipynb) for a detailed tutorial on fine-tuning.
 - MSN is particularly useful in the low-shot and extreme low-shot regimes. Notably, it achieves 75.7% top-1 accuracy with only 1% of ImageNet-1K
 labels when fine-tuned.
-
-
-<img src="https://i.ibb.co/W6PQMdC/Screenshot-2022-09-13-at-9-08-40-AM.png" alt="drawing" width="600"/> 
-
-<small> MSN architecture. Taken from the <a href="https://arxiv.org/abs/2204.07141">original paper.</a> </small>
-
-This model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/facebookresearch/msn). 
 
 ## Resources
 
@@ -65,12 +64,10 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] ViTMSNConfig
 
-
 ## ViTMSNModel
 
 [[autodoc]] ViTMSNModel
     - forward
-
 
 ## ViTMSNForImageClassification
 

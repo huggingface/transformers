@@ -163,10 +163,6 @@ class TrajectoryTransformerPreTrainedModel(PreTrainedModel):
     main_input_name = "trajectories"
     supports_gradient_checkpointing = True
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, TrajectoryTransformerModel):
-            module.gradient_checkpointing = value
-
     def _init_weights(self, module):
         if isinstance(module, (nn.Linear, nn.Embedding)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -550,15 +546,8 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
+                outputs = self._gradient_checkpointing_func(
+                    block.__call__,
                     hidden_states,
                     layer_past,
                     use_cache,
