@@ -66,43 +66,32 @@ masks = processor.image_processor.post_process_masks(
 scores = outputs.iou_scores
 ```
 
-Below is an example of how to create a training dataset containing images and segmentation maps (masks) using the SamProcessor:
+You can also process your own masks alongside the input images in the processor to be passed to the model.
 
 ```python
-import datasets
-from transformers import SamProcessor
+import torch
+from PIL import Image
+import requests
+from transformers import SamModel, SamProcessor
 
-class SamDataset(Dataset):
-    def __init__(self, dataset, processor, transform = None):
-        self.dataset = dataset
-        self.processor = processor
-        self.transform = transform
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = SamModel.from_pretrained("facebook/sam-vit-huge").to(device)
+processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
 
-    def __len__(self):
-        return len(self.dataset)
+img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+mask_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+segmentation_map = Image.open(requests.get(mask_url, stream=True).raw).convert("RGB")
+input_points = [[[450, 600]]]  # 2D location of a window in the image
 
-    def __getitem__(self, idx):
-        item = self.dataset[idx]
-        
-        if self.transform:
-            image = self.transform(item["pixel_values"])
-        else:
-            image = item["pixel_values"]
-        
-        mask = item["label"]
+inputs = processor(raw_image, input_points=input_points, segmentation_maps=mask, return_tensors="pt").to(device)
+with torch.no_grad():
+    outputs = model(**inputs)
 
-        inputs = self.processor(image, segmentation_maps=mask, return_tensors="pt")
-        inputs = {k:v.squeeze(0) for k,v in inputs.items()} # remove batch dimension which the processor adds by default
-
-        return inputs
-
-    dataset = datasets.load_dataset("nvidia/segformer-b1-finetuned-cityscapes-1024-1024")
-    dataset = dataset.rename_columns({"image":"pixel_values", "annotation":"label"})
-
-    processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
-    
-    train_dataset = SamDataset(dataset=dataset, processor=processor)
-```
+masks = processor.image_processor.post_process_masks(
+    outputs.pred_masks.cpu(), inputs["original_sizes"].cpu(), inputs["reshaped_input_sizes"].cpu()
+)
+scores = outputs.iou_scores
 
 Resources:
 
