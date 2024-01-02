@@ -22,8 +22,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
+from accelerate import PartialState
+from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -2219,13 +2220,11 @@ class DetaLoss(nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        # (Niels): comment out function below, distributed training to be added
-        if dist.is_available() and dist.is_initialized():
-            torch.distributed.all_reduce(num_boxes)
-            world_size = dist.get_world_size()
-        else:
-            world_size = 1
-        # (Niels) in original implementation, num_boxes is divided by get_world_size()
+        # Check that we have initialized the distributed state
+        world_size = 1
+        if PartialState._shared_state != {}:
+            num_boxes = reduce(num_boxes)
+            world_size = PartialState().num_processes
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses
