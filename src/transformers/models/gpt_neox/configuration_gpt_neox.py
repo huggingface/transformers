@@ -86,6 +86,8 @@ class GPTNeoXConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
 
         Example:
 
@@ -126,6 +128,7 @@ class GPTNeoXConfig(PretrainedConfig):
         tie_word_embeddings=False,
         use_parallel_residual=True,
         rope_scaling=None,
+        attention_bias=True,
         **kwargs,
     ):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -147,6 +150,7 @@ class GPTNeoXConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.use_parallel_residual = use_parallel_residual
         self.rope_scaling = rope_scaling
+        self.attention_bias = attention_bias
         self._rope_scaling_validation()
 
         if self.hidden_size % self.num_attention_heads != 0:
