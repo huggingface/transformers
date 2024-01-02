@@ -21,6 +21,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
+from accelerate import PartialState
+from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ... import AutoBackbone
@@ -788,7 +790,12 @@ class Mask2FormerLoss(nn.Module):
         """
         num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
-        return num_masks_pt
+        world_size = 1
+        if PartialState._shared_state != {}:
+            num_masks = reduce(num_masks_pt)
+            world_size = PartialState().num_processes
+        num_masks = torch.clamp(num_masks / world_size, min=1).item()
+        return num_masks
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
