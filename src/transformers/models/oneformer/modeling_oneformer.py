@@ -24,6 +24,9 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
+from accelerate import PartialState
+from accelerate.utils import reduce
+
 from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
@@ -723,6 +726,15 @@ class OneFormerLoss(nn.Module):
         """
         num_masks = sum([len(classes) for classes in class_labels])
         num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+
+        # Check that we have initialized the distributed state
+        world_size = 1
+        if PartialState._shared_state != {}:
+            num_masks_pt = reduce(num_masks_pt)
+            world_size = PartialState().num_processes
+            
+        num_masks_pt = torch.clamp(num_masks_pt / world_size, min=1)
+
         return num_masks_pt
 
 
