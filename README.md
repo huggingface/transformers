@@ -269,13 +269,13 @@ If you'd like to play with the examples or need the bleeding edge of the code an
 
 ### With conda
 
-Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
-
 🤗 Transformers can be installed using conda as follows:
 
 ```shell script
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
+
+> **_NOTE:_** Installing `transformers` from the `huggingface` channel is deprecated.
 
 Follow the installation pages of Flax, PyTorch or TensorFlow to see how to install them with conda.
 
