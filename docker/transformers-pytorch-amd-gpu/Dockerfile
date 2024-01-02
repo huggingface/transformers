@@ -22,7 +22,11 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools ninja git+htt
 
 ARG REF=main
 WORKDIR /
+
+# Invalidate docker cache from here if new commit is available.
+ADD https://api.github.com/repos/huggingface/transformers/git/refs/heads/main version.json
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
+
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing,video]
 
 RUN python3 -m pip uninstall -y tensorflow flax

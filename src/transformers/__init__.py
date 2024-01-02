@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.36.0.dev0"
+__version__ = "4.37.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -595,6 +595,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
         "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -854,6 +855,10 @@ _import_structure = {
         "ViltFeatureExtractor",
         "ViltImageProcessor",
         "ViltProcessor",
+    ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": [
@@ -1303,6 +1308,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
+    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache"]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2583,6 +2589,9 @@ else:
             "MistralPreTrainedModel",
         ]
     )
+    _import_structure["models.mixtral"].extend(
+        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
+    )
     _import_structure["models.mobilebert"].extend(
         [
             "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3204,6 +3213,7 @@ else:
     _import_structure["models.swinv2"].extend(
         [
             "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swinv2Backbone",
             "Swinv2ForImageClassification",
             "Swinv2ForMaskedImageModeling",
             "Swinv2Model",
@@ -3357,6 +3367,13 @@ else:
             "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -5233,6 +5250,7 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileBertConfig,
@@ -5502,6 +5520,10 @@ if TYPE_CHECKING:
         ViltFeatureExtractor,
         ViltImageProcessor,
         ViltProcessor,
+    )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
     )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
@@ -5945,6 +5967,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
+        from .cache_utils import Cache, DynamicCache, SinkCache
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -7004,6 +7027,12 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
+        from .models.mixtral import (
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralModel,
+            MixtralPreTrainedModel,
+        )
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MobileBertForMaskedLM,
@@ -7513,6 +7542,7 @@ if TYPE_CHECKING:
         )
         from .models.swinv2 import (
             SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
             Swinv2Model,
@@ -7631,6 +7661,11 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel

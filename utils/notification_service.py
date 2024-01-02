@@ -634,6 +634,9 @@ class Message:
         ]
 
     def get_new_model_failure_blocks(self, with_header=True):
+        if self.prev_ci_artifacts is None:
+            return {}
+
         sorted_dict = sorted(self.model_results.items(), key=lambda t: t[0])
 
         prev_model_results = {}

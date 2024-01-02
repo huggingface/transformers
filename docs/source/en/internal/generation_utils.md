@@ -368,3 +368,20 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
+
+## Caches
+
+[[autodoc]] Cache
+    - update
+
+[[autodoc]] DynamicCache
+    - update
+    - get_seq_length
+    - reorder_cache
+    - to_legacy_cache
+    - from_legacy_cache
+
+[[autodoc]] SinkCache
+    - update
+    - get_seq_length
+    - reorder_cache
