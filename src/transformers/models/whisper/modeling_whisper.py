@@ -230,81 +230,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
-    """
-    Applies a median filter of width `filter_width` along the last dimension of the input.
-
-    The `inputs` tensor is assumed to be 3- or 4-dimensional.
-    """
-    if filter_width <= 0 or filter_width % 2 != 1:
-        raise ValueError("`filter_width` should be an odd number")
-
-    pad_width = filter_width // 2
-    if inputs.shape[-1] <= pad_width:
-        return inputs
-
-    # Pad the left and right edges.
-    inputs = nn.functional.pad(inputs, (pad_width, pad_width, 0, 0), mode="reflect")
-
-    # sort() is faster than torch.median (https://github.com/pytorch/pytorch/issues/51450)
-    result = inputs.unfold(-1, filter_width, 1).sort()[0][..., pad_width]
-    return result
-
-
-def _dynamic_time_warping(matrix: np.ndarray):
-    """
-    Measures similarity between two temporal sequences: the input audio and the output tokens. Used to generate
-    token-level timestamps.
-    """
-    output_length, input_length = matrix.shape
-    cost = np.ones((output_length + 1, input_length + 1), dtype=np.float32) * np.inf
-    trace = -np.ones((output_length + 1, input_length + 1), dtype=np.float32)
-
-    cost[0, 0] = 0
-    for j in range(1, input_length + 1):
-        for i in range(1, output_length + 1):
-            c0 = cost[i - 1, j - 1]
-            c1 = cost[i - 1, j]
-            c2 = cost[i, j - 1]
-
-            if c0 < c1 and c0 < c2:
-                c, t = c0, 0
-            elif c1 < c0 and c1 < c2:
-                c, t = c1, 1
-            else:
-                c, t = c2, 2
-
-            cost[i, j] = matrix[i - 1, j - 1] + c
-            trace[i, j] = t
-
-    # backtrace
-    i = trace.shape[0] - 1
-    j = trace.shape[1] - 1
-    trace[0, :] = 2
-    trace[:, 0] = 1
-
-    text_indices = []
-    time_indices = []
-    while i > 0 or j > 0:
-        text_indices.append(i - 1)
-        time_indices.append(j - 1)
-        if trace[i, j] == 0:
-            i -= 1
-            j -= 1
-        elif trace[i, j] == 1:
-            i -= 1
-        elif trace[i, j] == 2:
-            j -= 1
-        else:
-            raise RuntimeError(
-                f"Internal error in dynamic time warping. Unexpected trace[{i}, {j}]. Please file a bug report."
-            )
-
-    text_indices = np.array(text_indices)[::-1]
-    time_indices = np.array(time_indices)[::-1]
-    return text_indices, time_indices
-
-
 class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
@@ -1915,47 +1840,6 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
-
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
-        """
-        Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
-        map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
-        cross-attentions will be cropped before applying DTW.
-
-        Returns:
-            tensor containing the timestamps in seconds for each predicted token
-        """
-        # Create a list with `decoder_layers` elements, each a tensor of shape
-        # (batch size, attention_heads, output length, input length).
-        cross_attentions = []
-        for i in range(self.config.decoder_layers):
-            cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
-
-        # Select specific cross-attention layers and heads. This is a tensor
-        # of shape (batch size, num selected, output length, input length).
-        weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
-        weights = weights.permute([1, 0, 2, 3])
-        if num_frames is not None:
-            weights = weights[..., : num_frames // 2]
-
-        # Normalize and smoothen the weights.
-        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-        weights = (weights - mean) / std
-        weights = _median_filter(weights, self.config.median_filter_width)
-
-        # Average the different cross-attention heads.
-        matrix = weights.mean(dim=1)
-
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
-
-        # Perform dynamic time warping on each element of the batch.
-        for batch_idx in range(timestamps.shape[0]):
-            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
-            jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
-            jump_times = time_indices[jumps] * time_precision
-            timestamps[batch_idx, 1:] = torch.tensor(jump_times)
-
-        return timestamps
 
 
 class WhisperDecoderWrapper(WhisperPreTrainedModel):

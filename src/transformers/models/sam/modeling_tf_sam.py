@@ -604,6 +604,9 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         if getattr(self, "iou_prediction_head", None) is not None:
             with tf.name_scope(self.iou_prediction_head.name):
                 self.iou_prediction_head.build(None)
+        for mlp in self.output_hypernetworks_mlps:
+            with tf.name_scope(mlp.name):
+                mlp.build(None)
 
     def call(
         self,
