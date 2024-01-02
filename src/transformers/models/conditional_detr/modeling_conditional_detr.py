@@ -20,10 +20,9 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from torch import Tensor, nn
-
 from accelerate import PartialState
 from accelerate.utils import reduce
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -2516,7 +2515,7 @@ class ConditionalDetrLoss(nn.Module):
         if PartialState._shared_state != {}:
             num_boxes = reduce(num_boxes)
             world_size = PartialState().num_processes
-            
+
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

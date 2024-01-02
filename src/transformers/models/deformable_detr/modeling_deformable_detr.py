@@ -23,12 +23,11 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+from accelerate import PartialState
+from accelerate.utils import reduce
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
-
-from accelerate import PartialState
-from accelerate.utils import reduce
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -2229,13 +2228,13 @@ class DeformableDetrLoss(nn.Module):
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
-        
+
         # Check that we have initialized the distributed state
         world_size = 1
         if PartialState._shared_state != {}:
             num_boxes = reduce(num_boxes)
             world_size = PartialState().num_processes
-            
+
         num_boxes = torch.clamp(num_boxes / world_size, min=1).item()
 
         # Compute all the requested losses

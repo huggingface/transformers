@@ -21,10 +21,9 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from torch import Tensor, nn
-
 from accelerate import PartialState
 from accelerate.utils import reduce
+from torch import Tensor, nn
 
 from ... import AutoBackbone
 from ...activations import ACT2FN
@@ -797,7 +796,7 @@ class Mask2FormerLoss(nn.Module):
         if PartialState._shared_state != {}:
             num_masks_pt = reduce(num_masks_pt)
             world_size = PartialState().num_processes
-            
+
         num_masks_pt = torch.clamp(num_masks_pt / world_size, min=1)
 
         return num_masks_pt
