@@ -17,8 +17,17 @@
 import datetime
 import unittest
 
+import pytest
+
 from transformers import GPTJConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, tooslow, torch_device
+from transformers.testing_utils import (
+    require_flash_attn,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    tooslow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -517,6 +526,48 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         for model_name in GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
             self.assertIsNotNone(model)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_generate_padding_right(self):
+        """
+        Overwritting the common test as the test is flaky on tiny models
+        """
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6b",
+            load_in_4bit=True,
+            device_map={"": 0},
+            revision="float16",
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
+
+        texts = ["hi", "Hello this is a very long sentence"]
+
+        tokenizer.padding_side = "right"
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
+
+        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_native = tokenizer.batch_decode(output_native)
+
+        model = GPTJForCausalLM.from_pretrained(
+            "EleutherAI/gpt-j-6b",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
+            revision="float16",
+            torch_dtype=torch.float16,
+        )
+
+        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_fa_2 = tokenizer.batch_decode(output_fa_2)
+
+        self.assertListEqual(output_native, output_fa_2)
 
 
 @require_torch

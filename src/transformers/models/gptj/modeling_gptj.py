@@ -355,11 +355,18 @@ class GPTJFlashAttention2(GPTJAttention):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
+        # tanspose to have the desired shape
+        # before transpose: batch_size x seq_length x num_attention_heads x head_dim
+        # after transpose: batch_size x num_attention_heads x seq_length x head_dim
+        key = key.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
+        # value: batch_size x num_attention_heads x seq_length x head_dim
+
         if layer_past is not None:
             past_key = layer_past[0]
             past_value = layer_past[1]
-            key = torch.cat((past_key, key), dim=1)
-            value = torch.cat((past_value, value), dim=2)
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
             # Note that this cast is quite ugly, but is not implemented before ROPE as the original codebase keeps the key in float32 all along the computation.
@@ -372,6 +379,8 @@ class GPTJFlashAttention2(GPTJAttention):
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we need to keep the original shape for query and key, and reshape value
         # to have the correct shape.
+        key = key.permute(0, 2, 1, 3).contiguous()
+        query = query.permute(0, 2, 1, 3).contiguous()
         value = value.permute(0, 2, 1, 3).contiguous()
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
