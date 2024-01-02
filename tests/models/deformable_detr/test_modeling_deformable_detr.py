@@ -150,6 +150,7 @@ class DeformableDetrModelTester:
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
             backbone_config=resnet_config,
+            backbone=None,
         )
 
     def prepare_config_and_inputs_for_common(self):
