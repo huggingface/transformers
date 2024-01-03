@@ -40,8 +40,8 @@ class HtdemucsConfig(PretrainedConfig):
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of decoder layers.
+        num_hidden_layers (`int`, *optional*, defaults to 5):
+            Number of hidden layers in the Transformer block.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer block.
         ffn_dim (`int`, *optional*, defaults to 4096):
@@ -92,12 +92,13 @@ class HtdemucsConfig(PretrainedConfig):
         freq_embedding_lr_scale (`float`, *optional*, defaults to 10):
             Factor by which to boost the learning rate in the scaled embedding layer.
     """
+
     model_type = "htdemucs"
 
     def __init__(
         self,
         max_position_embeddings=2048,
-        num_hidden_layers=6,
+        num_hidden_layers=5,
         ffn_dim=2048,
         num_attention_heads=8,
         layerdrop=0.0,

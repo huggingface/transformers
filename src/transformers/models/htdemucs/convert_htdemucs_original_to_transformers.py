@@ -16,21 +16,21 @@
 
 
 import argparse
-import json
-import os
+import re
 
 import torch
 from demucs.pretrained import get_model
 
-from transformers.models.htdemucs.modeling_htdemucs import HtdemucsModel
-from transformers.models.htdemucs.configuration_htdemucs import HtdemucsConfig
 from transformers import logging
+from transformers.models.htdemucs.configuration_htdemucs import HtdemucsConfig
+from transformers.models.htdemucs.modeling_htdemucs import HtdemucsModel
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 MAPPING = {
+    "freq_emb.embedding": "freq_embedding.embedding",
     "channel_downsampler": "freq_downsampler",
     "channel_upsampler": "freq_upsampler",
     "channel_downsampler_t": "temp_downsampler",
@@ -49,6 +49,39 @@ MAPPING = {
     "tdecoder.*.dconv": "temp_decoder.*.residual_conv",
     "crosstransformer.norm_in": "transformer.freq_layernorm_embedding",
     "crosstransformer.norm_in_t": "transformer.temp_layernorm_embedding",
+    "crosstransformer.layers.*.self_attn.q_proj": "transformer.layers.*.freq_attn.attn.q_proj",
+    "crosstransformer.layers.*.self_attn.k_proj": "transformer.layers.*.freq_attn.attn.k_proj",
+    "crosstransformer.layers.*.self_attn.v_proj": "transformer.layers.*.freq_attn.attn.v_proj",
+    "crosstransformer.layers.*.self_attn.out_proj": "transformer.layers.*.freq_attn.attn.out_proj",
+    "crosstransformer.layers.*.cross_attn.q_proj": "transformer.layers.*.freq_attn.attn.q_proj",
+    "crosstransformer.layers.*.cross_attn.k_proj": "transformer.layers.*.freq_attn.attn.k_proj",
+    "crosstransformer.layers.*.cross_attn.v_proj": "transformer.layers.*.freq_attn.attn.v_proj",
+    "crosstransformer.layers.*.cross_attn.out_proj": "transformer.layers.*.freq_attn.attn.out_proj",
+    "crosstransformer.layers.*.gamma_1.scale": "transformer.layers.*.freq_attn.layer_scale_1",
+    "crosstransformer.layers.*.gamma_2.scale": "transformer.layers.*.freq_attn.layer_scale_2",
+    "crosstransformer.layers.*.linear1": "transformer.layers.*.freq_attn.fc1",
+    "crosstransformer.layers.*.linear2": "transformer.layers.*.freq_attn.fc2",
+    "crosstransformer.layers.*.norm1": "transformer.layers.*.freq_attn.attn_layer_norm",
+    "crosstransformer.layers.*.norm2": ["transformer.layers.*.freq_attn.cross_attn_layer_norm", "transformer.layers.*.freq_attn.final_layer_norm"],
+    "crosstransformer.layers.*.norm3": "transformer.layers.*.freq_attn.final_layer_norm",
+    "crosstransformer.layers.*.norm_out": "transformer.layers.*.freq_attn.group_norm",
+    "crosstransformer.layers_t.*.self_attn.q_proj": "transformer.layers.*.temp_attn.attn.q_proj",
+    "crosstransformer.layers_t.*.self_attn.k_proj": "transformer.layers.*.temp_attn.attn.k_proj",
+    "crosstransformer.layers_t.*.self_attn.v_proj": "transformer.layers.*.temp_attn.attn.v_proj",
+    "crosstransformer.layers_t.*.self_attn.out_proj": "transformer.layers.*.temp_attn.attn.out_proj",
+    "crosstransformer.layers_t.*.cross_attn.q_proj": "transformer.layers.*.temp_attn.attn.q_proj",
+    "crosstransformer.layers_t.*.cross_attn.k_proj": "transformer.layers.*.temp_attn.attn.k_proj",
+    "crosstransformer.layers_t.*.cross_attn.v_proj": "transformer.layers.*.temp_attn.attn.v_proj",
+    "crosstransformer.layers_t.*.cross_attn.out_proj": "transformer.layers.*.temp_attn.attn.out_proj",
+    "crosstransformer.layers_t.*.gamma_1.scale": "transformer.layers.*.temp_attn.layer_scale_1",
+    "crosstransformer.layers_t.*.gamma_2.scale": "transformer.layers.*.temp_attn.layer_scale_2",
+    "crosstransformer.layers_t.*.linear1": "transformer.layers.*.temp_attn.fc1",
+    "crosstransformer.layers_t.*.linear2": "transformer.layers.*.temp_attn.fc2",
+    "crosstransformer.layers_t.*.norm1": "transformer.layers.*.temp_attn.attn_layer_norm",
+    "crosstransformer.layers_t.*.norm2": ["transformer.layers.*.temp_attn.cross_attn_layer_norm",
+                                        "transformer.layers.*.temp_attn.final_layer_norm"],
+    "crosstransformer.layers_t.*.norm3": "transformer.layers.*.temp_attn.final_layer_norm",
+    "crosstransformer.layers_t.*.norm_out": "transformer.layers.*.temp_attn.group_norm",
 }
 
 RESIDUAL_CONV_MAPPING = {
@@ -56,8 +89,29 @@ RESIDUAL_CONV_MAPPING = {
     ".layers.*.1": ".norm_in.*",
     ".layers.*.3": ".conv_out.*",
     ".layers.*.4": ".norm_out.*",
-    ".layers.*.6": ".layer_scales.*"
+    ".layers.*.6": ".layer_scales.*",
 }
+
+FUSED_PROJECTION_MAPPING = {
+    "in_proj_weight": ["q_proj.weight", "k_proj.weight", "v_proj.weight"],
+    "in_proj_bias": ["q_proj.bias", "k_proj.bias", "v_proj.bias"],
+}
+
+
+def unfuse_projections(state_dict):
+    state_dict = dict(state_dict)
+    keys = list(state_dict.keys())
+    for key in keys:
+        for fused_key, unfused_keys in FUSED_PROJECTION_MAPPING.items():
+            if fused_key in key:
+                val = state_dict.pop(key)
+                hidden_size = val.shape[0] // len(unfused_keys)
+                for idx, replacement_key in enumerate(unfused_keys):
+                    state_dict[key.replace(fused_key, replacement_key)] = val[
+                        idx * hidden_size : (idx + 1) * hidden_size, ...
+                    ]
+    return state_dict
+
 
 def set_recursively(key, value, full_name, weight_type, hf_pointer):
     for attribute in key.split("."):
@@ -106,9 +160,12 @@ def load_demucs_layer(name, value, hf_model=None):
     prefix = name.split(".")[0]
     for key, mapped_key in MAPPING.items():
         if "*" in key:
-            layer_index = name.split(".")[1]
-            key = key.replace("*", layer_index)
-            mapped_key = mapped_key.replace("*", layer_index)
+            layer_index = re.findall(r"\d+", name)
+            if layer_index:
+                layer_index = layer_index[0]
+                key = key.replace("*", layer_index)
+                mapped_key = mapped_key[int(layer_index) % 2] if isinstance(mapped_key, list) else mapped_key
+                mapped_key = mapped_key.replace("*", layer_index)
         if "dconv" in name:
             for residual_key, mapped_residual_key in RESIDUAL_CONV_MAPPING.items():
                 if "*" in residual_key:
@@ -137,6 +194,7 @@ def load_demucs_layer(name, value, hf_model=None):
 def recursively_load_weights(model, hf_model):
     unused_weights = []
     demucs_dict = model.models[0].state_dict()
+    demucs_dict = unfuse_projections(demucs_dict)
 
     for name, value in demucs_dict.items():
         is_used = load_demucs_layer(name, value, hf_model)

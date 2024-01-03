@@ -69,6 +69,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
+
 def inverse_spectrogram(spectrogram, hop_length, length=None):
     spectrogram = nn.functional.pad(spectrogram, (0, 0, 0, 1))
     spectrogram = nn.functional.pad(spectrogram, (2, 2))
@@ -289,14 +290,12 @@ class HtdemucsTransformerBlock(nn.Module):
 
 
 class HtdemucsTransformerLayer(nn.Module):
-    def __init__(self, config: HtdemucsConfig):
+    def __init__(self, config: HtdemucsConfig, is_cross_attn: bool):
         super().__init__()
 
-        self.freq_self_attn = HtdemucsTransformerBlock(config)
-        self.temp_self_attn = HtdemucsTransformerBlock(config)
-
-        self.freq_cross_attn = HtdemucsTransformerBlock(config, is_cross_attn=True)
-        self.temp_self_attn = HtdemucsTransformerBlock(config, is_cross_attn=True)
+        self.is_cross_attn = is_cross_attn
+        self.freq_attn = HtdemucsTransformerBlock(config, is_cross_attn=is_cross_attn)
+        self.temp_attn = HtdemucsTransformerBlock(config, is_cross_attn=is_cross_attn)
 
     def forward(
         self,
@@ -310,34 +309,16 @@ class HtdemucsTransformerLayer(nn.Module):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
-        freq_layer_outputs = self.freq_self_attn(
-            freq_hidden_states, attention_mask=freq_attention_mask, output_attentions=output_attentions
-        )
-        temp_layer_outputs = self.temp_self_attn(
-            temp_hidden_states, attention_mask=temp_attention_mask, output_attentions=output_attentions
-        )
-
-        freq_residual = freq_hidden_states
-
-        freq_hidden_states = freq_layer_outputs[0]
-        temp_hidden_states = temp_hidden_states[0]
-
-        if output_attentions:
-            all_attentions += (freq_layer_outputs[1], temp_layer_outputs[1])
-
-        if output_hidden_states:
-            all_hidden_states += (freq_hidden_states, temp_hidden_states)
-
-        freq_layer_outputs = self.freq_cross_attn(
+        freq_layer_outputs = self.freq_attn(
             freq_hidden_states,
             attention_mask=freq_attention_mask,
-            encoder_hidden_states=temp_hidden_states,
+            encoder_hidden_states=temp_hidden_states if self.is_cross_attn else None,
             output_attentions=output_attentions,
         )
-        temp_layer_outputs = self.temp_cross_attn(
+        temp_layer_outputs = self.temp_attn(
             temp_hidden_states,
             attention_mask=temp_attention_mask,
-            encoder_hidden_states=freq_residual,
+            encoder_hidden_states=freq_hidden_states if self.is_cross_attn else None,
             output_attentions=output_attentions,
         )
 
@@ -362,9 +343,7 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
     def __init__(self, config: HtdemucsConfig):
         super().__init__()
         num_embeddings = config.n_fft // (2 * config.stride)
-        embedding_dim = 2 * config.hidden_channels
-
-        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+        self.embedding = nn.Embedding(num_embeddings, config.hidden_channels)
 
         # smooth the frequency embedding weights
         # when summing gaussian, scale raises as sqrt(n), so we normalize by that
@@ -396,7 +375,9 @@ class HtdemucsResidualConvLayer(nn.Module):
 
         for layer_idx in range(config.residual_conv_depth):
             dilation = 2**layer_idx
-            self.conv_in.append(nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation))
+            self.conv_in.append(
+                nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation)
+            )
             self.norm_in.append(nn.GroupNorm(1, residual_hidden_size))
             self.conv_out.append(nn.Conv1d(residual_hidden_size, 2 * out_channels, kernel_size=1))
             self.norm_out.append(nn.GroupNorm(1, 2 * out_channels))
@@ -582,12 +563,13 @@ class HtdemucsSinusoidalPositionalEmbedding(nn.Module):
 class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.max_len = config.max_position_embeddings
+        # self.max_len = config.max_position_embeddings
+        self.max_len = 336
         self.d_model = config.hidden_size
         self.num_stems = config.num_stems
 
         self.pos_emb = None
-        # self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
+        self.extend_pe(torch.tensor(0.0).expand(1, self.max_len))
 
     def extend_pe(self, x):
         seq_len = x.size(-1)
@@ -598,24 +580,23 @@ class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
                     self.pos_emb = self.pos_emb.to(dtype=x.dtype, device=x.device)
                 return
 
-        # TODO(SG): clean-up and correct
-        pos_emb = torch.zeros(self.d_model, self.num_stems, seq_len)
-        height_position = torch.arange(0, self.num_stems, dtype=torch.float32).unsqueeze(1)
+        pos_emb = torch.zeros(self.d_model, 2 * self.num_stems, seq_len)
+        height_position = torch.arange(0, 2 * self.num_stems, dtype=torch.float32).unsqueeze(1)
         width_position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
-        div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
-        )
+        # Each dimension uses half of d_model
+        d_model = int(self.d_model / 2)
+        div_term = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / d_model))
 
-        pos_emb[:, :, 0 : self.d_model : 2] = (
-            torch.sin(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, self.num_stems, 1)
+        pos_emb[0 : d_model : 2, :, :] = (
+            torch.sin(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, 2 * self.num_stems, 1)
         )
-        pos_emb[:, :, 1 : self.d_model : 2] = (
-            torch.cos(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, self.num_stems, 1)
+        pos_emb[1 : d_model : 2, :, :] = (
+            torch.cos(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, 2 * self.num_stems, 1)
         )
-        pos_emb[:, :, self.d_model :: 2] = (
+        pos_emb[d_model::2, :, :] = (
             torch.sin(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
         )
-        pos_emb[:, :, self.d_model + 1 :: 2] = (
+        pos_emb[d_model+1::2, :, :] = (
             torch.cos(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
         )
 
@@ -637,7 +618,9 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 
         embed_dim = config.bottom_channels if config.bottom_channels is not None else config.hidden_size
 
-        self.layers = nn.ModuleList([HtdemucsTransformerLayer(config) for _ in range(config.num_hidden_layers // 2)])
+        self.layers = nn.ModuleList([])
+        for idx in range(config.num_hidden_layers):
+            self.layers.append(HtdemucsTransformerLayer(config, is_cross_attn=bool((idx + 1) % 2)))
 
         self.freq_pos_embedding = Htdemucs2dSinusoidalPositionalEmbedding(config)
         self.temp_pos_embedding = HtdemucsSinusoidalPositionalEmbedding(
@@ -722,7 +705,7 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
         if temp_attention_mask is not None:
             temp_attention_mask = _expand_mask(temp_attention_mask, freq_hidden_states.dtype)
 
-        all_hidden_states = (freq_hidden_states,temp_hidden_states) if output_hidden_states else None
+        all_hidden_states = (freq_hidden_states, temp_hidden_states) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for idx, layer in enumerate(self.layers):
@@ -812,7 +795,9 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
             in_channels = config.num_stems * in_channels if is_last else in_channels
 
             self.temp_decoder.insert(0, HtdemucsTempDecoderLayer(config, out_channels, in_channels, is_last))
-            self.freq_decoder.insert(0, HtdemucsFreqDecoderLayer(config, out_channels, freq_multp * in_channels, is_last))
+            self.freq_decoder.insert(
+                0, HtdemucsFreqDecoderLayer(config, out_channels, freq_multp * in_channels, is_last)
+            )
 
             in_channels = out_channels
             out_channels = config.channel_growth * out_channels
