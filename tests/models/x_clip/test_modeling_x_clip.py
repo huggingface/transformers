@@ -533,7 +533,11 @@ class XCLIPModelTester:
 @require_torch
 class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": XCLIPModel, "image-feature-extraction": XCLIPVisionModel}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False

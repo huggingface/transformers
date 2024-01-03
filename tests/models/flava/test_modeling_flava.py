@@ -921,7 +921,7 @@ class FlavaModelTester:
 @require_torch
 class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FlavaModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": FlavaModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"image-feature-extraction": FlavaModel} if is_torch_available() else {}
     class_for_tester = FlavaModelTester
     test_head_masking = False
     test_pruning = False

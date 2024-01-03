@@ -193,7 +193,7 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": ViTModel, "image-classification": ViTForImageClassification}
+        {"image-feature-extraction": ViTModel, "image-classification": ViTForImageClassification}
         if is_torch_available()
         else {}
     )

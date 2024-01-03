@@ -686,6 +686,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
+            "image-feature-extraction": Blip2VisionModel,
             "image-to-text": Blip2ForConditionalGeneration,
             "visual-question-answering": Blip2ForConditionalGeneration,
         }
