@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from zipfile import is_zipfile
 
 import torch
 from packaging import version
@@ -515,8 +516,16 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             map_location = "meta"
         else:
             map_location = "cpu"
-
-        return torch.load(checkpoint_file, map_location=map_location, weights_only=True)
+        extra_args = {}
+        # mmap can only be used with files serialized with zipfile-based format.
+        if (
+            isinstance(checkpoint_file, str)
+            and map_location != "meta"
+            and version.parse(torch.__version__) >= version.parse("2.1.0")
+            and is_zipfile(checkpoint_file)
+        ):
+            extra_args = {"mmap": True}
+        return torch.load(checkpoint_file, map_location=map_location, weights_only=True, **extra_args)
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
