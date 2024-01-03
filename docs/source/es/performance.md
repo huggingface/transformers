@@ -30,29 +30,29 @@ Utiliza este documento como punto de partida para navegar hacia los métodos que
 
 Entrenar modelos grandes de transformadores de manera eficiente requiere un acelerador como una GPU o TPU. El caso más común es cuando tienes una GPU única. Los métodos que puedes aplicar para mejorar la eficiencia de entrenamiento en una GPU única también se aplican a otras configuraciones, como múltiples GPU. Sin embargo, también existen técnicas específicas para entrenamiento con múltiples GPU o CPU, las cuales cubrimos en secciones separadas.
 
-* [Métodos y herramientas para un entrenamiento eficiente en una sola GPU](/docs/source/en/perf_train_gpu_one): comienza aquí para aprender enfoques comunes que pueden ayudar a optimizar la utilización de memoria de la GPU, acelerar el entrenamiento o ambas cosas.
-* [Sección de entrenamiento con varias GPU](/docs/source/en/perf_train_gpu_many): explora esta sección para conocer métodos de optimización adicionales que se aplican a configuraciones con varias GPU, como paralelismo de datos, tensores y canalizaciones.
-* [Sección de entrenamiento en CPU](/docs/source/en/perf_train_cpu): aprende sobre entrenamiento de precisión mixta en CPU.
-* [Entrenamiento eficiente en múltiples CPUs](/docs/source/en/perf_train_cpu_many): aprende sobre el entrenamiento distribuido en CPU.
-* [Entrenamiento en TPU con TensorFlow](/docs/source/en/perf_train_tpu_tf): si eres nuevo en TPUs, consulta esta sección para obtener una introducción basada en opiniones sobre el entrenamiento en TPUs y el uso de XLA.
-* [Hardware personalizado para el entrenamiento](/docs/source/en/perf_hardware): encuentra consejos y trucos al construir tu propia plataforma de aprendizaje profundo.
-* [Búsqueda de hiperparámetros utilizando la API del Entrenador](/docs/source/en/hpo_train)
+* [Métodos y herramientas para un entrenamiento eficiente en una sola GPU](https://huggingface.co/docs/transformers/perf_train_gpu_one): comienza aquí para aprender enfoques comunes que pueden ayudar a optimizar la utilización de memoria de la GPU, acelerar el entrenamiento o ambas cosas.
+* [Sección de entrenamiento con varias GPU](https://huggingface.co/docs/transformers/perf_train_gpu_many): explora esta sección para conocer métodos de optimización adicionales que se aplican a configuraciones con varias GPU, como paralelismo de datos, tensores y canalizaciones.
+* [Sección de entrenamiento en CPU](https://huggingface.co/docs/transformers/perf_train_cpu): aprende sobre entrenamiento de precisión mixta en CPU.
+* [Entrenamiento eficiente en múltiples CPUs](https://huggingface.co/docs/transformers/perf_train_cpu_many): aprende sobre el entrenamiento distribuido en CPU.
+* [Entrenamiento en TPU con TensorFlow](https://huggingface.co/docs/transformers/perf_train_tpu_tf): si eres nuevo en TPUs, consulta esta sección para obtener una introducción basada en opiniones sobre el entrenamiento en TPUs y el uso de XLA.
+* [Hardware personalizado para el entrenamiento](https://huggingface.co/docs/transformers/perf_hardware): encuentra consejos y trucos al construir tu propia plataforma de aprendizaje profundo.
+* [Búsqueda de hiperparámetros utilizando la API del Entrenador](https://huggingface.co/docs/transformers/hpo_train)
 
 ## Inferencia
 
 Realizar inferencias eficientes con modelos grandes en un entorno de producción puede ser tan desafiante como entrenarlos. En las siguientes secciones, describimos los pasos para ejecutar inferencias en CPU y configuraciones con GPU única/múltiple.
 
-* [Inferencia en una sola CPU](/docs/source/en/perf_infer_cpu)
-* [Inferencia en una sola GPU](/docs/source/en/perf_infer_gpu_one)
-* [Inferencia con múltiples GPU](/docs/source/en/perf_infer_gpu_one)
-* [Integración de XLA para modelos de TensorFlow](/docs/source/en/tf_xla)
+* [Inferencia en una sola CPU](https://huggingface.co/docs/transformers/perf_infer_cpu)
+* [Inferencia en una sola GPU](https://huggingface.co/docs/transformers/perf_infer_gpu_one)
+* [Inferencia con múltiples GPU](https://huggingface.co/docs/transformers/perf_infer_gpu_one)
+* [Integración de XLA para modelos de TensorFlow](https://huggingface.co/docs/transformers/tf_xla)
 
 ## Entrenamiento e Inferencia
 
 Aquí encontrarás técnicas, consejos y trucos que aplican tanto si estás entrenando un modelo como si estás ejecutando inferencias con él.
 
-* [Instanciar un modelo grande](/docs/source/en/big_models)
-* [Solución de problemas de rendimiento](/docs/source/en/debugging)
+* [Instanciar un modelo grande](https://huggingface.co/docs/transformers/big_models)
+* [Solución de problemas de rendimiento](https://huggingface.co/docs/transformers/debugging)
 
 ## Contribuir
 
