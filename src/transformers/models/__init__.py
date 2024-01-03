@@ -148,6 +148,7 @@ from . import (
     mra,
     mt5,
     musicgen,
+    musicgen_melody,
     mvp,
     nat,
     nezha,
