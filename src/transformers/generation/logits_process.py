@@ -1845,7 +1845,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
         scores[:, self.no_timestamps_token_id] = -float("inf")
 
         # timestamps have to appear in pairs, except directly before eos_token; mask logits accordingly
-        no_timestamps = False
         for k in range(input_ids.shape[0]):
             sampled_tokens = input_ids[k, self.begin_index :]
             seq = list(sampled_tokens.tolist())
@@ -1856,7 +1855,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             if last_was_timestamp:
                 if penultimate_was_timestamp:  # has to be non-timestamp
                     scores[k, self.timestamp_begin :] = -float("inf")
-                    no_timestamps = True
                 else:  # cannot be normal text tokens
                     scores[k, : self.eos_token_id] = -float("inf")
 
@@ -1894,7 +1892,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 class WhisperNoSpeechDetection(LogitsProcessor):
     r"""This processor can be used to detect silence when using Whisper."""
 
-    def __init__(self, no_speech_token: int, begin_index: int, begin_index_offset: int, scores_is_logprobs: bool = False):
+    def __init__(
+        self, no_speech_token: int, begin_index: int, begin_index_offset: int, scores_is_logprobs: bool = False
+    ):
         self.no_speech_token = no_speech_token
         self.begin_index = begin_index
         self.begin_index_offset = begin_index_offset

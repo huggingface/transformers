@@ -97,8 +97,6 @@ if is_torch_available():
 
         def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
             # we don't want to randomely sample timestamp tokens
-            orig_scores = scores.clone()
-
             if input_ids.shape[-1] != self.begin_index:
                 scores[:, self.timestamp_begin :] = -float("inf")
 
@@ -1437,7 +1435,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 seed=1,
             )
         ]
-        outputs_2 = model.generate(input_features_2, max_new_tokens=max_new_tokens, logits_processor=logits_processor, condition_on_prev_tokens=condition_on_prev_tokens, return_segments=True)
+        outputs_2 = model.generate(
+            input_features_2,
+            max_new_tokens=max_new_tokens,
+            logits_processor=logits_processor,
+            condition_on_prev_tokens=condition_on_prev_tokens,
+            return_segments=True,
+        )
         tokens_2 = outputs_2["sequences"][0]
         segments_2 = outputs_2["segments"][0]
 
@@ -1465,7 +1469,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         segments = outputs["segments"][1]
 
         # make sure batched and non-batched is the same
-        assert tokens_2.tolist() == tokens[:tokens_2.shape[-1]].tolist()
+        assert tokens_2.tolist() == tokens[: tokens_2.shape[-1]].tolist()
 
         for seg1, seg2 in zip(segments_2, segments):
             assert seg1["start"] == seg2["start"]

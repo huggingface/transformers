@@ -13,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Whisper model."""
-RUN_NEW_WAY = True
-
 import math
 from typing import Optional, Tuple, Union
 

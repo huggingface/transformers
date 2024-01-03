@@ -16,12 +16,13 @@
 import copy
 import math
 import warnings
-import numpy as np
 import zlib
 from typing import Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn.functional as F
+from torch import nn
 
 from ...generation.logits_process import (
     SuppressTokensAtBeginLogitsProcessor,
@@ -113,7 +114,6 @@ def _dynamic_time_warping(matrix: np.ndarray):
 
 
 class WhisperGenerationMixin:
-
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
@@ -221,7 +221,7 @@ class WhisperGenerationMixin:
         is_multilingual=None,
         condition_on_prev_tokens: Optional[bool] = None,
         no_speech_threshold: Optional[float] = None,
-        temperature: Optional[Union[float, Tuple[float, ...]]] = None, 
+        temperature: Optional[Union[float, Tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
         prompt_ids: Optional[torch.Tensor] = None,
@@ -401,23 +401,53 @@ class WhisperGenerationMixin:
         # 2. set global generate variables
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         num_segment_frames = input_stride * self.config.max_source_positions
-        total_input_frames = self._retrieve_total_input_frames(input_features=input_features, input_stride=input_stride, kwargs=kwargs)
+        total_input_frames = self._retrieve_total_input_frames(
+            input_features=input_features, input_stride=input_stride, kwargs=kwargs
+        )
         is_shortform = total_input_frames <= num_segment_frames
 
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
-        self._set_return_outputs(return_dict_in_generate=return_dict_in_generate, return_token_timestamps=return_token_timestamps, is_shortform=is_shortform, logprob_threshold=logprob_threshold, generation_config=generation_config)
-        self._set_return_timestamps(return_timestamps=return_timestamps, is_shortform=is_shortform, generation_config=generation_config)
-        self._set_language_and_task(language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config)
+        self._set_return_outputs(
+            return_dict_in_generate=return_dict_in_generate,
+            return_token_timestamps=return_token_timestamps,
+            is_shortform=is_shortform,
+            logprob_threshold=logprob_threshold,
+            generation_config=generation_config,
+        )
+        self._set_return_timestamps(
+            return_timestamps=return_timestamps, is_shortform=is_shortform, generation_config=generation_config
+        )
+        self._set_language_and_task(
+            language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config
+        )
         # pass self.config for backward compatibility
-        self._set_forced_decoder_ids(task=task, language=language, prompt_ids=prompt_ids, generation_config=generation_config, config=self.config, kwargs=kwargs)
+        self._set_forced_decoder_ids(
+            task=task,
+            language=language,
+            prompt_ids=prompt_ids,
+            generation_config=generation_config,
+            config=self.config,
+            kwargs=kwargs,
+        )
         self._set_token_ids(generation_config=generation_config, config=self.config, kwargs=kwargs)
-        self._set_num_frames(return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs)
+        self._set_num_frames(
+            return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
+        )
 
         # 4. Retrieve logits processors
         # => TODO(Patrick): The way `num_start_tokens` is retrieved here is too brittle. Need a better approach
-        num_start_tokens = len(generation_config.forced_decoder_ids) if generation_config.forced_decoder_ids is not None else 1
-        logits_processor = self._retrieve_logit_processors(generation_config=generation_config, logits_processor=logits_processor, no_speech_threshold=no_speech_threshold, num_start_tokens=num_start_tokens, is_shortform=is_shortform, num_beams=kwargs.get("num_beams", 1))
+        num_start_tokens = (
+            len(generation_config.forced_decoder_ids) if generation_config.forced_decoder_ids is not None else 1
+        )
+        logits_processor = self._retrieve_logit_processors(
+            generation_config=generation_config,
+            logits_processor=logits_processor,
+            no_speech_threshold=no_speech_threshold,
+            num_start_tokens=num_start_tokens,
+            is_shortform=is_shortform,
+            num_beams=kwargs.get("num_beams", 1),
+        )
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
@@ -443,14 +473,18 @@ class WhisperGenerationMixin:
         # We need to chunk the audio input depending on when the model generates timestamp tokens
 
         # 6.1 Set and retrieve global longform generation variables
-        self._set_condition_on_prev_tokens(condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config)
+        self._set_condition_on_prev_tokens(
+            condition_on_prev_tokens=condition_on_prev_tokens, generation_config=generation_config
+        )
 
         timestamp_begin = generation_config.no_timestamps_token_id + 1
         temperatures = [temperature] if not isinstance(temperature, (list, tuple)) else temperature
         temperature = temperatures[0]
         batch_size = input_features.shape[0]
 
-        max_frames, seek = self._retrieve_max_frames_and_seek(batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames)
+        max_frames, seek = self._retrieve_max_frames_and_seek(
+            batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames
+        )
         init_tokens = self._retrieve_init_tokens_from_forced_decoder_ids(generation_config=generation_config)
 
         # 6.2 Preppare running variables, list for generation
@@ -465,21 +499,52 @@ class WhisperGenerationMixin:
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
             # Set updated index map, duration of previously decoded chunks and number of max frames of current decoding chunk
-            input_features, cur_bsz, batch_idx_map = self._maybe_reduce_batch(input_features=input_features, seek=seek, max_frames=max_frames, cur_bsz=cur_bsz, batch_idx_map=batch_idx_map)
+            input_features, cur_bsz, batch_idx_map = self._maybe_reduce_batch(
+                input_features=input_features,
+                seek=seek,
+                max_frames=max_frames,
+                cur_bsz=cur_bsz,
+                batch_idx_map=batch_idx_map,
+            )
             time_offset = seek * time_precision / input_stride
             seek_num_frames = (max_frames - seek).clamp(max=num_segment_frames)
 
             # 6.4 cut out next 30s segment from input features
-            segment_input = self._get_input_segment(input_features=input_features, seek=seek, seek_num_frames=seek_num_frames, num_segment_frames=num_segment_frames, cur_bsz=cur_bsz, batch_idx_map=batch_idx_map)
+            segment_input = self._get_input_segment(
+                input_features=input_features,
+                seek=seek,
+                seek_num_frames=seek_num_frames,
+                num_segment_frames=num_segment_frames,
+                cur_bsz=cur_bsz,
+                batch_idx_map=batch_idx_map,
+            )
 
             # 6.5 prepare decoder input ids
             # TODO(Patrick) - clean up prev_start_of_text
-            suppress_tokens = self._get_attr_from_logit_processors(logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens")
+            suppress_tokens = self._get_attr_from_logit_processors(
+                logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
+            )
             prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
-            decoder_input_ids, kwargs = self._prepare_decoder_input_ids(cur_bsz=cur_bsz, init_tokens=init_tokens, current_segments=current_segments, batch_idx_map=batch_idx_map, do_condition_on_prev_tokens=do_condition_on_prev_tokens, generation_config=generation_config, config=self.config, device=segment_input.device, kwargs=kwargs, prev_start_of_text=prev_start_of_text)
+            decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
+                cur_bsz=cur_bsz,
+                init_tokens=init_tokens,
+                current_segments=current_segments,
+                batch_idx_map=batch_idx_map,
+                do_condition_on_prev_tokens=do_condition_on_prev_tokens,
+                generation_config=generation_config,
+                config=self.config,
+                device=segment_input.device,
+                kwargs=kwargs,
+                prev_start_of_text=prev_start_of_text,
+            )
 
             # 6.6 set max new tokens or max length
-            kwargs = self._set_max_new_tokens_and_length(config=self.config, decoder_input_ids=decoder_input_ids, generation_config=generation_config, kwargs=kwargs)
+            kwargs = self._set_max_new_tokens_and_length(
+                config=self.config,
+                decoder_input_ids=decoder_input_ids,
+                generation_config=generation_config,
+                kwargs=kwargs,
+            )
 
             # 6.7 Set current `begin_index` for all logit processors
             for proc in logits_processor:
@@ -487,7 +552,28 @@ class WhisperGenerationMixin:
                     proc.set_begin_index(decoder_input_ids.shape[-1])
 
             # 6.8 Run generate with fallback
-            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(segment_input=segment_input, decoder_input_ids=decoder_input_ids, cur_bsz=cur_bsz, batch_idx_map=batch_idx_map, seek=seek, num_segment_frames=num_segment_frames, max_frames=max_frames, temperatures=temperatures, generation_config=generation_config, logits_processor=logits_processor, stopping_criteria=stopping_criteria, prefix_allowed_tokens_fn=prefix_allowed_tokens_fn, synced_gpus=synced_gpus, return_token_timestamps=return_token_timestamps, compression_ratio_threshold=compression_ratio_threshold, logprob_threshold=logprob_threshold, no_speech_threshold=no_speech_threshold, do_condition_on_prev_tokens=do_condition_on_prev_tokens, condition_on_prev_tokens=condition_on_prev_tokens, kwargs=kwargs)
+            seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(
+                segment_input=segment_input,
+                decoder_input_ids=decoder_input_ids,
+                cur_bsz=cur_bsz,
+                batch_idx_map=batch_idx_map,
+                seek=seek,
+                num_segment_frames=num_segment_frames,
+                max_frames=max_frames,
+                temperatures=temperatures,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
+                return_token_timestamps=return_token_timestamps,
+                compression_ratio_threshold=compression_ratio_threshold,
+                logprob_threshold=logprob_threshold,
+                no_speech_threshold=no_speech_threshold,
+                do_condition_on_prev_tokens=do_condition_on_prev_tokens,
+                condition_on_prev_tokens=condition_on_prev_tokens,
+                kwargs=kwargs,
+            )
 
             # 6.9 In every generated sequence, split by timestamp tokens and extract segments
             for i, seek_sequence in enumerate(seek_sequences):
@@ -522,7 +608,29 @@ class WhisperGenerationMixin:
 
         return sequences
 
-    def generate_with_fallback(self, segment_input, decoder_input_ids, cur_bsz, batch_idx_map, seek, num_segment_frames, max_frames, temperatures, generation_config, logits_processor, stopping_criteria, prefix_allowed_tokens_fn, synced_gpus, return_token_timestamps, compression_ratio_threshold, logprob_threshold, no_speech_threshold, do_condition_on_prev_tokens, condition_on_prev_tokens, kwargs):
+    def generate_with_fallback(
+        self,
+        segment_input,
+        decoder_input_ids,
+        cur_bsz,
+        batch_idx_map,
+        seek,
+        num_segment_frames,
+        max_frames,
+        temperatures,
+        generation_config,
+        logits_processor,
+        stopping_criteria,
+        prefix_allowed_tokens_fn,
+        synced_gpus,
+        return_token_timestamps,
+        compression_ratio_threshold,
+        logprob_threshold,
+        no_speech_threshold,
+        do_condition_on_prev_tokens,
+        condition_on_prev_tokens,
+        kwargs,
+    ):
         # 6.6 Batch generate current chunk
         seek_sequence_list = [None for _ in range(cur_bsz)]
         seek_outputs_list = [None for _ in range(cur_bsz)]
@@ -550,10 +658,12 @@ class WhisperGenerationMixin:
             )
 
             # post-process sequence tokens and outputs to be in list form
-            sequence_tokens, seek_outputs = self._postprocess_outputs(seek_outputs, return_token_timestamps, generation_config)
+            sequence_tokens, seek_outputs = self._postprocess_outputs(
+                seek_outputs, return_token_timestamps, generation_config
+            )
 
             # remove all previously passed decoder input ids
-            seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
+            seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1] :]
 
             # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
             # Loop over each decoded audio individually as each decoding can be of a different length
@@ -577,18 +687,31 @@ class WhisperGenerationMixin:
                     seek_sequence = seek_sequence[:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
-                needs_fallback[i], should_skip[i] = self._need_fallback(seek_sequence, seek_outputs, i, logits_processor, compression_ratio_threshold, logprob_threshold, no_speech_threshold, self.config.vocab_size, generation_config.eos_token_id, temperature)
+                needs_fallback[i], should_skip[i] = self._need_fallback(
+                    seek_sequence,
+                    seek_outputs,
+                    i,
+                    logits_processor,
+                    compression_ratio_threshold,
+                    logprob_threshold,
+                    no_speech_threshold,
+                    self.config.vocab_size,
+                    generation_config.eos_token_id,
+                    temperature,
+                )
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
-                do_condition_on_prev_tokens[fallback_index_map[i]] = condition_on_prev_tokens and temperature is not None and temperature < 0.5
+                do_condition_on_prev_tokens[fallback_index_map[i]] = (
+                    condition_on_prev_tokens and temperature is not None and temperature < 0.5
+                )
 
                 if needs_fallback[i]:
                     new_fallback_index_map.append(fallback_index_map[i])
                     new_segment_input.append(segment_input[i])
                     new_decoder_input_ids.append(decoder_input_ids[i])
                     if "decoder_attention_mask" in kwargs:
-                        new_decoder_attention_mask.append(kwargs['decoder_attention_mask'][i])
+                        new_decoder_attention_mask.append(kwargs["decoder_attention_mask"][i])
 
             fallback_index_map = new_fallback_index_map
 
@@ -614,6 +737,7 @@ class WhisperGenerationMixin:
             )
 
         if generation_config.return_dict_in_generate:
+
             def split_by_batch_index(values, key, batch_idx):
                 if key == "scores":
                     return [v[batch_idx].cpu() for v in values]
@@ -623,14 +747,28 @@ class WhisperGenerationMixin:
                 return values[batch_idx].cpu()
 
             sequence_tokens = seek_outputs["sequences"]
-            seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(sequence_tokens.shape[0])]
+            seek_outputs = [
+                {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
+                for i in range(sequence_tokens.shape[0])
+            ]
         else:
             sequence_tokens = seek_outputs
 
         return sequence_tokens, seek_outputs
 
     @staticmethod
-    def _need_fallback(seek_sequence, seek_outputs, index, logits_processor, compression_ratio_threshold, logprob_threshold, no_speech_threshold, vocab_size, eos_token_id, temperature):
+    def _need_fallback(
+        seek_sequence,
+        seek_outputs,
+        index,
+        logits_processor,
+        compression_ratio_threshold,
+        logprob_threshold,
+        no_speech_threshold,
+        vocab_size,
+        eos_token_id,
+        temperature,
+    ):
         needs_fallback = False
         should_skip = False
         if compression_ratio_threshold is not None:
@@ -644,13 +782,17 @@ class WhisperGenerationMixin:
                 logprobs = [s["sequences_scores"] for s in seek_outputs][index]
             else:
                 scores = seek_outputs[index]["scores"]
-                logprobs = WhisperGenerationMixin._retrieve_avg_logprobs(scores, seek_sequence, eos_token_id, temperature)
+                logprobs = WhisperGenerationMixin._retrieve_avg_logprobs(
+                    scores, seek_sequence, eos_token_id, temperature
+                )
 
             if logprobs < logprob_threshold:
                 needs_fallback = True
 
         if no_speech_threshold is not None:
-            no_speech_prob = WhisperGenerationMixin._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
+            no_speech_prob = WhisperGenerationMixin._get_attr_from_logit_processors(
+                logits_processor, WhisperNoSpeechDetection, "no_speech_prob"
+            )
 
             if logprobs < logprob_threshold and no_speech_prob[index] > no_speech_threshold:
                 needs_fallback = False
@@ -658,17 +800,13 @@ class WhisperGenerationMixin:
 
         return needs_fallback, should_skip
 
-
     @staticmethod
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
-        set_inputs = WhisperGenerationMixin._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
+        set_inputs = WhisperGenerationMixin._get_attr_from_logit_processors(
+            logits_processor, WhisperNoSpeechDetection, "set_inputs"
+        )
         extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
-        set_inputs({
-            "inputs": segment_input,
-            "decoder_input_ids": decoder_input_ids,
-            **extra_kwargs
-        })
-
+        set_inputs({"inputs": segment_input, "decoder_input_ids": decoder_input_ids, **extra_kwargs})
 
     @staticmethod
     def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
@@ -693,7 +831,9 @@ class WhisperGenerationMixin:
         raise ValueError("Make sure to provide either `input_features` or `encoder_outputs` to `generate`.")
 
     @staticmethod
-    def _set_return_outputs(return_dict_in_generate, return_token_timestamps, is_shortform, logprob_threshold, generation_config):
+    def _set_return_outputs(
+        return_dict_in_generate, return_token_timestamps, is_shortform, logprob_threshold, generation_config
+    ):
         if return_dict_in_generate is None:
             return_dict_in_generate = generation_config.return_dict_in_generate
 
@@ -783,10 +923,7 @@ class WhisperGenerationMixin:
         # Legacy code for backward compatibility
         if hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
             forced_decoder_ids = config.forced_decoder_ids
-        elif (
-            hasattr(generation_config, "forced_decoder_ids")
-            and generation_config.forced_decoder_ids is not None
-        ):
+        elif hasattr(generation_config, "forced_decoder_ids") and generation_config.forced_decoder_ids is not None:
             forced_decoder_ids = generation_config.forced_decoder_ids
         else:
             forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
@@ -875,10 +1012,14 @@ class WhisperGenerationMixin:
         decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
 
         eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
-        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else generation_config.decoder_start_token_id 
+        decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else generation_config.decoder_start_token_id
+        )
 
         generation_config.eos_token_id = eos_token_id if eos_token_id is not None else config.eos_token_id
-        generation_config.decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else config.decoder_start_token_id 
+        generation_config.decoder_start_token_id = (
+            decoder_start_token_id if decoder_start_token_id is not None else config.decoder_start_token_id
+        )
 
     @staticmethod
     def _set_num_frames(return_token_timestamps, generation_config, kwargs):
@@ -933,7 +1074,9 @@ class WhisperGenerationMixin:
 
         return init_tokens
 
-    def _retrieve_logit_processors(self, generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform, num_beams):
+    def _retrieve_logit_processors(
+        self, generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform, num_beams
+    ):
         begin_index = 1
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids
@@ -955,19 +1098,30 @@ class WhisperGenerationMixin:
         if generation_config.suppress_tokens is not None:
             suppress_tokens_processor = SuppressTokensLogitsProcessor(generation_config.suppress_tokens)
             logits_processor = (
-                [suppress_tokens_processor] if logits_processor is None else [suppress_tokens_processor] + logits_processor
+                [suppress_tokens_processor]
+                if logits_processor is None
+                else [suppress_tokens_processor] + logits_processor
             )
             generation_config.suppress_tokens = None
 
         if generation_config.begin_suppress_tokens is not None:
-            begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index=begin_index)
+            begin_suppress_processor = SuppressTokensAtBeginLogitsProcessor(
+                generation_config.begin_suppress_tokens, begin_index=begin_index
+            )
             logits_processor = (
-                [begin_suppress_processor] if logits_processor is None else [begin_suppress_processor] + logits_processor
+                [begin_suppress_processor]
+                if logits_processor is None
+                else [begin_suppress_processor] + logits_processor
             )
             generation_config.begin_suppress_tokens = None
 
         if no_speech_threshold is not None and not is_shortform:
-            no_speech_detector = WhisperNoSpeechDetection(no_speech_token=generation_config.no_timestamps_token_id - 1, begin_index=begin_index, begin_index_offset=num_start_tokens, scores_is_logprobs=num_beams > 1)
+            no_speech_detector = WhisperNoSpeechDetection(
+                no_speech_token=generation_config.no_timestamps_token_id - 1,
+                begin_index=begin_index,
+                begin_index_offset=num_start_tokens,
+                scores_is_logprobs=num_beams > 1,
+            )
             logits_processor = (
                 [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
             )
@@ -996,9 +1150,7 @@ class WhisperGenerationMixin:
         segment_input = []
         for i in range(cur_bsz):
             prev_i = batch_idx_map[i]
-            segment_input_slice = input_features[
-                i : i + 1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]
-            ]
+            segment_input_slice = input_features[i : i + 1, :, seek[prev_i] : seek[prev_i] + seek_num_frames[prev_i]]
 
             if segment_input_slice.shape[-1] < num_segment_frames:
                 # pad to 3000 if necessary
@@ -1014,7 +1166,18 @@ class WhisperGenerationMixin:
 
     # TODO(Patrick) - remove prev_start_of_text
     @staticmethod
-    def _prepare_decoder_input_ids(cur_bsz, init_tokens, current_segments, batch_idx_map, do_condition_on_prev_tokens, generation_config, config, device, kwargs, prev_start_of_text):
+    def _prepare_decoder_input_ids(
+        cur_bsz,
+        init_tokens,
+        current_segments,
+        batch_idx_map,
+        do_condition_on_prev_tokens,
+        generation_config,
+        config,
+        device,
+        kwargs,
+        prev_start_of_text,
+    ):
         cut_off_length = config.max_target_positions // 2 - 1
 
         one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
@@ -1028,11 +1191,15 @@ class WhisperGenerationMixin:
 
             bos_token_tensor = prev_start_of_text * one_tensor[0]
             prev_tokens = WhisperGenerationMixin._pad_to_max_length(
-                active_segments, generation_config.pad_token_id, padding="left", bos_token_tensor=bos_token_tensor, cut_off_length=cut_off_length
+                active_segments,
+                generation_config.pad_token_id,
+                padding="left",
+                bos_token_tensor=bos_token_tensor,
+                cut_off_length=cut_off_length,
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
-            kwargs["decoder_attention_mask"] = (decoder_input_ids != generation_config.pad_token_id)
+            kwargs["decoder_attention_mask"] = decoder_input_ids != generation_config.pad_token_id
         else:
             # make sure `"decoder_attention_mask"` is not passed to forward
             kwargs.pop("decoder_attention_mask", None)
@@ -1053,16 +1220,12 @@ class WhisperGenerationMixin:
 
         # Make sure we don't get larger than `max_length`
         if passed_max_length is not None and passed_max_new_tokens is None:
-            max_length = min(
-                passed_max_length + num_initial_tokens, config.max_target_positions
-            )
+            max_length = min(passed_max_length + num_initial_tokens, config.max_target_positions)
             logger.info(
                 f"Increase max_length from {passed_max_length} to {max_length} since input is conditioned on previous segment."
             )
         elif max_length_config is not None and passed_max_new_tokens is None and max_new_tokens_config is None:
-            max_length = min(
-                generation_config.max_length + num_initial_tokens, config.max_target_positions
-            )
+            max_length = min(generation_config.max_length + num_initial_tokens, config.max_target_positions)
             logger.info(
                 f"Increase max_length from {max_length_config} to {max_length} since input is conditioned on previous segment."
             )
@@ -1087,7 +1250,9 @@ class WhisperGenerationMixin:
         return kwargs
 
     @staticmethod
-    def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
+    def _pad_to_max_length(
+        current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None
+    ):
         max_total_length = 0
         sequences = []
         if padding not in ["right", "left"]:
@@ -1118,9 +1283,9 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _retrieve_compression_ratio(tokens, vocab_size):
-        """ Compute byte length of zlib compressed token bytes vs. byte length of raw token bytes """
+        """Compute byte length of zlib compressed token bytes vs. byte length of raw token bytes"""
         length = int(math.log2(vocab_size) / 8) + 1
-        token_bytes = b''.join([t.to_bytes(length, 'little') for t in tokens.tolist()])
+        token_bytes = b"".join([t.to_bytes(length, "little") for t in tokens.tolist()])
         compression_ratio = len(token_bytes) / len(zlib.compress(token_bytes))
 
         return compression_ratio
@@ -1131,9 +1296,9 @@ class WhisperGenerationMixin:
         scores = torch.stack(scores).to(tokens.device)
 
         if scores.shape[0] > tokens.shape[0]:
-            scores = scores[:tokens.shape[0]]
+            scores = scores[: tokens.shape[0]]
         else:
-            tokens = tokens[-scores.shape[0]:]
+            tokens = tokens[-scores.shape[0] :]
 
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 
@@ -1175,7 +1340,7 @@ class WhisperGenerationMixin:
             last_slice = 0
             # Add each segment to list of all segments
             for current_slice in slices:
-                sliced_tokens = seek_sequence[last_slice : current_slice]
+                sliced_tokens = seek_sequence[last_slice:current_slice]
                 start_timestamp_pos = sliced_tokens[0].item() - timestamp_begin
                 end_timestamp_pos = sliced_tokens[-1].item() - timestamp_begin
                 segments.append(
@@ -1217,4 +1382,3 @@ class WhisperGenerationMixin:
             segment_offset = seek_num_frames[prev_idx]
 
         return segments, segment_offset
-
