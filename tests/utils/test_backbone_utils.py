@@ -31,6 +31,10 @@ if is_torch_available():
     import torch
 
     from transformers import BertPreTrainedModel
+
+
+class BackboneUtilsTester(unittest.TestCase):
+    def test_get_aligned_output_features_output_indices(self):
         stage_names = ["a", "b", "c"]
 
         # Defaults to last layer if both are None
