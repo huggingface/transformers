@@ -30,8 +30,7 @@ from transformers.utils.import_utils import is_torch_available
 if is_torch_available():
     import torch
 
-    # from transformers import PretrainedModel
-    from transformers import BertPreTrainedModel as PretrainedModel
+    from transformers import BertPreTrainedModel
 
 
 class BackboneUtilsTester(unittest.TestCase):
@@ -145,7 +144,8 @@ class BackboneUtilsTester(unittest.TestCase):
         Tests that new model can be created, with its weights instantiated and pretrained backbone weights loaded.
         """
 
-        class NewModel(PretrainedModel):
+        # Inherit from PreTrainedModel to ensure that the weights are initialized
+        class NewModel(BertPreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
                 self.backbone = load_backbone(config)
