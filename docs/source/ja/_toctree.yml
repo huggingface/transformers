@@ -317,6 +317,12 @@
         title: CvT
       - local: model_doc/deformable_detr
         title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -351,6 +357,8 @@
         title: CLVP
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       title: マルチモーダルモデル
     - isExpanded: false
       sections:
