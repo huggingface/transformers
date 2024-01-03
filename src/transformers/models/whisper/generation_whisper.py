@@ -221,7 +221,7 @@ class WhisperGenerationMixin:
         is_multilingual=None,
         condition_on_prev_tokens: Optional[bool] = None,
         no_speech_threshold: Optional[float] = None,
-        temperature: Union[float, Tuple[float, ...]] = 0.0,
+        temperature: Optional[Union[float, Tuple[float, ...]]] = None, 
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
         prompt_ids: Optional[torch.Tensor] = None,
@@ -411,6 +411,7 @@ class WhisperGenerationMixin:
         self._set_language_and_task(language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config)
         # pass self.config for backward compatibility
         self._set_forced_decoder_ids(task=task, language=language, prompt_ids=prompt_ids, generation_config=generation_config, config=self.config, kwargs=kwargs)
+        self._set_token_ids(generation_config=generation_config, config=self.config, kwargs=kwargs)
         self._set_num_frames(return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs)
 
         # 4. Retrieve logits processors
@@ -427,6 +428,7 @@ class WhisperGenerationMixin:
                 stopping_criteria,
                 prefix_allowed_tokens_fn,
                 synced_gpus,
+                temperature=temperature,
                 **kwargs,
             )
 
@@ -484,7 +486,6 @@ class WhisperGenerationMixin:
                 if hasattr(proc, "set_begin_index"):
                     proc.set_begin_index(decoder_input_ids.shape[-1])
 
-            print("hf  in tokens", decoder_input_ids[0].tolist())
             # 6.8 Run generate with fallback
             seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens = self.generate_with_fallback(segment_input=segment_input, decoder_input_ids=decoder_input_ids, cur_bsz=cur_bsz, batch_idx_map=batch_idx_map, seek=seek, num_segment_frames=num_segment_frames, max_frames=max_frames, temperatures=temperatures, generation_config=generation_config, logits_processor=logits_processor, stopping_criteria=stopping_criteria, prefix_allowed_tokens_fn=prefix_allowed_tokens_fn, synced_gpus=synced_gpus, return_token_timestamps=return_token_timestamps, compression_ratio_threshold=compression_ratio_threshold, logprob_threshold=logprob_threshold, no_speech_threshold=no_speech_threshold, do_condition_on_prev_tokens=do_condition_on_prev_tokens, condition_on_prev_tokens=condition_on_prev_tokens, kwargs=kwargs)
 
@@ -494,11 +495,9 @@ class WhisperGenerationMixin:
 
                 if should_skip[i]:
                     seek[prev_i] += seek_num_frames[prev_i]
-                    print("Skipped!")
                     continue
 
-                # TODO(Patrick: delete cut type)
-                segments, segment_offset, cut_type = self._retrieve_segment(
+                segments, segment_offset = self._retrieve_segment(
                     seek_sequence=seek_sequence,
                     seek_outputs=seek_outputs,
                     time_offset=time_offset,
@@ -532,16 +531,10 @@ class WhisperGenerationMixin:
         fallback_index_map = list(range(cur_bsz))
 
         if no_speech_threshold is not None:
-            set_inputs = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
-            extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
-            set_inputs({
-                "inputs": segment_input,
-                "decoder_input_ids": decoder_input_ids,
-                **extra_kwargs
-            })
+            self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs)
 
         for fallback_idx, temperature in enumerate(temperatures):
-            generation_config.do_sample = temperature > 0.0
+            generation_config.do_sample = temperature is not None and temperature > 0.0
             generation_config.temperature = temperature
             generation_config.num_beams = kwargs.pop("num_beams", 1) if not generation_config.do_sample else 1
 
@@ -556,35 +549,19 @@ class WhisperGenerationMixin:
                 **kwargs,
             )
 
-            if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-                num_frames = getattr(generation_config, "num_frames", None)
-                seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                    seek_outputs, generation_config.alignment_heads, num_frames=num_frames
-                )
-
-            if generation_config.return_dict_in_generate:
-                def split_by_batch_index(values, key, batch_idx):
-                    if key == "scores":
-                        return [v[batch_idx].cpu() for v in values]
-                    if key == "past_key_values":
-                        # we don't save `past_key_values` as this is too costly
-                        return None
-                    return values[batch_idx].cpu()
-
-                sequence_tokens = seek_outputs["sequences"]
-                seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(sequence_tokens.shape[0])]
-            else:
-                sequence_tokens = seek_outputs
+            # post-process sequence tokens and outputs to be in list form
+            sequence_tokens, seek_outputs = self._postprocess_outputs(seek_outputs, return_token_timestamps, generation_config)
 
             # remove all previously passed decoder input ids
             seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1]:]
 
+            # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
+            # Loop over each decoded audio individually as each decoding can be of a different length
             new_fallback_index_map = []
             new_segment_input = []
             new_decoder_input_ids = []
             new_decoder_attention_mask = []
 
-            # 6.7 Loop over each decoded audio individually as each decoding can be of a different length
             for i, seek_sequence in enumerate(seek_sequences):
                 # make sure we cut a predicted EOS token if we are not finished with the generation yet
                 prev_i = batch_idx_map[fallback_index_map[i]]
@@ -594,47 +571,17 @@ class WhisperGenerationMixin:
                 if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
                     seek_sequence = seek_sequence[:-1]
 
-                print("hf  out tokens", seek_sequence.tolist())
-
                 # remove all padding tokens
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
                     seek_sequence = seek_sequence[:-num_paddings]
 
-                if compression_ratio_threshold is not None:
-                    compression_ratio = self._retrieve_compression_ratio(seek_sequence, self.config.vocab_size)
-
-                    if compression_ratio > compression_ratio_threshold:
-                        print("fallback compression")
-                        print("current temp", temperature)
-                        needs_fallback[i] = True
-
-                if logprob_threshold is not None:
-                    if "sequences_scores" in seek_outputs[0]:
-                        logprobs = [s["sequences_scores"] for s in seek_outputs][i]
-                    else:
-                        scores = seek_outputs[i]["scores"]
-                        logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, self.config.eos_token_id, temperature)
-
-                    # TODO(PVP) only works for batch size = 1 currently
-                    if logprobs < logprob_threshold:
-                        print("fallback logprobs", logprobs)
-                        print("current temp", temperature)
-                        needs_fallback[i] = True
-
-                if no_speech_threshold is not None:
-                    # TODO(PVP) only works for batch size = 1 currently
-                    # Need to do before all other logit processors
-                    no_speech_prob = self._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
-
-                    if logprobs < logprob_threshold and no_speech_prob[i] > no_speech_threshold:
-                        print("Skip because of VAD")
-                        needs_fallback[i] = False
-                        should_skip[i] = True
+                # check which sequences in batch need fallback & which should be skipped
+                needs_fallback[i], should_skip[i] = self._need_fallback(seek_sequence, seek_outputs, i, logits_processor, compression_ratio_threshold, logprob_threshold, no_speech_threshold, self.config.vocab_size, generation_config.eos_token_id, temperature)
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
-                do_condition_on_prev_tokens[fallback_index_map[i]] = condition_on_prev_tokens and temperature < 0.5
+                do_condition_on_prev_tokens[fallback_index_map[i]] = condition_on_prev_tokens and temperature is not None and temperature < 0.5
 
                 if needs_fallback[i]:
                     new_fallback_index_map.append(fallback_index_map[i])
@@ -658,6 +605,69 @@ class WhisperGenerationMixin:
                 kwargs["decoder_attention_mask"] = torch.stack(new_decoder_attention_mask)
 
         return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
+
+    def _postprocess_outputs(self, seek_outputs, return_token_timestamps, generation_config):
+        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            num_frames = getattr(generation_config, "num_frames", None)
+            seek_outputs["token_timestamps"] = self._extract_token_timestamps(
+                seek_outputs, generation_config.alignment_heads, num_frames=num_frames
+            )
+
+        if generation_config.return_dict_in_generate:
+            def split_by_batch_index(values, key, batch_idx):
+                if key == "scores":
+                    return [v[batch_idx].cpu() for v in values]
+                if key == "past_key_values":
+                    # we don't save `past_key_values` as this is too costly
+                    return None
+                return values[batch_idx].cpu()
+
+            sequence_tokens = seek_outputs["sequences"]
+            seek_outputs = [{k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()} for i in range(sequence_tokens.shape[0])]
+        else:
+            sequence_tokens = seek_outputs
+
+        return sequence_tokens, seek_outputs
+
+    @staticmethod
+    def _need_fallback(seek_sequence, seek_outputs, index, logits_processor, compression_ratio_threshold, logprob_threshold, no_speech_threshold, vocab_size, eos_token_id, temperature):
+        needs_fallback = False
+        should_skip = False
+        if compression_ratio_threshold is not None:
+            compression_ratio = WhisperGenerationMixin._retrieve_compression_ratio(seek_sequence, vocab_size)
+
+            if compression_ratio > compression_ratio_threshold:
+                needs_fallback = True
+
+        if logprob_threshold is not None:
+            if "sequences_scores" in seek_outputs[0]:
+                logprobs = [s["sequences_scores"] for s in seek_outputs][index]
+            else:
+                scores = seek_outputs[index]["scores"]
+                logprobs = WhisperGenerationMixin._retrieve_avg_logprobs(scores, seek_sequence, eos_token_id, temperature)
+
+            if logprobs < logprob_threshold:
+                needs_fallback = True
+
+        if no_speech_threshold is not None:
+            no_speech_prob = WhisperGenerationMixin._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "no_speech_prob")
+
+            if logprobs < logprob_threshold and no_speech_prob[index] > no_speech_threshold:
+                needs_fallback = False
+                should_skip = True
+
+        return needs_fallback, should_skip
+
+
+    @staticmethod
+    def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
+        set_inputs = WhisperGenerationMixin._get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
+        extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
+        set_inputs({
+            "inputs": segment_input,
+            "decoder_input_ids": decoder_input_ids,
+            **extra_kwargs
+        })
 
 
     @staticmethod
@@ -858,6 +868,17 @@ class WhisperGenerationMixin:
             ]
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
+
+    @staticmethod
+    def _set_token_ids(generation_config, config, kwargs):
+        eos_token_id = kwargs.pop("eos_token_id", None)
+        decoder_start_token_id = kwargs.pop("decoder_start_token_id", None)
+
+        eos_token_id = eos_token_id if eos_token_id is not None else generation_config.eos_token_id
+        decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else generation_config.decoder_start_token_id 
+
+        generation_config.eos_token_id = eos_token_id if eos_token_id is not None else config.eos_token_id
+        generation_config.decoder_start_token_id = decoder_start_token_id if decoder_start_token_id is not None else config.decoder_start_token_id 
 
     @staticmethod
     def _set_num_frames(return_token_timestamps, generation_config, kwargs):
@@ -1109,7 +1130,6 @@ class WhisperGenerationMixin:
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
-        # TODO(Patrick) - only leave scores = scores[:tokens.shape[0]] part
         if scores.shape[0] > tokens.shape[0]:
             scores = scores[:tokens.shape[0]]
         else:
@@ -1119,7 +1139,7 @@ class WhisperGenerationMixin:
 
         # retrieve logprob of selected tokens and sum
         sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-        length = (tokens != eos_token_id).sum(-1)
+        length = (tokens != eos_token_id).sum(-1) if eos_token_id is not None else tokens.shape[0]
 
         avg_logprobs = sum_logprobs / (length + 1)
         return avg_logprobs
@@ -1171,14 +1191,12 @@ class WhisperGenerationMixin:
             if single_timestamp_ending:
                 # single timestamp at the end means no speech after the last timestamp.
                 segment_offset = seek_num_frames[prev_idx]
-                cut_type = "single ending"
             else:
                 # otherwise, ignore the unfinished segment and seek to the last timestamp
                 # here we throw away all predictions after the last predicted "end of segment"
                 # since we are cutting right in the middle of an audio
                 last_timestamp_pos = seek_sequence[last_slice - 1].item() - timestamp_begin
                 segment_offset = last_timestamp_pos * input_stride
-                cut_type = "cut"
         else:
             # If whisper does not predict any "end of segment" token, then
             # the whole decoding is considered a segment and we add it to the list of segments
@@ -1197,7 +1215,6 @@ class WhisperGenerationMixin:
                 }
             ]
             segment_offset = seek_num_frames[prev_idx]
-            cut_type = "all"
 
-        return segments, segment_offset, cut_type
+        return segments, segment_offset
 

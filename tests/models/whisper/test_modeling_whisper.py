@@ -1360,6 +1360,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         timestamp_begin = vocab_size - num_timestamp_tokens
         model.generation_config.no_timestamps_token_id = timestamp_begin - 1
         model.generation_config.eos_token_id = None
+        model.config.eos_token_id = None
         model.generation_config._detect_timestamp_from_logprob = False
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0
@@ -1419,6 +1420,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         timestamp_begin = vocab_size - num_timestamp_tokens
         model.generation_config.no_timestamps_token_id = timestamp_begin - 1
         model.generation_config.eos_token_id = None
+        model.config.eos_token_id = None
         model.generation_config._detect_timestamp_from_logprob = False
         # make sure that we only have the same begin token
         model.generation_config.max_initial_timestamp_index = 0

@@ -1874,7 +1874,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 
         # apply the `max_initial_timestamp` option
         if input_ids.shape[1] == self.begin_index:
-            print("HF Sample begin", self.begin_index)
             scores[:, : self.timestamp_begin] = -float("inf")
 
             if self.max_initial_timestamp_index is not None:
@@ -1888,9 +1887,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
             max_text_token_logprob = logprobs[k, : self.timestamp_begin].max()
             if timestamp_logprob > max_text_token_logprob and self._detect_timestamp_from_logprob:
                 scores[k, : self.timestamp_begin] = -float("inf")
-
-        if torch.isinf(scores).all():
-            print("RED FLAG")
 
         return scores
 
