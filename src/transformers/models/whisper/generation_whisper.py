@@ -17,19 +17,22 @@ import copy
 import math
 import warnings
 import zlib
-from typing import Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ...generation.configuration import GenerationConfig
 from ...generation.logits_process import (
+    LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     WhisperNoSpeechDetection,
     WhisperTimeStampLogitsProcessor,
 )
+from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_outputs import BaseModelOutput
 from ...utils import logging
 from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
@@ -210,26 +213,26 @@ class WhisperGenerationMixin:
     def generate(
         self,
         input_features: Optional[torch.Tensor] = None,
-        generation_config=None,
-        logits_processor=None,
-        stopping_criteria=None,
-        prefix_allowed_tokens_fn=None,
-        synced_gpus=False,
-        return_timestamps=None,
-        task=None,
-        language=None,
-        is_multilingual=None,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[LogitsProcessorList] = None,
+        stopping_criteria: Optional[StoppingCriteriaList] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        synced_gpus: bool = False,
+        return_timestamps: Optional[bool] = None,
+        task: Optional[str] = None,
+        language: Optional[str] = None,
+        is_multilingual: Optional[bool] = None,
+        prompt_ids: Optional[torch.Tensor] = None,
         condition_on_prev_tokens: Optional[bool] = None,
         no_speech_threshold: Optional[float] = None,
         temperature: Optional[Union[float, Tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
-        prompt_ids: Optional[torch.Tensor] = None,
         num_segment_frames: Optional[int] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        time_precision: float = 0.02,
         return_token_timestamps: Optional[bool] = None,
         return_segments: bool = False,
-        attention_mask: Optional[torch.Tensor] = None,
-        time_precision: int = 0.02,
         return_dict_in_generate: Optional[bool] = None,
         **kwargs,
     ):
@@ -248,7 +251,7 @@ class WhisperGenerationMixin:
         </Tip>
 
         Parameters:
-            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
+            input_features (`torch.Tensor` of varying shape depending on the modality, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
@@ -292,6 +295,45 @@ class WhisperGenerationMixin:
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+            condition_on_prev_tokens (`bool`, *optional*):
+                Only relevant for long-form transcription. Whether to condition each segment on the previous segment.
+                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            no_speech_threshold (`float`, *optional*):
+                Only relevant for long-form transcription. If defined, the "no-speech" token combined with the `logprob_threshold`
+                is used to determine whether a segment contains only silence. In this case, the transcription for this segment
+                is skipped.
+                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            temperature (`float` or list of `float`, *optional*):
+                The temperature to be used for generation. Passing a single `float` value and `do_sample=True` activates
+                generation using sampling. For long-form transcription, temperature fallback can be activated by passing
+                a list of float values such as (0.0, 0.2, 0.4, 0.6, 0.8). As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            compression_ratio_threshold (`float`, *optional*):
+                Only relevant for long-form transcription. If defined, the zlib compression rate of each segment will be computed. If the compression rate of
+                a segment is higher than `compression_ratio_threshold`, temperature fallback is activated: the generated segment is discarded and the generation is
+                repeated using a higher temperature. The intuition behind this feature is that segments with very high compression rates
+                suffer from a lot of repetition. The unwanted repetition can be reduced by injecting more randomness by increasing the temperature. If `compression_ratio_threshold` is defined
+                make sure that `temperature` is a list of values. A common value for `compression_ratio_threshold` is 1.35.
+                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            logprob_threshold (`float`, *optional*):
+                Only relevant for long-form transcription. If defined, the average log-probability of each segment will be computed. If the log-probability of
+                a given segment is lower than `logprob_threshold`, temperature fallback is activated: the generated segment is discarded and the generation is
+                repeated using a higher temperature. The intuition behind this feature is that segments of low logprobability
+                can be improved by injecting more randomness by increasing the temperature. If `logprob_threshold` is defined
+                make sure that `temperature` is a list of values. A common value for `logprob_threshold` is -1.0.
+                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            num_segment_frames (`int`, *optional*):
+                The number of frames a single segment is made of. If not defined, `num_segment_frames` defaults to the model's stride
+                times the maximum input length.
+            attention_mask (`torch.Tensor`, *optional*):
+                `attention_mask` needs to be passed when doing long-form transcription using a batch size > 1.
+            time_precision (`int`, *optional*, defaults to 0.02):
+                The duration of output token in seconds. *E.g.* 0.02 means that a generated token on average accounts
+                for 20 ms.
             return_token_timestamps (`bool`, *optional*):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
@@ -299,11 +341,6 @@ class WhisperGenerationMixin:
             return_segments (`bool`, *optional*, defaults to `False`):
                 Whether to additionally return a list of all segments. Note that this option can only be enabled
                 when doing long-form transcription.
-            attention_mask (`torch.Tensor`, *optional*):
-                `attention_mask` needs to be passed when doing long-form transcription using a batch size > 1.
-            time_precision (`int`, *optional*, defaults to 0.02):
-                The duration of output token in seconds. *E.g.* 0.02 means that a generated token on average accounts
-                for 20 ms.
             return_dict_in_generate (`bool`, *optional*, defaults to `False`):
                 Whether or not to return a [`~utils.ModelOutput`] instead of just returning the generated tokens.
                 Note that when doing long-form transcription, `return_dict_in_generate` can only be enabled when
