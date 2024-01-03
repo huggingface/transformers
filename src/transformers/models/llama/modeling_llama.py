@@ -74,7 +74,6 @@ if is_torch_fx_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "TinyLlama/TinyLlama-1.1B-Chat-v0.3"
 _REAL_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b"
 
 
@@ -1437,10 +1436,6 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         self.model = LlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1452,7 +1447,6 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LLAMA_START_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
