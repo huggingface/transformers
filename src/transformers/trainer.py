@@ -187,7 +187,7 @@ if is_safetensors_available():
 
 
 if is_peft_available():
-    from peft import PeftModel
+    from peft import PeftModel, PeftMixedModel
 
 
 if is_accelerate_available():
@@ -213,7 +213,7 @@ if is_accelerate_available():
 
 
 def _is_peft_model(model):
-    return is_peft_available() and isinstance(model, PeftModel)
+    return is_peft_available() and isinstance(model, PeftModel) or is_peft_available() and isinstance(model, PeftMixedModel)
 
 
 if TYPE_CHECKING:
@@ -700,7 +700,11 @@ class Trainer:
             # Inspect model forward signature to keep only the arguments it accepts.
             model_to_inspect = self.model
             if _is_peft_model(self.model):
-                model_to_inspect = self.model.get_base_model()
+                if hasattr(self.model, "get_base_model"):
+                    model_to_inspect = self.model.get_base_model()
+                else:
+                    #PeftMixedModel
+                    model_to_inspect = self.model.base_model.model
             signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
