@@ -516,7 +516,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
         "pip install -U --upgrade-strategy eager natten",
         "find -name __pycache__ -delete",
-        "find . -name \*.pyc -delete",
+        r"find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         {
