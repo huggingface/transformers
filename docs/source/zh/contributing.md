@@ -20,9 +20,9 @@ limitations under the License.
 
 宣传 🤗 Transformers 也会帮助我们！比如在博客文章里介绍一下这个库是如何帮助你完成了很棒的项目，每次它帮助你时都在 Twitter 上大声宣传，或者给这个代码仓库点⭐️来表示感谢。
 
-无论你选择以哪种方式做出贡献，请注意并尊重我们的[行为准则](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md) 。
+无论你选择以哪种方式做出贡献，请注意并尊重我们的[行为准则](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md)。
 
-**本指南的灵感来源于 [scikit-learn贡献指南](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md) ，它令人印象深刻。**
+**本指南的灵感来源于 [scikit-learn贡献指南](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md) ，它令人印象深刻.**
 
 ## 做贡献的方法
 
