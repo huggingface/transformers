@@ -14,14 +14,14 @@
 # limitations under the License.
 
 import copy
-import warnings
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
 import torch
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from .configuration_utils import GenerationConfig
     from .logits_process import LogitsProcessorList
 
 
@@ -66,14 +66,17 @@ class CandidateGenerator:
 
 class AssistedCandidateGenerator(CandidateGenerator):
     """
-    `CandidateGenerator` class to be used for assisted generation. This class generates candidates through the use of
-    a smaller model. Read the following blog post for more information: https://huggingface.co/blog/assisted-generation
+    `CandidateGenerator` class to be used for assisted generation and speculative decoding. This class generates
+    candidates through the use of a smaller model. Read the following blog post for more information:
+    https://huggingface.co/blog/assisted-generation
 
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
         assistant_model (`PreTrainedModel`):
             The model to be used for generating candidates. This model should be smaller than the main model.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
         logits_processor (`LogitsProcessorList`):
             An instance of [`LogitsProcessorList`]. List of instances of class derived from [`LogitsProcessor`]
             used to modify the prediction scores of the language modeling head applied at each generation step.
@@ -82,31 +85,20 @@ class AssistedCandidateGenerator(CandidateGenerator):
             model as well.
         inputs_tensor (`torch.Tensor`, *optional*):
             The model input tensor. In encoder-decoder models, this is the encoder input.
-        eos_token_id (`Union[int, List[int]]`, *optional*):
-            The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
     """
 
     def __init__(
         self,
         input_ids: torch.LongTensor,
         assistant_model: "PreTrainedModel",
+        generation_config: "GenerationConfig",
         logits_processor: "LogitsProcessorList",
         model_kwargs: Dict,
         inputs_tensor: Optional[torch.Tensor] = None,
-        eos_token_id: Optional[Union[int, List[int]]] = None,
     ):
+        # Prepare the assistant and the starting number of candidate tokens
         self.assistant_model = assistant_model
-
-        # Prepare the number of candidate tokens
-        if hasattr(assistant_model, "num_assistant_tokens"):
-            warnings.warn(
-                "Setting `num_assistant_tokens` via `assistant_model.num_assistant_tokens` is deprecated and will be "
-                "removed in v4.37. Make sure to set `num_assistant_tokens` via the generation_config instead.",
-                FutureWarning,
-            )
-            self.num_assistant_tokens = assistant_model.num_assistant_tokens
-        else:
-            self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
+        self.num_assistant_tokens = assistant_model.generation_config.num_assistant_tokens
 
         # Prepare the kwargs for the assistant model
         assistant_kwargs = {}
@@ -145,13 +137,17 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.input_ids_key = "input_ids"
             self.attention_key = "attention_mask"
 
-        # Prepare other attributes
+        # Prepare generation-related options.
+        eos_token_id = generation_config.eos_token_id
         if isinstance(eos_token_id, int):
             eos_token_id = [eos_token_id]
         self.eos_token_id_tensor = (
             torch.tensor(eos_token_id).to(input_ids.device) if eos_token_id is not None else None
         )
         self.logits_processor = logits_processor
+        self.generation_config = copy.deepcopy(generation_config)
+        self.generation_config.return_dict_in_generate = True
+        self.generation_config.output_scores = True
 
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
@@ -185,12 +181,11 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # 2. Forecast next N tokens using the assistant model.
         assistant_generation_kwargs = {
             self.input_ids_key: input_ids,
-            "do_sample": False,
-            "num_beams": 1,
             "max_new_tokens": int(self.num_assistant_tokens),
-            "return_dict_in_generate": True,
-            "output_scores": True,
+            "generation_config": self.generation_config,
+            "logits_processor": self.logits_processor,
         }
+
         assistant_output = self.assistant_model.generate(**assistant_generation_kwargs, **self.assistant_kwargs)
 
         # 3. Update variables for the next round of candidate generation

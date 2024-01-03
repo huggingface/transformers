@@ -302,10 +302,22 @@ def _prepare_4d_causal_attention_mask(
     key_value_length = input_shape[-1] + past_key_values_length
 
     # 4d mask is passed through the layers
-    if attention_mask is not None:
+    if attention_mask is not None and len(attention_mask.shape) == 2:
         attention_mask = attn_mask_converter.to_4d(
             attention_mask, input_shape[-1], key_value_length=key_value_length, dtype=inputs_embeds.dtype
         )
+    elif attention_mask is not None and len(attention_mask.shape) == 4:
+        expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
+        if tuple(attention_mask.shape) != expected_shape:
+            raise ValueError(
+                f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
+            )
+        else:
+            # if the 4D mask has correct shape - invert it and fill with negative infinity
+            inverted_mask = 1.0 - attention_mask
+            attention_mask = inverted_mask.masked_fill(
+                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+            )
     else:
         attention_mask = attn_mask_converter.to_causal_4d(
             input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -340,7 +352,22 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     is_tracing = torch.jit.is_tracing()
 
     if attention_mask is not None:
-        if torch.all(attention_mask == 1):
+        # 4d mask is passed through
+        if len(attention_mask.shape) == 4:
+            expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
+            if tuple(attention_mask.shape) != expected_shape:
+                raise ValueError(
+                    f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
+                )
+            else:
+                # if the 4D mask has correct shape - invert it and fill with negative infinity
+                inverted_mask = 1.0 - attention_mask.to(inputs_embeds.dtype)
+                attention_mask = inverted_mask.masked_fill(
+                    inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+                )
+                return attention_mask
+
+        elif torch.all(attention_mask == 1):
             if is_tracing:
                 pass
             elif query_length == 1:
