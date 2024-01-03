@@ -233,6 +233,7 @@ from . import (
     vivit,
     wav2vec2,
     wav2vec2_conformer,
+    wav2vec2_bert,
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,

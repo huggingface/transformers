@@ -899,6 +899,10 @@ _import_structure = {
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2ConformerConfig",
     ],
+    "models.wav2vec2_bert": [
+        "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2BERTConfig",
+    ],
     "models.wav2vec2_phoneme": ["Wav2Vec2PhonemeCTCTokenizer"],
     "models.wav2vec2_with_lm": ["Wav2Vec2ProcessorWithLM"],
     "models.wavlm": [
@@ -3479,6 +3483,18 @@ else:
             "Wav2Vec2ConformerPreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2_bert"].extend(
+        [
+            "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2BERTForAudioFrameClassification",
+            "Wav2Vec2BERTForCTC",
+            "Wav2Vec2BERTForPreTraining",
+            "Wav2Vec2BERTForSequenceClassification",
+            "Wav2Vec2BERTForXVector",
+            "Wav2Vec2BERTModel",
+            "Wav2Vec2BERTPreTrainedModel",
+        ]
+    )
     _import_structure["models.wavlm"].extend(
         [
             "WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5559,6 +5575,10 @@ if TYPE_CHECKING:
     from .models.wav2vec2_conformer import (
         WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2ConformerConfig,
+    )
+    from .models.wav2vec2_bert import (
+        WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2BERTConfig,
     )
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
@@ -7746,6 +7766,16 @@ if TYPE_CHECKING:
             Wav2Vec2ConformerForXVector,
             Wav2Vec2ConformerModel,
             Wav2Vec2ConformerPreTrainedModel,
+        )
+        from .models.wav2vec2_bert import (
+            WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2BERTForAudioFrameClassification,
+            Wav2Vec2BERTForCTC,
+            Wav2Vec2BERTForPreTraining,
+            Wav2Vec2BERTForSequenceClassification,
+            Wav2Vec2BERTForXVector,
+            Wav2Vec2BERTModel,
+            Wav2Vec2BERTPreTrainedModel,
         )
         from .models.wavlm import (
             WAVLM_PRETRAINED_MODEL_ARCHIVE_LIST,

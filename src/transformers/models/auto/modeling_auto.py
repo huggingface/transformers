@@ -229,6 +229,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vivit", "VivitModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
+        ("wav2vec2-bert", "Wav2Vec2BERTModel"),
         ("wavlm", "WavLMModel"),
         ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
@@ -306,6 +307,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
+        ("wav2vec2-bert", "Wav2Vec2BERTForPreTraining"),
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
@@ -1029,6 +1031,7 @@ MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatForSequenceClassification"),
         ("wav2vec2", "Wav2Vec2ForSequenceClassification"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForSequenceClassification"),
+        ("wav2vec2-bert", "Wav2Vec2BERTForSequenceClassification"),
         ("wavlm", "WavLMForSequenceClassification"),
         ("whisper", "WhisperForAudioClassification"),
     ]
@@ -1046,6 +1049,7 @@ MODEL_FOR_CTC_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatForCTC"),
         ("wav2vec2", "Wav2Vec2ForCTC"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForCTC"),
+        ("wav2vec2-bert", "Wav2Vec2BERTForCTC"),
         ("wavlm", "WavLMForCTC"),
     ]
 )
@@ -1057,6 +1061,7 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatForAudioFrameClassification"),
         ("wav2vec2", "Wav2Vec2ForAudioFrameClassification"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForAudioFrameClassification"),
+        ("wav2vec2-bert", "Wav2Vec2BERTForAudioFrameClassification"),
         ("wavlm", "WavLMForAudioFrameClassification"),
     ]
 )
@@ -1068,6 +1073,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
         ("unispeech-sat", "UniSpeechSatForXVector"),
         ("wav2vec2", "Wav2Vec2ForXVector"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForXVector"),
+        ("wav2vec2-bert", "Wav2Vec2BERTForXVector"),
         ("wavlm", "WavLMForXVector"),
     ]
 )

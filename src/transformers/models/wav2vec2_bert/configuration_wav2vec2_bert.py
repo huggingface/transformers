@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Wav2Vec2Conformer model configuration"""
+""" Wav2Vec2BERT model configuration"""
 
 import functools
 import operator
@@ -23,19 +23,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-conformer-rel-pos-large": (
-        "https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large/resolve/main/config.json"
-    ),
+WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/w2v-bert-2.0": "https://huggingface.co/facebook/w2v-bert-2.0/resolve/main/config.json",
 }
 
 
-class Wav2Vec2ConformerConfig(PretrainedConfig):
+
+class Wav2Vec2BERTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Wav2Vec2ConformerModel`]. It is used to
-    instantiate an Wav2Vec2Conformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2Conformer
-    [facebook/wav2vec2-conformer-rel-pos-large](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large)
+    This is the configuration class to store the configuration of a [`Wav2Vec2BERTModel`]. It is used to
+    instantiate an Wav2Vec2BERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2BERT
+    [facebook/wav2vec2-bert-rel-pos-large](https://huggingface.co/facebook/wav2vec2-bert-rel-pos-large)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -44,10 +43,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*):
-            Vocabulary size of the Wav2Vec2Conformer model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`Wav2Vec2ConformerModel`]. Vocabulary size of the
+            Vocabulary size of the Wav2Vec2BERT model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`Wav2Vec2BERTModel`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`Wav2Vec2ConformerModel`].
+            method of [`Wav2Vec2BERTModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -66,7 +65,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`Wav2Vec2ConformerForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2BERTForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
@@ -74,34 +73,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
-        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the feature encoder.
-        feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the 1D convolutional layers of the feature
-            extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for quantized feature encoder states.
-        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
-        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
-            *conv_dim*.
-        conv_bias (`bool`, *optional*, defaults to `False`):
-            Whether the 1D convolutional layers have a bias.
-        num_conv_pos_embeddings (`int`, *optional*, defaults to 128):
-            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
-            embeddings layer.
-        num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
-            Number of groups of 1D convolutional positional embeddings layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
@@ -149,14 +122,14 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             The weight of the codebook diversity loss component.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`Wav2Vec2ConformerForCTC`].
+            instance of [`Wav2Vec2BERTForCTC`].
         ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
             Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
             occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`Wav2Vec2ConformerForCTC`].
+            of [`Wav2Vec2BERTForCTC`].
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`Wav2Vec2ConformerForSequenceClassification`].
+            instance of [`Wav2Vec2BERTForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
         tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
@@ -171,8 +144,8 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
         add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the Wav2Vec2Conformer Encoder. Can be very
-            useful for warm-starting Wav2Vec2Conformer for SpeechEncoderDecoder models.
+            Whether a convolutional attention network should be stacked on top of the Wav2Vec2BERT Encoder. Can be very
+            useful for warm-starting Wav2Vec2BERT for SpeechEncoderDecoder models.
         adapter_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):
@@ -184,33 +157,44 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
         position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
-            Can be specified to `relative` or `rotary` for relative or rotary position embeddings respectively. If left
-            `None` no relative position embedding is applied.
+            Can be specified to :
+                - `rotary`, for rotary position embeddings.
+                - `relative`, for relative position embeddings.
+                - `relative_key`, for relative position embeddings as defined by Shaw in [Self-Attention
+            with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            If left to `None`, no relative position embeddings is applied.
         rotary_embedding_base (`int`, *optional*, defaults to 10000):
             If `"rotary"` position embeddings are used, defines the size of the embedding base.
         max_source_positions (`int`, *optional*, defaults to 5000):
             if `"relative"` position embeddings are used, defines the maximum source input positions.
+        left_max_position_embeddings (`int`, *optional*, defaults to 64):
+            If `"relative_key"` (aka Shaw) position embeddings are used, defines the left clipping value for relative positions.
+        right_max_position_embeddings (`int`, *optional*, defaults to 8):
+            If `"relative_key"` (aka Shaw) position embeddings are used, defines the right clipping value for relative positions.
         conv_depthwise_kernel_size (`int`, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
-
+            
+        feature_projection_input_dim (`int`, *optional*, defaults to 160):
+            Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
+            input audios with [`Wav2Vec2BERTFeatureExtractor`].
     Example:
 
     ```python
-    >>> from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
+    >>> from transformers import Wav2Vec2BERTConfig, Wav2Vec2BERTModel
 
-    >>> # Initializing a Wav2Vec2Conformer facebook/wav2vec2-conformer-rel-pos-large style configuration
-    >>> configuration = Wav2Vec2ConformerConfig()
+    >>> # Initializing a Wav2Vec2BERT facebook/wav2vec2-bert-rel-pos-large style configuration
+    >>> configuration = Wav2Vec2BERTConfig()
 
-    >>> # Initializing a model (with random weights) from the facebook/wav2vec2-conformer-rel-pos-large style configuration
-    >>> model = Wav2Vec2ConformerModel(configuration)
+    >>> # Initializing a model (with random weights) from the facebook/wav2vec2-bert-rel-pos-large style configuration
+    >>> model = Wav2Vec2BERTModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "wav2vec2-conformer"
+    model_type = "wav2vec2-bert"
 
     def __init__(
         self,
@@ -229,14 +213,6 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        feat_extract_norm="group",
-        feat_extract_activation="gelu",
-        conv_dim=(512, 512, 512, 512, 512, 512, 512),
-        conv_stride=(5, 2, 2, 2, 2, 2, 2),
-        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
-        conv_bias=False,
-        num_conv_pos_embeddings=128,
-        num_conv_pos_embedding_groups=16,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -270,21 +246,16 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
         max_source_positions=5000,
+        left_max_position_embeddings=64,
+        right_max_position_embeddings=8,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
+        use_intermediate_ffn_before_adapter=False, # TODO add to docstrings
+        feature_projection_input_dim=160,#TODO add to docstrings
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
-        self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_activation = feat_extract_activation
-        self.conv_dim = list(conv_dim)
-        self.conv_stride = list(conv_stride)
-        self.conv_kernel = list(conv_kernel)
-        self.conv_bias = conv_bias
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
-        self.num_feat_extract_layers = len(self.conv_dim)
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -300,20 +271,23 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
+
+        if position_embeddings_type is not None and position_embeddings_type not in [
+            "rotary",
+            "relative",
+            "relative_key",
+        ]:
+            raise ValueError(
+                """
+                `position_embeddings_type` is not valid. It must be one of the following values:
+                `["rotary", "relative", "relative_key"]` or left at `None`.
+                """
+            )
         self.position_embeddings_type = position_embeddings_type
         self.rotary_embedding_base = rotary_embedding_base
+        self.left_max_position_embeddings = left_max_position_embeddings
+        self.right_max_position_embeddings = right_max_position_embeddings
 
-        if (
-            (len(self.conv_stride) != self.num_feat_extract_layers)
-            or (len(self.conv_kernel) != self.num_feat_extract_layers)
-            or (len(self.conv_dim) != self.num_feat_extract_layers)
-        ):
-            raise ValueError(
-                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
-                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
-                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
-                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
-            )
 
         # Conformer-block related
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
@@ -357,6 +331,14 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
+        
+        if use_intermediate_ffn_before_adapter and not add_adapter:
+            raise ValueError(
+                "`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`."
+            )
+        self.use_intermediate_ffn_before_adapter=use_intermediate_ffn_before_adapter
+        
+        self.feature_projection_input_dim=feature_projection_input_dim
 
     @property
     def inputs_to_logits_ratio(self):

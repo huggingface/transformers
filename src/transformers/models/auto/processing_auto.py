@@ -90,6 +90,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
+        ("wav2vec2-bert", "Wav2Vec2Processor"),
         ("wavlm", "Wav2Vec2Processor"),
         ("whisper", "WhisperProcessor"),
         ("xclip", "XCLIPProcessor"),
