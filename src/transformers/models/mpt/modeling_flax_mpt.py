@@ -1,13 +1,13 @@
-from functools import partial
 import math
 from typing import Optional, Tuple
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import jax.lax as lax
-from transformers.modeling_flax_utils import FlaxPreTrainedModel
 
+from transformers.modeling_flax_utils import FlaxPreTrainedModel
 from transformers.models.mpt.configuration_mpt import MptConfig
+
 
 class FlaxMptAttention(nn.module):
     config: MptConfig
@@ -25,9 +25,9 @@ class FlaxMptAttention(nn.module):
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
         self.attn_dropout_p = config.attn_config.attn_pdrop
-        
+
         self.Wqkv = nn.Dense(
-            3*self.hidden_size,
+            3 * self.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
@@ -38,7 +38,7 @@ class FlaxMptAttention(nn.module):
             kernel_init=jax.nn.initializers.normal(0.02),
             use_bias=False,
         )
-    
+
     def __call__(
         self,
         hidden_states,
@@ -50,9 +50,13 @@ class FlaxMptAttention(nn.module):
 
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = jnp.split(mixed_qkv, 3, axis=-1)
-        query_states = query_states.reshape((batch_size, seq_length, self.n_heads, self.head_dim)).transpose((0, 2, 1, 3))
+        query_states = query_states.reshape((batch_size, seq_length, self.n_heads, self.head_dim)).transpose(
+            (0, 2, 1, 3)
+        )
         key_states = key_states.reshape((batch_size, seq_length, self.n_heads, self.head_dim)).transpose((0, 2, 1, 3))
-        value_states = value_states.reshape((batch_size, seq_length, self.n_heads, self.head_dim)).transpose((0, 2, 1, 3))
+        value_states = value_states.reshape((batch_size, seq_length, self.n_heads, self.head_dim)).transpose(
+            (0, 2, 1, 3)
+        )
 
         if past_key_value is not None:
             if past_key_value[0].shape[2] > 0:
@@ -79,7 +83,9 @@ class FlaxMptAttention(nn.module):
             attention_scores = attention_scores + position_bias
 
         if attention_mask is not None:
-            attention_scores = jax.lax.select(attention_mask, jnp.full_like(attention_scores, -jnp.inf), attention_scores)
+            attention_scores = jax.lax.select(
+                attention_mask, jnp.full_like(attention_scores, -jnp.inf), attention_scores
+            )
 
         attn_weights = nn.softmax(attention_scores, axis=-1).astype(value_states.dtype)
         attn_weights = nn.dropout(attn_weights, rate=self.attn_dropout_p, deterministic=not self.training)
@@ -90,14 +96,19 @@ class FlaxMptAttention(nn.module):
 
         return attn_output, attn_weights, past_key_value
 
+
 class FlaxMptMLP(nn.Module):
     hidden_size: int
     attn_pdrop: float
 
     def setup(self):
-        self.up_proj = nn.Dense(features=4 * self.hidden_size, kernel_init=nn.initializers.xavier_uniform(), use_bias=False)
+        self.up_proj = nn.Dense(
+            features=4 * self.hidden_size, kernel_init=nn.initializers.xavier_uniform(), use_bias=False
+        )
         self.act = nn.gelu
-        self.down_proj = nn.Dense(features=self.hidden_size, kernel_init=nn.initializers.xavier_uniform(), use_bias=False)
+        self.down_proj = nn.Dense(
+            features=self.hidden_size, kernel_init=nn.initializers.xavier_uniform(), use_bias=False
+        )
 
     def forward(self, hidden_states, residual):
         hidden_states = self.act(self.up_proj(hidden_states))
@@ -108,7 +119,8 @@ class FlaxMptMLP(nn.Module):
         output = output + residual
 
         return output
-    
+
+
 class FlaxMptBlock(nn.Module):
     hidden_size: int
     n_heads: int
@@ -156,7 +168,8 @@ class FlaxMptBlock(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-    
+
+
 class MptPreTrainedModel(FlaxPreTrainedModel):
     config_class = MptConfig
     base_model_prefix = "transformer"
