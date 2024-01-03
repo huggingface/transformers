@@ -69,7 +69,7 @@ class HtdemucsConfig(PretrainedConfig):
             Whether the model should return the last key/values attentions (not used by all models)
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        num_stems (`int`, *optional*, defaults to 8):
+        num_stems (`int`, *optional*, defaults to 4):
             The number of stems the audio is split into.
         audio_channels (`int`, *optional*, defaults to 2):
             The number of input/output audio channels.
@@ -85,7 +85,8 @@ class HtdemucsConfig(PretrainedConfig):
             Dimension of the linear conv layer that is applied before and after the transformer model to
             upsample/downsample the number of channels.
         n_fft (`int`, *optional* defaults to 4096):
-            Size of the Fourier transform applied to the input audio.
+            Size of the Fourier transform applied to the input audio. Should match that used in the
+            `HtDemucsFeatureExtractor` class.
         stride (`int`, *optional*, defaults to 4):
             Stride for encoder and decoder layers.
         freq_embedding_lr_scale (`float`, *optional*, defaults to 10):
@@ -109,7 +110,7 @@ class HtdemucsConfig(PretrainedConfig):
         activation_dropout=0.0,
         initializer_factor=0.02,
         layer_scale_init_value=1e-4,
-        num_stems=8,
+        num_stems=4,
         audio_channels=2,
         hidden_channels=48,
         channel_growth=2,

@@ -386,26 +386,32 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
 class HtdemucsResidualConvLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, out_channels):
         super().__init__()
-        residual_hidden_size = int(out_channels / 2)
+        residual_hidden_size = int(out_channels / 8)
 
-        self.residual_layers = nn.ModuleList([])
+        self.conv_in = nn.ModuleList([])
+        self.norm_in = nn.ModuleList([])
+        self.conv_out = nn.ModuleList([])
+        self.norm_out = nn.ModuleList([])
         self.layer_scales = nn.ParameterList([])
 
         for layer_idx in range(config.residual_conv_depth):
             dilation = 2**layer_idx
-            layer = [
-                nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation),
-                nn.GELU(),
-                nn.Conv1d(residual_hidden_size, 2 * residual_hidden_size, kernel_size=1),
-                nn.GLU(dim=1),
-            ]
-            layer = nn.Sequential(*layer)  # TODO(SG): remove sequential
-            self.residual_layers.append(layer)
+            self.conv_in.append(nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation))
+            self.norm_in.append(nn.GroupNorm(1, residual_hidden_size))
+            self.conv_out.append(nn.Conv1d(residual_hidden_size, 2 * out_channels, kernel_size=1))
+            self.norm_out.append(nn.GroupNorm(1, 2 * out_channels))
             self.layer_scales.append(nn.Parameter(torch.ones(out_channels) * config.layer_scale_init_value))
 
     def forward(self, hidden_states):
-        for layer_scale, residual_layer in zip(self.layer_scales, self.residual_layers):
-            hidden_states = hidden_states + layer_scale * residual_layer(hidden_states)
+        for idx in range(len(self.conv_in)):
+            residual = hidden_states
+            hidden_states = self.conv_in[idx](hidden_states)
+            hidden_states = self.norm_in[idx](hidden_states)
+            hidden_states = nn.functional.gelu(hidden_states)
+            hidden_states = self.conv_out[idx](hidden_states)
+            hidden_states = self.norm_out[idx](hidden_states)
+            hidden_states = nn.functional.glu(hidden_states, dim=1)
+            hidden_states = residual + self.layer_scales[idx] * hidden_states
         return hidden_states
 
 
@@ -456,8 +462,8 @@ class HtdemucsFreqEncoderLayer(nn.Module):
 class HtdemucsTempDecoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels, is_last):
         super().__init__()
-        self.conv_in = nn.Conv1d(in_channels, 2 * out_channels, kernel_size=3, stride=1, padding=1)
-        self.residual_conv = HtdemucsResidualConvLayer(config, out_channels)
+        self.conv_in = nn.Conv1d(in_channels, 2 * in_channels, kernel_size=3, stride=1, padding=1)
+        self.residual_conv = HtdemucsResidualConvLayer(config, in_channels)
         self.conv_out = nn.ConvTranspose1d(in_channels, out_channels, kernel_size=8, stride=4)
         self.is_last = is_last
 
@@ -480,8 +486,8 @@ class HtdemucsTempDecoderLayer(nn.Module):
 class HtdemucsFreqDecoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels, is_last):
         super().__init__()
-        self.conv_in = nn.Conv2d(in_channels, 2 * out_channels, kernel_size=3, stride=1, padding=1)
-        self.residual_conv = HtdemucsResidualConvLayer(config, out_channels)
+        self.conv_in = nn.Conv2d(in_channels, 2 * in_channels, kernel_size=3, stride=1, padding=1)
+        self.residual_conv = HtdemucsResidualConvLayer(config, in_channels)
         self.conv_out = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=(8, 1), stride=(4, 1))
         self.is_last = is_last
 
@@ -798,17 +804,15 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         self.freq_decoder = nn.ModuleList()
 
         for layer in range(num_layers):
-            self.temp_encoder.append(HtdemucsTempEncoderLayer(config, 2 * in_channels, out_channels))
-            self.freq_encoder.append(HtdemucsFreqEncoderLayer(config, in_channels, out_channels))
+            is_last = layer == 0
+            freq_multp = 2 if is_last else 1
+            self.temp_encoder.append(HtdemucsTempEncoderLayer(config, in_channels, out_channels))
+            self.freq_encoder.append(HtdemucsFreqEncoderLayer(config, freq_multp * in_channels, out_channels))
 
-            if layer == 0:
-                in_channels = config.num_stems * in_channels
-                is_last = True
-            else:
-                is_last = False
+            in_channels = config.num_stems * in_channels if is_last else in_channels
 
-            self.temp_decoder.insert(0, HtdemucsTempDecoderLayer(config, out_channels, 2 * in_channels, is_last))
-            self.freq_decoder.insert(0, HtdemucsFreqDecoderLayer(config, out_channels, in_channels, is_last))
+            self.temp_decoder.insert(0, HtdemucsTempDecoderLayer(config, out_channels, in_channels, is_last))
+            self.freq_decoder.insert(0, HtdemucsFreqDecoderLayer(config, out_channels, freq_multp * in_channels, is_last))
 
             in_channels = out_channels
             out_channels = config.channel_growth * out_channels
