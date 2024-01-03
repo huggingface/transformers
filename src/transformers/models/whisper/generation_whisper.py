@@ -427,7 +427,6 @@ class WhisperGenerationMixin:
                 stopping_criteria,
                 prefix_allowed_tokens_fn,
                 synced_gpus,
-                return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
             )
 
