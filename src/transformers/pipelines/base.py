@@ -34,7 +34,16 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
+from ..utils import (
+    ModelOutput,
+    add_end_docstrings,
+    infer_framework,
+    is_tf_available,
+    is_torch_available,
+    is_torch_cuda_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -792,10 +801,6 @@ class Pipeline(_ScikitCompat):
                 "discard the `device` argument when creating your pipeline object."
             )
 
-        # We shouldn't call `model.to()` for models loaded with accelerate
-        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
-            self.model.to(device)
-
         if device is None:
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
@@ -805,17 +810,35 @@ class Pipeline(_ScikitCompat):
 
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
+                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                    logger.warning("XPU is not available. Use CPU!")
+                    device = torch.device("cpu")
                 self.device = device
             elif isinstance(device, str):
+                if device == "xpu" and not is_torch_xpu_available(check_device=True):
+                    logger.warning("XPU is not available. Use CPU!")
+                    device = "cpu"
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
-            else:
+            elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
+            elif is_torch_xpu_available(check_device=True):
+                self.device = torch.device(f"xpu:{device}")
+            else:
+                self.device = torch.device("cpu")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if (
+            self.framework == "pt"
+            and self.device is not None
+            and not (isinstance(self.device, int) and self.device < 0)
+        ):
+            self.model.to(self.device)
 
         # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
