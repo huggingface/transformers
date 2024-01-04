@@ -153,7 +153,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> device = "cuda" # the device to load the model onto
 
 >>> tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased')
->>> model = AutoModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16, use_flash_attention_2=True)
+>>> model = AutoModel.from_pretrained("distilbert-base-uncased", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
 
 >>> text = "Replace me by any text you'd like."
 

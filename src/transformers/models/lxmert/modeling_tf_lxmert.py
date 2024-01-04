@@ -174,6 +174,9 @@ class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
         self.box_layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="box_layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.feat_dim = config.visual_feat_dim
+        self.pos_dim = config.visual_pos_dim
+        self.config = config
 
     def call(self, visn_input, training=False):
         feats, boxes = visn_input
@@ -186,6 +189,23 @@ class TFLxmertVisualFeatureEncoder(tf.keras.layers.Layer):
 
         output = self.dropout(output, training=training)
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "visn_fc", None) is not None:
+            with tf.name_scope(self.visn_fc.name):
+                self.visn_fc.build([None, None, self.feat_dim])
+        if getattr(self, "visn_layer_norm", None) is not None:
+            with tf.name_scope(self.visn_layer_norm.name):
+                self.visn_layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "box_fc", None) is not None:
+            with tf.name_scope(self.box_fc.name):
+                self.box_fc.build([None, None, self.pos_dim])
+        if getattr(self, "box_layer_norm", None) is not None:
+            with tf.name_scope(self.box_layer_norm.name):
+                self.box_layer_norm.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertEmbeddings(tf.keras.layers.Layer):
@@ -201,7 +221,7 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
@@ -223,7 +243,12 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def call(self, input_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
@@ -284,6 +309,8 @@ class TFLxmertAttention(tf.keras.layers.Layer):
         )
 
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.ctx_dim = config.hidden_size
+        self.config = config
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -328,6 +355,20 @@ class TFLxmertAttention(tf.keras.layers.Layer):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.ctx_dim])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.ctx_dim])
+
 
 class TFLxmertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -341,11 +382,20 @@ class TFLxmertIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertOutput(tf.keras.layers.Layer):
@@ -359,12 +409,24 @@ class TFLxmertOutput(tf.keras.layers.Layer):
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertAttentionOutput(tf.keras.layers.Layer):
@@ -377,12 +439,24 @@ class TFLxmertAttentionOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
@@ -398,6 +472,17 @@ class TFLxmertSelfAttentionLayer(tf.keras.layers.Layer):
             attention_probs = self_output[1]
         attention_output = self.attention_output(self_output[0], input_tensor)
         return (attention_output, attention_probs) if output_attentions else (attention_output,)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self", None) is not None:
+            with tf.name_scope(self.self.name):
+                self.self.build(None)
+        if getattr(self, "attention_output", None) is not None:
+            with tf.name_scope(self.attention_output.name):
+                self.attention_output.build(None)
 
 
 class TFLxmertCrossAttentionLayer(tf.keras.layers.Layer):
@@ -421,6 +506,17 @@ class TFLxmertCrossAttentionLayer(tf.keras.layers.Layer):
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "att", None) is not None:
+            with tf.name_scope(self.att.name):
+                self.att.build(None)
+        if getattr(self, "attention_output", None) is not None:
+            with tf.name_scope(self.attention_output.name):
+                self.attention_output.build(None)
+
 
 class TFLxmertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -436,6 +532,20 @@ class TFLxmertLayer(tf.keras.layers.Layer):
         layer_output = self.transformer_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "transformer_output", None) is not None:
+            with tf.name_scope(self.transformer_output.name):
+                self.transformer_output.build(None)
 
 
 class TFLxmertXLayer(tf.keras.layers.Layer):
@@ -542,6 +652,32 @@ class TFLxmertXLayer(tf.keras.layers.Layer):
 
         return (lang_output, visn_output, attention_probs[0]) if output_attentions else (lang_output, visn_output)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "visual_attention", None) is not None:
+            with tf.name_scope(self.visual_attention.name):
+                self.visual_attention.build(None)
+        if getattr(self, "lang_self_att", None) is not None:
+            with tf.name_scope(self.lang_self_att.name):
+                self.lang_self_att.build(None)
+        if getattr(self, "visn_self_att", None) is not None:
+            with tf.name_scope(self.visn_self_att.name):
+                self.visn_self_att.build(None)
+        if getattr(self, "lang_inter", None) is not None:
+            with tf.name_scope(self.lang_inter.name):
+                self.lang_inter.build(None)
+        if getattr(self, "lang_output", None) is not None:
+            with tf.name_scope(self.lang_output.name):
+                self.lang_output.build(None)
+        if getattr(self, "visn_inter", None) is not None:
+            with tf.name_scope(self.visn_inter.name):
+                self.visn_inter.build(None)
+        if getattr(self, "visn_output", None) is not None:
+            with tf.name_scope(self.visn_output.name):
+                self.visn_output.build(None)
+
 
 class TFLxmertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -630,6 +766,26 @@ class TFLxmertEncoder(tf.keras.layers.Layer):
             lang_encoder_outputs,
             cross_encoder_attentions if output_attentions else None,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "visn_fc", None) is not None:
+            with tf.name_scope(self.visn_fc.name):
+                self.visn_fc.build(None)
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if getattr(self, "x_layers", None) is not None:
+            for layer in self.x_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if getattr(self, "r_layers", None) is not None:
+            for layer in self.r_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @keras_serializable
@@ -770,6 +926,20 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             vision_attentions=vision_attentions if output_attentions else None,
             cross_encoder_attentions=cross_encoder_attentions if output_attentions else None,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
 
 
 class TFLxmertPreTrainedModel(TFPreTrainedModel):
@@ -966,6 +1136,14 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lxmert", None) is not None:
+            with tf.name_scope(self.lxmert.name):
+                self.lxmert.build(None)
+
 
 class TFLxmertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -976,6 +1154,7 @@ class TFLxmertPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states):
         # We "pool" the model by simply taking the hidden state corresponding
@@ -983,6 +1162,14 @@ class TFLxmertPooler(tf.keras.layers.Layer):
         first_token_tensor = hidden_states[:, 0]
         pooled_output = self.dense(first_token_tensor)
         return pooled_output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Lxmert
@@ -1002,6 +1189,7 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
             self.transform_act_fn = config.hidden_act
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -1009,6 +1197,17 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Lxmert
@@ -1025,10 +1224,15 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transform", None) is not None:
+            with tf.name_scope(self.transform.name):
+                self.transform.build(None)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
@@ -1067,6 +1271,14 @@ class TFLxmertMLMHead(tf.keras.layers.Layer):
 
         return prediction_scores
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
+
 
 class TFLxmertPreTrainingHeads(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
@@ -1078,11 +1290,23 @@ class TFLxmertPreTrainingHeads(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="seq_relationship",
         )
+        self.config = config
 
     def call(self, sequence_output, pooled_output):
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
         return prediction_scores, seq_relationship_score
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
+        if getattr(self, "seq_relationship", None) is not None:
+            with tf.name_scope(self.seq_relationship.name):
+                self.seq_relationship.build([None, None, self.config.hidden_size])
 
 
 class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
@@ -1101,6 +1325,7 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="logit_fc_._3",
         )
+        self.hid_dim = hid_dim
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1109,6 +1334,20 @@ class TFLxmertVisualAnswerHead(tf.keras.layers.Layer):
         hidden_states = self.dense_1(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.hid_dim])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, self.hid_dim * 2])
+        if getattr(self, "dense_1", None) is not None:
+            with tf.name_scope(self.dense_1.name):
+                self.dense_1.build([None, None, self.hid_dim * 2])
 
 
 class TFLxmertVisualObjHead(tf.keras.layers.Layer):
@@ -1136,6 +1375,7 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
             )
             for key in self.visual_losses
         }
+        self.config = config
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -1143,6 +1383,18 @@ class TFLxmertVisualObjHead(tf.keras.layers.Layer):
         for key in self.visual_losses:
             output[key] = self.decoder_dict[key](hidden_states)
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transform", None) is not None:
+            with tf.name_scope(self.transform.name):
+                self.transform.build(None)
+        if getattr(self, "decoder_dict", None) is not None:
+            for layer in self.decoder_dict.values():
+                with tf.name_scope(layer.name):
+                    layer.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings("""Lxmert Model with a `language modeling` head on top.""", LXMERT_START_DOCSTRING)
@@ -1387,3 +1639,20 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             vision_attentions=lxmert_output.vision_attentions,
             cross_encoder_attentions=lxmert_output.cross_encoder_attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lxmert", None) is not None:
+            with tf.name_scope(self.lxmert.name):
+                self.lxmert.build(None)
+        if getattr(self, "cls", None) is not None:
+            with tf.name_scope(self.cls.name):
+                self.cls.build(None)
+        if getattr(self, "obj_predict_head", None) is not None:
+            with tf.name_scope(self.obj_predict_head.name):
+                self.obj_predict_head.build(None)
+        if getattr(self, "answer_head", None) is not None:
+            with tf.name_scope(self.answer_head.name):
+                self.answer_head.build(None)

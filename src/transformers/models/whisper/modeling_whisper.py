@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch Whisper model."""
 
+import copy
 import math
 import warnings
 from typing import Optional, Tuple, Union
@@ -27,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation.logits_process import WhisperTimeStampLogitsProcessor
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -41,6 +42,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -478,6 +480,15 @@ class WhisperFlashAttention2(WhisperAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
     def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
 
@@ -602,6 +613,12 @@ class WhisperFlashAttention2(WhisperAttention):
             softmax_scale (`float`, *optional*):
                 The scaling of QK^T before applying softmax. Default to 1 / sqrt(head_dim)
         """
+        if not self._flash_attn_uses_top_left_mask:
+            causal = self.is_causal
+        else:
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
+            causal = self.is_causal and query_length != 1
+
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
@@ -622,13 +639,13 @@ class WhisperFlashAttention2(WhisperAttention):
                 max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=dropout,
                 softmax_scale=softmax_scale,
-                causal=self.is_causal,
+                causal=causal,
             )
 
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=self.is_causal
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
@@ -673,9 +690,113 @@ class WhisperFlashAttention2(WhisperAttention):
         )
 
 
+class WhisperSdpaAttention(WhisperAttention):
+    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with BART->whisper, Bart->Whisper
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        if output_attentions or layer_head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "WhisperModel is using WhisperSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                key_value_states=key_value_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = self._shape(query_states, tgt_len, bsz)
+
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+            is_causal=self.is_causal and attention_mask is None and tgt_len > 1,
+        )
+
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
 WHISPER_ATTENTION_CLASSES = {
-    "default": WhisperAttention,
+    "eager": WhisperAttention,
     "flash_attention_2": WhisperFlashAttention2,
+    "sdpa": WhisperSdpaAttention,
 }
 
 
@@ -684,9 +805,8 @@ class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = WHISPER_ATTENTION_CLASSES[attn_type](
+        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -756,9 +876,8 @@ class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
 
-        self.self_attn = WHISPER_ATTENTION_CLASSES[attn_type](
+        self.self_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -771,7 +890,7 @@ class WhisperDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = WHISPER_ATTENTION_CLASSES[attn_type](
+        self.encoder_attn = WHISPER_ATTENTION_CLASSES[config._attn_implementation](
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -880,6 +999,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["WhisperEncoderLayer", "WhisperDecoderLayer"]
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1210,6 +1330,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1319,9 +1441,14 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+        elif self._use_sdpa and head_mask is None and not output_attentions:
+            # output_attentions=True & head_mask can not be supported when using SDPA.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
@@ -1910,14 +2037,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 FutureWarning,
             )
 
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
-
-        if generation_config is None:
-            generation_config = self.generation_config
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
@@ -2031,6 +2158,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         f"Unsupported language: {generation_config.language}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                     )
+                if language_token not in generation_config.lang_to_id:
+                    raise ValueError(
+                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                        "(You should just add it to the generation config)"
+                    )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:
                 forced_decoder_ids.append((1, None))  # automatically detect the language
@@ -2092,6 +2224,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_token_timestamps:
             kwargs["output_attentions"] = True
             return_dict_in_generate = True
+            kwargs["output_scores"] = True
 
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -2423,22 +2556,74 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # of shape (batch size, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
-        if num_frames is not None:
-            weights = weights[..., : num_frames // 2]
 
-        # Normalize and smoothen the weights.
-        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-        weights = (weights - mean) / std
-        weights = _median_filter(weights, self.config.median_filter_width)
+        if "beam_indices" in generate_outputs:
+            # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
+            # since the beam search strategy chooses the most probable sequences at the end of the search.
+            # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
+            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            weights = weights[:, :, :weight_length]
 
-        # Average the different cross-attention heads.
-        matrix = weights.mean(dim=1)
+            # If beam index is still -1, it means that the associated token id is EOS
+            # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
+            beam_indices = generate_outputs.beam_indices[:, :weight_length]
+            beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
+
+            # Select the cross attention from the right beam for each output sequences
+            weights = torch.stack(
+                [
+                    torch.index_select(weights[:, :, i, :], dim=0, index=beam_indices[:, i])
+                    for i in range(beam_indices.shape[1])
+                ],
+                dim=2,
+            )
 
         timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+        batch_size = timestamps.shape[0]
+
+        if num_frames is not None:
+            # two cases:
+            # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
+            # 2. num_frames is different, compute the DTW matrix for each sample sequentially
+
+            # we're using np.unique because num_frames can be int/list/tuple
+            if len(np.unique(num_frames)) == 1:
+                # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
+                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
+
+                weights = weights[..., : num_frames // 2]
+            else:
+                # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
+                repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
+                num_frames = np.repeat(num_frames, repeat_time)
+
+        if num_frames is None or isinstance(num_frames, int):
+            # Normalize and smoothen the weights.
+            std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
+            mean = torch.mean(weights, dim=-2, keepdim=True)
+            weights = (weights - mean) / std
+            weights = _median_filter(weights, self.config.median_filter_width)
+
+            # Average the different cross-attention heads.
+            weights = weights.mean(dim=1)
 
         # Perform dynamic time warping on each element of the batch.
-        for batch_idx in range(timestamps.shape[0]):
-            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
+        for batch_idx in range(batch_size):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
+                matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
+
+                # Normalize and smoothen the weights.
+                std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
+                mean = torch.mean(matrix, dim=-2, keepdim=True)
+                matrix = (matrix - mean) / std
+                matrix = _median_filter(matrix, self.config.median_filter_width)
+
+                # Average the different cross-attention heads.
+                matrix = matrix.mean(dim=0)
+            else:
+                matrix = weights[batch_idx]
+
+            text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
             timestamps[batch_idx, 1:] = torch.tensor(jump_times)
