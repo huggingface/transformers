@@ -285,7 +285,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         return model_embeds
 
     def _merge_input_ids_with_image_features(
-        self, image_features, inputs_embeds, input_ids, attention_mask, position_ids, labels
+        self, image_features, inputs_embeds, input_ids, attention_mask, labels
     ):
         num_images, num_image_patches, embed_dim = image_features.shape
         batch_size, sequence_length = input_ids.shape
@@ -430,7 +430,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
                 image_features = self.multi_modal_projector(image_features)
                 inputs_embeds, attention_mask, labels, position_ids = self._merge_input_ids_with_image_features(
-                    image_features, inputs_embeds, input_ids, attention_mask, position_ids, labels
+                    image_features, inputs_embeds, input_ids, attention_mask, labels
                 )
                 if labels is None:
                     labels = torch.full_like(attention_mask, self.config.ignore_index).to(torch.long)
