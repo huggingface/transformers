@@ -35,7 +35,6 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_scipy_available,
-    is_timm_available,
     is_torch_cuda_available,
     is_vision_available,
     replace_return_docstrings,
@@ -144,8 +143,6 @@ class MultiScaleDeformableAttentionFunction(Function):
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
 
-if is_timm_available():
-    from timm import create_model
 
 logger = logging.get_logger(__name__)
 
@@ -419,30 +416,13 @@ class DeformableDetrConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            kwargs = {}
-            if config.dilation:
-                kwargs["output_stride"] = 16
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=(2, 3, 4) if config.num_feature_levels > 1 else (4,),
-                in_chans=config.num_channels,
-                **kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
         backbone_model_type = config.backbone if config.use_timm_backbone else config.backbone_config.model_type
         if "resnet" in backbone_model_type:
@@ -457,7 +437,7 @@ class DeformableDetrConvEncoder(nn.Module):
     # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->DeformableDetr
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values).feature_maps
 
         out = []
         for feature_map in features:

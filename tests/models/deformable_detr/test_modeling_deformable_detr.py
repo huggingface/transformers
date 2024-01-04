@@ -152,7 +152,6 @@ class DeformableDetrModelTester:
             use_timm_backbone=False,
             backbone=None,
             backbone_config=resnet_config,
-            backbone=None,
             use_pretrained_backbone=False,
         )
 

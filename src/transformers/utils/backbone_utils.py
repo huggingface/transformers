@@ -288,7 +288,7 @@ class BackboneConfigMixin:
         return output
 
 
-def load_backbone(config, **kwargs):
+def load_backbone(config):
     """
     Loads the backbone model from a config object.
 
@@ -307,7 +307,9 @@ def load_backbone(config, **kwargs):
     backbone_kwargs = getattr(config, "backbone_kwargs", None)
 
     backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
-    backbone_kwargs.update(kwargs)
+
+    if backbone_kwargs and backbone_config is not None:
+        raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
     # If there is a backbone_config and a backbone checkpoint, and use_pretrained_backbone=False then the desired
     # behaviour is ill-defined: do you want to load from the checkpoint's config or the backbone_config?
