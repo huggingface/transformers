@@ -74,7 +74,7 @@ class PipelineIterator(IterableDataset):
         if isinstance(self._loader_batch_data, torch.Tensor):
             # Batch data is simple tensor, just fetch the slice
             result = self._loader_batch_data[self._loader_batch_index]
-        else:
+        elif isinstance(self._loader_batch_data, dict):
             # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
@@ -111,6 +111,44 @@ class PipelineIterator(IterableDataset):
             # Recreate the element by reusing the original class to make it look
             # batch_size=1
             result = self._loader_batch_data.__class__(loader_batched)
+        else:
+            # Batch data is assumed to be tuple
+            loader_batched = []
+            for element in self._loader_batch_data:
+                if isinstance(element, ModelOutput):
+                    # Convert ModelOutput to tuple first
+                    element = element.to_tuple()
+                    if isinstance(element[0], torch.Tensor):
+                        loader_batched.append(tuple(el[self._loader_batch_index].unsqueeze(0) for el in element))
+                    elif isinstance(element[0], np.ndarray):
+                        loader_batched.append(tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element))
+                    continue
+                if isinstance(element, tuple):
+                    # Those are stored as lists of tensors so need specific unbatching.
+                    if isinstance(element[0], torch.Tensor):
+                        loader_batched.append(tuple(el[self._loader_batch_index].unsqueeze(0) for el in element))
+                    elif isinstance(element[0], np.ndarray):
+                        loader_batched.append(tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element))
+                    continue
+                if element is None:
+                    # This can happen for optional data that get passed around
+                    loader_batched.append(None)
+                elif isinstance(element[self._loader_batch_index], torch.Tensor):
+                    # Take correct batch data, but make it looked like batch_size=1
+                    # For compatibility with other methods within transformers
+
+                    loader_batched.append(element[self._loader_batch_index].unsqueeze(0))
+                elif isinstance(element[self._loader_batch_index], np.ndarray):
+                    # Take correct batch data, but make it looked like batch_size=1
+                    # For compatibility with other methods within transformers
+                    loader_batched.append(np.expand_dims(element[self._loader_batch_index], 0))
+                else:
+                    # This is typically a list, so no need to `unsqueeze`.
+                    loader_batched.append(element[self._loader_batch_index])
+            # Recreate the element by reusing the original class to make it look
+            # batch_size=1
+            result = self._loader_batch_data.__class__(loader_batched)
+
         self._loader_batch_index += 1
         return result
 
@@ -128,9 +166,11 @@ class PipelineIterator(IterableDataset):
             # Try to infer the size of the batch
             if isinstance(processed, torch.Tensor):
                 first_tensor = processed
-            else:
+            elif isinstance(processed, dict):
                 key = list(processed.keys())[0]
                 first_tensor = processed[key]
+            else:
+                first_tensor = processed[0]
             if isinstance(first_tensor, list):
                 observed_batch_size = len(first_tensor)
             else:
