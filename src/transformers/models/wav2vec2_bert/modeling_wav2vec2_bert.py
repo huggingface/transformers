@@ -113,7 +113,7 @@ class Wav2Vec2BERTForPreTrainingOutput(ModelOutput):
     diversity_loss: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.seamless_m4t_v2._compute_new_attention_mask
+# Copied from transformers.models.seamless_m4t_v2.modeling_seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
     Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that
@@ -688,6 +688,7 @@ class Wav2Vec2BERTEncoderLayer(nn.Module):
         self.ffn2 = Wav2Vec2BERTFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
+    # Ignore copy
     def forward(
         self,
         hidden_states,
@@ -733,6 +734,7 @@ class Wav2Vec2BERTEncoderLayer(nn.Module):
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoder with Wav2Vec2Conformer->Wav2Vec2BERT
 class Wav2Vec2BERTEncoder(nn.Module):
+    # Ignore copy
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -849,7 +851,7 @@ class Wav2Vec2BERTGumbelVectorQuantizer(nn.Module):
         self.codevectors = nn.Parameter(
             torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
         )
-        # Copy ignore
+        # Ignore copy
         self.weight_proj = nn.Linear(config.feature_projection_input_dim, self.num_groups * self.num_vars)
 
         # can be decayed for training
@@ -962,6 +964,7 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
             stride=self.stride,
             padding=self.stride // 2,
         )
+        # Ignore copy
         self.self_attn = Wav2Vec2BERTSelfAttention(config, is_adapter_attention=True)
         self.self_attn_dropout = nn.Dropout(dropout)
 
@@ -1043,6 +1046,7 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
+    # Ignore copy
     def _init_weights(self, module):
         """Initialize the weights"""
         # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
@@ -1080,7 +1084,7 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
-    # Copy ignore
+    # Ignore copy
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
     ):
@@ -1521,8 +1525,8 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
     """Wav2Vec2BERT Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForCTC with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForCTC.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
@@ -1592,7 +1596,6 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
             # retrieve loss input_lengths from attention_mask
-            # Copy ignore
             attention_mask = (
                 attention_mask
                 if attention_mask is not None
@@ -1738,8 +1741,8 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
@@ -1756,6 +1759,7 @@ class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.freeze_base_model with wav2vec2_conformer->wav2vec2_bert
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1771,6 +1775,7 @@ class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1882,8 +1887,8 @@ class TDNNLayer(nn.Module):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
@@ -1903,6 +1908,7 @@ class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
 
         self.init_weights()
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.freeze_base_model with wav2vec2_conformer->wav2vec2_bert
     def freeze_base_model(self):
         """
         Calling this function will disable the gradient computation for the base model so that its parameters will not
@@ -1911,6 +1917,7 @@ class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
         for param in self.wav2vec2_bert.parameters():
             param.requires_grad = False
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector._get_tdnn_output_lengths
     def _get_tdnn_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the TDNN layers
@@ -1933,6 +1940,7 @@ class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert
     def forward(
         self,
         input_values: Optional[torch.Tensor],

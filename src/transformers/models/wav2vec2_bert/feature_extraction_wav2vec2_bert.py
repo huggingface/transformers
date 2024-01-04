@@ -29,7 +29,6 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.seamless_m4t.feature_extraction_seamless_m4t.SeamlessM4TFeatureExtractor with input_features->input_values, SeamlessM4T->Wav2Vec2BERT
 class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2BERT feature extractor.
