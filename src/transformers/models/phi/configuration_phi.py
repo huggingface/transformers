@@ -16,8 +16,6 @@
 """ Phi model configuration"""
 
 
-import math
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -44,8 +42,7 @@ class PhiConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 51200):
             Vocabulary size of the Phi model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PhiModel`]. Note that the vocabulary size will be padded to be a
-            multiple of `pad_vocab_size_multiple`.
+            `inputs_ids` passed when calling [`PhiModel`].
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 8192):
@@ -96,8 +93,6 @@ class PhiConfig(PretrainedConfig):
             Percentage of the query and keys which will have rotary embedding.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states.
-        pad_vocab_size_multiple (`int`, *optional*, defaults to 1):
-            Vocabulary size will be padded to be a multiple of this value.
         bos_token_id (`int`, *optional*, defaults to 1):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -142,12 +137,11 @@ class PhiConfig(PretrainedConfig):
         rope_scaling=None,
         partial_rotary_factor=0.5,
         qk_layernorm=False,
-        pad_vocab_size_multiple=1,
         bos_token_id=1,
         eos_token_id=2,
         **kwargs,
     ):
-        self.vocab_size = int(math.ceil(vocab_size / pad_vocab_size_multiple) * pad_vocab_size_multiple)
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
