@@ -151,6 +151,7 @@ class DeformableDetrModelTester:
             use_timm_backbone=False,
             backbone_config=resnet_config,
             backbone=None,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
