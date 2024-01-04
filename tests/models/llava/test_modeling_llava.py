@@ -332,3 +332,37 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # Make sure that `generate` works
         _ = model.generate(**inputs, max_new_tokens=20)
+
+    @slow
+    def test_llava_merge_inputs_error_bug(self):
+        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
+        model_id = "llava-hf/llava-1.5-13b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id)
+
+        # Simulate some user inputs
+        pixel_values = torch.randn(
+            (2, 3, 336, 336),
+            dtype=torch.float,
+            device=torch_device,
+        )
+        input_ids = torch.tensor(
+            [
+                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
+                [1, 15043, 7084, 29901, 29871, 32000, 29871, 13, 7900],
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        attention_mask = torch.tensor(
+            [[0, 0, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1]],
+            dtype=torch.long,
+            device=torch_device,
+        )
+
+        # Make sure that the loss is properly computed
+        _ = model(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=input_ids,
+        )
