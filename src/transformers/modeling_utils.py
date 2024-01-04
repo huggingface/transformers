@@ -1578,7 +1578,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(list(module.parameters()), modifier_rank=0):
+            with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
                 self._init_weights(module)
         else:
             self._init_weights(module)
