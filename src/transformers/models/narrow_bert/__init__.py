@@ -41,9 +41,7 @@ else:
     _import_structure["modeling_narrow_bert"] = [
         "NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "NarrowBertForMaskedLM",
-        "NarrowBertForCausalLM",
         "NarrowBertForMultipleChoice",
-        "NarrowBertForQuestionAnswering",
         "NarrowBertForSequenceClassification",
         "NarrowBertForTokenClassification",
         "NarrowBertLayer",
@@ -76,9 +74,7 @@ if TYPE_CHECKING:
         from .modeling_narrow_bert import (
             NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             NarrowBertForMaskedLM,
-            NarrowBertForCausalLM,
             NarrowBertForMultipleChoice,
-            NarrowBertForQuestionAnswering,
             NarrowBertForSequenceClassification,
             NarrowBertForTokenClassification,
             NarrowBertLayer,

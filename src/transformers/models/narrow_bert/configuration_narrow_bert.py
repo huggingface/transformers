@@ -112,11 +112,14 @@ class NarrowBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         **kwargs
     ):
+        if full_length_layers > num_hidden_layers:
+            raise ValueError("You have to specify fewer full_length_layers than total num_hidden_layers.")
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.full_length_layers = full_length_layers
+        self.num_narrow_layers = num_hidden_layers - full_length_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act

@@ -42,7 +42,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, SequenceSummary
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
@@ -503,6 +503,7 @@ class NarrowBertEncoder(nn.Module):
     def __init__(self, config, narrow=False):
         super().__init__()
         self.config = config
+        self.narrow = narrow
         if not narrow:
             self.layer = nn.ModuleList([NarrowBertLayer(config) for _ in range(config.full_length_layers)])
         else:
@@ -535,10 +536,11 @@ class NarrowBertEncoder(nn.Module):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         next_decoder_cache = () if use_cache else None
 
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        if output_hidden_states and not self.narrow:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
+        for i, layer_module in enumerate(self.layer):
+            
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
@@ -565,15 +567,14 @@ class NarrowBertEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(
@@ -653,7 +654,6 @@ class NarrowBertPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_narrow_bert
     base_model_prefix = "narrow_bert"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -670,10 +670,6 @@ class NarrowBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-    
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, NarrowBertEncoder):
-            module.gradient_checkpointing = value
 
 
 NARROW_BERT_START_DOCSTRING = r"""
@@ -910,15 +906,21 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         )
         encoder_hidden_states = encoder_outputs[0]
         if self.pooler is None:
-            narrow_inputs = []
-            for i in range(batch_size):
-                batch_input = encoder_hidden_states[i][narrow_mask[i]]
-                narrow_inputs.append(batch_input)
-            narrow_inputs = pad_sequence(narrow_inputs, batch_first=True)
+            if narrow_mask is not None:
+                narrow_inputs = []
+                for i in range(batch_size):
+                    batch_input = encoder_hidden_states[i][narrow_mask[i]]
+                    narrow_inputs.append(batch_input)
+                narrow_inputs = pad_sequence(narrow_inputs, batch_first=True)
+            else:
+                # Using as normal BERT
+                narrow_inputs = encoder_hidden_states
+                encoder_hidden_states = None
+                extended_attention_mask = None
         else:
             narrow_inputs = encoder_hidden_states[:, 0].unsqueeze(1)
 
-        encoder_outputs = self.encoder_narrow(
+        narrow_encoder_outputs = self.encoder_narrow(
             narrow_inputs,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
@@ -931,12 +933,30 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = encoder_outputs[0]
+        sequence_output = narrow_encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
+            parsing_idx = 1
+            if output_hidden_states:
+                all_hidden_states = encoder_outputs[parsing_idx] + narrow_encoder_outputs[parsing_idx]
+                parsing_idx += 1
+            else:
+                all_hidden_states = ()
+            if output_attentions:
+                all_attentions = encoder_outputs[parsing_idx] + narrow_encoder_outputs[parsing_idx]
+                parsing_idx += 1
+            else:
+                all_attentions = ()
+            if pooled_output is None:
+                pooled_output = ()
+            return (sequence_output, pooled_output) + (all_hidden_states,) + (all_attentions,)
+        
+        if output_hidden_states:
+            encoder_outputs.hidden_states += narrow_encoder_outputs.hidden_states
+        if output_attentions:
+            encoder_outputs.attentions += narrow_encoder_outputs.attentions
+        
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -949,6 +969,8 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
 
 @add_start_docstrings("""NarrowBERT Model with a `language modeling` head on top. """, NARROW_BERT_START_DOCSTRING)
 class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
+    _tied_weights_keys = ["predictions.decoder.bias", "cls.predictions.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1024,6 +1046,7 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            narrow_mask=narrow_mask,
         )
 
         sequence_output = outputs[0]
