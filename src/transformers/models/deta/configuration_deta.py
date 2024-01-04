@@ -49,6 +49,8 @@ class DetaConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetaModel`] can
             detect in a single image. In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
@@ -150,6 +152,7 @@ class DetaConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
+        backbone_kwargs=None,
         num_queries=900,
         max_position_embeddings=2048,
         encoder_layers=6,
@@ -208,6 +211,7 @@ class DetaConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model

@@ -53,6 +53,8 @@ class OneFormerConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
         ignore_value (`int`, *optional*, defaults to 255):
             Values to be ignored in GT label while calculating loss.
         num_queries (`int`, *optional*, defaults to 150):
@@ -156,6 +158,7 @@ class OneFormerConfig(PretrainedConfig):
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
+        backbone_kwargs: Optional[Dict] = None,
         ignore_value: int = 255,
         num_queries: int = 150,
         no_object_weight: int = 0.1,
@@ -227,6 +230,7 @@ class OneFormerConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
         self.ignore_value = ignore_value
         self.num_queries = num_queries
         self.no_object_weight = no_object_weight

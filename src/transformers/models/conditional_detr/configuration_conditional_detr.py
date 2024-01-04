@@ -98,6 +98,8 @@ class ConditionalDetrConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use pretrained weights for the backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -168,6 +170,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         position_embedding_type="sine",
         backbone="resnet50",
         use_pretrained_backbone=True,
+        backbone_kwargs=None,
         dilation=False,
         class_cost=2,
         bbox_cost=5,
@@ -224,6 +227,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost

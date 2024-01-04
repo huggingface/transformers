@@ -45,6 +45,8 @@ class UperNetConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
         hidden_size (`int`, *optional*, defaults to 512):
             The number of hidden units in the convolutional layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -87,6 +89,7 @@ class UperNetConfig(PretrainedConfig):
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,
+        backbone_kwargs=None,
         hidden_size=512,
         initializer_range=0.02,
         pool_scales=[1, 2, 3, 6],
@@ -118,6 +121,7 @@ class UperNetConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.pool_scales = pool_scales
