@@ -732,9 +732,7 @@ class Wav2Vec2BERTEncoderLayer(nn.Module):
         return hidden_states, attn_weigts
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoder with Wav2Vec2Conformer->Wav2Vec2BERT
 class Wav2Vec2BERTEncoder(nn.Module):
-    # Ignore copy
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -1190,12 +1188,10 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
     "The bare Wav2Vec2BERT Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerModel with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT
 class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
     def __init__(self, config: Wav2Vec2BERTConfig):
         super().__init__(config)
         self.config = config
-
         self.feature_projection = Wav2Vec2BERTFeatureProjection(config)
 
         # model only needs masking vector if mask prob is > 0.0
@@ -1213,6 +1209,7 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
         self,
         hidden_states: torch.FloatTensor,
@@ -1318,8 +1315,8 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
 
 
 @add_start_docstrings("""Wav2Vec2BERT Model with a quantizer and `VQ` head on top.""", WAV2VEC2_BERT_START_DOCSTRING)
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForPreTraining with Wav2Vec2Conformer->Wav2Vec2BERT,wav2vec2-conformer->wav2vec2-bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.__init__ with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert
     def __init__(self, config: Wav2Vec2BERTConfig):
         super().__init__(config)
         self.wav2vec2_bert = Wav2Vec2BERTModel(config)
@@ -1333,6 +1330,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.set_gumbel_temperature
     def set_gumbel_temperature(self, temperature: int):
         """
         Set the Gumbel softmax temperature to a given value. Only necessary for training
@@ -1340,6 +1338,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         self.quantizer.temperature = temperature
 
     @staticmethod
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.compute_contrastive_logits
     def compute_contrastive_logits(
         target_features: torch.FloatTensor,
         negative_features: torch.FloatTensor,
@@ -1362,6 +1361,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2BERTForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,wav2vec2_bert-base->wav2vec2-bert-rel-pos-large
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1639,8 +1639,8 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForSequenceClassification with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
@@ -1673,6 +1673,7 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT
     def forward(
         self,
         input_values: Optional[torch.Tensor],
