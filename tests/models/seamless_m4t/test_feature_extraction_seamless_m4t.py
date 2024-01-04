@@ -62,7 +62,7 @@ class SeamlessM4TFeatureExtractionTester(unittest.TestCase):
         feature_size=10,
         padding_value=0.0,
         sampling_rate=4_000,
-        return_attention_mask=True,
+        return_attention_mask=False,
         do_normalize=True,
         stride=2,
     ):
