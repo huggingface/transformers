@@ -220,6 +220,10 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        return_attention_mask = (
+            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
+        )
+
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 3:
             raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")

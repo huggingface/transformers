@@ -171,6 +171,41 @@ class SeamlessM4TFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_attention_mask(self):
+        feature_extractor_args = self.feat_extract_tester.prepare_feat_extract_dict()
+        feature_extractor_args["return_attention_mask"] = True
+
+        feature_extractor = self.feature_extraction_class(**feature_extractor_args)
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test attention mask when passing it to forward call
+        output = feature_extractor(np_speech_inputs, padding=True, return_tensors="np", return_attention_mask=True)
+        input_features = output.input_features
+
+        attention_mask = output.attention_mask
+        self.assertTrue(attention_mask.ndim == 2)
+        self.assertTrue(attention_mask.shape[0] == 3)
+        self.assertTrue(attention_mask.shape[-1] == input_features.shape[1])
+
+        # Test attention mask when initializing
+        feature_extractor_args["return_attention_mask"] = True
+        feature_extractor = self.feature_extraction_class(**feature_extractor_args)
+
+        output = feature_extractor(np_speech_inputs, padding=True, return_tensors="np")
+        input_features = output.input_features
+
+        attention_mask = output.attention_mask
+        self.assertTrue(attention_mask.ndim == 2)
+        self.assertTrue(attention_mask.shape[0] == 3)
+        self.assertTrue(attention_mask.shape[-1] == input_features.shape[1])
+
+        # Test attention mask with list of numpy arrays.
+        list_attention_mask = feature_extractor(speech_inputs, return_tensors="np").attention_mask
+        self.assertTrue(list_attention_mask.shape[-1] == attention_mask.shape[-1])
+        self.assertTrue((list_attention_mask == attention_mask).all())
+
     @require_torch
     # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
     def test_double_precision_pad(self):
