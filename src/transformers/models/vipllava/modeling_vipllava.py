@@ -332,7 +332,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
         final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
         if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_image_indices]
+            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
 
         # 5. Fill the embeddings corresponding to the images. Anything that is still zeros needs filling
         image_to_overwrite = torch.all(final_embedding == 0, dim=-1)
