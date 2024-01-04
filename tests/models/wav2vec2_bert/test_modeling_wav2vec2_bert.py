@@ -657,7 +657,7 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        model = Wav2Vec2BERTModel.from_pretrained("facebook/wav2vec2-bert-rel-pos-large")
+        model = Wav2Vec2BERTModel.from_pretrained("facebook/w2v-bert-2.0")
         self.assertIsNotNone(model)
 
 
@@ -883,9 +883,7 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
 
         model.eval()
         with torch.no_grad():
-            outputs = model.wav2vec2_bert(
-                inputs["input_features"], attention_mask=inputs["attention_mask"], output_attentions=True
-            )
+            outputs = model.wav2vec2_bert(**inputs, output_attentions=True)
 
         # fmt: off
         expected_slice_0 = torch.tensor(
@@ -933,7 +931,7 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
         inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
-        features_shape = inputs["input_features"].shape[:2]
+        features_shape = inputs["input_vales"].shape[:2]
 
         # apply augmentation
         model.wav2vec2_bert.config.apply_spec_augment = True
@@ -948,7 +946,6 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         )
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 
-        inputs["input_values"] = inputs.pop("input_features")
         inputs["output_attentions"] = True
         inputs["mask_time_indices"] = mask_time_indices
 
