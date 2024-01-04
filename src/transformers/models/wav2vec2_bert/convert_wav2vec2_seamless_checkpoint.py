@@ -21,7 +21,7 @@ import torch
 from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
-    SeamlessM4TFeatureExtractor,
+    Wav2Vec2BERTFeatureExtractor,
     Wav2Vec2BERTConfig,
     Wav2Vec2BERTForPreTraining,
     logging,
@@ -135,7 +135,7 @@ def convert_wav2vec2_bert_checkpoint(
         hf_wav2vec.push_to_hub(repo_id, create_pr=True)
 
     # save feature extractor
-    fe = SeamlessM4TFeatureExtractor(padding_value=1)
+    fe = Wav2Vec2BERTFeatureExtractor(padding_value=1)
     fe.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:
@@ -171,7 +171,7 @@ def convert_wav2vec2_bert_checkpoint(
 
         inputs = fe(waveform, return_tensors="pt", padding=True)
         with torch.no_grad():
-            outputs = hf_wav2vec.wav2vec2_bert(inputs["input_features"], attention_mask=inputs["attention_mask"])
+            outputs = hf_wav2vec.wav2vec2_bert(**inputs)
 
         torch.testing.assert_close(original_output, outputs.last_hidden_state, atol=5e-3, rtol=5e-3)
 
@@ -189,12 +189,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--config_path",
-        default="/home/yoach/tmp/wav2vec_seamless",
+        default=None,
         type=str,
         help="Path to hf config.json of model to convert",
     )
     parser.add_argument(
-        "--repo_id", default="facebook/w2v-bert-2.0", type=str, help="Push to this repo id if precised."
+        "--repo_id", default="w2v-bert-2.0", type=str, help="Push to this repo id if precised."
     )
     parser.add_argument(
         "--audio_path",

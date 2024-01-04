@@ -29,7 +29,7 @@ from ...utils import PaddingStrategy, TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.seamless_m4t.feature_extraction_seamless_m4t with input_features->input_values, SeamlessM4T->Wav2Vec2BERT
+# Copied from transformers.models.seamless_m4t.feature_extraction_seamless_m4t with input_values->input_values, SeamlessM4T->Wav2Vec2BERT
 class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2BERT feature extractor.
@@ -221,6 +221,10 @@ class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        return_attention_mask = (
+            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
+        )
+
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 3:
             raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
@@ -265,24 +269,25 @@ class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
 
         # Wav2Vec2BERT needs to process extracted features
         input_values = padded_inputs.get("input_values")
-        attention_mask = padded_inputs.get("attention_mask")
+        attention_mask = padded_inputs.pop("attention_mask")
 
         batch_size, num_frames, num_channels = input_values.shape
 
         remainder = num_frames % self.stride
         if remainder != 0:
             input_values = input_values[:, :num_frames, :]
-            if return_attention_mask:
-                attention_mask = attention_mask[:, :num_frames]
+            attention_mask = attention_mask[:, :num_frames]
 
-        input_values = np.reshape(input_values, (batch_size, num_frames // self.stride, num_channels * self.stride))
+        input_values = np.reshape(
+            input_values, (batch_size, num_frames // self.stride, num_channels * self.stride)
+        )
 
         indices = np.arange(0, num_frames)
-        if return_attention_mask:
-            attention_mask = attention_mask[:, indices % self.stride == 1]
+        attention_mask = attention_mask[:, indices % self.stride == 1]
 
         padded_inputs["input_values"] = input_values
-        padded_inputs["attention_mask"] = attention_mask
+        if return_attention_mask:
+            padded_inputs["attention_mask"] = attention_mask
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

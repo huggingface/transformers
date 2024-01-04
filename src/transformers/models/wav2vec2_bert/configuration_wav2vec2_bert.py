@@ -54,9 +54,9 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+        hidden_act (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         activation_dropout (`float`, *optional*, defaults to 0.0):
@@ -113,9 +113,9 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
         num_negatives (`int`, *optional*, defaults to 100):
             Number of negative samples for the contrastive loss.
-        codevector_dim (`int`, *optional*, defaults to 256):
+        codevector_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the quantized feature vectors.
-        proj_codevector_dim (`int`, *optional*, defaults to 256):
+        proj_codevector_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the final projection of both the quantized and the transformer features.
         diversity_loss_weight (`int`, *optional*, defaults to 0.1):
             The weight of the codebook diversity loss component.
@@ -129,7 +129,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
             instance of [`Wav2Vec2BERTForSequenceClassification`].
-        classifier_proj_size (`int`, *optional*, defaults to 256):
+        classifier_proj_size (`int`, *optional*, defaults to 768):
             Dimensionality of the projection before token mean-pooling for classification.
         tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
             A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
@@ -152,10 +152,13 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         num_adapter_layers (`int`, *optional*, defaults to 1):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
+        use_intermediate_ffn_before_adapter (`bool`, *optional*, defaults to `False`):
+            Whether an intermediate feed-forward block should be stacked on top of the Wav2Vec2BERT Encoder and before the adapter network.
+             Only relevant if `add_adapter is True`.
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
-        position_embeddings_type (`str`, *optional*, defaults to `"relative"`):
+        position_embeddings_type (`str`, *optional*, defaults to `"relative_key"`):
             Can be specified to :
                 - `rotary`, for rotary position embeddings.
                 - `relative`, for relative position embeddings.
@@ -174,10 +177,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
-
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
-            Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
-            input audios with [`Wav2Vec2BERTFeatureExtractor`].
+            Input dimension of this model, i.e the dimension after processing input audios with [`Wav2Vec2BERTFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
     Example:
 
     ```python
@@ -202,7 +203,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         num_hidden_layers=24,
         num_attention_heads=16,
         intermediate_size=4096,
-        hidden_act="gelu",
+        feature_projection_input_dim=160,
+        hidden_act="swish",
         hidden_dropout=0.0,
         activation_dropout=0.0,
         attention_dropout=0.0,
@@ -223,13 +225,13 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         num_codevector_groups=2,
         contrastive_logits_temperature=0.1,
         num_negatives=100,
-        codevector_dim=256,
-        proj_codevector_dim=256,
+        codevector_dim=768,
+        proj_codevector_dim=768,
         diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
-        classifier_proj_size=256,
+        classifier_proj_size=768,
         tdnn_dim=(512, 512, 512, 512, 1500),
         tdnn_kernel=(5, 3, 3, 1, 1),
         tdnn_dilation=(1, 2, 3, 1, 1),
@@ -241,16 +243,15 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         adapter_kernel_size=3,
         adapter_stride=2,
         num_adapter_layers=1,
+        use_intermediate_ffn_before_adapter=False,
         output_hidden_size=None,
-        position_embeddings_type="relative",
+        position_embeddings_type="relative_key",
         rotary_embedding_base=10000,
         max_source_positions=5000,
         left_max_position_embeddings=64,
         right_max_position_embeddings=8,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        use_intermediate_ffn_before_adapter=False,  # TODO add to docstrings
-        feature_projection_input_dim=160,  # TODO add to docstrings
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -259,6 +260,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
+        self.feature_projection_input_dim = feature_projection_input_dim
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -320,6 +322,9 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size or hidden_size
+        if use_intermediate_ffn_before_adapter and not add_adapter:
+            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
+        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
 
         # SequenceClassification-specific parameter. Feel free to ignore for other classes.
         self.classifier_proj_size = classifier_proj_size
@@ -329,12 +334,6 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
-
-        if use_intermediate_ffn_before_adapter and not add_adapter:
-            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
-        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
-
-        self.feature_projection_input_dim = feature_projection_input_dim
 
     @property
     def inputs_to_logits_ratio(self):
