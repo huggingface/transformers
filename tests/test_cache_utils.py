@@ -230,11 +230,11 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(decoded[0].endswith(last_output))
 
-    @parameterized.expand(attn_implementation=["eager", "sdpa","fa2"])
-    def test_static_cache_greedy(self):
+    @parameterized.expand(["eager", "sdpa","flash_attention_2"])
+    def test_static_cache_greedy(self, attn_implementation):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left", pad_token = "<s>")
         model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16, attn_implementation="eager",
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16, attn_implementation=attn_implementation,
         )
         # TODO when generating, init the cache with the class and the model config and the input batch size
         cache = StaticCache(model.config, model.config.num_hidden_layers, 2, 4096, model.config.num_attention_heads, model.config.hidden_size)
