@@ -187,7 +187,7 @@ class Wav2Vec2BERTModelTester:
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
-        
+
     def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_values, attention_mask):
         config.add_adapter = True
         config.use_intermediate_ffn_before_adapter = True
@@ -199,7 +199,7 @@ class Wav2Vec2BERTModelTester:
             result.last_hidden_state.shape,
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
-        
+
         # also try with different adapter proj dim
         config.output_hidden_size = 8
         model = Wav2Vec2BERTModel(config=config)
@@ -425,7 +425,7 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    
+
     pipeline_model_mapping = (
         {
             "audio-classification": Wav2Vec2BERTForSequenceClassification,
@@ -474,10 +474,10 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_with_adapter_for_ctc(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
-        
-    def test_model_with_adapter_for_ctc(self):
+
+    def test_model_with_intermediate_ffn_before_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model_with_intermediate_ffn_before_adapter(*config_and_inputs)        
+        self.model_tester.create_and_check_model_with_intermediate_ffn_before_adapter(*config_and_inputs)
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -657,7 +657,7 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @slow
     def test_model_from_pretrained(self):
-        model = Wav2Vec2BERTModel.from_pretrained("facebook/w2v-bert-2.0")
+        model = Wav2Vec2BERTModel.from_pretrained("ylacombe/w2v-bert-2.0")
         self.assertIsNotNone(model)
 
 
@@ -873,9 +873,9 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
 
     def test_inference_w2v2_bert(self):
-        model = Wav2Vec2BERTForPreTraining.from_pretrained("facebook/w2v-bert-2.0")
+        model = Wav2Vec2BERTForPreTraining.from_pretrained("ylacombe/w2v-bert-2.0")
         model.to(torch_device)
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("ylacombe/w2v-bert-2.0")
 
         input_speech = self._load_datasamples(2)
 
@@ -924,14 +924,14 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(list(outputs.last_hidden_state.shape), [2, 326, 1024])
 
     def test_inference_pretrained(self):
-        model_id = "facebook/w2v-bert-2.0"
+        model_id = "ylacombe/w2v-bert-2.0"
         model = Wav2Vec2BERTForPreTraining.from_pretrained(model_id)
         model.to(torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
         input_speech = self._load_datasamples(2)
         inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
-        features_shape = inputs["input_vales"].shape[:2]
+        features_shape = inputs["input_values"].shape[:2]
 
         # apply augmentation
         model.wav2vec2_bert.config.apply_spec_augment = True

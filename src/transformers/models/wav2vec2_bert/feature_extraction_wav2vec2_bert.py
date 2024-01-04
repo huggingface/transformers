@@ -263,7 +263,7 @@ class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+            return_attention_mask=True,
             return_tensors="np",
         )
 
@@ -278,9 +278,7 @@ class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
             input_values = input_values[:, :num_frames, :]
             attention_mask = attention_mask[:, :num_frames]
 
-        input_values = np.reshape(
-            input_values, (batch_size, num_frames // self.stride, num_channels * self.stride)
-        )
+        input_values = np.reshape(input_values, (batch_size, num_frames // self.stride, num_channels * self.stride))
 
         indices = np.arange(0, num_frames)
         attention_mask = attention_mask[:, indices % self.stride == 1]

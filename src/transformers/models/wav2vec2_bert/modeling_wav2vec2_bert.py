@@ -500,7 +500,7 @@ class Wav2Vec2BERTSelfAttention(nn.Module):
 
     def __init__(self, config, is_adapter_attention=False):
         super().__init__()
-        hidden_size = config.hidden_size if not is_adapter_attention else config.output_hidden_size  
+        hidden_size = config.hidden_size if not is_adapter_attention else config.output_hidden_size
 
         self.head_size = hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
@@ -1096,9 +1096,11 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
             return torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor") + 1
 
         if add_adapter:
-            padding = self.config.adapter_kernel_size//2
+            padding = self.config.adapter_kernel_size // 2
             for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, self.config.adapter_kernel_size, self.config.adapter_stride, padding)
+                input_lengths = _conv_out_length(
+                    input_lengths, self.config.adapter_kernel_size, self.config.adapter_stride, padding
+                )
 
         return input_lengths
 
@@ -1592,7 +1594,9 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
             # retrieve loss input_lengths from attention_mask
             # Copy ignore
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones(input_values.shape[:2], device=input_values.device, dtype=torch.long)
+                attention_mask
+                if attention_mask is not None
+                else torch.ones(input_values.shape[:2], device=input_values.device, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
 

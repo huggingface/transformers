@@ -21,8 +21,8 @@ import torch
 from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
-    Wav2Vec2BERTFeatureExtractor,
     Wav2Vec2BERTConfig,
+    Wav2Vec2BERTFeatureExtractor,
     Wav2Vec2BERTForPreTraining,
     logging,
 )
@@ -193,9 +193,7 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf config.json of model to convert",
     )
-    parser.add_argument(
-        "--repo_id", default="w2v-bert-2.0", type=str, help="Push to this repo id if precised."
-    )
+    parser.add_argument("--repo_id", default="w2v-bert-2.0", type=str, help="Push to this repo id if precised.")
     parser.add_argument(
         "--audio_path",
         default="/home/yoach/transformers/audio_vits.wav",
