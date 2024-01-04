@@ -18,6 +18,8 @@ Weights conversion script for Phi
 
 This script downloads both Phi-1 and Phi-1.5 checkpoints to "checkpoint_path" and then converts the weights to
 HugfgingFace model's format and saves them in "pytorch_dump_folder_path".
+
+Example : $python ./convert_phi_weights_to_hf.py --model_name "microsoft/phi-2" --pytorch_dump_folder ./dump_folder/ --checkpoint_path ./ckpt_path/
 """
 
 import argparse
@@ -109,7 +111,7 @@ def convert_phi_weights(
         converted_checkpoint = {}
         model_checkpoint = {}
 
-        # for phi-2 the weights are stored in 2 different safetensors file so we need to iterate over thaat list and download one at a time
+        # for phi-2 the weights are stored in 2 different safetensors file so we need to iterate over that list and download one at a time
         for model_each_url in model_url:
             model_path = os.path.join(checkpoint_path, model_name + "_" + model_each_url.split("/")[-1])
             if not os.path.exists(model_path):
@@ -123,9 +125,18 @@ def convert_phi_weights(
             model_checkpoint.update(**loaded_weights)
 
         model_type = model_name.split("/")[1]  # phi-1 or phi-1_5 or phi-2
-        config = PhiConfig.from_pretrained(
-            f"susnato/{model_type}_dev" if model_name != "microsoft/phi-2" else f"susnato/{model_type}"
-        )
+
+        # init the config for phi-1 and phi-1.5
+        config = PhiConfig()
+        # if we are dealing with phi-2 then update the config
+        if model_type == "phi-2":
+            config.hidden_size = 2560
+            config.intermediate_size = 10240
+            config.num_hidden_layers = 32
+            config.resid_pdrop = 0.1
+            config.partial_rotary_factor = 0.4
+            config.num_hidden_layers = 32
+            config.torch_dtype = "float16"
 
         # Converting the weights
         converted_checkpoint.update(**convert_weights(model_checkpoint, PHI_MAPPING, config))

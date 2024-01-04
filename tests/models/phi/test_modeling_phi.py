@@ -448,3 +448,22 @@ class PhiIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = torch.tensor([[6.4830,  6.1644,  3.4055,  2.2848,  5.4654,  2.8360,  5.5975,  5.5391, 7.3101,  4.2498,  2.5913, 10.3885,  6.4359,  8.7982,  5.6534,  0.5150, 2.7498,  3.1930,  2.4334,  1.7781,  1.5613,  1.3067,  0.8291,  0.5633, 0.6522,  9.8191,  5.5771,  2.7987,  4.2845,  3.7030], [6.0642,  7.8242,  3.4634,  1.9259,  4.3169,  2.0913,  6.0446,  3.6804, 6.6736,  4.0727,  2.1791, 11.4139,  5.6795,  7.5652,  6.2039,  2.7174, 4.3266,  3.6930,  2.8058,  2.6721,  2.3047,  2.0848,  2.0972,  2.0441, 1.3160,  9.2085,  4.5557,  3.0296,  2.6045,  2.4059]]).to(torch_device)  # fmt: skip
 
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-3, rtol=1e-3))
+
+    def test_phi_2_generation(self):
+        model = PhiForCausalLM.from_pretrained("susnato/phi-2")
+        tokenizer = AutoTokenizer.from_pretrained("susnato/phi-2")
+
+        inputs = tokenizer(
+            "Can you help me write a formal email to a potential business partner proposing a joint venture?",
+            return_tensors="pt",
+            return_attention_mask=False,
+        )
+
+        outputs = model.generate(**inputs, max_new_tokens=30)
+        output_text = tokenizer.batch_decode(outputs)
+
+        EXPECTED_OUTPUT = [
+            "Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
