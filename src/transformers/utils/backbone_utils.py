@@ -311,7 +311,7 @@ def load_backbone(config):
         raise ValueError("Cannot specify both config.backbone_config and config.backbone")
 
     if backbone_config is not None or use_timm_backbone or backbone_checkpoint is not None:
-        # This is a config from the parent model the has a backbone. This contains the pretrained backbone checkpoint
+        # This is a config from the parent model that has a backbone. This contains the pretrained backbone checkpoint
         # if specified.
         # By default, most models don't have use_pretrained_backbone set.
         if use_pretrained_backbone:
