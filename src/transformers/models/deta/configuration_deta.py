@@ -45,8 +45,7 @@ class DetaConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, `False`):
-            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
-            when this is `False`.
+            Whether to use pretrained weights for the backbone.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetaModel`] can
             detect in a single image. In case `two_stage` is set to `True`, we use `two_stage_num_proposals` instead.
@@ -186,6 +185,9 @@ class DetaConfig(PretrainedConfig):
         focal_alpha=0.25,
         **kwargs,
     ):
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 

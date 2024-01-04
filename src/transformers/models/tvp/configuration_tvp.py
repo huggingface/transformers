@@ -48,8 +48,7 @@ class TvpConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
-            when this is `False`.
+            Whether to use pretrained weights for the backbone.
         distance_loss_weight (`float`, *optional*, defaults to 1.0):
             The weight of distance loss.
         duration_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -127,6 +126,9 @@ class TvpConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
