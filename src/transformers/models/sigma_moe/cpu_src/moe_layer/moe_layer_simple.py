@@ -79,24 +79,18 @@ class MoE(torch.nn.Module):
         self.values = torch.nn.Parameter(
             torch.empty(self.n_experts, self.expert_size, self.v_dim)
         )
-        self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
-        torch.nn.init.normal_(self.keys, std=d_model**-0.5 * weight_std_scale)
-        torch.nn.init.normal_(self.values, std=self.size**-0.5 * weight_std_scale)
-        torch.nn.init.normal_(
-            self.expert_sel.weight, std=self.k_vec_dim**-0.5 * weight_std_scale
+        self.expert_sel = torch.nn.Parameter(
+            torch.empty(self.n_experts, self.k_vec_dim)
         )
 
         if bias:
             self.bias = torch.nn.Parameter(
-                torch.zeros(int(self.n_experts * self.expert_size))
+                torch.zeros(self.n_experts, self.expert_size)
             )
-            # NOTE What is o_bias?
             self.o_bias = torch.nn.Parameter(torch.zeros(self.v_dim))
         else:
             self.bias = None
             self.o_bias = None
-
-        self.renorm_keep_std(self.expert_sel.weight, dim=1)
 
     def renorm_keep_std(self, weight: torch.Tensor, dim: int = 0):
         with torch.no_grad():
@@ -172,8 +166,7 @@ class MoE(torch.nn.Module):
             self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
 
         # Selection score calculation
-        # sel = sel_raw = F.linear(input, self.expert_sel, None)
-        sel = sel_raw = self.expert_sel(input)
+        sel = sel_raw = F.linear(input, self.expert_sel, None)
         reg_loss = self.entropy_reg(sel_raw)
 
         # Selection activation and topk

@@ -883,6 +883,8 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, MoE):
+            module.expert_sel.data.normal_(mean=0.0, std=std)
+            module.renorm_keep_std(module.expert_sel, dim=1)
             module.keys.data.normal_(mean=0.0, std=std)
             module.values.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
