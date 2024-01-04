@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
+    is_g2p_en_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
@@ -423,11 +424,16 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
-    "models.flaubert": [
-        "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FlaubertConfig",
-        "FlaubertTokenizer",
+    "models.fastspeech2_conformer": [
+        "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FastSpeech2ConformerConfig",
+        "FastSpeech2ConformerHifiGanConfig",
+        "FastSpeech2ConformerTokenizer",
+        "FastSpeech2ConformerWithHifiGanConfig",
     ],
+    "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FlavaConfig",
@@ -2126,6 +2132,15 @@ else:
             "FalconPreTrainedModel",
         ]
     )
+    _import_structure["models.fastspeech2_conformer"].extend(
+        [
+            "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastSpeech2ConformerHifiGan",
+            "FastSpeech2ConformerModel",
+            "FastSpeech2ConformerPreTrainedModel",
+            "FastSpeech2ConformerWithHifiGan",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3213,6 +3228,7 @@ else:
     _import_structure["models.swinv2"].extend(
         [
             "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swinv2Backbone",
             "Swinv2ForImageClassification",
             "Swinv2ForMaskedImageModeling",
             "Swinv2Model",
@@ -5080,11 +5096,16 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.flaubert import (
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FlaubertConfig,
-        FlaubertTokenizer,
+    from .models.fastspeech2_conformer import (
+        FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FastSpeech2ConformerConfig,
+        FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerTokenizer,
+        FastSpeech2ConformerWithHifiGanConfig,
     )
+    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -6651,6 +6672,13 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
+        from .models.fastspeech2_conformer import (
+            FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ConformerHifiGan,
+            FastSpeech2ConformerModel,
+            FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerWithHifiGan,
+        )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
@@ -7541,6 +7569,7 @@ if TYPE_CHECKING:
         )
         from .models.swinv2 import (
             SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
             Swinv2Model,

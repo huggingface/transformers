@@ -61,6 +61,10 @@
     title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性
 - sections:
+  - local: contributing
+    title: 如何为 🤗 Transformers 做贡献？
+  title: 贡献
+- sections:
   - local: task_summary
     title: 🤗Transformers能做什么
   - local: tokenizer_summary
