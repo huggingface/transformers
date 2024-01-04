@@ -17,7 +17,7 @@ import unittest
 
 from transformers import set_seed
 from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch, require_torch_gpu, slow
-
+from parameterized import parameterized
 
 if is_torch_available():
     import torch
@@ -106,7 +106,7 @@ class CacheTest(unittest.TestCase):
                 )
 
 
-@require_torch_gpu
+# @require_torch_gpu
 # @slow
 class CacheIntegrationTest(unittest.TestCase):
     def test_dynamic_cache_hard(self):
@@ -230,19 +230,31 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(decoded[0].endswith(last_output))
 
-
+    @parameterized.expand(attn_implementation=["eager", "sdpa","fa2"])
     def test_static_cache_greedy(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left", pad_token = "<s>")
         model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16, attn_implementation="eager",
         )
-        cache = StaticCache(model.config, model.config.num_hidden_layers, 1, 4096, model.config.num_attention_heads, model.config.hidden_size)
-
-        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
-        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache)
+        # TODO when generating, init the cache with the class and the model config and the input batch size
+        cache = StaticCache(model.config, model.config.num_hidden_layers, 2, 4096, model.config.num_attention_heads, model.config.hidden_size)
+        model.generation_config.cache_implementation = "static"
+        inputs = tokenizer(["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt").to(model.device)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = ["The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good"]
         self.assertListEqual(decoded, expected_text)
+        
+        model = torch.compile(model)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, expected_text)
+        
+        model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        self.assertListEqual(decoded, expected_text)
+
         
     def test_static_cache_beam_search(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")

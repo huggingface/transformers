@@ -732,7 +732,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=torch.tril(torch.ones(4096, 4096, dtype=torch.bool))[position_ids.tolist(), None].permute(0,2,1,3).to(query_states.device),
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -1037,14 +1037,14 @@ class LlamaModel(LlamaPreTrainedModel):
             # the manual implementation that requires a 4D causal mask in all cases.
             attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
                 attention_mask,
-                (batch_size, seq_length),
+                (batch_size, 4096),
                 inputs_embeds,
                 past_key_values_length,
             )
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+                attention_mask, (batch_size, 4096), inputs_embeds, past_key_values_length
             )
 
         # embed positions
