@@ -99,7 +99,8 @@ class TableTransformerConfig(PretrainedConfig):
         use_pretrained_backbone (`bool`, *optional*, `True`):
             Whether to use pretrained weights for the backbone.
         backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         dilation (`bool`, *optional*, defaults to `False`):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
@@ -195,7 +196,14 @@ class TableTransformerConfig(PretrainedConfig):
         if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
-        if not use_timm_backbone:
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {}
+            if dilation:
+                backbone_kwargs["output_stride"] = 16
+            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+            backbone_kwargs["in_chans"] = num_channels
+        # Backwards compatibility
+        elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -203,12 +211,13 @@ class TableTransformerConfig(PretrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
+            backbone = None
             # set timm attributes to None
-            dilation, backbone, use_pretrained_backbone = None, None, None
+            dilation = None
 
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
-        self.num_channels = num_channels
+        self._num_channels = num_channels
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -230,8 +239,8 @@ class TableTransformerConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
-        self.dilation = dilation
+        self.backbone_kwargs = backbone_kwargs
+        self._dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
@@ -245,12 +254,28 @@ class TableTransformerConfig(PretrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
+    def num_channels(self):
+        logger.warn("The `num_channels` attribute is deprecated and will be removed in v4.40")
+        return self._num_channels
+
+    @property
+    def dilation(self):
+        logger.warn("The `dilation` attribute is deprecated and will be removed in v4.40")
+        return self._dilation
+
+    @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
 
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("_num_channels", None)
+        output.pop("_dilation", None)
+        return output
 
 
 # Copied from transformers.models.detr.configuration_detr.DetrOnnxConfig
