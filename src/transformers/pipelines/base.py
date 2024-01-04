@@ -815,7 +815,7 @@ class Pipeline(_ScikitCompat):
                     device = torch.device("cpu")
                 self.device = device
             elif isinstance(device, str):
-                if device == "xpu" and not is_torch_xpu_available(check_device=True):
+                if "xpu" in device and not is_torch_xpu_available(check_device=True):
                     logger.warning("XPU is not available. Use CPU!")
                     device = "cpu"
                 self.device = torch.device(device)
@@ -837,6 +837,7 @@ class Pipeline(_ScikitCompat):
             self.framework == "pt"
             and self.device is not None
             and not (isinstance(self.device, int) and self.device < 0)
+            and hf_device_map is None
         ):
             self.model.to(self.device)
 
