@@ -54,6 +54,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        feature_projection_input_dim (`int`, *optional*, defaults to 160):
+            Input dimension of this model, i.e the dimension after processing input audios with [`Wav2Vec2BERTFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
         hidden_act (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
@@ -63,6 +65,10 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probabilitiy for the feature projection.
+        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BERTForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
@@ -70,47 +76,43 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature encoder states.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
-            procecure generates ''mask_time_prob*len(time_axis)/mask_time_length'' independent masks over the axis. If
+            procecure generates `mask_time_prob*len(time_axis)/mask_time_length ``independent masks over the axis. If
             reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
             masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment is True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+        mask_time_min_masks (`int`, *optional*, defaults to 2):
             The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
-            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
-            mask_time_min_masks''
+            irrespectively of `mask_feature_prob`. Only relevant if `mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks`.
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
-            masking procecure generates ''mask_feature_prob*len(feature_axis)/mask_time_length'' independent masks over
+            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
             the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
             span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
             may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
             True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+        mask_feature_min_masks (`int`, *optional*, defaults to 0):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
-            ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
         num_codevectors_per_group (`int`, *optional*, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (`int`, *optional*, defaults to 2):
             Number of codevector groups for product codevector quantization.
         contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
             The temperature *kappa* in the contrastive loss.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
         num_negatives (`int`, *optional*, defaults to 100):
             Number of negative samples for the contrastive loss.
         codevector_dim (`int`, *optional*, defaults to 768):
@@ -142,6 +144,9 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
+        pad_token_id (`int`, *optional*, defaults to 0): The id of the _beginning-of-stream_ token.
+        bos_token_id (`int`, *optional*, defaults to 1): The id of the _padding_ token.
+        eos_token_id (`int`, *optional*, defaults to 2): The id of the _end-of-stream_ token.
         add_adapter (`bool`, *optional*, defaults to `False`):
             Whether a convolutional attention network should be stacked on top of the Wav2Vec2BERT Encoder. Can be very
             useful for warm-starting Wav2Vec2BERT for SpeechEncoderDecoder models.
@@ -173,12 +178,10 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             If `"relative_key"` (aka Shaw) position embeddings are used, defines the left clipping value for relative positions.
         right_max_position_embeddings (`int`, *optional*, defaults to 8):
             If `"relative_key"` (aka Shaw) position embeddings are used, defines the right clipping value for relative positions.
-        conv_depthwise_kernel_size (`int`, defaults to 31):
+        conv_depthwise_kernel_size (`int`, defaults to 31, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
-        conformer_conv_dropout (`float`, defaults to 0.1):
+        conformer_conv_dropout (`float`, defaults to 0.1, *optional*, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
-        feature_projection_input_dim (`int`, *optional*, defaults to 160):
-            Input dimension of this model, i.e the dimension after processing input audios with [`Wav2Vec2BERTFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
     Example:
 
     ```python
