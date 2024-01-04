@@ -66,6 +66,8 @@ class MaskFormerConfig(PretrainedConfig):
         use_timm_backbone (`bool`, *optional*, `False`):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
         decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
@@ -126,6 +128,7 @@ class MaskFormerConfig(PretrainedConfig):
         backbone: Optional[str] = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
+        backbone_kwargs: Optional[Dict] = None,
         **kwargs,
     ):
         if use_pretrained_backbone:
@@ -198,6 +201,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
+        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
         super().__init__(**kwargs)
 
     @classmethod
