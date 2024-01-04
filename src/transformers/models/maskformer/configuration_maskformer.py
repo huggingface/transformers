@@ -62,8 +62,7 @@ class MaskFormerConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, `False`):
-            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
-            when this is `False`.
+            Whether to use pretrained weights for the backbone.
         decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
@@ -125,6 +124,9 @@ class MaskFormerConfig(PretrainedConfig):
         use_pretrained_backbone: bool = False,
         **kwargs,
     ):
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 

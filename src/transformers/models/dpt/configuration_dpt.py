@@ -116,8 +116,7 @@ class DPTConfig(PretrainedConfig):
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone. You cannot specify both `backbone` and `backbone_config`
-            when this is `False`.
+            Whether to use pretrained weights for the backbone.
 
     Example:
 
@@ -176,6 +175,9 @@ class DPTConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
+
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
 
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
