@@ -178,9 +178,9 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             If `"relative_key"` (aka Shaw) position embeddings are used, defines the left clipping value for relative positions.
         right_max_position_embeddings (`int`, *optional*, defaults to 8):
             If `"relative_key"` (aka Shaw) position embeddings are used, defines the right clipping value for relative positions.
-        conv_depthwise_kernel_size (`int`, defaults to 31, *optional*, defaults to 31):
+        conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
-        conformer_conv_dropout (`float`, defaults to 0.1, *optional*, defaults to 0.1):
+        conformer_conv_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
     Example:
 
