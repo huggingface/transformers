@@ -26,6 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -35,7 +36,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -68,7 +68,6 @@ WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/w2v-bert-2.0",
     # See all Wav2Vec2-BERT models at https://huggingface.co/models?filter=wav2vec2-bert
 ]
-
 
 
 @dataclass
@@ -113,6 +112,7 @@ class Wav2Vec2BERTForPreTrainingOutput(ModelOutput):
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
 
+
 # Copied from transformers.models.seamless_m4t_v2._compute_new_attention_mask
 def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Tensor):
     """
@@ -137,6 +137,7 @@ def _compute_new_attention_mask(hidden_states: torch.Tensor, seq_lens: torch.Ten
     mask = mask.masked_fill(bool_mask, 0)
 
     return mask
+
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
 def _compute_mask_indices(
@@ -397,15 +398,16 @@ class Wav2Vec2BERTFeatureProjection(nn.Module):
 
 
 class Wav2Vec2BERTFeedForward(nn.Module):
-    def __init__(self, config, act_fn=None):
+    def __init__(self, config, act_fn=None, hidden_size=None):
         super().__init__()
         act_fn = act_fn if act_fn is not None else config.hidden_act
+        hidden_size = hidden_size if hidden_size is not None else config.hidden_size
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_dense = nn.Linear(hidden_size, config.intermediate_size)
         self.intermediate_act_fn = ACT2FN[act_fn] if isinstance(act_fn, str) else act_fn
 
-        self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.output_dense = nn.Linear(config.intermediate_size, hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward.forward
@@ -417,6 +419,7 @@ class Wav2Vec2BERTFeedForward(nn.Module):
         hidden_states = self.output_dense(hidden_states)
         hidden_states = self.output_dropout(hidden_states)
         return hidden_states
+
 
 class Wav2Vec2BERTConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
@@ -489,28 +492,30 @@ class Wav2Vec2BERTConvolutionModule(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
+
 class Wav2Vec2BERTSelfAttention(nn.Module):
     """Construct an Wav2Vec2BERTSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, is_adapter_attention=False):
         super().__init__()
+        hidden_size = config.hidden_size if not is_adapter_attention else config.output_hidden_size  
 
-        self.head_size = config.hidden_size // config.num_attention_heads
+        self.head_size = hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.position_embeddings_type = config.position_embeddings_type
+        self.position_embeddings_type = config.position_embeddings_type if not is_adapter_attention else None
 
-        self.linear_q = nn.Linear(config.hidden_size, config.hidden_size)
-        self.linear_k = nn.Linear(config.hidden_size, config.hidden_size)
-        self.linear_v = nn.Linear(config.hidden_size, config.hidden_size)
-        self.linear_out = nn.Linear(config.hidden_size, config.hidden_size)
+        self.linear_q = nn.Linear(hidden_size, hidden_size)
+        self.linear_k = nn.Linear(hidden_size, hidden_size)
+        self.linear_v = nn.Linear(hidden_size, hidden_size)
+        self.linear_out = nn.Linear(hidden_size, hidden_size)
 
         self.dropout = nn.Dropout(p=config.attention_dropout)
 
         if self.position_embeddings_type == "relative":
             # linear transformation for positional encoding
-            self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+            self.linear_pos = nn.Linear(hidden_size, hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
             self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
@@ -931,7 +936,7 @@ class Wav2Vec2BERTAdapter(nn.Module):
 class Wav2Vec2BERTAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        embed_dim = config.hidden_size
+        embed_dim = config.output_hidden_size
         dropout = config.conformer_conv_dropout
 
         self.kernel_size = config.adapter_kernel_size
@@ -957,12 +962,12 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
             stride=self.stride,
             padding=self.stride // 2,
         )
-        self.self_attn = Wav2Vec2BERTSelfAttention(config, use_position_embeddings=False)
+        self.self_attn = Wav2Vec2BERTSelfAttention(config, is_adapter_attention=True)
         self.self_attn_dropout = nn.Dropout(dropout)
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu")
+        self.ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu", hidden_size=embed_dim)
 
     def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
         pad = self.kernel_size // 2
@@ -1085,14 +1090,15 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
 
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
 
-        def _conv_out_length(input_length, kernel_size, stride):
+        def _conv_out_length(input_length, kernel_size, stride, padding):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor") + 1
 
         if add_adapter:
+            padding = self.config.adapter_kernel_size//2
             for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+                input_lengths = _conv_out_length(input_lengths, self.config.adapter_kernel_size, self.config.adapter_stride, padding)
 
         return input_lengths
 
@@ -1198,7 +1204,6 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         if config.use_intermediate_ffn_before_adapter:
             self.intermediate_ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu")
 
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1272,15 +1277,6 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         extract_features = input_values
-        if not self.config.skip_feature_encoder:
-            extract_features = self.feature_extractor(extract_features)
-            extract_features = extract_features.transpose(1, 2)
-
-            if attention_mask is not None:
-                # compute reduced attention_mask corresponding to feature vectors
-                attention_mask = self._get_feature_vector_attention_mask(
-                    extract_features.shape[1], attention_mask, add_adapter=False
-                )
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
@@ -1315,9 +1311,7 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """Wav2Vec2BERT Model with a quantizer and `VQ` head on top.""", WAV2VEC2_BERT_START_DOCSTRING
-)
+@add_start_docstrings("""Wav2Vec2BERT Model with a quantizer and `VQ` head on top.""", WAV2VEC2_BERT_START_DOCSTRING)
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForPreTraining with Wav2Vec2Conformer->Wav2Vec2BERT,wav2vec2-conformer->wav2vec2-bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
 class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
     def __init__(self, config: Wav2Vec2BERTConfig):
@@ -1596,10 +1590,11 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
             # retrieve loss input_lengths from attention_mask
+            # Copy ignore
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+                attention_mask if attention_mask is not None else torch.ones(input_values.shape[:2], device=input_values.device, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to

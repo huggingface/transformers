@@ -28,7 +28,6 @@ WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Wav2Vec2BERTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2BERTModel`]. It is used to
@@ -47,22 +46,22 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             represented by the `inputs_ids` passed when calling [`Wav2Vec2BERTModel`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
             method of [`Wav2Vec2BERTModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout (`float`, *optional*, defaults to 0.1):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
+        activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BERTForCTC`].
@@ -150,7 +149,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):
             Stride of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
-        num_adapter_layers (`int`, *optional*, defaults to 3):
+        num_adapter_layers (`int`, *optional*, defaults to 1):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
         output_hidden_size (`int`, *optional*):
@@ -175,7 +174,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
         conformer_conv_dropout (`float`, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
-            
+
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
             Input dimension of the input feature projection of the speech encoder, i.e the dimension after processing
             input audios with [`Wav2Vec2BERTFeatureExtractor`].
@@ -199,14 +198,14 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=None,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
-        hidden_dropout=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
+        hidden_dropout=0.0,
+        activation_dropout=0.0,
+        attention_dropout=0.0,
         feat_proj_dropout=0.0,
         feat_quantizer_dropout=0.0,
         final_dropout=0.1,
@@ -241,7 +240,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         add_adapter=False,
         adapter_kernel_size=3,
         adapter_stride=2,
-        num_adapter_layers=3,
+        num_adapter_layers=1,
         output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
@@ -250,8 +249,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         right_max_position_embeddings=8,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        use_intermediate_ffn_before_adapter=False, # TODO add to docstrings
-        feature_projection_input_dim=160,#TODO add to docstrings
+        use_intermediate_ffn_before_adapter=False,  # TODO add to docstrings
+        feature_projection_input_dim=160,  # TODO add to docstrings
         **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -287,7 +286,6 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         self.rotary_embedding_base = rotary_embedding_base
         self.left_max_position_embeddings = left_max_position_embeddings
         self.right_max_position_embeddings = right_max_position_embeddings
-
 
         # Conformer-block related
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
@@ -331,14 +329,12 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         self.tdnn_kernel = list(tdnn_kernel)
         self.tdnn_dilation = list(tdnn_dilation)
         self.xvector_output_dim = xvector_output_dim
-        
+
         if use_intermediate_ffn_before_adapter and not add_adapter:
-            raise ValueError(
-                "`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`."
-            )
-        self.use_intermediate_ffn_before_adapter=use_intermediate_ffn_before_adapter
-        
-        self.feature_projection_input_dim=feature_projection_input_dim
+            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
+        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
+
+        self.feature_projection_input_dim = feature_projection_input_dim
 
     @property
     def inputs_to_logits_ratio(self):

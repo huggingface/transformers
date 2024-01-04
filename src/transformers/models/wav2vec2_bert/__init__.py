@@ -21,6 +21,12 @@ _import_structure = {
         "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2BERTConfig",
     ],
+    "feature_extraction_wav2vec2_bert": [
+        "Wav2Vec2BERTFeatureExtractor",
+    ],
+    "processing_wav2vec2_bert": [
+        "Wav2Vec2BERTProcessor",
+    ]
 }
 
 
@@ -46,6 +52,11 @@ if TYPE_CHECKING:
         WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2BERTConfig,
     )
+    from .feature_extraction_wav2vec2_bert import (
+        Wav2Vec2BERTFeatureExtractor
+    )
+    
+    from .processing_wav2vec2_bert import Wav2Vec2BERTProcessor
 
     try:
         if not is_torch_available():

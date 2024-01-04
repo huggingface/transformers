@@ -13,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch Wav2Vec2-BERT model. """
-import math
 import tempfile
 import unittest
 
-import numpy as np
 from datasets import load_dataset
 
 from transformers import Wav2Vec2BERTConfig, is_torch_available
@@ -52,8 +50,6 @@ if is_torch_available():
         Wav2Vec2BERTForSequenceClassification,
         Wav2Vec2BERTForXVector,
         Wav2Vec2BERTModel,
-        Wav2Vec2BERTFeatureExtractor,
-        Wav2Vec2BERTProcessor,
     )
     from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import (
         Wav2Vec2BERTGumbelVectorQuantizer,
@@ -70,8 +66,7 @@ class Wav2Vec2BERTModelTester:
         seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=16,
-        feature_projection_input_dim=32,
-        conv_bias=False,
+        feature_projection_input_dim=16,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
         num_hidden_layers=2,
@@ -192,49 +187,28 @@ class Wav2Vec2BERTModelTester:
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
-
-    def create_and_check_causal_fbank_model(self, config, input_values, attention_mask):
-        config.add_adapter = False
-        config.skip_feature_encoder = True
-        config.skip_encoder_layer_norm = True
-        config.skip_pos_conv_embed = True
-        config.non_causal_depth_wise_conv = False
-
-        model = Wav2Vec2BERTModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_combination_without_feature_encoder(self, config, input_values, attention_mask):
-        # same as fbank causal model except it uses non causal depth-wise conv and it doesn't skip encoder layer norm
-        config.add_adapter = False
-        config.skip_feature_encoder = True
-        config.skip_encoder_layer_norm = False
-        config.skip_pos_conv_embed = True
-        config.non_causal_depth_wise_conv = True
-
-        model = Wav2Vec2BERTModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_values, attention_mask=attention_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-        # same as fbank causal model except it uses an adapter
+        
+    def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_values, attention_mask):
         config.add_adapter = True
-        config.skip_feature_encoder = True
-        config.skip_encoder_layer_norm = True
-        config.skip_pos_conv_embed = True
-        config.non_causal_depth_wise_conv = False
-
-        adapter_output_seq_length = (self.seq_length - 1) // self.adapter_stride + 1
-
+        config.use_intermediate_ffn_before_adapter = True
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_values, attention_mask=attention_mask)
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, adapter_output_seq_length, self.hidden_size)
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
+        )
+        
+        # also try with different adapter proj dim
+        config.output_hidden_size = 8
+        model = Wav2Vec2BERTModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_values, attention_mask=attention_mask)
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
     def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
@@ -300,9 +274,9 @@ class Wav2Vec2BERTModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(input_values.shape[:2], device=torch_device, dtype=torch.long)
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
 
@@ -328,9 +302,9 @@ class Wav2Vec2BERTModelTester:
         model.eval()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(input_values.shape[:2], device=torch_device, dtype=torch.long)
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
 
         # pad input
@@ -353,7 +327,7 @@ class Wav2Vec2BERTModelTester:
 
         input_values = input_values[:3]
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
         labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
 
@@ -382,7 +356,7 @@ class Wav2Vec2BERTModelTester:
 
         input_values = input_values[:3]
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
         labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
 
         # pad input
@@ -451,6 +425,17 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
+    
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Wav2Vec2BERTForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2BERTForCTC,
+            "feature-extraction": Wav2Vec2BERTModel,
+        }
+        if is_torch_available()
+        else {}
+    )
+
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -489,18 +474,14 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_model_with_adapter_for_ctc(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_for_ctc(*config_and_inputs)
+        
+    def test_model_with_adapter_for_ctc(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_intermediate_ffn_before_adapter(*config_and_inputs)        
 
     def test_model_with_adapter_proj_dim(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
-
-    def test_model_from_seamless_communication(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_causal_fbank_model(*config_and_inputs)
-
-    def test_model_combination_without_feature_encoder(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_combination_without_feature_encoder(*config_and_inputs)
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -894,11 +875,11 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
     def test_inference_w2v2_bert(self):
         model = Wav2Vec2BERTForPreTraining.from_pretrained("facebook/w2v-bert-2.0")
         model.to(torch_device)
-        processor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
 
         input_speech = self._load_datasamples(2)
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True).to(torch_device)
+        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
 
         model.eval()
         with torch.no_grad():
@@ -972,5 +953,3 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         inputs["mask_time_indices"] = mask_time_indices
 
         self.check_inference_pretrained(model_id, model, inputs)
-
-

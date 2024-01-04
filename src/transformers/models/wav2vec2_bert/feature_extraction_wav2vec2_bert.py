@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Wav2Vec2
+Feature extractor class for Wav2Vec2-BERT
 """
 
 from typing import List, Optional, Union
@@ -28,7 +28,8 @@ from ...utils import PaddingStrategy, TensorType, logging
 
 logger = logging.get_logger(__name__)
 
-# Copied from transformers.models.seamless_m4t.feature_extraction_seamless_m4t with input_features->input_values
+
+# Copied from transformers.models.seamless_m4t.feature_extraction_seamless_m4t with input_features->input_values, SeamlessM4T->Wav2Vec2BERT
 class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2BERT feature extractor.
@@ -271,14 +272,14 @@ class Wav2Vec2BERTFeatureExtractor(SequenceFeatureExtractor):
         remainder = num_frames % self.stride
         if remainder != 0:
             input_values = input_values[:, :num_frames, :]
-            attention_mask = attention_mask[:, :num_frames]
+            if return_attention_mask:
+                attention_mask = attention_mask[:, :num_frames]
 
-        input_values = np.reshape(
-            input_values, (batch_size, num_frames // self.stride, num_channels * self.stride)
-        )
+        input_values = np.reshape(input_values, (batch_size, num_frames // self.stride, num_channels * self.stride))
 
         indices = np.arange(0, num_frames)
-        attention_mask = attention_mask[:, indices % self.stride == 1]
+        if return_attention_mask:
+            attention_mask = attention_mask[:, indices % self.stride == 1]
 
         padded_inputs["input_values"] = input_values
         padded_inputs["attention_mask"] = attention_mask

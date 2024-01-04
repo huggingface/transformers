@@ -19,8 +19,8 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
-from .feature_extraction_wav2vec2_bert import Wav2Vec2BERTFeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
+from .feature_extraction_wav2vec2_bert import Wav2Vec2BERTFeatureExtractor
 
 
 class Wav2Vec2BERTProcessor(ProcessorMixin):
