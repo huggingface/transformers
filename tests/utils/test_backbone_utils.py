@@ -16,7 +16,7 @@ import unittest
 
 import pytest
 
-from transformers import MaskFormerConfig
+from transformers import DetrConfig, MaskFormerConfig
 from transformers.testing_utils import require_torch, slow
 from transformers.utils.backbone_utils import (
     BackboneMixin,
@@ -182,6 +182,29 @@ class BackboneUtilsTester(unittest.TestCase):
 
         # Norm layers are always initialized with the same weights
         equal_weights = [w for w in equal_weights if "normalization" not in w]
+        self.assertEqual(len(equal_weights), 20)
+        # Linear layers are still initialized randomly
+        self.assertEqual(len(not_equal_weights), 4)
+
+        # Check loading in timm backbone
+        config = DetrConfig(use_pretrained_backbone=False, backbone="resnet18", use_timm_backbone=True)
+        model_0 = NewModel(config)
+        model_1 = NewModel(config)
+        equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
+
+        # Norm layers are always initialized with the same weights
+        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
+        self.assertEqual(len(equal_weights), 0)
+        self.assertEqual(len(not_equal_weights), 24)
+
+        # Now we create a new model with backbone weights that are pretrained
+        config.use_pretrained_backbone = True
+        model_0 = NewModel(config)
+        model_1 = NewModel(config)
+        equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
+
+        # Norm layers are always initialized with the same weights
+        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
         self.assertEqual(len(equal_weights), 20)
         # Linear layers are still initialized randomly
         self.assertEqual(len(not_equal_weights), 4)
