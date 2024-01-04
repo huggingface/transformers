@@ -19,6 +19,7 @@ import functools
 import gc
 import importlib.metadata
 import inspect
+import itertools
 import json
 import os
 import re
@@ -544,10 +545,14 @@ def set_initialized_submodules(model, state_dict_keys):
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
     """
+    not_initialized_submodules = {}
     for module_name, module in model.named_modules():
-        loaded_keys = [k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")]
-        if len(set(module.state_dict().keys()) - set(loaded_keys)) == 0:
+        loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
+        if loaded_keys.issuperset(module.state_dict()):
             module._is_hf_initialized = True
+        else:
+            not_initialized_submodules[module_name] = module
+    return not_initialized_submodules
 
 
 def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
@@ -1574,15 +1579,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         if getattr(module, "_is_hf_initialized", False):
             return
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                self._init_weights(module)
-        else:
-            self._init_weights(module)
-
+        self._init_weights(module)
         module._is_hf_initialized = True
 
     def tie_weights(self):
@@ -4008,9 +4005,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
                 else:
                     _loaded_keys = loaded_keys
-                set_initialized_submodules(model, _loaded_keys)
+                not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
+            else:
+                not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
-            model.apply(model._initialize_weights)
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
+
+                not_initialized_parameters = list(
+                    set(
+                        itertools.chain.from_iterable(
+                            submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
+                        )
+                    )
+                )
+                with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
+                    model.apply(model._initialize_weights)
+            else:
+                model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
