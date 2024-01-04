@@ -2238,7 +2238,7 @@ class Trainer:
             )
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch, ignore_keys_for_eval):
-        if self.control.should_log:
+        if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_tpu_available():
                 xm.mark_step()
 
@@ -2908,7 +2908,9 @@ class Trainer:
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if self.args.save_safetensors:
-                    safetensors.torch.save_file(state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME))
+                    safetensors.torch.save_file(
+                        state_dict, os.path.join(output_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"}
+                    )
                 else:
                     torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:

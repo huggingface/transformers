@@ -90,6 +90,7 @@ from .hub import (
     try_to_load_from_cache,
 )
 from .import_utils import (
+    ACCELERATE_MIN_VERSION,
     ENV_VARS_TRUE_AND_AUTO_VALUES,
     ENV_VARS_TRUE_VALUES,
     TORCH_FX_REQUIRED_VERSION,
@@ -122,6 +123,7 @@ from .import_utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_in_notebook,
     is_ipex_available,
     is_jieba_available,
