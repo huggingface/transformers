@@ -180,7 +180,7 @@ class TableTransformerConfig(PretrainedConfig):
     ):
         if not use_timm_backbone and use_pretrained_backbone:
             raise ValueError(
-                "It is not possible yet to use pretrained weights without `use_timm_backbone` set to `True`."
+                "Loading pretrained backbone weights from the transformers library is not supported yet. `use_timm_backbone` must be set to `True` when `use_pretrained_backbone=True`"
             )
 
         if backbone_config is not None and backbone is not None:
