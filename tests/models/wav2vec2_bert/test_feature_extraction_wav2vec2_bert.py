@@ -243,7 +243,7 @@ class Wav2Vec2BERTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     @require_torch
-    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad
+    # Copied from tests.models.whisper.test_feature_extraction_whisper.WhisperFeatureExtractionTest.test_double_precision_pad with input_features->input_values
     def test_double_precision_pad(self):
         import torch
 
