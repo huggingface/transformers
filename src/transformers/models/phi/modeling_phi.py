@@ -259,7 +259,6 @@ class PhiAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with llama->phi
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
@@ -540,7 +539,7 @@ class PhiFlashAttention2(PhiAttention):
         if not self._flash_attn_uses_top_left_mask:
             causal = self.is_causal
         else:
-            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in PhiFlashAttention2 __init__.
+            # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in LlamaFlashAttention2 __init__.
             causal = self.is_causal and query_length != 1
 
         # Contains at least one padding token in the sequence
