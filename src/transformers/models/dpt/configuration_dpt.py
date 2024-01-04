@@ -117,6 +117,9 @@ class DPTConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
 
     Example:
 
@@ -169,6 +172,7 @@ class DPTConfig(PretrainedConfig):
         backbone_config=None,
         backbone=None,
         use_pretrained_backbone=False,
+        use_timm_backbone=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -229,6 +233,7 @@ class DPTConfig(PretrainedConfig):
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
         self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
         self.num_attention_heads = None if use_autobackbone else num_attention_heads
         self.intermediate_size = None if use_autobackbone else intermediate_size
