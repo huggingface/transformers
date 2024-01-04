@@ -35,16 +35,12 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_accelerate_available, logging
+from ...utils import logging
 from .configuration_mask2former import Mask2FormerConfig
 
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -791,13 +787,7 @@ class Mask2FormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
-        world_size = 1
-        if PartialState._shared_state != {}:
-            num_masks_pt = reduce(num_masks_pt)
-            world_size = PartialState().num_processes
-
-        num_masks_pt = torch.clamp(num_masks_pt / world_size, min=1)
+        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         return num_masks_pt
 
 

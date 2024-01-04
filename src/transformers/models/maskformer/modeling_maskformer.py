@@ -32,7 +32,6 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -45,10 +44,6 @@ from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
@@ -1198,13 +1193,7 @@ class MaskFormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
-        world_size = 1
-        if PartialState._shared_state != {}:
-            num_masks_pt = reduce(num_masks_pt)
-            world_size = PartialState().num_processes
-
-        num_masks_pt = torch.clamp(num_masks_pt / world_size, min=1)
+        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         return num_masks_pt
 
 
