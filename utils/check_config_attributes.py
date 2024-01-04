@@ -220,6 +220,8 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "out_indices",
         "sampling_rate",
         "use_pretrained_backbone",
+        "backbone",
+        "backbone_config",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
