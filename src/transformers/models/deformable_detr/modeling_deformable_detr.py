@@ -23,8 +23,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
@@ -45,11 +43,15 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_ninja_available, logging
+from ...utils import is_accelerate_available, is_ninja_available, logging
 from ..auto import AutoBackbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 

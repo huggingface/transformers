@@ -20,8 +20,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -32,6 +30,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_timm_available,
     is_vision_available,
@@ -42,6 +41,10 @@ from ...utils import (
 from ..auto import AutoBackbone
 from .configuration_conditional_detr import ConditionalDetrConfig
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment

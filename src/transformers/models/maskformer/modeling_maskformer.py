@@ -21,8 +21,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ... import AutoBackbone
@@ -34,6 +32,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     logging,
     replace_return_docstrings,
@@ -46,6 +45,10 @@ from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 

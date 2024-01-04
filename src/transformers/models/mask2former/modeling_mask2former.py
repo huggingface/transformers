@@ -21,8 +21,6 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ... import AutoBackbone
@@ -37,12 +35,16 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import is_accelerate_available, logging
 from .configuration_mask2former import Mask2FormerConfig
 
 
 if is_scipy_available():
     from scipy.optimize import linear_sum_assignment
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 logger = logging.get_logger(__name__)
 
