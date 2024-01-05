@@ -2655,6 +2655,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
+        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2973,6 +2974,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
+        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
