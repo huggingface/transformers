@@ -779,7 +779,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+            (self.encoder.layer + self.encoder_narrow.layer)[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(NARROW_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -895,7 +895,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            head_mask=head_mask[:self.config.full_length_layers],
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
@@ -923,7 +923,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         narrow_encoder_outputs = self.encoder_narrow(
             narrow_inputs,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask,
+            head_mask=head_mask[self.config.full_length_layers:],
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=extended_attention_mask,
             past_key_values=past_key_values,
