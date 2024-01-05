@@ -219,7 +219,7 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 <Tip>
 Different pipelines support tokenizer arguments in their `__call__()` differently. `text-2-text-generation` pipelines support (i.e. pass on)
 only `truncation`. `text-generation` pipelines support `max_length`, `truncation`, `padding` and `add_special_tokens`. 
-In `fill-mask` pipelines, tokenizer arguments can be passed inside the `tokenizer_kwargs` dictionary.
+In `fill-mask` pipelines, tokenizer arguments can be passed in the `tokenizer_kwargs` argument (dictionary).
 </Tip>
 
 ## Audio
