@@ -109,12 +109,14 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         **generate_kwargs,
     ):
-        preprocess_params = {"add_special_tokens": add_special_tokens,
-                             "truncation": truncation,
-                             "padding": padding,
-                             "max_length": max_length}
+        preprocess_params = {
+            "add_special_tokens": add_special_tokens,
+            "truncation": truncation,
+            "padding": padding,
+            "max_length": max_length,
+        }
         if max_length is not None:
-            generate_kwargs['max_length'] = max_length
+            generate_kwargs["max_length"] = max_length
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
@@ -227,10 +229,14 @@ class TextGenerationPipeline(Pipeline):
         max_length=None,
         **generate_kwargs,
     ):
-
-        inputs = self.tokenizer(prefix + prompt_text, return_tensors=self.framework,
-                                truncation=truncation, padding=padding, max_length=max_length,
-                                add_special_tokens=add_special_tokens)
+        inputs = self.tokenizer(
+            prefix + prompt_text,
+            return_tensors=self.framework,
+            truncation=truncation,
+            padding=padding,
+            max_length=max_length,
+            add_special_tokens=add_special_tokens,
+        )
         inputs["prompt_text"] = prompt_text
 
         if handle_long_generation == "hole":
