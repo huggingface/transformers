@@ -126,6 +126,9 @@ class TextGenerationPipeline(Pipeline):
                              "truncation": truncation,
                              "padding": padding,
                              "max_length": max_length}
+        if max_length is not None:
+            generate_kwargs['max_length'] = max_length
+
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
