@@ -267,13 +267,13 @@ pip install transformers
 
 ### С помощью conda
 
-Начиная с версии Transformers v4.0.0, у нас появилсась поддержка conda: `huggingface`.
-
 Установить Transformers с помощью conda можно следующим образом:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
+
+> **_ЗАМЕТКА:_** Установка `transformers` через канал `huggingface` устарела.
 
 О том, как установить Flax, PyTorch или TensorFlow с помощью conda, читайте на страницах, посвященных их установке.
 
