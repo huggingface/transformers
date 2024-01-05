@@ -1456,14 +1456,11 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
-    # Copied from transformers.models.gptj.modeling_gptj.GPTJForQuestionAnswering.forward with GPTJ->Llama
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1486,9 +1483,7 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
