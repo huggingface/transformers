@@ -51,10 +51,10 @@ inputs = processor(text=candidate_labels, images=image, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
 
-# これは画像-テキスト類似度スコア
+# this is the image-text similarity score
 logits_per_image = outputs.logits_per_image
 
-# Softmaxを取ることで各ラベルの確率を得られる
+# we can take the softmax to get the label probabilities
 probs = logits_per_image.softmax(dim=1)
 print(probs)
 ```

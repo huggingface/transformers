@@ -25,7 +25,7 @@ jobs:
         
         - name: Get changed files
           id: changed-files
-          uses: tj-actions/changed-files@v22.2
+          uses: tj-actions/changed-files@v41
         
         - name: Was setup changed 
           id: was_changed

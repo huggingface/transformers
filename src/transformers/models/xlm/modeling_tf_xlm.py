@@ -132,6 +132,7 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
         self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
+        self.dim = dim
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -206,6 +207,23 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_lin", None) is not None:
+            with tf.name_scope(self.q_lin.name):
+                self.q_lin.build([None, None, self.dim])
+        if getattr(self, "k_lin", None) is not None:
+            with tf.name_scope(self.k_lin.name):
+                self.k_lin.build([None, None, self.dim])
+        if getattr(self, "v_lin", None) is not None:
+            with tf.name_scope(self.v_lin.name):
+                self.v_lin.build([None, None, self.dim])
+        if getattr(self, "out_lin", None) is not None:
+            with tf.name_scope(self.out_lin.name):
+                self.out_lin.build([None, None, self.dim])
+
 
 class TFXLMTransformerFFN(tf.keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
@@ -215,6 +233,8 @@ class TFXLMTransformerFFN(tf.keras.layers.Layer):
         self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.in_dim = in_dim
+        self.dim_hidden = dim_hidden
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -223,6 +243,17 @@ class TFXLMTransformerFFN(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
 
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lin1", None) is not None:
+            with tf.name_scope(self.lin1.name):
+                self.lin1.build([None, None, self.in_dim])
+        if getattr(self, "lin2", None) is not None:
+            with tf.name_scope(self.lin2.name):
+                self.lin2.build([None, None, self.dim_hidden])
 
 
 @keras_serializable
@@ -316,7 +347,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("position_embeddings"):
             self.position_embeddings = self.add_weight(
                 name="embeddings",
@@ -331,8 +365,24 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     shape=[self.n_langs, self.dim],
                     initializer=get_initializer(self.embed_init_std),
                 )
-
-        super().build(input_shape)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "layer_norm_emb", None) is not None:
+            with tf.name_scope(self.layer_norm_emb.name):
+                self.layer_norm_emb.build([None, None, self.dim])
+        for layer in self.attentions:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm1:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
+        for layer in self.ffns:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm2:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -734,6 +784,14 @@ class TFXLMModel(TFXLMPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+
 
 class TFXLMPredLayer(tf.keras.layers.Layer):
     """
@@ -871,6 +929,17 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "pred_layer", None) is not None:
+            with tf.name_scope(self.pred_layer.name):
+                self.pred_layer.build(None)
+
 
 @add_start_docstrings(
     """
@@ -949,6 +1018,17 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+
 
 @add_start_docstrings(
     """
@@ -966,6 +1046,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         self.logits_proj = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
+        self.config = config
 
     @property
     def dummy_inputs(self):
@@ -1068,6 +1149,20 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "logits_proj", None) is not None:
+            with tf.name_scope(self.logits_proj.name):
+                self.logits_proj.build([None, None, self.config.num_labels])
+
 
 @add_start_docstrings(
     """
@@ -1086,6 +1181,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1148,6 +1244,17 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1163,6 +1270,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1238,3 +1346,14 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])

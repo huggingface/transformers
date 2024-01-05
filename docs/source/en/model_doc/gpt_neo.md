@@ -56,13 +56,9 @@ The `generate()` method can be used to generate text using GPT Neo model.
 
 ## Combining GPT-Neo and Flash Attention 2
 
-First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature, and make sure your hardware is compatible with Flash-Attention 2. More details are available [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2) concerning the installation.
 
-```bash
-pip install -U flash-attn --no-build-isolation
-```
-
-Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+Make sure as well to load your model in half-precision (e.g. `torch.float16`).
 
 To load and run a model using Flash Attention 2, refer to the snippet below:
 
@@ -71,7 +67,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-2.7B", torch_dtype=torch.float16, use_flash_attention_2=True)
+>>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-2.7B", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-2.7B")
 
 >>> prompt = "def hello_world():"

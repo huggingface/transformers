@@ -120,6 +120,34 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(loaded_config.do_sample, True)
         self.assertEqual(loaded_config.num_beams, 1)  # default value
 
+    def test_validate(self):
+        """
+        Tests that the `validate` method is working as expected. Note that `validate` is called at initialization time
+        """
+        # Case 1: A correct configuration will not throw any warning
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            GenerationConfig()
+        self.assertEqual(len(captured_warnings), 0)
+
+        # Case 2: Inconsequent but technically wrong configuration will throw a warning (e.g. setting sampling
+        # parameters with `do_sample=False`). May be escalated to an error in the future.
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            GenerationConfig(temperature=0.5)
+        self.assertEqual(len(captured_warnings), 1)
+
+        # Case 3: Impossible sets of contraints/parameters will raise an exception
+        with self.assertRaises(ValueError):
+            GenerationConfig(num_return_sequences=2)
+
+        # Case 4: Passing `generate()`-only flags to `validate` will raise an exception
+        with self.assertRaises(ValueError):
+            GenerationConfig(logits_processor="foo")
+
+        # Case 5: Model-specific parameters will NOT raise an exception or a warning
+        with warnings.catch_warnings(record=True) as captured_warnings:
+            GenerationConfig(foo="bar")
+        self.assertEqual(len(captured_warnings), 0)
+
     def test_refuse_to_save(self):
         """Tests that we refuse to save a generation config that fails validation."""
 

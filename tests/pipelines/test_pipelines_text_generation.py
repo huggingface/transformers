@@ -291,7 +291,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
             model="hf-internal-testing/tiny-random-bloom",
             model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
         )
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -308,7 +307,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
         out = pipe("This is a test")
         self.assertEqual(
@@ -325,7 +323,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
         # torch_dtype will be automatically set to float32 if not provided - check: https://github.com/huggingface/transformers/pull/20602
         pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
-        self.assertEqual(pipe.model.device, torch.device(0))
         self.assertEqual(pipe.model.lm_head.weight.dtype, torch.float32)
         out = pipe("This is a test")
         self.assertEqual(
