@@ -329,19 +329,19 @@ class StaticCache(Cache):
     # TODO Store the relevant values in the generation config rather than having kwargs
     
     # TODO extra the batchsize in the generate method.
-    def __init__(self, config: PretrainedConfig, num_layers, max_batch_size, max_sequence_length, num_heads, hidden_dim, dtype=torch.float16) -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, dtype=torch.float16) -> None:
         super().__init__()
-        self.num_layers = num_layers
+        self.num_layers = config.num_hidden_layers
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = max_sequence_length
-        self.head_dim = hidden_dim // num_heads
-        self.num_heads = num_heads
-        self.shape = (max_batch_size, max_sequence_length, hidden_dim // num_heads,  num_heads)
+        self.max_sequence_length = config.max_position_embeddings
+        self.head_dim = config.hidden_dim // config.num_attention_heads
+        self.num_heads = config.num_heads
+        self.shape = (max_batch_size, self.max_sequence_length, self.hidden_dim // self.num_heads,  self.num_heads)
         self.dtype = dtype # Property?
         
         # TODO device meta? 
-        self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, num_heads, max_sequence_length, self.head_dim, dtype=dtype) for _ in range(num_layers)]
-        self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, num_heads, max_sequence_length, self.head_dim, dtype=dtype) for _ in range(num_layers)]
+        self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=dtype) for _ in range(self.num_layers)]
+        self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=dtype) for _ in range(self.num_layers)]
         
         # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
@@ -349,7 +349,7 @@ class StaticCache(Cache):
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         
         # We cache a big mask that will be updated with the input mask
-        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,max_sequence_length, max_sequence_length),  dtype=dtype, fill_value=torch.finfo(dtype).min), diagonal = 1)
+        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),  dtype=dtype, fill_value=torch.finfo(dtype).min), diagonal = 1)
 
     def update(
         self,

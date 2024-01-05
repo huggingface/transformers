@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache
+from ..cache_utils import Cache, DynamicCache, StaticCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -1584,6 +1584,13 @@ class GenerationMixin:
         )
         batch_size = inputs_tensor.shape[0]
 
+        ALL_CACHE_CLASSES = {
+            "static": StaticCache
+        }
+        if generation_config.cache_implementation in ALL_CACHE_CLASSES and not model_kwargs.get("past_key_values", False):
+            cache_cls = ALL_CACHE_CLASSES[generation_config.cache_implementation]
+            model_kwargs["past_key_values"] = cache_cls(self.config, max_batch_size=batch_size, dtype = inputs_tensor.dtype)
+            
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
