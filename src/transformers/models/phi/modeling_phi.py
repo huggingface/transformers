@@ -1030,7 +1030,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        'This is an example script .py file that uses the `os` module to create a new directory and write some text to it.\n\n``'
+        'This is an example script .\n\n\n\nfrom typing import List\n\ndef find_most_common_letter(words: List[str'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
