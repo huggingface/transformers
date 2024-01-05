@@ -99,7 +99,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 test_str,
                 do_sample=False,
                 return_full_text=False,
-                tokenizer_kwargs={"truncation": True, "max_length": 3},
+                truncation=True,
+                max_length=3,
             )[0]["generated_text"],
         )
         assert output_str != output_str_with_truncation  # results must be different because one hd truncation
