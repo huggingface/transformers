@@ -112,7 +112,7 @@ class DetaConfig(PretrainedConfig):
         assign_first_stage (`bool`, *optional*, defaults to `True`):
             Whether to assign each prediction i to the highest overlapping ground truth object if the overlap is larger than a threshold τ.
         assign_second_stage (`bool`, *optional*, defaults to `True`):
-            Whether to assign second  assignment procedure in the second stage closely follows the first stage assignment procedure.
+            Whether to assign second assignment procedure in the second stage closely follows the first stage assignment procedure.
 
     Examples:
 
