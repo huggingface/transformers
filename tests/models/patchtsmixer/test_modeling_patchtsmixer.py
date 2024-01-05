@@ -716,7 +716,6 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         if target_input is None:
             output = mdl(self.__class__.data, output_hidden_states=output_hidden_states)
         else:
-            print("Ground truth", ground_truth_arg)
             output = mdl(
                 self.__class__.data,
                 **{ground_truth_arg: target_input, "output_hidden_states": output_hidden_states},
