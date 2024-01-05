@@ -329,15 +329,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [[-0.0173]],
-                [[-1.0379]],
-                [[-0.1030]],
-                [[0.3642]],
-                [[0.1601]],
-                [[-1.3136]],
-                [[0.8780]],
-            ],
+            [[[-0.0173]], [[-1.0379]], [[-0.1030]], [[0.3642]], [[0.1601]], [[-1.3136]], [[0.8780]]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
