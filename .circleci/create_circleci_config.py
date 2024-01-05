@@ -43,7 +43,7 @@ class EmptyJob:
         return {
             "working_directory": "~/transformers",
             "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
-            "steps":["checkout"],
+            "steps": ["checkout"],
         }
 
 
@@ -107,7 +107,8 @@ class CircleCIJob:
                 "restore_cache": {
                     "keys": [
                         # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-"
+                        + '{{ checksum "setup.py" }}',
                         # try the partially-matched cache from `main`
                         f"v{self.cache_version}-{self.cache_name}-main-pip-",
                         # try the general partially-matched cache
@@ -118,7 +119,8 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-"
+                        + '{{ checksum "setup.py" }}',
                         f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
                         f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
@@ -131,7 +133,8 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-"
+                    + '{{ checksum "setup.py" }}',
                     "paths": ["~/.cache/pip"],
                 }
             }
@@ -139,16 +142,27 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-"
+                    + '{{ checksum "setup.py" }}',
                     "paths": ["~/.pyenv/versions/"],
                 }
             }
         )
-        steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
+        steps.append(
+            {
+                "run": {
+                    "name": "Show installed libraries and their versions",
+                    "command": "pip freeze | tee installed.txt",
+                }
+            }
+        )
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
-        pytest_flags = [f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}" for key, value in all_options.items()]
+        pytest_flags = [
+            f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}"
+            for key, value in all_options.items()
+        ]
         pytest_flags.append(
             f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
         )
@@ -158,7 +172,9 @@ class CircleCIJob:
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(
+            pytest_flags
+        )
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -203,7 +219,7 @@ class CircleCIJob:
             command = f'echo {tests} | tr " " "\\n" >> tests.txt'
             steps.append({"run": {"name": "Get tests", "command": command}})
 
-            command = 'TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt'
+            command = "TESTS=$(circleci tests split tests.txt) && echo $TESTS > splitted_tests.txt"
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
@@ -231,9 +247,9 @@ class CircleCIJob:
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
         # Deal with errors
-        check_test_command = f'if [ -s reports/{self.job_name}/errors.txt ]; '
+        check_test_command = f"if [ -s reports/{self.job_name}/errors.txt ]; "
         check_test_command += 'then echo "Some tests errored out!"; echo ""; '
-        check_test_command += f'cat reports/{self.job_name}/errors.txt; '
+        check_test_command += f"cat reports/{self.job_name}/errors.txt; "
         check_test_command += 'echo ""; echo ""; '
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
@@ -241,9 +257,9 @@ class CircleCIJob:
         check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         # Deeal with failed tests
-        check_test_command += f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
+        check_test_command += f"elif [ -s reports/{self.job_name}/failures_short.txt ]; "
         check_test_command += 'then echo "Some tests failed!"; echo ""; '
-        check_test_command += f'cat reports/{self.job_name}/failures_short.txt; '
+        check_test_command += f"cat reports/{self.job_name}/failures_short.txt; "
         check_test_command += 'echo ""; echo ""; '
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
@@ -372,13 +388,12 @@ custom_tokenizers_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         {
             "name": "install jumanpp",
-            "command":
-                "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz\n"
-                "tar xvf jumanpp-2.0.0-rc3.tar.xz\n"
-                "mkdir jumanpp-2.0.0-rc3/bld\n"
-                "cd jumanpp-2.0.0-rc3/bld\n"
-                "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local\n"
-                "sudo make install\n",
+            "command": "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz\n"
+            "tar xvf jumanpp-2.0.0-rc3.tar.xz\n"
+            "mkdir jumanpp-2.0.0-rc3/bld\n"
+            "cd jumanpp-2.0.0-rc3/bld\n"
+            "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local\n"
+            "sudo make install\n",
         },
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
@@ -515,23 +530,19 @@ doc_test_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
         "pip install -U --upgrade-strategy eager natten",
+        "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
-        r"find . -name \*.pyc -delete",
+        "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         {
             "name": "Get files to test",
             "command": command,
         },
-        {
-            "name": "Show information in `Get files to test`",
-            "command":
-                "cat pr_documentation_tests_temp.txt"
-        },
+        {"name": "Show information in `Get files to test`", "command": "cat pr_documentation_tests_temp.txt"},
         {
             "name": "Get the last line in `pr_documentation_tests.txt`",
-            "command":
-                "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt"
+            "command": "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt",
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
