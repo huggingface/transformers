@@ -7281,6 +7281,7 @@ if TYPE_CHECKING:
             SigmaMoEForTokenClassification,
             SigmaMoEModel,
             SigmaMoEPreTrainedModel,
+            SigmaMoELayer,
         )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,

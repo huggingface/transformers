@@ -1,11 +1,18 @@
-# Copyright Robert Csordas: https://github.com/RobertCsordas/moe_layer
-
 import torch
 import torch.distributed
 import torch.nn.functional as F
-from typing import Tuple, List, Optional
+from typing import Tuple, Optional, Union
 import math
-from .cvmm import cvmm, cvmm_prepare_sel, CVMMSel
+
+try:
+    from .triton_src import cvmm, cvmm_prepare_sel, CVMMSel
+except ImportError:
+    from ...utils import logging
+    logger = logging.get_logger(__name__)
+    logger.warning(
+        "Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead."
+    )
+    from .cuda_src import cvmm, cvmm_prepare_sel, CVMMSel
 
 
 def dist_logsumexp(x: torch.Tensor, dim: int, keepdim: bool = False) -> torch.Tensor:
@@ -39,7 +46,7 @@ def entropy_l(l: torch.Tensor) -> torch.Tensor:
     return -(l * l.exp()).sum(-1)
 
 
-class MoE(torch.nn.Module):
+class SigmaMoELayer(torch.nn.Module):
     def __init__(
         self,
         d_model: int,
@@ -54,7 +61,6 @@ class MoE(torch.nn.Module):
         v_dim: Optional[int] = None,
         sinkhorn_n_iters: int = 3,
         expert_dropout: float = 0.0,
-        weight_std_scale: float = 1.0,
     ):
         super().__init__()
         self.k_dim = d_model
@@ -75,13 +81,13 @@ class MoE(torch.nn.Module):
             raise ValueError(f"Unknown selection mode {self.selection_mode}")
 
         self.keys = torch.nn.Parameter(
-            torch.empty(self.n_experts, self.k_vec_dim, self.expert_size)
+            torch.randn(self.n_experts, self.k_vec_dim, self.expert_size)
         )
         self.values = torch.nn.Parameter(
-            torch.empty(self.n_experts, self.expert_size, self.v_dim)
+            torch.randn(self.n_experts, self.expert_size, self.v_dim)
         )
         self.expert_sel = torch.nn.Parameter(
-            torch.empty(self.n_experts, self.k_vec_dim)
+            torch.randn(self.n_experts, self.k_vec_dim)
         )
 
         if bias:
@@ -107,11 +113,17 @@ class MoE(torch.nn.Module):
         return -entropy_l(sel).mean()
 
     def compute_scores(
-        self, input: torch.Tensor, index: CVMMSel, expert_scores: torch.Tensor
+        self, input: torch.Tensor, index: Union[CVMMSel,torch.Tensor], expert_scores: torch.Tensor
     ) -> torch.Tensor:
-        scores = cvmm(input, index, self.keys)
-        if self.bias is not None:
-            scores = scores + self.bias[index.raw_sel]
+        IS_CUDA = input.is_cuda
+        if IS_CUDA:
+            scores = cvmm(input, index, self.keys)
+            if self.bias is not None:
+                scores = scores + self.bias[index.raw_sel]
+        else:
+            scores = index  * F.linear(input, self.keys, None)
+            if self.bias is not None:
+                scores = scores + index * self.bias
 
         scores = self.activation(scores)
         scores = scores * expert_scores[..., None]
@@ -154,7 +166,21 @@ class MoE(torch.nn.Module):
 
         return (a[..., None, :] + b[..., None] + x).exp()
 
+
+    def create_index(self, index: torch.Tensor) -> torch.Tensor:
+        bs, seq_len = index.shape
+        one_hot = torch.nn.functional.one_hot(index, num_classes=self.n_experts)
+        return one_hot.unsqueeze(-1).expand(bs, seq_len, self.n_experts, self.expert_size).reshape((bs, seq_len, -1))
+
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        IS_CUDA = input.is_cuda
+        if not IS_CUDA:
+            if self.keys.ndim > 2:
+                self.keys.data = torch.reshape(self.keys.transpose(1,2), (int(self.n_experts * self.expert_size), self.k_vec_dim))
+            if self.values.ndim > 2:
+                self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
+
         # Selection score calculation
         sel = sel_raw = F.linear(input, self.expert_sel, None)
         reg_loss = self.entropy_reg(sel_raw)
@@ -187,10 +213,16 @@ class MoE(torch.nn.Module):
             )
 
         # Preprocess the selection indices. They will be needed for both layers and save some time
-        sel_indices = [
-            cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts)
-            for h in range(sel_index.shape[-1])
-        ]
+        if IS_CUDA:
+            sel_indices = [
+                cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts)
+                for h in range(sel_index.shape[-1])
+            ]
+        else:
+            sel_indices = [
+                self.create_index(sel_index[..., h].long())
+                for h in range(sel_index.shape[-1])
+            ]
 
         # "Up-projection" layer for each head
         scores_l = [
@@ -199,11 +231,19 @@ class MoE(torch.nn.Module):
         ]
 
         # Down projection layer for each head
-        out = 0
-        for hi, scores in zip(sel_indices, scores_l):
-            out = out + cvmm(scores, hi, self.values)
+        if IS_CUDA:
+            out = 0
+            for hi, scores in zip(sel_indices, scores_l):
+                out = out + cvmm(scores, hi, self.values)
 
-        res = out.view(*input.shape[:-1], self.v_dim)
+            res = out.view(*input.shape[:-1], self.v_dim)
+        else:
+            res = 0
+            for scores in scores_l:
+                # we don't need to mask with the indices here since the
+                # hidden activations of the non-used experts are zero
+                res = res + F.linear(scores, self.values, None)
+
         if self.o_bias is not None:
             res = res + self.o_bias
         return res, reg_loss

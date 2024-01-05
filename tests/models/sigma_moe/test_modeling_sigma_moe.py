@@ -1,57 +1,35 @@
-# coding=utf-8
-# Copyright 2022 Google SwitchTransformers Authors and HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+import torch
+from transformers.models.sigma_moe.moe_layer import SigmaMoELayer
+from transformers.testing_utils import slow
 
 
-from transformers.models.sigma_moe import (
-    SigmaMoEConfiguration,
-    SigmaMoEFeedForwardLayer,
-    SigmaMoEDecoderLayer,
-    SigmaMoEModel,
-    SigmaMoEForCausalLM,
-    SigmaMoEForSequenceClassification,
-    SigmaMoEForTokenClassification
-)
+@slow
+def test_equivalence_cpu_cuda():
+    torch.manual_seed(0)
 
-if __name__ == "__main__":
-    import torch
+    d_model = 128
+    n_experts = 4
+    expert_size = 64
+    k = 2
 
-    bs = 5
-    seq_len = 128
-    d_model = 256
+    cpu_moe = SigmaMoELayer(
+        d_model=d_model,
+        n_experts=n_experts,
+        expert_size=expert_size,
+        k=k,
+    )
 
-    config = SigmaMoEConfiguration()
-    # ff = SigmaMoEFeedForwardLayer(config, is_sparse=True)
-    # x = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
-    # ff(x)
+    cuda_moe = SigmaMoELayer(
+        d_model=d_model,
+        n_experts=n_experts,
+        expert_size=expert_size,
+        k=k,
+    ).cuda()
 
-    # decoder_layer = SigmaMoEDecoderLayer(config, is_sparse=True, layer_idx=0)
-    # tgt_len = 128
-    # src_len = 128
-    # hidden_states = torch.randn((bs, seq_len, d_model), device=torch.device("cpu"))
-    # mask = torch.tril(torch.ones((bs, 1, tgt_len, src_len), device=torch.device("cpu")))
-    # decoder_layer(hidden_states, mask)
+    cuda_moe.load_state_dict(cpu_moe.state_dict())
 
-    # model = SigmaMoEModel(config)
-    # xx = model(input_ids=torch.randint(0, 51200, (bs, seq_len)), return_dict=True)
+    inp = torch.randn(1, 1, 128)
+    cpu_x, _ = cpu_moe(inp)
+    cuda_x, _ = cuda_moe(inp.cuda())
 
-    # model = SigmaMoEForCausalLM(config)
-    # input_ids = torch.randint(0, 51200, (bs, seq_len))
-    # xx = model(input_ids=input_ids, return_dict=True, labels=input_ids)
-
-    config.num_labels = 2
-    model = SigmaMoEForSequenceClassification(config)
-    input_ids = torch.randint(0, 51200, (bs, seq_len))
-    labels = torch.randint(0, 2, (bs,))
-    xx = model(input_ids=input_ids, return_dict=True, labels=labels)
+    assert torch.allclose(cpu_x, cuda_x.cpu(), atol=1e-4)

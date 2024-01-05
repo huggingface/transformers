@@ -40,6 +40,7 @@ from ...utils import (
 )
 from ...activations import ACT2FN
 from .configuration_sigma_moe import SigmaMoEConfiguration
+from .moe_layer import SigmaMoELayer
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -48,18 +49,6 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SigmaMoEConfiguration"
-
-if torch.cuda.is_available():
-    try:
-        from .triton_src.moe_layer import MoE
-    except ImportError:
-        logger.warning(
-            "Could not import triton_src.moe_layer.MoE. Using cuda_src.moe_layer.MoE instead."
-        )
-        from .cuda_src.moe_layer import MoE
-else:
-    from .cpu_src.moe_layer import MoE
-
 
 def _get_router_loss(config: SigmaMoEConfiguration, reg_losses: Tuple):
     # router loss is the sum of all reg losses
@@ -257,7 +246,7 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
         self.config = config
 
         if self.is_sparse:
-            self.ff = MoE(
+            self.ff = SigmaMoELayer(
                 d_model=config.d_model,
                 n_experts=config.n_experts,
                 expert_size=config.expert_size,
@@ -270,7 +259,6 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
                 v_dim=config.v_dim,
                 sinkhorn_n_iters=config.sinkhorn_n_iters,
                 expert_dropout=config.expert_dropout,
-                weight_std_scale=config.weight_std_scale,
             )
         else:
             self.ff = SigmaMoEDenseActDense(config)
@@ -873,6 +861,7 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
 
     def _init_weights(self, module):
+        self.config: SigmaMoEConfiguration
         std = self.config.initializer_range
         if isinstance(module, torch.nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -882,7 +871,7 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MoE):
+        elif isinstance(module, SigmaMoELayer):
             module.expert_sel.data.normal_(mean=0.0, std=std)
             module.renorm_keep_std(module.expert_sel, dim=1)
             module.keys.data.normal_(mean=0.0, std=std)
