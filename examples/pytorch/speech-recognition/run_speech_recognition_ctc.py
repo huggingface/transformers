@@ -132,6 +132,13 @@ class ModelArguments:
     ctc_loss_reduction: Optional[str] = field(
         default="mean", metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."}
     )
+    add_adapter: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether a convolutional attention network should be stacked on top of the Wav2Vec2BERT Encoder. Can be very"
+            "useful to downsample the output length."
+        },
+    )
 
 
 @dataclass
@@ -602,6 +609,7 @@ def main():
             "pad_token_id": tokenizer.pad_token_id,
             "vocab_size": len(tokenizer),
             "activation_dropout": model_args.activation_dropout,
+            "add_adapter": model_args.add_adapter,
         }
     )
 
