@@ -110,7 +110,7 @@ class DetaConfig(PretrainedConfig):
         focal_alpha (`float`, *optional*, defaults to 0.25):
             Alpha parameter in the focal loss.
         assign_first_stage (`bool`, *optional*, defaults to `True`):
-            Whether to assign each prediction i to the highest overlapping ground truth object if the overlap is larger than a threshold τ.
+            Whether to assign each prediction i to the highest overlapping ground truth object if the overlap is larger than a threshold 0.7.
         assign_second_stage (`bool`, *optional*, defaults to `True`):
             Whether to assign second assignment procedure in the second stage closely follows the first stage assignment procedure.
 
