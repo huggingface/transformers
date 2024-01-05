@@ -15,8 +15,6 @@
 """ PyTorch NarrowBERT model. """
 
 
-
-
 import math
 import os
 
@@ -25,15 +23,8 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.utils.rnn import pad_sequence
-from typing import Optional, Tuple, Union
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -48,7 +39,12 @@ from ...pytorch_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_narrow_bert import NarrowBertConfig
 
 
@@ -215,7 +211,9 @@ class NarrowBertSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = position_embedding_type or getattr(
+            config, "position_embedding_type", "absolute"
+        )
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
@@ -509,7 +507,7 @@ class NarrowBertEncoder(nn.Module):
         else:
             narrow_layers = config.num_hidden_layers - config.full_length_layers
             self.layer = nn.ModuleList([NarrowBertLayer(config) for _ in range(narrow_layers)])
-        
+
         self.gradient_checkpointing = False
 
     def forward(
@@ -540,7 +538,6 @@ class NarrowBertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         for i, layer_module in enumerate(self.layer):
-            
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
@@ -656,7 +653,7 @@ class NarrowBertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -758,7 +755,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         self.config = config
 
         self.embeddings = NarrowBertEmbeddings(config)
-        
+
         self.encoder = NarrowBertEncoder(config)
         self.encoder_narrow = NarrowBertEncoder(config, narrow=True)
 
@@ -851,7 +848,6 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
@@ -895,7 +891,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask[:self.config.full_length_layers],
+            head_mask=head_mask[: self.config.full_length_layers],
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
@@ -923,7 +919,7 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         narrow_encoder_outputs = self.encoder_narrow(
             narrow_inputs,
             attention_mask=extended_attention_mask,
-            head_mask=head_mask[self.config.full_length_layers:],
+            head_mask=head_mask[self.config.full_length_layers :],
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=extended_attention_mask,
             past_key_values=past_key_values,
@@ -951,12 +947,12 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
             if pooled_output is None:
                 pooled_output = ()
             return (sequence_output, pooled_output) + (all_hidden_states,) + (all_attentions,)
-        
+
         if output_hidden_states:
             encoder_outputs.hidden_states += narrow_encoder_outputs.hidden_states
         if output_attentions:
             encoder_outputs.attentions += narrow_encoder_outputs.attentions
-        
+
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
@@ -1021,7 +1017,7 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
             in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         narrow_mask = None
 
         if labels is not None:
@@ -1111,17 +1107,17 @@ class NarrowBertForSequenceClassification(NarrowBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1182,6 +1178,7 @@ class NarrowBertForSequenceClassification(NarrowBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """NarrowBERT Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -1201,24 +1198,26 @@ class NarrowBertForMultipleChoice(NarrowBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(NARROW_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        NARROW_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1280,7 +1279,6 @@ class NarrowBertForMultipleChoice(NarrowBertPreTrainedModel):
     NARROW_BERT_START_DOCSTRING,
 )
 class NarrowBertForTokenClassification(NarrowBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1343,7 +1341,7 @@ class NarrowBertForTokenClassification(NarrowBertPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            narrow_mask=narrow_mask
+            narrow_mask=narrow_mask,
         )
 
         sequence_output = outputs[0]

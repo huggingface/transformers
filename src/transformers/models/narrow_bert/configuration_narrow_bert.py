@@ -48,7 +48,7 @@ class NarrowBertConfig(PretrainedConfig):
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         full_length_layers (`int`, *optional*, defaults to 2):
-            Number of fully contextualized layers. 12 is equivalent to normal BERT. 
+            Number of fully contextualized layers. 12 is equivalent to normal BERT.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
@@ -86,10 +86,9 @@ class NarrowBertConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
+
     model_type = "narrow_bert"
-    
 
     def __init__(
         self,
@@ -110,7 +109,7 @@ class NarrowBertConfig(PretrainedConfig):
         pad_token_id=0,
         classifier_dropout=None,
         position_embedding_type="absolute",
-        **kwargs
+        **kwargs,
     ):
         if full_length_layers > num_hidden_layers:
             raise ValueError("You have to specify fewer full_length_layers than total num_hidden_layers.")
@@ -132,8 +131,4 @@ class NarrowBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.position_embedding_type = position_embedding_type
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            **kwargs
-        )
-
+        super().__init__(pad_token_id=pad_token_id, **kwargs)

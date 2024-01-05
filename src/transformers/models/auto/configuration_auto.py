@@ -30,7 +30,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("narrow_bert", "NarrowBertConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -158,6 +157,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mt5", "MT5Config"),
         ("musicgen", "MusicgenConfig"),
         ("mvp", "MvpConfig"),
+        ("narrow_bert", "NarrowBertConfig"),
         ("nat", "NatConfig"),
         ("nezha", "NezhaConfig"),
         ("nllb-moe", "NllbMoeConfig"),
@@ -263,7 +263,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("narrow_bert", "NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -381,6 +380,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("musicgen", "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("narrow_bert", "NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nezha", "NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nllb-moe", "NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -473,7 +473,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("narrow_bert", "NarrowBert"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -622,6 +621,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "MT5"),
         ("musicgen", "MusicGen"),
         ("mvp", "MVP"),
+        ("narrow_bert", "NarrowBert"),
         ("nat", "NAT"),
         ("nezha", "Nezha"),
         ("nllb", "NLLB"),

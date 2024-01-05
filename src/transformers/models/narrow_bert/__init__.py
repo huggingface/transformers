@@ -13,10 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -51,8 +48,6 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_narrow_bert import NARROW_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, NarrowBertConfig
     from .tokenization_narrow_bert import NarrowBertTokenizer
@@ -82,7 +77,6 @@ if TYPE_CHECKING:
             NarrowBertPreTrainedModel,
             load_tf_weights_in_narrow_bert,
         )
-
 
 
 else:

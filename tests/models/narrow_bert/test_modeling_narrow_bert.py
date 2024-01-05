@@ -17,11 +17,9 @@
 
 import unittest
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import NarrowBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import NarrowBertConfig
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -43,29 +41,29 @@ if is_torch_available():
 
 class NarrowBertModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -157,7 +155,7 @@ class NarrowBertModelTester:
     #     )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = NarrowBertModel(config=config, add_pooling_layer=False)
         model.to(torch_device)
@@ -168,7 +166,7 @@ class NarrowBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = NarrowBertForMaskedLM(config=config)
         model.to(torch_device)
@@ -177,7 +175,7 @@ class NarrowBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_sequence_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = NarrowBertForSequenceClassification(config)
@@ -187,7 +185,7 @@ class NarrowBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = NarrowBertForTokenClassification(config=config)
@@ -197,7 +195,7 @@ class NarrowBertModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_multiple_choice(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
         model = NarrowBertForMultipleChoice(config=config)
@@ -231,7 +229,6 @@ class NarrowBertModelTester:
 
 @require_torch
 class NarrowBertModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             NarrowBertModel,
@@ -298,9 +295,7 @@ class NarrowBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[-6.1220, -5.7395, -4.6056],
-            [-6.1220, -5.7396, -4.6056],
-            [-6.1221, -5.7395, -4.6056]]]
+            [[[-6.1220, -5.7395, -4.6056], [-6.1220, -5.7396, -4.6056], [-6.1221, -5.7395, -4.6056]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
@@ -316,6 +311,6 @@ class NarrowBertModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, num_class))
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-1.0934, -2.5223,  3.7916]])
+        expected_slice = torch.tensor([[-1.0934, -2.5223, 3.7916]])
 
         self.assertTrue(torch.allclose(output, expected_slice, atol=1e-4))
