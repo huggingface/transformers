@@ -37,7 +37,7 @@ MAPPING = {
     "channel_upsampler_t": "temp_upsampler",
     "encoder.*.conv": "freq_encoder.*.conv_in",
     "encoder.*.rewrite": "freq_encoder.*.conv_out",
-    "encoder.*.dconv": "temp_encoder.*.residual_conv",
+    "encoder.*.dconv": "freq_encoder.*.residual_conv",
     "tencoder.*.conv": "temp_encoder.*.conv_in",
     "tencoder.*.rewrite": "temp_encoder.*.conv_out",
     "tencoder.*.dconv": "temp_encoder.*.residual_conv",
@@ -47,8 +47,8 @@ MAPPING = {
     "tdecoder.*.conv_tr": "temp_decoder.*.conv_out",
     "tdecoder.*.rewrite": "temp_decoder.*.conv_in",
     "tdecoder.*.dconv": "temp_decoder.*.residual_conv",
-    "crosstransformer.norm_in": "transformer.freq_layernorm_embedding",
     "crosstransformer.norm_in_t": "transformer.temp_layernorm_embedding",
+    "crosstransformer.norm_in": "transformer.freq_layernorm_embedding",
     "crosstransformer.layers.*.self_attn.q_proj": "transformer.layers.*.freq_attn.attn.q_proj",
     "crosstransformer.layers.*.self_attn.k_proj": "transformer.layers.*.freq_attn.attn.k_proj",
     "crosstransformer.layers.*.self_attn.v_proj": "transformer.layers.*.freq_attn.attn.v_proj",
@@ -62,7 +62,7 @@ MAPPING = {
     "crosstransformer.layers.*.linear1": "transformer.layers.*.freq_attn.fc1",
     "crosstransformer.layers.*.linear2": "transformer.layers.*.freq_attn.fc2",
     "crosstransformer.layers.*.norm1": "transformer.layers.*.freq_attn.attn_layer_norm",
-    "crosstransformer.layers.*.norm2": ["transformer.layers.*.freq_attn.cross_attn_layer_norm", "transformer.layers.*.freq_attn.final_layer_norm"],
+    "crosstransformer.layers.*.norm2": ["transformer.layers.*.freq_attn.final_layer_norm", "transformer.layers.*.freq_attn.cross_attn_layer_norm"],
     "crosstransformer.layers.*.norm3": "transformer.layers.*.freq_attn.final_layer_norm",
     "crosstransformer.layers.*.norm_out": "transformer.layers.*.freq_attn.group_norm",
     "crosstransformer.layers_t.*.self_attn.q_proj": "transformer.layers.*.temp_attn.attn.q_proj",
@@ -78,8 +78,7 @@ MAPPING = {
     "crosstransformer.layers_t.*.linear1": "transformer.layers.*.temp_attn.fc1",
     "crosstransformer.layers_t.*.linear2": "transformer.layers.*.temp_attn.fc2",
     "crosstransformer.layers_t.*.norm1": "transformer.layers.*.temp_attn.attn_layer_norm",
-    "crosstransformer.layers_t.*.norm2": ["transformer.layers.*.temp_attn.cross_attn_layer_norm",
-                                        "transformer.layers.*.temp_attn.final_layer_norm"],
+    "crosstransformer.layers_t.*.norm2": ["transformer.layers.*.temp_attn.final_layer_norm", "transformer.layers.*.temp_attn.cross_attn_layer_norm"],
     "crosstransformer.layers_t.*.norm3": "transformer.layers.*.temp_attn.final_layer_norm",
     "crosstransformer.layers_t.*.norm_out": "transformer.layers.*.temp_attn.group_norm",
 }
@@ -164,7 +163,8 @@ def load_demucs_layer(name, value, hf_model=None):
             if layer_index:
                 layer_index = layer_index[0]
                 key = key.replace("*", layer_index)
-                mapped_key = mapped_key[int(layer_index) % 2] if isinstance(mapped_key, list) else mapped_key
+                if isinstance(mapped_key, list):
+                    mapped_key = mapped_key[int(layer_index) % 2]
                 mapped_key = mapped_key.replace("*", layer_index)
         if "dconv" in name:
             for residual_key, mapped_residual_key in RESIDUAL_CONV_MAPPING.items():
@@ -218,7 +218,10 @@ def convert_demucs_checkpoint(checkpoint, pytorch_dump_folder_path, config_path=
     hf_demucs = HtdemucsModel(config)
 
     recursively_load_weights(model, hf_demucs)
-    hf_demucs.save_pretrained(pytorch_dump_folder_path)
+    # hack to save tied weights from the k/q/v proj
+    hf_demucs.save_pretrained(pytorch_dump_folder_path, safe_serialization=False)
+    hf_demucs = hf_demucs.from_pretrained(pytorch_dump_folder_path, use_safetensors=False)
+    hf_demucs.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
 
 
 if __name__ == "__main__":

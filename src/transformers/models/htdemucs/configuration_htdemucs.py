@@ -91,6 +91,8 @@ class HtdemucsConfig(PretrainedConfig):
             Stride for encoder and decoder layers.
         freq_embedding_lr_scale (`float`, *optional*, defaults to 10):
             Factor by which to boost the learning rate in the scaled embedding layer.
+        freq_embedding_scale (`float`, *optional*, defaults to 0.2):
+            Factor by which to scale the weights of the frequency embeddings.
     """
 
     model_type = "htdemucs"
@@ -121,6 +123,7 @@ class HtdemucsConfig(PretrainedConfig):
         n_fft=4096,
         stride=4,
         freq_embedding_lr_scale=10,
+        freq_embedding_scale=0.2,
         **kwargs,
     ):
         self.max_position_embeddings = max_position_embeddings
@@ -147,5 +150,6 @@ class HtdemucsConfig(PretrainedConfig):
         self.n_fft = n_fft
         self.stride = stride
         self.freq_embedding_lr_scale = freq_embedding_lr_scale
+        self.freq_embedding_scale = freq_embedding_scale
 
         super().__init__(**kwargs)

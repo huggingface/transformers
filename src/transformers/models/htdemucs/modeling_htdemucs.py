@@ -19,6 +19,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+from torch.nn import L1Loss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
@@ -71,6 +72,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 def inverse_spectrogram(spectrogram, hop_length, length=None):
+    spectrogram = torch.view_as_complex(spectrogram.contiguous())
     spectrogram = nn.functional.pad(spectrogram, (0, 0, 0, 1))
     spectrogram = nn.functional.pad(spectrogram, (2, 2))
     padding = hop_length // 2 * 3
@@ -79,14 +81,13 @@ def inverse_spectrogram(spectrogram, hop_length, length=None):
     *other, freqs, frames = spectrogram.shape
     n_fft = 2 * freqs - 2
     spectrogram = spectrogram.view(-1, freqs, frames)
-    win_length = n_fft // (1 + padding)
 
     waveform = torch.istft(
         spectrogram,
         n_fft,
         hop_length,
-        window=torch.hann_window(win_length).to(spectrogram.real),
-        win_length=win_length,
+        window=torch.hann_window(n_fft).to(spectrogram.real),
+        win_length=n_fft,
         normalized=True,
         length=unpadded_length,
         center=True,
@@ -279,7 +280,7 @@ class HtdemucsTransformerBlock(nn.Module):
         hidden_states = self.layer_scale_2 * hidden_states
         hidden_states = residual + hidden_states
 
-        hidden_states = self.group_norm(hidden_states)
+        hidden_states = self.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         outputs = (hidden_states,)
 
@@ -323,7 +324,7 @@ class HtdemucsTransformerLayer(nn.Module):
         )
 
         freq_hidden_states = freq_layer_outputs[0]
-        temp_hidden_states = temp_hidden_states[0]
+        temp_hidden_states = temp_layer_outputs[0]
 
         if output_attentions:
             all_attentions += (freq_layer_outputs[1], temp_layer_outputs[1])
@@ -353,12 +354,14 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
         self.embedding.weight.data[:] = weight / smoothing_factor.sqrt()
 
         self.embedding.weight.data /= config.freq_embedding_lr_scale
-        self.scale = config.freq_embedding_lr_scale
+        self.lr_scale = config.freq_embedding_lr_scale
+        self.weight_scale = config.freq_embedding_scale
 
     def forward(self, input_features):
         frequencies = torch.arange(input_features.shape[-2], device=input_features.device)
-        embeddings = self.scale * self.embedding(frequencies)
+        embeddings = self.lr_scale * self.embedding(frequencies)
         embeddings = embeddings.transpose(1, 0)[None, :, :, None].expand_as(input_features)
+        embeddings = self.weight_scale * embeddings
         return embeddings
 
 
@@ -392,7 +395,7 @@ class HtdemucsResidualConvLayer(nn.Module):
             hidden_states = self.conv_out[idx](hidden_states)
             hidden_states = self.norm_out[idx](hidden_states)
             hidden_states = nn.functional.glu(hidden_states, dim=1)
-            hidden_states = residual + self.layer_scales[idx] * hidden_states
+            hidden_states = residual + self.layer_scales[idx][:, None] * hidden_states
         return hidden_states
 
 
@@ -452,7 +455,7 @@ class HtdemucsTempDecoderLayer(nn.Module):
         hidden_states = hidden_states + res_hidden_states
 
         hidden_states = self.conv_in(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         hidden_states = self.residual_conv(hidden_states)
 
@@ -476,7 +479,7 @@ class HtdemucsFreqDecoderLayer(nn.Module):
         hidden_states = hidden_states + res_hidden_states
 
         hidden_states = self.conv_in(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
 
         bsz, channels, freq, seq_len = hidden_states.shape
         hidden_states = hidden_states.permute(0, 2, 1, 3).reshape(-1, channels, seq_len)
@@ -620,7 +623,7 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 
         self.layers = nn.ModuleList([])
         for idx in range(config.num_hidden_layers):
-            self.layers.append(HtdemucsTransformerLayer(config, is_cross_attn=bool((idx + 1) % 2)))
+            self.layers.append(HtdemucsTransformerLayer(config, is_cross_attn=bool(idx % 2)))
 
         self.freq_pos_embedding = Htdemucs2dSinusoidalPositionalEmbedding(config)
         self.temp_pos_embedding = HtdemucsSinusoidalPositionalEmbedding(
@@ -636,8 +639,8 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 
     def forward(
         self,
-        input_features: torch.FloatTensor,
-        input_values: torch.FloatTensor,
+        freq_hidden_states: torch.FloatTensor,
+        temp_hidden_states: torch.FloatTensor,
         freq_attention_mask: torch.LongTensor = None,
         temp_attention_mask: torch.LongTensor = None,
         output_attentions: Optional[bool] = None,
@@ -646,17 +649,10 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
     ) -> Union[Tuple, HtdemucsBaseModelOutput]:
         r"""
         Args:
-            input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
-                Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
-                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
-                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
-                tensor of type `torch.FloatTensor`. See [`~HtdemucsProcessor.__call__`]
-            input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-                Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
-                into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-                soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
-                conversion into a tensor of type `torch.FloatTensor`. See [`HtdemucsProcessor.__call__`] for details.
+            freq_hidden_states (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                TODO
+            temp_hidden_states (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                TODO
             freq_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on spatial (frequency) padding token indices. Mask values selected
                 in `[0, 1]`:
@@ -687,14 +683,21 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        freq_positions = self.freq_pos_embedding(input_features)
-        temp_positions = self.temp_pos_embedding(input_values)
+        freq_positions = self.freq_pos_embedding(freq_hidden_states)
+        temp_positions = self.temp_pos_embedding(temp_hidden_states)
 
-        freq_hidden_states = input_features + freq_positions.to(input_features.device)
-        temp_hidden_states = input_values + temp_positions.to(input_values.device)
-
+        # TODO(SG): see if we can remove this reshape
+        bsz, bottom_channels, freq, seq_len = freq_hidden_states.shape
+        freq_hidden_states = freq_hidden_states.reshape(bsz, bottom_channels, freq * seq_len).transpose(1, 2)
         freq_hidden_states = self.freq_layernorm_embedding(freq_hidden_states)
+        freq_positions = freq_positions.reshape(bottom_channels, freq * seq_len).transpose(0, 1)
+
+        # TODO(SG): see if we can remove this reshpae
+        temp_hidden_states = temp_hidden_states.transpose(1, 2)
         temp_hidden_states = self.temp_layernorm_embedding(temp_hidden_states)
+
+        freq_hidden_states = freq_hidden_states + freq_positions.to(freq_hidden_states.device)
+        temp_hidden_states = temp_hidden_states + temp_positions.to(temp_hidden_states.device)
 
         freq_hidden_states = nn.functional.dropout(freq_hidden_states, p=self.dropout, training=self.training)
         temp_hidden_states = nn.functional.dropout(temp_hidden_states, p=self.dropout, training=self.training)
@@ -753,18 +756,18 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + layer_outputs[3]
 
-            if not return_dict:
-                return tuple(
-                    v
-                    for v in [freq_hidden_states, temp_hidden_states, all_hidden_states, all_attentions]
-                    if v is not None
-                )
-            return HtdemucsBaseModelOutput(
-                last_freq_hidden_state=freq_hidden_states,
-                last_temp_hidden_state=temp_hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_attentions,
+        if not return_dict:
+            return tuple(
+                v
+                for v in [freq_hidden_states, temp_hidden_states, all_hidden_states, all_attentions]
+                if v is not None
             )
+        return HtdemucsBaseModelOutput(
+            last_freq_hidden_state=freq_hidden_states,
+            last_temp_hidden_state=temp_hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
+        )
 
 
 class HtdemucsModel(HtdemucsPreTrainedModel):
@@ -815,21 +818,32 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         self,
         input_features: torch.FloatTensor,
         input_values: torch.FloatTensor,
-        freq_attention_mask: torch.LongTensor = None,
-        temp_attention_mask: torch.LongTensor = None,
+        labels: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, HtdemucsBaseModelOutput]:
-        res_freq_hidden_states = ()
-        res_temp_hidden_states = ()
+        """
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+            tensor of type `torch.FloatTensor`. See [`~HtdemucsProcessor.__call__`]
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`HtdemucsProcessor.__call__`] for details.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        freq_lengths = ()
+        all_freq_hidden_states = ()
+        all_temp_hidden_states = ()
         temp_lengths = ()
 
-        bsz, channels, freq, seq_len = input_features.shape
-
         # prepare the freq branch input
+        freq_channels = input_features.size(2)
         freq_mean = input_features.mean(dim=(1, 2, 3), keepdim=True)
         freq_std = input_features.std(dim=(1, 2, 3), keepdim=True)
         freq_hidden_states = (input_features - freq_mean) / (1e-5 + freq_std)
@@ -841,14 +855,12 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
 
         # down-blocks
         for layer, (temp_encoder, freq_encoder) in enumerate(zip(self.temp_encoder, self.freq_encoder)):
-            freq_lengths += (freq_hidden_states.shape[-1],)
-
             if layer < len(self.temp_encoder):
                 # we have not yet merged branches
                 temp_lengths += (temp_hidden_states.shape[-1],)
                 temp_hidden_states = temp_encoder(temp_hidden_states)
-                # save for skip connection
-                res_temp_hidden_states += (temp_hidden_states,)
+                # save temp hidden-state for skip connection
+                all_temp_hidden_states += (temp_hidden_states,)
 
             freq_hidden_states = freq_encoder(freq_hidden_states)
 
@@ -857,45 +869,64 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
                 positional_embedding = self.freq_embedding(freq_hidden_states)
                 freq_hidden_states = freq_hidden_states + positional_embedding
 
-            res_freq_hidden_states += (freq_hidden_states,)
+            # save freq hidden-state for skip connection
+            all_freq_hidden_states += (freq_hidden_states,)
 
         # mid-block
-        if self.crosstransformer:
-            bsz, channels, freq, seq_len = freq_hidden_states.shape
-            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
-            freq_hidden_states = self.freq_upsampler(freq_hidden_states)
-            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
-            temp_hidden_states = self.temp_upsampler(temp_hidden_states)
+        bsz, channels, freq, seq_len = freq_hidden_states.shape
+        freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
+        freq_hidden_states = self.freq_upsampler(freq_hidden_states)
+        # TODO(SG): see if we can remove this reshape
+        freq_hidden_states = freq_hidden_states.reshape(bsz, self.config.bottom_channels, freq, seq_len)
+        temp_hidden_states = self.temp_upsampler(temp_hidden_states)
 
-            transformer_outputs = self.transformer(freq_hidden_states, temp_hidden_states)
-            freq_hidden_states = transformer_outputs[0]
-            temp_hidden_states = transformer_outputs[1]
+        transformer_outputs = self.transformer(freq_hidden_states, temp_hidden_states, output_attention=output_attentions, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        freq_hidden_states = transformer_outputs[0]
+        temp_hidden_states = transformer_outputs[1]
 
-            bsz, channels, freq, seq_len = freq_hidden_states.shape
-            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq * seq_len)
-            freq_hidden_states = self.freq_downsampler(freq_hidden_states)
-            freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
-            temp_hidden_states = self.temp_downsampler(temp_hidden_states)
+        if output_hidden_states:
+            # TODO(SG): correct
+            all_freq_hidden_states += (freq_hidden_states,)
+            all_temp_hidden_states += (temp_hidden_states,)
+
+        freq_hidden_states = freq_hidden_states.transpose(1, 2).reshape(bsz, self.config.bottom_channels, freq * seq_len)
+        freq_hidden_states = self.freq_downsampler(freq_hidden_states)
+        freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
+        temp_hidden_states = temp_hidden_states.transpose(1, 2)
+        temp_hidden_states = self.temp_downsampler(temp_hidden_states)
 
         # up-blocks
         for layer, (temp_decoder, freq_decoder) in enumerate(zip(self.temp_decoder, self.freq_decoder)):
-            res_layer = len(self.temp_decoder) - layer
-            freq_hidden_states = freq_decoder(
-                freq_hidden_states, res_freq_hidden_states[res_layer], freq_lengths[res_layer]
-            )
+            res_layer = len(self.temp_decoder) - layer - 1
+            freq_hidden_states = freq_decoder(freq_hidden_states, all_freq_hidden_states[res_layer])
             temp_hidden_states = temp_decoder(
-                temp_hidden_states, res_temp_hidden_states[res_layer], temp_lengths[res_layer]
+                temp_hidden_states, all_temp_hidden_states[res_layer], temp_lengths[res_layer]
             )
+            if output_hidden_states:
+                all_freq_hidden_states += (freq_hidden_states,)
+                all_temp_hidden_states += (temp_hidden_states,)
 
-        freq_hidden_states = freq_hidden_states.view(bsz, self.num_stems, -1, freq, seq_len)
+        # un-normalize the frequency branch and post-process (spectrogram -> waveform)
+        freq_hidden_states = freq_hidden_states.reshape(bsz, self.num_stems, -1, freq_channels, seq_len)
         freq_hidden_states = freq_hidden_states * freq_std[:, None] + freq_mean[:, None]
 
-        freq_hidden_states = freq_hidden_states.view(bsz, self.num_stems, -1, 2, freq, seq_len)
+        freq_hidden_states = freq_hidden_states.reshape(bsz, self.num_stems, -1, 2, freq_channels, seq_len)
         freq_hidden_states = freq_hidden_states.permute(0, 1, 2, 4, 5, 3)
-        freq_hidden_states = freq_hidden_states.view_as_complex(freq_hidden_states.contiguous())
         freq_hidden_states = inverse_spectrogram(freq_hidden_states, self.hop_length, input_values.shape[-1])
 
-        temp_hidden_states = temp_hidden_states.view(bsz, self.num_stems, -1, input_values.shape[-1])
+        # un-normalize the temporal branch
+        temp_hidden_states = temp_hidden_states.reshape(bsz, self.num_stems, -1, input_values.shape[-1])
         temp_hidden_states = temp_hidden_states * temp_std[:, None] + temp_mean[:, None]
 
-        return temp_hidden_states + freq_hidden_states
+        output_values = temp_hidden_states + freq_hidden_states
+
+        loss = None
+        if labels is not None:
+            loss_fn = L1Loss()
+            loss = loss_fn(output_values, labels, reduction="mean")
+
+        if not return_dict:
+            output = (output_values,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return output_values
