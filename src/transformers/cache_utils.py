@@ -267,7 +267,6 @@ class SinkCache(Cache):
         cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
         using_rope = cos is not None and sin is not None
-
         # Update the number of seen tokens
         if layer_idx == 0:
             self.seen_tokens += key_states.shape[-2]
@@ -348,7 +347,9 @@ class StaticCache(Cache):
         # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         # self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-
+        
+        # We cache a big mask that will be updated with the input mask
+        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,max_sequence_length, max_sequence_length),  dtype=dtype, fill_value=torch.finfo(dtype).min), diagonal = 1)
 
     def update(
         self,
@@ -368,32 +369,39 @@ class StaticCache(Cache):
             layer_idx (`int`):
                 The index of the layer to cache the states for.
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. No additional arguments are used in `DynamicCache`.
+                Additional arguments for the cache subclass. The `StaticCache` needs to update the attention
+                mask to make sure the unseen tokens are not attended to.
 
         Return:
             A tuple containing the updated key and value states.
         """
+        
+        attention_mask = cache_kwargs.get("attention_mask")
+
+        # make sure the parts that are not seen are masked as well
+        
         if self.seen_tokens == 0:
             self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
-
+        
+        _, _, query_length, past_length = attention_mask.shape
+        final_mask = self.causal_4d_mask.to(attention_mask.device)
+        final_mask[:,:,:query_length,:past_length] = attention_mask
+        final_mask[:,:, query_length:,past_length:] = -65504
+        
         # Update the cache
         if len(self.key_cache) + 1 == self.max_sequence_length:
             # let's overwrite and roll the cache to support going beyond?
-            self.key_cache[layer_idx][0] = key_states
-            self.key_cache[layer_idx] = torch.roll(self.key_cache[layer_idx],-1,0)
-
-            self.value_cache[layer_idx][0] = value_states
-            self.value_cache[layer_idx] = torch.roll(self.value_cache[layer_idx],-1,0)
+            raise ValueError("Your are going outside the allocated cache")
         else:
             self.key_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = key_states
             self.value_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = value_states
 
         # Update the number of seen tokens
-        if layer_idx == self.num_layers:
+        if layer_idx == self.num_layers - 1:
             self.seen_tokens += key_states.shape[-2]
             
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+        return self.key_cache[layer_idx], self.value_cache[layer_idx], final_mask[:,:,:query_length,:]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""

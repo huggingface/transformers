@@ -240,7 +240,7 @@ class CacheIntegrationTest(unittest.TestCase):
         cache = StaticCache(model.config, model.config.num_hidden_layers, 2, 4096, model.config.num_attention_heads, model.config.hidden_size)
         model.generation_config.cache_implementation = "static"
         inputs = tokenizer(["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt").to(model.device)
-        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=4)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = ["The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good"]
         self.assertListEqual(decoded, expected_text)
@@ -255,6 +255,26 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
 
+        EXPECTED_CAUSAL_MASK = torch.tensor(
+            [
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
+                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.]
+            ],device='mps:0'
+        ) # fmt: skip
         
     def test_static_cache_beam_search(self):
         tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
