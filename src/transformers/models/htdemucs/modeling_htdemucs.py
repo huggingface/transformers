@@ -19,7 +19,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch.nn import L1Loss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import ModelOutput
@@ -590,16 +589,16 @@ class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
         d_model = int(self.d_model / 2)
         div_term = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / d_model))
 
-        pos_emb[0 : d_model : 2, :, :] = (
+        pos_emb[0:d_model:2, :, :] = (
             torch.sin(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, 2 * self.num_stems, 1)
         )
-        pos_emb[1 : d_model : 2, :, :] = (
+        pos_emb[1:d_model:2, :, :] = (
             torch.cos(width_position * div_term).transpose(0, 1).unsqueeze(1).repeat(1, 2 * self.num_stems, 1)
         )
         pos_emb[d_model::2, :, :] = (
             torch.sin(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
         )
-        pos_emb[d_model+1::2, :, :] = (
+        pos_emb[d_model + 1 :: 2, :, :] = (
             torch.cos(height_position * div_term).transpose(0, 1).unsqueeze(2).repeat(1, 1, seq_len)
         )
 
@@ -758,9 +757,7 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v
-                for v in [freq_hidden_states, temp_hidden_states, all_hidden_states, all_attentions]
-                if v is not None
+                v for v in [freq_hidden_states, temp_hidden_states, all_hidden_states, all_attentions] if v is not None
             )
         return HtdemucsBaseModelOutput(
             last_freq_hidden_state=freq_hidden_states,
@@ -880,7 +877,13 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         freq_hidden_states = freq_hidden_states.reshape(bsz, self.config.bottom_channels, freq, seq_len)
         temp_hidden_states = self.temp_upsampler(temp_hidden_states)
 
-        transformer_outputs = self.transformer(freq_hidden_states, temp_hidden_states, output_attention=output_attentions, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        transformer_outputs = self.transformer(
+            freq_hidden_states,
+            temp_hidden_states,
+            output_attention=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
         freq_hidden_states = transformer_outputs[0]
         temp_hidden_states = transformer_outputs[1]
 
@@ -889,7 +892,9 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
             all_freq_hidden_states += (freq_hidden_states,)
             all_temp_hidden_states += (temp_hidden_states,)
 
-        freq_hidden_states = freq_hidden_states.transpose(1, 2).reshape(bsz, self.config.bottom_channels, freq * seq_len)
+        freq_hidden_states = freq_hidden_states.transpose(1, 2).reshape(
+            bsz, self.config.bottom_channels, freq * seq_len
+        )
         freq_hidden_states = self.freq_downsampler(freq_hidden_states)
         freq_hidden_states = freq_hidden_states.reshape(bsz, channels, freq, seq_len)
         temp_hidden_states = temp_hidden_states.transpose(1, 2)
@@ -922,8 +927,8 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fn = L1Loss()
-            loss = loss_fn(output_values, labels, reduction="mean")
+           loss_fn = L1Loss()
+           loss = loss_fn(output_values, labels, reduction="mean")
 
         if not return_dict:
             output = (output_values,) + outputs[1:]

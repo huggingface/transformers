@@ -62,7 +62,10 @@ MAPPING = {
     "crosstransformer.layers.*.linear1": "transformer.layers.*.freq_attn.fc1",
     "crosstransformer.layers.*.linear2": "transformer.layers.*.freq_attn.fc2",
     "crosstransformer.layers.*.norm1": "transformer.layers.*.freq_attn.attn_layer_norm",
-    "crosstransformer.layers.*.norm2": ["transformer.layers.*.freq_attn.final_layer_norm", "transformer.layers.*.freq_attn.cross_attn_layer_norm"],
+    "crosstransformer.layers.*.norm2": [
+        "transformer.layers.*.freq_attn.final_layer_norm",
+        "transformer.layers.*.freq_attn.cross_attn_layer_norm",
+    ],
     "crosstransformer.layers.*.norm3": "transformer.layers.*.freq_attn.final_layer_norm",
     "crosstransformer.layers.*.norm_out": "transformer.layers.*.freq_attn.group_norm",
     "crosstransformer.layers_t.*.self_attn.q_proj": "transformer.layers.*.temp_attn.attn.q_proj",
@@ -78,7 +81,10 @@ MAPPING = {
     "crosstransformer.layers_t.*.linear1": "transformer.layers.*.temp_attn.fc1",
     "crosstransformer.layers_t.*.linear2": "transformer.layers.*.temp_attn.fc2",
     "crosstransformer.layers_t.*.norm1": "transformer.layers.*.temp_attn.attn_layer_norm",
-    "crosstransformer.layers_t.*.norm2": ["transformer.layers.*.temp_attn.final_layer_norm", "transformer.layers.*.temp_attn.cross_attn_layer_norm"],
+    "crosstransformer.layers_t.*.norm2": [
+        "transformer.layers.*.temp_attn.final_layer_norm",
+        "transformer.layers.*.temp_attn.cross_attn_layer_norm",
+    ],
     "crosstransformer.layers_t.*.norm3": "transformer.layers.*.temp_attn.final_layer_norm",
     "crosstransformer.layers_t.*.norm_out": "transformer.layers.*.temp_attn.group_norm",
 }
