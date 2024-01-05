@@ -631,12 +631,13 @@ class ElectraDiscriminatorPredictions(nn.Module):
         super().__init__()
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.act = get_activation(self.config.hidden_act)
         self.dense_prediction = nn.Linear(config.hidden_size, 1)
         self.config = config
 
     def forward(self, discriminator_hidden_states):
         hidden_states = self.dense(discriminator_hidden_states)
-        hidden_states = get_activation(self.config.hidden_act)(hidden_states)
+        hidden_states = self.act(hidden_states)
         logits = self.dense_prediction(hidden_states).squeeze(-1)
 
         return logits
@@ -648,12 +649,13 @@ class ElectraGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.gelu_act = get_activation('gelu')
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
     def forward(self, generator_hidden_states):
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = get_activation("gelu")(hidden_states)
+        hidden_states = self.gelu_act(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states
@@ -933,6 +935,7 @@ class ElectraClassificationHead(nn.Module):
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
+        self.gelu_act = get_activation("gelu")
         self.dropout = nn.Dropout(classifier_dropout)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -940,7 +943,7 @@ class ElectraClassificationHead(nn.Module):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = get_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = self.gelu_act(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
