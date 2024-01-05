@@ -917,7 +917,6 @@ class PhiModel(PhiPreTrainedModel):
                     position_ids,
                     past_key_values,
                     output_attentions,
-                    use_cache,
                 )
             else:
                 layer_outputs = decoder_layer(

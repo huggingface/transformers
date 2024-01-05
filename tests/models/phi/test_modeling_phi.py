@@ -365,18 +365,18 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->susnato/phi-1_5_dev
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1_5
     def test_flash_attn_2_generate_padding_right(self):
         """
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_5_dev",
+            "microsoft/phi-1_5",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -389,7 +389,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         output_native = tokenizer.batch_decode(output_native)
 
         model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_5_dev", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "microsoft/phi-1_5", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -408,7 +408,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-1").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -424,7 +424,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
