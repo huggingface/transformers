@@ -420,13 +420,13 @@ class LlamaAttention(nn.Module):
             )
 
         if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+            if attention_mask.size() != (bsz, 1, q_len, attn_weights.shape[-1]):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
             # TODO with static cache the attention mask should be 4d with the correct max_length
             # which is 4096. But this might only work well for sdpa
-            attn_weights = attn_weights +  torch.tril(torch.ones(attn_weights.shape[-2], attn_weights.shape[-1], dtype=torch.bool)).to(attn_weights.device)
+            attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -715,11 +715,11 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+        # if attention_mask is not None:
+        #     if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
+        #         raise ValueError(
+        #             f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
+        #         )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -732,7 +732,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=torch.tril(torch.ones(4096, 4096, dtype=torch.bool))[position_ids.tolist(), None].permute(0,2,1,3).to(query_states.device),
+            attn_mask=attention_mask.bool(),
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -974,6 +974,20 @@ class LlamaModel(LlamaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    @staticmethod
+    def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+        """
+        Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, src_seq_len, tgt_len]`.
+        """
+        bsz, src_len = mask.size()
+        tgt_len = tgt_len if tgt_len is not None else src_len
+
+        expanded_mask = mask[:, None, :, None].expand(bsz, 1, src_len, tgt_len).to(dtype)
+
+        inverted_mask = 1.0 - expanded_mask
+
+        return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
+    
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -1018,7 +1032,7 @@ class LlamaModel(LlamaPreTrainedModel):
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_usable_length(seq_length)
-                
+
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
@@ -1035,17 +1049,38 @@ class LlamaModel(LlamaPreTrainedModel):
         elif self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-                attention_mask,
-                (batch_size, 4096),
-                inputs_embeds,
-                past_key_values_length,
+            
+            # we need to use the max length of the cache, and the number of tokens that were seen to properly update
+            # the attention mask when generating with past key values.
+            
+            causal_mask = torch.tril(torch.ones(seq_length+past_key_values_length, past_key_values.max_sequence_length, device=attention_mask.device))
+
+            causal_mask = (1-causal_mask).masked_fill(~causal_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min)
+            causal_mask = causal_mask.expand(batch_size, 1, seq_length+past_key_values_length, past_key_values.max_sequence_length)
+            # add the padding mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = self._expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=causal_mask.shape[-1]).to(
+                attention_mask.device
             )
+            if causal_mask is not None:
+                expanded_attn_mask = causal_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(inputs_embeds.dtype).min)
+            attention_mask = expanded_attn_mask[:,:,past_key_values_length:past_key_values_length+seq_length,:]
+
         else:
             # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, 4096), inputs_embeds, past_key_values_length
+            causal_mask = torch.tril(torch.ones(seq_length+past_key_values_length, past_key_values.max_sequence_length, device=attention_mask.device))
+
+            causal_mask = (1-causal_mask).masked_fill(~causal_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min)
+            causal_mask = causal_mask.expand(batch_size, 1, seq_length+past_key_values_length, past_key_values.max_sequence_length)
+            # add the padding mask
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            expanded_attn_mask = self._expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=causal_mask.shape[-1]).to(
+                attention_mask.device
             )
+            if causal_mask is not None:
+                expanded_attn_mask = causal_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(inputs_embeds.dtype).min)
+            attention_mask = expanded_attn_mask[:,:,past_key_values_length:past_key_values_length+seq_length,:]
+
 
         # embed positions
         hidden_states = inputs_embeds
