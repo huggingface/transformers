@@ -1160,19 +1160,6 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-
-            <Tip warning={true}>
-
-            `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
-            True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [wav2vec2-bert-rel-pos-large](https://huggingface.co/facebook/wav2vec2-bert-rel-pos-large),
-            `attention_mask` should **not** be passed to avoid degraded performance when doing batched inference. For
-            such models `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware
-            that these models also yield slightly different results depending on whether `input_values` is padded or
-            not.
-
-            </Tip>
-
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1390,14 +1377,14 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         >>> from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import _compute_mask_indices, _sample_negative_indices
         >>> from datasets import load_dataset
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-bert-rel-pos-large")
-        >>> model = Wav2Vec2BERTForPreTraining.from_pretrained("facebook/wav2vec2-bert-rel-pos-large")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+        >>> model = Wav2Vec2BERTForPreTraining.from_pretrained("facebook/w2v-bert-2.0")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1
 
         >>> # compute masked indices
-        >>> batch_size, raw_sequence_length = input_values.shape
+        >>> batch_size, raw_sequence_length = input_values.shape[:2]
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length).item()
         >>> mask_time_indices = _compute_mask_indices(
         ...     shape=(batch_size, sequence_length), mask_prob=0.2, mask_length=2

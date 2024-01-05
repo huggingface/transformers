@@ -63,7 +63,7 @@ class Wav2Vec2BERTModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=1024,  # speech is longer
+        seq_length=200,  # speech is longer
         is_training=False,
         hidden_size=16,
         feature_projection_input_dim=16,
