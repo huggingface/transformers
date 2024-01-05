@@ -30,6 +30,7 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
+    AnnotationType,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -56,6 +57,20 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
     from torch import nn
+
+
+# Copied from transformers.models.detr.image_processing_detr.safe_squeeze
+def safe_squeeze(arr: np.ndarray, axis: Optional[int] = None) -> np.ndarray:
+    """
+    Squeezes an array, but only if the axis specified has dim 1.
+    """
+    if axis is None:
+        return arr.squeeze()
+
+    try:
+        return arr.squeeze(axis=axis)
+    except ValueError:
+        return arr
 
 
 # Copied from transformers.models.detr.image_processing_detr.max_across_indices
@@ -771,11 +786,55 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         )
         return encoded_inputs
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._update_annotation_for_padded_image
+    def _update_annotation_for_padded_image(
+        self, annotation: Dict, input_image_size: Tuple[int, int], output_image_size: Tuple[int, int], padding
+    ) -> Dict:
+        """
+        Update the annotation for a padded image.
+        """
+        new_annotation = {}
+        new_annotation["size"] = output_image_size
+
+        input_height, input_width = input_image_size
+        output_height, output_width = output_image_size
+        for key, value in annotation.items():
+            if key == "boxes":
+                boxes = value
+                boxes *= np.asarray(
+                    [
+                        input_width / output_width,
+                        input_height / output_height,
+                        input_width / output_width,
+                        input_height / output_height,
+                    ],
+                    dtype=np.float32,
+                )
+                new_annotation["boxes"] = boxes
+            elif key == "masks":
+                masks = value
+                # FIXME - check the value to pad with here
+                masks = pad(
+                    masks[:, None],
+                    padding,
+                    mode=PaddingMode.CONSTANT,
+                    constant_values=0,
+                    input_data_format=ChannelDimension.LAST,
+                )
+                masks = safe_squeeze(masks, 1)
+                new_annotation["masks"] = masks
+            elif key == "size":
+                new_annotation["size"] = output_image_size
+            else:
+                new_annotation[key] = value
+        return new_annotation
+
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
         output_size: Tuple[int, int],
+        annotation: Optional[Dict[str, Any]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -797,12 +856,17 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             data_format=data_format,
             input_data_format=input_data_format,
         )
-        return padded_image
+        if annotation is not None:
+            annotation = self._update_annotation_for_padded_image(
+                annotation, (input_height, input_width), (output_height, output_width), padding
+            )
+        return padded_image, annotation
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
         constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -814,8 +878,10 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            image (`np.ndarray`):
-                Image to pad.
+            images (List[`np.ndarray`]):
+                Images to pad.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                Annotations to transform according to the padding that is applied to the images.
             constant_values (`float` or `Iterable[float]`, *optional*):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
@@ -834,16 +900,21 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         """
         pad_size = get_max_height_width(images, input_data_format=input_data_format)
 
-        padded_images = [
-            self._pad_image(
+        annotation_list = annotations if annotations is not None else [None] * len(images)
+        padded_images = []
+        padded_annotations = []
+        for image, annotation in zip(images, annotation_list):
+            padded_image, padded_annotation = self._pad_image(
                 image,
                 pad_size,
+                annotation,
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
             )
-            for image in images
-        ]
+            padded_images.append(padded_image)
+            padded_annotations.append(padded_annotation)
+
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
@@ -853,7 +924,14 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             ]
             data["pixel_mask"] = masks
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        if annotations is not None:
+            encoded_inputs["labels"] = [
+                BatchFeature(padded_annotations, tensor_type=return_tensors) for annotation in annotations
+            ]
+
+        return encoded_inputs
 
     def encode_inputs(
         self,
