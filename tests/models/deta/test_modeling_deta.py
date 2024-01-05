@@ -134,9 +134,9 @@ class DetaModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        two_stage = True if model_class_name == "DetaForObjectDetection" else False
-        assign_first_stage = True if model_class_name == "DetaForObjectDetection" else False
-        assign_second_stage = True if model_class_name == "DetaForObjectDetection" else False
+        two_stage = model_class_name == "DetaForObjectDetection"
+        assign_first_stage = model_class_name == "DetaForObjectDetection"
+        assign_second_stage = model_class_name == "DetaForObjectDetection"
         return DetaConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
