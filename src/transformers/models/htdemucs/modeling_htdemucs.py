@@ -36,23 +36,36 @@ class HtdemucsBaseModelOutput(ModelOutput):
             Sequence of frequency hidden-states at the output of the last layer of the model.
         last_temp_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of temporal hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        freq_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Hidden-states of the frequency branch of the model at the output of each layer plus the optional initial embedding outputs.
+        temp_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the frequency branch of the model at the output of each layer plus the optional initial embedding outputs.
+        freq_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+            Attention weights for the frequency branch after the attention softmax, used to compute the weighted average
+            in the self-attention heads.
+        temp_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attention weights for the frequency branch after the attention softmax, used to compute the weighted average
+            in the self-attention heads.
     """
 
     last_freq_hidden_state: torch.FloatTensor = None
     last_temp_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    freq_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    temp_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    freq_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    temp_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -292,7 +305,7 @@ class HtdemucsTransformerBlock(nn.Module):
 class HtdemucsTransformerLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, is_cross_attn: bool):
         super().__init__()
-
+        # mix the temporal/frequency branches with cross-attention conditioning when a cross-attention layer
         self.is_cross_attn = is_cross_attn
         self.freq_attn = HtdemucsTransformerBlock(config, is_cross_attn=is_cross_attn)
         self.temp_attn = HtdemucsTransformerBlock(config, is_cross_attn=is_cross_attn)
@@ -304,11 +317,7 @@ class HtdemucsTransformerLayer(nn.Module):
         freq_attention_mask: torch.LongTensor = None,
         temp_attention_mask: torch.LongTensor = None,
         output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
     ):
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
-
         freq_layer_outputs = self.freq_attn(
             freq_hidden_states,
             attention_mask=freq_attention_mask,
@@ -322,16 +331,14 @@ class HtdemucsTransformerLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        freq_hidden_states = freq_layer_outputs[0]
-        temp_hidden_states = temp_layer_outputs[0]
+        # freq and temp hidden-states
+        output = (freq_layer_outputs[0], temp_layer_outputs[0])
 
         if output_attentions:
-            all_attentions += (freq_layer_outputs[1], temp_layer_outputs[1])
+            # freq and temp attentions
+            output += freq_layer_outputs[1] + temp_layer_outputs[1]
 
-        if output_hidden_states:
-            all_hidden_states += (freq_hidden_states, temp_hidden_states)
-
-        return freq_hidden_states, temp_hidden_states, all_attentions, all_hidden_states
+        return output
 
 
 class HtdemucsScaledFrequencyEmbedding(nn.Module):
@@ -707,8 +714,10 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
         if temp_attention_mask is not None:
             temp_attention_mask = _expand_mask(temp_attention_mask, freq_hidden_states.dtype)
 
-        all_hidden_states = (freq_hidden_states, temp_hidden_states) if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_freq_hidden_states = (freq_hidden_states,) if output_hidden_states else None
+        all_temp_hidden_states = (temp_hidden_states,) if output_hidden_states else None
+        all_freq_attentions = () if output_attentions else None
+        all_temp_attentions = () if output_attentions else None
 
         for idx, layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -750,20 +759,24 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
                 temp_hidden_states = layer_outputs[1]
 
             if output_attentions:
-                all_attentions = all_attentions + layer_outputs[2]
+                all_freq_attentions = all_freq_attentions + (layer_outputs[3],)
+                all_temp_attentions = all_temp_attentions + (layer_outputs[3],)
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + layer_outputs[3]
+                all_freq_hidden_states = all_freq_hidden_states + (freq_hidden_states,)
+                all_temp_hidden_states = all_temp_hidden_states + (temp_hidden_states,)
 
         if not return_dict:
             return tuple(
-                v for v in [freq_hidden_states, temp_hidden_states, all_hidden_states, all_attentions] if v is not None
+                v for v in [freq_hidden_states, temp_hidden_states, all_freq_hidden_states, all_temp_hidden_states, all_freq_attentions, all_temp_attentions] if v is not None
             )
         return HtdemucsBaseModelOutput(
             last_freq_hidden_state=freq_hidden_states,
             last_temp_hidden_state=temp_hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            freq_hidden_states=all_freq_hidden_states,
+            temp_hidden_states=all_temp_hidden_states,
+            freq_attentions=all_freq_attentions,
+            temp_attentions=all_temp_attentions,
         )
 
 
