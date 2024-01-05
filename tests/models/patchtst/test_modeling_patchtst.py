@@ -275,11 +275,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
-                expected_arg_names = [
-                    "past_values",
-                    "target_values",
-                    "past_observed_mask",
-                ]
+                expected_arg_names = ["past_values", "target_values", "past_observed_mask"]
             else:
                 expected_arg_names = [
                     "past_values",
