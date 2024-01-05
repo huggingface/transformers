@@ -1430,20 +1430,25 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     LLAMA_START_DOCSTRING,
 )
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJForQuestionAnswering.__init__ with GPTJ->Llama
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.transformer = LlamaModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.transformer.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.transformer.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(LLAMA_START_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1451,11 +1456,14 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
     )
+    # Copied from transformers.models.gptj.modeling_gptj.GPTJForQuestionAnswering.forward with GPTJ->Llama
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
@@ -1475,10 +1483,12 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
+            head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
