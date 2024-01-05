@@ -274,6 +274,32 @@
         title: Blenderbot
       - local: model_doc/blenderbot-small
         title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -281,6 +307,16 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -288,6 +324,8 @@
         title: Audio Spectrogram Transformer
       - local: model_doc/bark
         title: Bark
+      - local: model_doc/clap
+        title: CLAP
       title: 音声モデル
     - isExpanded: false
       sections:
@@ -295,7 +333,30 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/data2vec
+        title: Data2Vec
       title: マルチモーダルモデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
+      title: 強化学習モデル
     - isExpanded: false
       sections:
       - local: model_doc/autoformer

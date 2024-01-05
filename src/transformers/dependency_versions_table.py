@@ -55,7 +55,7 @@ deps = {
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "python": "python>=3.8.0",
-    "ray[tune]": "ray[tune]",
+    "ray[tune]": "ray[tune]>=2.7.0",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",

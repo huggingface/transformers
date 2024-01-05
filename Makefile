@@ -44,6 +44,7 @@ repo-consistency:
 	python utils/update_metadata.py --check-only
 	python utils/check_task_guides.py
 	python utils/check_docstrings.py
+	python utils/check_support_list.py
 
 # this target runs checks on all files
 
