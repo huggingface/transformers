@@ -2831,6 +2831,12 @@ class Trainer:
                 state_dict = self.accelerator.get_state_dict(self.model)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
+            else:
+                if not version.parse(accelerate_version) > version.parse("0.24.1"):
+                    logger.warning(
+                        "I can't save FSDP normally because the version of accelerate is low!"
+                        " Please increase the version of accelerate to 0.24.5 or higher!"
+                        )
         elif self.is_deepspeed_enabled:
             try:
                 state_dict = self.accelerator.get_state_dict(self.deepspeed)
