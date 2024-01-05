@@ -236,8 +236,12 @@ class CacheIntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16, attn_implementation=attn_implementation,
         )
+        
+        # Set the generation config to use static cache
         model.generation_config.cache_implementation = "static"
         model.generation_config.max_sequence_length = 4096
+        
+        
         inputs = tokenizer(["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt").to(model.device)
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)

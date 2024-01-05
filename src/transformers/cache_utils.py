@@ -336,6 +336,7 @@ class StaticCache(Cache):
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
         
         # TODO device meta? 
+
         self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=self.dtype) for _ in range(self.num_layers)]
         self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=self.dtype) for _ in range(self.num_layers)]
         
@@ -345,7 +346,7 @@ class StaticCache(Cache):
         self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         
         # We cache a big mask that will be updated with the input mask
-        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),  dtype=dself.type, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
+        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
 
     def update(
         self,
