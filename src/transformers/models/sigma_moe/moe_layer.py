@@ -7,11 +7,12 @@ import math
 try:
     from .triton_src import cvmm, cvmm_prepare_sel, CVMMSel
 except ImportError:
-    from ...utils import logging
-    logger = logging.get_logger(__name__)
-    logger.warning(
-        "Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead."
-    )
+    if torch.cuda.is_available():
+        from ...utils import logging
+        logger = logging.get_logger(__name__)
+        logger.warning(
+            "Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead."
+        )
     from .cuda_src import cvmm, cvmm_prepare_sel, CVMMSel
 
 
