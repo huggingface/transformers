@@ -49,7 +49,7 @@ Windows의 경우:
 .env/Scripts/activate
 ```
 
-이제 🤗 Transformers를 설치할 준비가 되었습니다. 다음 명령을 입력해주세요. 
+이제 🤗 Transformers를 설치할 준비가 되었습니다. 다음 명령을 입력해주세요.
 
 ```bash
 pip install transformers
@@ -135,10 +135,10 @@ Python 환경을 다시 실행하면 업데이트된 🤗 Transformers의 `main`
 
 ## conda로 설치하기[[install-with-conda]]
 
-`huggingface` conda 채널에서 설치할 수 있습니다.
+`conda-forge` conda 채널에서 설치할 수 있습니다.
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## 캐시 구성하기[[cache-setup]]

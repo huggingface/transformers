@@ -96,6 +96,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
@@ -1083,6 +1084,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Text-To-Spectrogram mapping
+        ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("speecht5", "SpeechT5ForTextToSpeech"),
     ]
 )
@@ -1091,6 +1093,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
