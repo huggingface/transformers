@@ -226,9 +226,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester,
-                "expected_num_hidden_layers",
-                self.model_tester.num_hidden_layers,
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
