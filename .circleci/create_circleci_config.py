@@ -160,20 +160,32 @@ class CircleCIJob:
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [
-            f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}"
+            f"--{key}={value}"
+            if (value is not None or key in ["doctest-modules"])
+            else f"-{key}"
             for key, value in all_options.items()
         ]
         pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
+            f"--make-reports={self.name}"
+            if "examples" in self.name
+            else f"--make-reports=tests_{self.name}"
         )
 
-        steps.append({"run": {"name": "Create `test-results` directory", "command": "mkdir test-results"}})
+        steps.append(
+            {
+                "run": {
+                    "name": "Create `test-results` directory",
+                    "command": "mkdir test-results",
+                }
+            }
+        )
 
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(
-            pytest_flags
+        test_command += (
+            f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} "
+            + " ".join(pytest_flags)
         )
 
         if self.parallelism == 1:
@@ -199,9 +211,13 @@ class CircleCIJob:
                 if test.endswith(".py"):
                     expanded_tests.append(test)
                 elif test == "tests/models":
-                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                    expanded_tests.extend(
+                        [os.path.join(test, x) for x in os.listdir(test)]
+                    )
                 elif test == "tests/pipelines":
-                    expanded_tests.extend([os.path.join(test, x) for x in os.listdir(test)])
+                    expanded_tests.extend(
+                        [os.path.join(test, x) for x in os.listdir(test)]
+                    )
                 else:
                     expanded_tests.append(test)
             # Avoid long tests always being collected together
@@ -223,12 +239,17 @@ class CircleCIJob:
             steps.append({"run": {"name": "Split tests", "command": command}})
 
             steps.append({"store_artifacts": {"path": "~/transformers/tests.txt"}})
-            steps.append({"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}})
+            steps.append(
+                {"store_artifacts": {"path": "~/transformers/splitted_tests.txt"}}
+            )
 
             test_command = ""
             if self.timeout:
                 test_command = f"timeout {self.timeout} "
-            test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+            test_command += (
+                f"python -m pytest -n {self.pytest_num_workers} "
+                + " ".join(pytest_flags)
+            )
             test_command += " $(cat splitted_tests.txt)"
         if self.marker is not None:
             test_command += f" -m {self.marker}"
@@ -257,7 +278,9 @@ class CircleCIJob:
         check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         # Deeal with failed tests
-        check_test_command += f"elif [ -s reports/{self.job_name}/failures_short.txt ]; "
+        check_test_command += (
+            f"elif [ -s reports/{self.job_name}/failures_short.txt ]; "
+        )
         check_test_command += 'then echo "Some tests failed!"; echo ""; '
         check_test_command += f"cat reports/{self.job_name}/failures_short.txt; "
         check_test_command += 'echo ""; echo ""; '
@@ -274,7 +297,9 @@ class CircleCIJob:
 
         check_test_command += 'else echo "other fatal error"; echo ""; exit -1; fi;'
 
-        steps.append({"run": {"name": "Check test results", "command": check_test_command}})
+        steps.append(
+            {"run": {"name": "Check test results", "command": check_test_command}}
+        )
 
         steps.append({"store_test_results": {"path": "test-results"}})
 
@@ -522,7 +547,11 @@ py_command = f"$(python3 -c '{py_command}')"
 command = f'echo "{py_command}" > pr_documentation_tests_temp.txt'
 doc_test_job = CircleCIJob(
     "pr_documentation_tests",
-    additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
+    additional_env={
+        "TRANSFORMERS_VERBOSITY": "error",
+        "DATASETS_VERBOSITY": "error",
+        "SKIP_CUDA_DOCTEST": "1",
+    },
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade --upgrade-strategy eager pip",
@@ -539,14 +568,22 @@ doc_test_job = CircleCIJob(
             "name": "Get files to test",
             "command": command,
         },
-        {"name": "Show information in `Get files to test`", "command": "cat pr_documentation_tests_temp.txt"},
+        {
+            "name": "Show information in `Get files to test`",
+            "command": "cat pr_documentation_tests_temp.txt",
+        },
         {
             "name": "Get the last line in `pr_documentation_tests.txt`",
             "command": "tail -n1 pr_documentation_tests_temp.txt | tee pr_documentation_tests.txt",
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
-    pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
+    pytest_options={
+        "-doctest-modules": None,
+        "doctest-glob": "*.md",
+        "dist": "loadfile",
+        "rvsA": None,
+    },
     command_timeout=1200,  # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 )
@@ -636,7 +673,11 @@ def create_circleci_config(folder=None):
             if example_tests == "all":
                 job.tests_to_run = [f"examples/{framework}"]
             else:
-                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
+                job.tests_to_run = [
+                    f
+                    for f in example_tests.split(" ")
+                    if f.startswith(f"examples/{framework}")
+                ]
 
             if len(job.tests_to_run) > 0:
                 jobs.append(job)
@@ -663,7 +704,10 @@ def create_circleci_config(folder=None):
         "tests_to_run": {"type": "string", "default": test_list},
     }
     config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
-    config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+    config["workflows"] = {
+        "version": 2,
+        "run_tests": {"jobs": [j.job_name for j in jobs]},
+    }
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
         f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
 
@@ -671,7 +715,10 @@ def create_circleci_config(folder=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--fetcher_folder", type=str, default=None, help="Only test that all tests and modules are accounted for."
+        "--fetcher_folder",
+        type=str,
+        default=None,
+        help="Only test that all tests and modules are accounted for.",
     )
     args = parser.parse_args()
 
