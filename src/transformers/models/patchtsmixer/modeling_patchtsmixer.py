@@ -2172,7 +2172,6 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             distribution.sample() for _ in range(num_parallel_samples)
         ]  # samples: list of [batch_size x num_targets]
         # stack tensors
-        samples = torch.stack(samples, dim=1).view(
-            -1, num_parallel_samples, self.config.num_targets
-        )  # [batch_size x num_samples x num_targets]
+        # [batch_size x num_samples x num_targets]
+        samples = torch.stack(samples, dim=1).view(-1, num_parallel_samples, self.config.num_targets)
         return SamplePatchTSMixerRegressionOutput(sequences=samples)
