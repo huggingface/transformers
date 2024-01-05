@@ -204,6 +204,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [MT5](model_doc/mt5)                           |       ✅        |         ✅         |      ✅      |
 |                      [MusicGen](model_doc/musicgen)                      |       ✅        |         ❌         |      ❌      |
 |                           [MVP](model_doc/mvp)                           |       ✅        |         ❌         |      ❌      |
+|                   [NarrowBert](model_doc/narrow_bert)                    |       ✅        |         ❌         |      ❌      |
 |                           [NAT](model_doc/nat)                           |       ✅        |         ❌         |      ❌      |
 |                         [Nezha](model_doc/nezha)                         |       ✅        |         ❌         |      ❌      |
 |                          [NLLB](model_doc/nllb)                          |       ✅        |         ❌         |      ❌      |

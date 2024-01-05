@@ -1008,6 +1008,7 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        narrow_mask=None
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1018,9 +1019,8 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        narrow_mask = None
-
         if labels is not None:
+            # narrow_mask will be generated accoridng to labels during training.
             narrow_mask = labels > -100
             batch_size, _ = labels.shape
             batch_labels = []

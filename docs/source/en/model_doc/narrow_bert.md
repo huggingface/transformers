@@ -51,12 +51,6 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - forward
 
 
-## NarrowBertForCausalLM
-
-[[autodoc]] NarrowBertForCausalLM
-    - forward
-
-
 ## NarrowBertForMaskedLM
 
 [[autodoc]] NarrowBertForMaskedLM
@@ -77,10 +71,4 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 ## NarrowBertForTokenClassification
 
 [[autodoc]] transformers.NarrowBertForTokenClassification
-    - forward
-
-
-## NarrowBertForQuestionAnswering
-
-[[autodoc]] NarrowBertForQuestionAnswering
     - forward

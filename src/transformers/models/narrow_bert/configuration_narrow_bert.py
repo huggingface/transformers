@@ -73,7 +73,9 @@ class NarrowBertConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        Example:
+        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        classifier_dropout (`<fill_type>`, *optional*): <fill_docstring>
+        position_embedding_type (`<fill_type>`, *optional*, defaults to `"absolute"`): <fill_docstring>
 
     ```python
     >>> from transformers import NarrowBertModel, NarrowBertConfig

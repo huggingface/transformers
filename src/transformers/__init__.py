@@ -2733,10 +2733,8 @@ else:
     _import_structure["models.narrow_bert"].extend(
         [
             "NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "NarrowBertForCausalLM",
             "NarrowBertForMaskedLM",
             "NarrowBertForMultipleChoice",
-            "NarrowBertForQuestionAnswering",
             "NarrowBertForSequenceClassification",
             "NarrowBertForTokenClassification",
             "NarrowBertLayer",
@@ -7182,10 +7180,8 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.narrow_bert import (
             NARROW_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            NarrowBertForCausalLM,
             NarrowBertForMaskedLM,
             NarrowBertForMultipleChoice,
-            NarrowBertForQuestionAnswering,
             NarrowBertForSequenceClassification,
             NarrowBertForTokenClassification,
             NarrowBertLayer,
