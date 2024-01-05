@@ -240,13 +240,13 @@ class CacheIntegrationTest(unittest.TestCase):
         cache = StaticCache(model.config, model.config.num_hidden_layers, 2, 4096, model.config.num_attention_heads, model.config.hidden_size)
         model.generation_config.cache_implementation = "static"
         inputs = tokenizer(["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt").to(model.device)
-        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=4)
+        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = ["The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good"]
+        expected_text = ["The best color is the one that makes you feel good.\nThe", "We should not undermind the issues at hand.\nI think the issue is that the people"]
         self.assertListEqual(decoded, expected_text)
         
-        model = torch.compile(model)
-        gen_out = model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
+        compiled_model = torch.compile(model)
+        gen_out = compiled_model.generate(**inputs, do_sample=False, past_key_values = cache, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
         
