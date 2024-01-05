@@ -23,8 +23,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from accelerate import PartialState
-from accelerate.utils import reduce
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
@@ -32,6 +30,7 @@ from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_accelerate_available,
     is_scipy_available,
     is_vision_available,
     replace_return_docstrings,
@@ -47,6 +46,10 @@ from .configuration_deta import DetaConfig
 
 logger = logging.get_logger(__name__)
 
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
