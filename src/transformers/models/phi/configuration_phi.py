@@ -24,8 +24,8 @@ logger = logging.get_logger(__name__)
 
 PHI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/phi-1": "https://huggingface.co/microsoft/phi-1/resolve/main/config.json",
-    "microsoft/phi-1_5": "https://huggingface.co/microsoft/phi-1_5/resolve/main/config.json",
-    "microsoft/phi-2": "https://huggingface.co/microsoft/phi-1_5/resolve/main/config.json",
+    # "microsoft/phi-1_5": "https://huggingface.co/microsoft/phi-1_5/resolve/main/config.json",
+    # "microsoft/phi-2": "https://huggingface.co/microsoft/phi-2/resolve/main/config.json",
 }
 
 

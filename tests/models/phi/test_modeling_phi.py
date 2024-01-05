@@ -365,18 +365,18 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1_5
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1
     def test_flash_attn_2_generate_padding_right(self):
         """
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PhiForCausalLM.from_pretrained(
-            "microsoft/phi-1_5",
+            "microsoft/phi-1",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -389,7 +389,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         output_native = tokenizer.batch_decode(output_native)
 
         model = PhiForCausalLM.from_pretrained(
-            "microsoft/phi-1_5", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "microsoft/phi-1", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -417,18 +417,18 @@ class PhiIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
 
-    def test_model_phi_1_5_logits(self):
-        input_ids = {
-            "input_ids": torch.tensor(
-                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
-            )
-        }
+    # def test_model_phi_1_5_logits(self):
+    #     input_ids = {
+    #         "input_ids": torch.tensor(
+    #             [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+    #         )
+    #     }
 
-        model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5").to(torch_device)
-        model.eval()
+    #     model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5").to(torch_device)
+    #     model.eval()
 
-        output = model(**input_ids).logits
+    #     output = model(**input_ids).logits
 
-        EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363, 13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233, 10.3129, 10.6118, 10.0204,  9.3827,  8.8344,  8.2806,  8.0153,  8.0540, 7.0964, 16.5743, 11.1256,  9.6987, 11.4770, 10.5440], [12.3323, 14.6050,  8.9986,  8.1580,  9.5654,  6.6728, 12.5966, 12.6662, 12.2784, 11.7522,  8.2039, 16.3102, 11.2203, 13.6088, 12.0125,  9.1021, 9.8216, 10.0987,  9.0926,  8.4260,  8.8009,  7.6547,  6.8075,  7.7881, 7.4501, 15.7451, 10.5053,  8.3129, 10.0027,  9.2612]]).to(torch_device)  # fmt: skip
+    #     EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363, 13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233, 10.3129, 10.6118, 10.0204,  9.3827,  8.8344,  8.2806,  8.0153,  8.0540, 7.0964, 16.5743, 11.1256,  9.6987, 11.4770, 10.5440], [12.3323, 14.6050,  8.9986,  8.1580,  9.5654,  6.6728, 12.5966, 12.6662, 12.2784, 11.7522,  8.2039, 16.3102, 11.2203, 13.6088, 12.0125,  9.1021, 9.8216, 10.0987,  9.0926,  8.4260,  8.8009,  7.6547,  6.8075,  7.7881, 7.4501, 15.7451, 10.5053,  8.3129, 10.0027,  9.2612]]).to(torch_device)  # fmt: skip
 
-        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+    #     self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))

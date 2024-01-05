@@ -59,8 +59,8 @@ _CONFIG_FOR_DOC = "PhiConfig"
 
 PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/phi-1",
-    "microsoft/phi-1_5",
-    "microsoft/phi-2",
+    # "microsoft/phi-1_5",
+    # "microsoft/phi-2",
     # See all Phi models at https://huggingface.co/models?filter=phi
 ]
 
@@ -1021,8 +1021,8 @@ class PhiForCausalLM(PhiPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, PhiForCausalLM
 
-        >>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5")
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
+        >>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
 
         >>> prompt = "This is an example script ."
         >>> inputs = tokenizer(prompt, return_tensors="pt")
