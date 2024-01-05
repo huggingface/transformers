@@ -432,7 +432,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             ):
                 expected_arg_names[expected_arg_names.index("future_values")] = "target_values"
                 expected_arg_names.remove("observed_mask")
-                print(expected_arg_names)
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
