@@ -1589,7 +1589,7 @@ class GenerationMixin:
         }
         if generation_config.cache_implementation in ALL_CACHE_CLASSES and not model_kwargs.get("past_key_values", False):
             cache_cls = ALL_CACHE_CLASSES[generation_config.cache_implementation]
-            model_kwargs["past_key_values"] = cache_cls(self.config, max_batch_size=batch_size, dtype = inputs_tensor.dtype)
+            model_kwargs["past_key_values"] = cache_cls(self.config, max_batch_size=batch_size)
             
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
