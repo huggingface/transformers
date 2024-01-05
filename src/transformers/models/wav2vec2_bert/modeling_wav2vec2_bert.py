@@ -1348,7 +1348,6 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Wav2Vec2BERTForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,wav2vec2_bert-base->wav2vec2-bert-rel-pos-large
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1385,7 +1384,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
 
         >>> # compute masked indices
         >>> batch_size, raw_sequence_length = input_values.shape[:2]
-        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length).item()
+        >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices(
         ...     shape=(batch_size, sequence_length), mask_prob=0.2, mask_length=2
         ... )
