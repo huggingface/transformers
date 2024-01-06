@@ -733,6 +733,9 @@ NARROW_BERT_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare NarrowBERT Model transformer outputting raw hidden-states without any specific head on top.",
     NARROW_BERT_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`): Adding a pooling layer on the `[CLS]` outputs.
+    """,
 )
 class NarrowBertModel(NarrowBertPreTrainedModel):
     """
