@@ -1955,7 +1955,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
     </Tip>
@@ -2014,7 +2014,7 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark)'s fine submodel. See the model documentation
     for examples.
 
@@ -2175,7 +2175,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark). See the model documentation for examples.
 
     </Tip>
