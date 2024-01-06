@@ -631,7 +631,7 @@ class ElectraDiscriminatorPredictions(nn.Module):
         super().__init__()
 
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.act = get_activation(config.hidden_act)
+        self.activation = get_activation(config.hidden_act)
         self.dense_prediction = nn.Linear(config.hidden_size, 1)
         self.config = config
 
