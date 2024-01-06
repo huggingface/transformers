@@ -317,7 +317,7 @@ generation.
 
 ## StoppingCriteria
 
-A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusivelly available to our PyTorch implementations.
+A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] StoppingCriteria
     - __call__
@@ -333,7 +333,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 ## Constraints
 
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusivelly available to our PyTorch implementations.
+A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] Constraint
 
