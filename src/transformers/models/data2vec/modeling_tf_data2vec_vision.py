@@ -949,7 +949,7 @@ DATA2VEC_VISION_INPUTS_DOCSTRING = r"""
     DATA2VEC_VISION_START_DOCSTRING,
 )
 class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
-    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
+    def __init__(self, config: Data2VecVisionConfig, add_pooling_layer: bool = False, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
