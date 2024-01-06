@@ -905,13 +905,6 @@ class FlaxMistralForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxMistralForSequenceClassification(metaclass=DummyObject):
-    _backends = ["flax"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["flax"])
-
-
 class FlaxMistralModel(metaclass=DummyObject):
     _backends = ["flax"]
 
