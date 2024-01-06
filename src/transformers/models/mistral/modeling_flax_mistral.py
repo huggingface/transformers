@@ -599,7 +599,6 @@ class FlaxMistralModule(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.padding_idx = self.config.pad_token_id
         self.vocab_size = self.config.vocab_size
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
         self.embed_tokens = nn.Embed(
