@@ -300,6 +300,8 @@
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
+      - local: model_doc/dialogpt
+        title: DialoGPT
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -323,6 +325,8 @@
         title: DETA
       - local: model_doc/detr
         title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       title: ビジョンモデル
     - isExpanded: false
       sections:
