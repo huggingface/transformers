@@ -29,7 +29,6 @@ if is_flax_available():
 
     from transformers.models.mistral.modeling_flax_mistral import (
         FlaxMistralForCausalLM,
-        FlaxMistralForSequenceClassification,
         FlaxMistralModel,
     )
 
@@ -122,8 +121,6 @@ class FlaxMistralModelTester:
     # Modifed from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
-        if model_class_name.__name__ == "FlaxMistralForSequenceClassification":
-            return
         model = model_class_name(config)
 
         past_key_values = model.init_cache(input_ids.shape[0], max_decoder_length)
@@ -159,8 +156,6 @@ class FlaxMistralModelTester:
     # Modifed from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
     def check_use_cache_forward_with_attn_mask(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
-        if model_class_name.__name__ == "FlaxMistralForSequenceClassification":
-            return
         model = model_class_name(config)
 
         attention_mask_cache = jnp.concatenate(
@@ -200,7 +195,7 @@ class FlaxMistralModelTester:
 @require_flax
 class FlaxMistralModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (FlaxMistralModel, FlaxMistralForCausalLM, FlaxMistralForSequenceClassification) if is_flax_available() else ()
+        (FlaxMistralModel, FlaxMistralForCausalLM) if is_flax_available() else ()
     )
     all_generative_model_classes = (FlaxMistralForCausalLM,) if is_flax_available() else ()
 

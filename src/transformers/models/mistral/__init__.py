@@ -44,7 +44,6 @@ else:
         "FlaxMistralForCausalLM",
         "FlaxMistralModel",
         "FlaxMistralPreTrainedModel",
-        "FlaxMistralForSequenceClassification",
     ]
 
 
@@ -72,7 +71,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_flax_mistral import (
             FlaxMistralForCausalLM,
-            FlaxMistralForSequenceClassification,
             FlaxMistralModel,
             FlaxMistralPreTrainedModel,
         )

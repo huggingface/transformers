@@ -4609,7 +4609,6 @@ else:
     _import_structure["models.mistral"].extend(
         [
             "FlaxMistralForCausalLM",
-            "FlaxMistralForSequenceClassification",
             "FlaxMistralModel",
             "FlaxMistralPreTrainedModel",
         ]
@@ -8714,7 +8713,6 @@ if TYPE_CHECKING:
         )
         from .models.mistral import (
             FlaxMistralForCausalLM,
-            FlaxMistralForSequenceClassification,
             FlaxMistralModel,
             FlaxMistralPreTrainedModel,
         )
