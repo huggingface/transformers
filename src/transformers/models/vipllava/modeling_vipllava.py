@@ -162,6 +162,14 @@ class VipLlavaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return self.language_model._supports_sdpa
+
 
 VIPLLAVA_INPUTS_DOCSTRING = r"""
     Args:
@@ -367,23 +375,26 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
         Example:
 
         ```python
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, VipLlavaForConditionalGeneration
 
-        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vipllava-7b-hf")
-        >>> processor = AutoProcessor.from_pretrained("llava-hf/vipllava-7b-hf")
+        >>> model = VipLlavaForConditionalGeneration.from_pretrained("llava-hf/vip-llava-7b-hf", device_map="auto", torch_dtype=torch.float16)
+        >>> processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
-        >>> prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
+        >>> prompt = "A chat between a curious human and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the human's questions.###Human: <image>\n{}###Assistant:"
+        >>> question = "Can you please describe this image?"
+        >>> prompt = prompt.format(question)
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+        >>> inputs = processor(text=text, images=image, return_tensors="pt").to(0, torch.float16)
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_new_tokens=20)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on a green surface, with a red ball in its paw."
+        >>> processor.decode(generate_ids[0][len(inputs["input_ids"][0]):], skip_special_tokens=True)
+        The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -419,10 +430,13 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, 0]
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value == 0)
+                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, :]
+
+                    # Sum all dimensions of head_dim (-1) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
+
                     # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                    target_seqlen = first_layer_past_key_value.shape[-2] + 1
 
                     extended_attention_mask = torch.ones(
                         (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
@@ -489,7 +503,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]

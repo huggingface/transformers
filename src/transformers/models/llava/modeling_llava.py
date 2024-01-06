@@ -155,6 +155,14 @@ class LlavaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    @property
+    def _supports_sdpa(self):
+        """
+        Retrieve language_model's attribute to check whether the model supports
+        SDPA or not.
+        """
+        return self.language_model._supports_sdpa
+
 
 LLAVA_INPUTS_DOCSTRING = r"""
     Args:
@@ -370,12 +378,12 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=text, images=image, return_tensors="pt")
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "There seems to be a stop sign"
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "\nUSER: What's the content of the image?\nASSISTANT: The image features a stop sign on a street corner"
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -423,8 +431,11 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, 0]
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value == 0)
+                    first_layer_past_key_value = past_key_values[0][0][:, :, :, 0]
+
+                    # Sum all dimensions of head_dim (-2) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-2) == 0)
+
                     # Get the target length
                     target_seqlen = first_layer_past_key_value.shape[-1] + 1
 
@@ -493,7 +504,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
