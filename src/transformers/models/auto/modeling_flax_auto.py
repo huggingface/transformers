@@ -168,7 +168,6 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("electra", "FlaxElectraForSequenceClassification"),
         ("mbart", "FlaxMBartForSequenceClassification"),
-        ("mistral", "FlaxMistralForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForSequenceClassification"),
         ("roformer", "FlaxRoFormerForSequenceClassification"),
