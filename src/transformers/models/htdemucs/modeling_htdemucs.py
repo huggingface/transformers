@@ -372,36 +372,42 @@ class HtdemucsScaledFrequencyEmbedding(nn.Module):
 
 
 class HtdemucsResidualConvLayer(nn.Module):
-    def __init__(self, config: HtdemucsConfig, out_channels):
+    def __init__(self, config: HtdemucsConfig, out_channels, dilation):
         super().__init__()
         residual_hidden_size = int(out_channels / 8)
 
-        self.conv_in = nn.ModuleList([])
-        self.norm_in = nn.ModuleList([])
-        self.conv_out = nn.ModuleList([])
-        self.norm_out = nn.ModuleList([])
-        self.layer_scales = nn.ParameterList([])
-
-        for layer_idx in range(config.residual_conv_depth):
-            dilation = 2**layer_idx
-            self.conv_in.append(
-                nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation)
-            )
-            self.norm_in.append(nn.GroupNorm(1, residual_hidden_size))
-            self.conv_out.append(nn.Conv1d(residual_hidden_size, 2 * out_channels, kernel_size=1))
-            self.norm_out.append(nn.GroupNorm(1, 2 * out_channels))
-            self.layer_scales.append(nn.Parameter(torch.ones(out_channels) * config.layer_scale_init_value))
+        self.conv_in = nn.Conv1d(
+            out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation
+        )
+        self.norm_in = nn.GroupNorm(1, residual_hidden_size)
+        self.conv_out = nn.Conv1d(residual_hidden_size, 2 * out_channels, kernel_size=1)
+        self.norm_out = nn.GroupNorm(1, 2 * out_channels)
+        self.layer_scales = nn.Parameter(torch.ones(out_channels) * config.layer_scale_init_value)
 
     def forward(self, hidden_states):
-        for idx in range(len(self.conv_in)):
-            residual = hidden_states
-            hidden_states = self.conv_in[idx](hidden_states)
-            hidden_states = self.norm_in[idx](hidden_states)
-            hidden_states = nn.functional.gelu(hidden_states)
-            hidden_states = self.conv_out[idx](hidden_states)
-            hidden_states = self.norm_out[idx](hidden_states)
-            hidden_states = nn.functional.glu(hidden_states, dim=1)
-            hidden_states = residual + self.layer_scales[idx][:, None] * hidden_states
+        residual = hidden_states
+        hidden_states = self.conv_in(hidden_states)
+        hidden_states = self.norm_in(hidden_states)
+        hidden_states = nn.functional.gelu(hidden_states)
+
+        hidden_states = self.conv_out(hidden_states)
+        hidden_states = self.norm_out(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        hidden_states = residual + self.layer_scales[:, None] * hidden_states
+        return hidden_states
+
+
+class HtdemucsResidualConv(nn.Module):
+    def __init__(self, config: HtdemucsConfig, out_channels):
+        super().__init__()
+        self.residual_layers = nn.ModuleList([])
+        for layer_idx in range(config.residual_conv_depth):
+            self.residual_layers.append(HtdemucsResidualConvLayer(config, out_channels, 2**layer_idx))
+
+    def forward(self, hidden_states):
+        for layer in self.residual_layers:
+            hidden_states = layer(hidden_states)
         return hidden_states
 
 
@@ -410,7 +416,7 @@ class HtdemucsTempEncoderLayer(nn.Module):
         super().__init__()
         self.stride = config.stride
         self.conv_in = nn.Conv1d(in_channels, out_channels, kernel_size=8, stride=self.stride, padding=2)
-        self.residual_conv = HtdemucsResidualConvLayer(config, out_channels)
+        self.residual_conv = HtdemucsResidualConv(config, out_channels)
         self.conv_out = nn.Conv1d(out_channels, 2 * out_channels, kernel_size=1)
 
     def forward(self, hidden_states):
@@ -432,7 +438,7 @@ class HtdemucsFreqEncoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels):
         super().__init__()
         self.conv_in = nn.Conv2d(in_channels, out_channels, kernel_size=(8, 1), stride=(4, 1), padding=(2, 0))
-        self.residual_conv = HtdemucsResidualConvLayer(config, out_channels)
+        self.residual_conv = HtdemucsResidualConv(config, out_channels)
         self.conv_out = nn.Conv2d(out_channels, 2 * out_channels, kernel_size=1)
 
     def forward(self, hidden_states):
@@ -453,7 +459,7 @@ class HtdemucsTempDecoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels, is_last):
         super().__init__()
         self.conv_in = nn.Conv1d(in_channels, 2 * in_channels, kernel_size=3, stride=1, padding=1)
-        self.residual_conv = HtdemucsResidualConvLayer(config, in_channels)
+        self.residual_conv = HtdemucsResidualConv(config, in_channels)
         self.conv_out = nn.ConvTranspose1d(in_channels, out_channels, kernel_size=8, stride=4)
         self.is_last = is_last
 
@@ -477,7 +483,7 @@ class HtdemucsFreqDecoderLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig, in_channels, out_channels, is_last):
         super().__init__()
         self.conv_in = nn.Conv2d(in_channels, 2 * in_channels, kernel_size=3, stride=1, padding=1)
-        self.residual_conv = HtdemucsResidualConvLayer(config, in_channels)
+        self.residual_conv = HtdemucsResidualConv(config, in_channels)
         self.conv_out = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=(8, 1), stride=(4, 1))
         self.is_last = is_last
 
@@ -753,7 +759,6 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
                         freq_attention_mask=freq_attention_mask,
                         temp_attention_mask=temp_attention_mask,
                         output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
                     )
                 freq_hidden_states = layer_outputs[0]
                 temp_hidden_states = layer_outputs[1]
@@ -768,7 +773,16 @@ class HtdemucsTransformer(HtdemucsPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v for v in [freq_hidden_states, temp_hidden_states, all_freq_hidden_states, all_temp_hidden_states, all_freq_attentions, all_temp_attentions] if v is not None
+                v
+                for v in [
+                    freq_hidden_states,
+                    temp_hidden_states,
+                    all_freq_hidden_states,
+                    all_temp_hidden_states,
+                    all_freq_attentions,
+                    all_temp_attentions,
+                ]
+                if v is not None
             )
         return HtdemucsBaseModelOutput(
             last_freq_hidden_state=freq_hidden_states,
@@ -828,7 +842,7 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         self,
         input_features: torch.FloatTensor,
         input_values: torch.FloatTensor,
-        labels: torch.FloatTensor,
+        labels: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -893,7 +907,7 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         transformer_outputs = self.transformer(
             freq_hidden_states,
             temp_hidden_states,
-            output_attention=output_attentions,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -940,11 +954,11 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
 
         loss = None
         if labels is not None:
-           loss_fn = L1Loss()
-           loss = loss_fn(output_values, labels, reduction="mean")
+            loss_fn = nn.L1Loss()
+            loss = loss_fn(output_values, labels, reduction="mean")
 
         if not return_dict:
-            output = (output_values,) + outputs[1:]
+            output = (output_values,)
             return ((loss,) + output) if loss is not None else output
 
         return output_values

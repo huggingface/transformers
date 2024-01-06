@@ -90,11 +90,11 @@ MAPPING = {
 }
 
 RESIDUAL_CONV_MAPPING = {
-    ".layers.*.0": ".conv_in.*",
-    ".layers.*.1": ".norm_in.*",
-    ".layers.*.3": ".conv_out.*",
-    ".layers.*.4": ".norm_out.*",
-    ".layers.*.6": ".layer_scales.*",
+    ".layers.*.0": ".residual_layers.*.conv_in",
+    ".layers.*.1": ".residual_layers.*.norm_in",
+    ".layers.*.3": ".residual_layers.*.conv_out",
+    ".layers.*.4": ".residual_layers.*.norm_out",
+    ".layers.*.6": ".residual_layers.*.layer_scales",
 }
 
 FUSED_PROJECTION_MAPPING = {
