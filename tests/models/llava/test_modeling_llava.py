@@ -360,9 +360,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # Make sure that the loss is properly computed
-        _ = model(
+        loss = model(
             pixel_values=pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
             labels=input_ids,
-        )
+        ).loss
+        loss.backward()
