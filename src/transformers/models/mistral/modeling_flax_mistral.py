@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Flax Mistral model."""
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
@@ -26,9 +26,10 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
 from ...modeling_flax_outputs import (
+    FlaxBaseModelOutput,
     FlaxBaseModelOutputWithPast,
+    FlaxCausalLMOutput,
     FlaxCausalLMOutputWithCrossAttentions,
-    FlaxSequenceClassifierOutput,
 )
 from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring, logging
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -587,53 +588,40 @@ class FlaxMistralLayerCollection(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaModule with Llama->Mistral
 class FlaxMistralModule(nn.Module):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`MistralDecoderLayer`]
-
-    Args:
-        config: MistralConfig
-    """
-
     config: MistralConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.vocab_size = self.config.vocab_size
+        self.hidden_size = self.config.hidden_size
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
         self.embed_tokens = nn.Embed(
-            self.config.vocab_size, self.config.hidden_size, dtype=self.dtype, embedding_init=embedding_init
+            self.config.vocab_size,
+            self.hidden_size,
+            embedding_init=embedding_init,
+            dtype=self.dtype,
         )
         self.layers = FlaxMistralLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxMistralRMSNorm(self.config, dtype=self.dtype)
 
     def __call__(
         self,
-        input_ids: jnp.ndarray = None,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
-        deterministic: bool = True,
-        init_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FlaxBaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        inputs_embeds = self.embed_tokens(input_ids.astype("i4"))
-        hidden_states = inputs_embeds
-
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
+        input_ids,
+        attention_mask=None,
+        position_ids=None,
+        deterministic=True,
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        input_embeds = self.embed_tokens(input_ids.astype("i4"))
 
         outputs = self.layers(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
+            input_embeds,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -644,22 +632,19 @@ class FlaxMistralModule(nn.Module):
         hidden_states = outputs[0]
         hidden_states = self.norm(hidden_states)
 
-        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states = outputs[1] + (hidden_states,)
             outputs = (hidden_states, all_hidden_states) + outputs[2:]
         else:
             outputs = (hidden_states,) + outputs[1:]
 
-        next_cache = outputs[1] if init_cache else None
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
-        return FlaxBaseModelOutputWithPast(
+        return FlaxBaseModelOutput(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=outputs[-1] if output_attentions else None,
+            hidden_states=outputs[1],
+            attentions=outputs[-1],
         )
 
 
@@ -680,36 +665,35 @@ append_call_sample_docstring(
 )
 
 
+# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaForCausalLMModule with Llama->Mistral
 class FlaxMistralForCausalLMModule(nn.Module):
     config: MistralConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         self.model = FlaxMistralModule(self.config, dtype=self.dtype)
-        self.vocab_size = self.config.vocab_size
-        self.lm_head = nn.Dense(self.config.vocab_size, use_bias=False, dtype=self.dtype)
+        self.lm_head = nn.Dense(
+            self.config.vocab_size,
+            use_bias=False,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+        )
 
     def __call__(
         self,
-        input_ids: jnp.ndarray,
-        attention_mask: Optional[jnp.ndarray] = None,
-        position_ids: Optional[jnp.ndarray] = None,
+        input_ids,
+        attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
-        init_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, FlaxCausalLMOutputWithCrossAttentions]:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        init_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
         outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            input_ids,
             position_ids=position_ids,
+            attention_mask=attention_mask,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -718,19 +702,12 @@ class FlaxMistralForCausalLMModule(nn.Module):
         )
 
         hidden_states = outputs[0]
-
-        logits = self.lm_head(hidden_states)
+        lm_logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
-            return output
+            return (lm_logits,) + outputs[1:]
 
-        return FlaxCausalLMOutputWithCrossAttentions(
-            logits=logits,
-            past_key_values=outputs.past_key_values if return_dict else outputs[1],
-            hidden_states=outputs.hidden_states if return_dict else outputs[2],
-            attentions=outputs.attentions if return_dict else outputs[3],
-        )
+        return FlaxCausalLMOutput(logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
 
 @add_start_docstrings(
@@ -778,4 +755,3 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
-
