@@ -14,17 +14,21 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The NarrowBERT model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The NarrowBERT model was proposed in [NarrowBERT: Accelerating Masked Language Model Pretraining and Inference
+](https://arxiv.org/abs/2301.04761)  by Haoxin Li, Phillip Keung, Daniel Cheng, Jungo Kasai, Noah A. Smith. A modified transformer encoder that increases the throughput for masked language model pretraining by more than 2x and is also comparable to standard BERT performance. 
+
+**This implementation is the SparseQueries variant.** 
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Large-scale language model pretraining is a very successful form of self-supervised learning in natural language processing, but it is increasingly expensive to perform as the models and pretraining corpora have become larger over time. We propose NarrowBERT, a modified transformer encoder that increases the throughput for masked language model pretraining by more than 2×. NarrowBERT sparsifies the transformer model such that the self-attention queries and feedforward layers only operate on the masked tokens of each sentence during pretraining, rather than all of the tokens as with the usual transformer encoder. We also show that NarrowBERT increases the throughput at inference time by as much as 3.5× with minimal (or no) performance degradation on sentence encoding tasks like MNLI. Finally, we examine the performance of NarrowBERT on the IMDB and Amazon reviews classification and CoNLL NER tasks and show that it is also comparable to standard BERT performance.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- We have released two SparseQueries models [here](https://huggingface.co/models?filter=narrow_bert), including MLM pretrained model and MNLI finetuned model. 
+- `NarrowBertModel` speedup depends on narrow_mask. Gain more efficiency by masking out unnecessary outputs. 
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [lihaoxin2020](https://huggingface.co/lihaoxin2020). The original code can be found [here](https://github.com/lihaoxin2020/narrowbert).
 
 ## NarrowBertConfig
 

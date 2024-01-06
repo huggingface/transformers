@@ -73,9 +73,17 @@ class NarrowBertConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        pad_token_id (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
-        classifier_dropout (`<fill_type>`, *optional*): <fill_docstring>
-        position_embedding_type (`<fill_type>`, *optional*, defaults to `"absolute"`): <fill_docstring>
+        pad_token_id (`int`, *optional*, defaults to 0): <pad> token ID.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+
+    Exampls:
 
     ```python
     >>> from transformers import NarrowBertModel, NarrowBertConfig

@@ -820,6 +820,13 @@ class NarrowBertModel(NarrowBertPreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up
             decoding (see `past_key_values`).
+        narrow_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention from unnecessary input tokens. This mask is used in narrow
+            layers save computation from computing wasting outputs.
+            Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1008,7 +1015,7 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        narrow_mask=None
+        narrow_mask=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1016,6 +1023,15 @@ class NarrowBertForMaskedLM(NarrowBertPreTrainedModel):
             Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
             Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
             in `[0, ..., config.vocab_size]`.
+        narrow_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention from unnecessary input tokens. This mask is used in narrow
+            layers save computation from computing wasting outputs.
+            Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            *Note* that `narrow_mask` is automatically generated to mask out `-100` elements in `labels`, if `labels` are given.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
