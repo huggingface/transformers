@@ -222,8 +222,6 @@ ACT2FN = ClassInstantier(ACT2CLS)
 
 
 def get_activation(activation_string):
-    if activation_string is not None:
-        activation_string = activation_string.lower().replace(" ", "")
     if activation_string in ACT2FN:
         return ACT2FN[activation_string]
     else:
