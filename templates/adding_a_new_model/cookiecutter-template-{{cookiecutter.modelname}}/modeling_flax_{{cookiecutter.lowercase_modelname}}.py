@@ -792,7 +792,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_cache with Bert->{{cookiecutter.camelcase_modelname}}
@@ -2455,7 +2455,7 @@ class Flax{{cookiecutter.camelcase_modelname}}PreTrainedModel(FlaxPreTrainedMode
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
         r"""

@@ -483,7 +483,7 @@ class FlaxResNetPreTrainedModel(FlaxPreTrainedModel):
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
     @add_start_docstrings_to_model_forward(RESNET_INPUTS_DOCSTRING)
     def __call__(

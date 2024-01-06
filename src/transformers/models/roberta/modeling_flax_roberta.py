@@ -792,7 +792,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
     # Copied from transformers.models.bart.modeling_flax_bart.FlaxBartDecoderPreTrainedModel.init_cache
     def init_cache(self, batch_size, max_length):

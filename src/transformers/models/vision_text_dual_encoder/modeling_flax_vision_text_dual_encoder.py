@@ -265,7 +265,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
     def __call__(
         self,

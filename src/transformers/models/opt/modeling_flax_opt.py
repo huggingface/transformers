@@ -559,7 +559,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
             self._missing_keys = set()
             return freeze(unflatten_dict(params))
         else:
-            return random_params
+            return freeze(random_params)
 
     def init_cache(self, batch_size, max_length):
         r"""
