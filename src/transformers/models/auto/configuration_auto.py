@@ -93,6 +93,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
         ("falcon", "FalconConfig"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
@@ -144,6 +145,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertConfig"),
         ("mgp-str", "MgpstrConfig"),
         ("mistral", "MistralConfig"),
+        ("mixtral", "MixtralConfig"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
@@ -229,6 +231,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("van", "VanConfig"),
         ("videomae", "VideoMAEConfig"),
         ("vilt", "ViltConfig"),
+        ("vipllava", "VipLlavaConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
         ("visual_bert", "VisualBertConfig"),
@@ -318,6 +321,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("falcon", "FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("fastspeech2_conformer", "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -366,6 +370,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mgp-str", "MGP_STR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mistral", "MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mixtral", "MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v1", "MOBILENET_V1_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilenet_v2", "MOBILENET_V2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -440,6 +445,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("van", "VAN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("videomae", "VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vipllava", "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("visual_bert", "VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit", "VIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -540,6 +546,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
         ("falcon", "Falcon"),
+        ("fastspeech2_conformer", "FastSpeech2Conformer"),
         ("flan-t5", "FLAN-T5"),
         ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
@@ -579,7 +586,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
-        ("llava", "Llava"),
+        ("llava", "LLaVa"),
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
@@ -600,6 +607,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("megatron_gpt2", "Megatron-GPT2"),
         ("mgp-str", "MGP-STR"),
         ("mistral", "Mistral"),
+        ("mixtral", "Mixtral"),
         ("mluke", "mLUKE"),
         ("mms", "MMS"),
         ("mobilebert", "MobileBERT"),
@@ -692,6 +700,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("van", "VAN"),
         ("videomae", "VideoMAE"),
         ("vilt", "ViLT"),
+        ("vipllava", "VipLlava"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
         ("vision-text-dual-encoder", "VisionTextDualEncoder"),
         ("visual_bert", "VisualBERT"),
@@ -1095,7 +1104,14 @@ class AutoConfig:
                 config_class.register_for_auto_class()
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
-            config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            try:
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+            except KeyError:
+                raise ValueError(
+                    f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
+                    "but Transformers does not recognize this architecture. This could be because of an "
+                    "issue with the checkpoint, or because your version of Transformers is out of date."
+                )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.

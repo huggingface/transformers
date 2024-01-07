@@ -85,49 +85,22 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", attn_implementation="flash_attention_2", device_map="cuda:0")
 ```
 
+### Fused modules
 
-### Benchmarks
+Fused modules offers improved accuracy and performance and it is supported out-of-the-box for AWQ modules for [Llama](https://huggingface.co/meta-llama) and [Mistral](https://huggingface.co/mistralai/Mistral-7B-v0.1) architectures, but you can also fuse AWQ modules for unsupported architectures.
 
-We performed some speed, throughput and latency benchmarks using [`optimum-benchmark`](https://github.com/huggingface/optimum-benchmark) library. 
+<Tip warning={true}>
 
-Note at that time of writing this documentation section, the available quantization methods were: `awq`, `gptq` and `bitsandbytes`.
+Fused modules cannot be combined with other optimization techniques such as FlashAttention-2.
 
-The benchmark was run on a NVIDIA-A100 instance and the model used was [`TheBloke/Mistral-7B-v0.1-AWQ`](https://huggingface.co/TheBloke/Mistral-7B-v0.1-AWQ) for the AWQ model, [`TheBloke/Mistral-7B-v0.1-GPTQ`](https://huggingface.co/TheBloke/Mistral-7B-v0.1-GPTQ) for the GPTQ model. We also benchmarked it against `bitsandbytes` quantization methods and native `float16` model. Some results are shown below:
+</Tip>
 
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_memory_plot.png">
-</div>
+<hfoptions id="fuse">
+<hfoption id="supported architectures">
 
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_memory_plot.png">
-</div>
+To enable fused modules for supported architectures, create an [`AwqConfig`] and set the parameters `fuse_max_seq_len` and `do_fuse=True`. The `fuse_max_seq_len` parameter is the total sequence length and it should include the context length and the expected generation length. You can set it to a larger value to be safe.
 
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/generate_throughput_plot.png">
-</div>
-
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/forward_latency_plot.png">
-</div>
-
-You can find the full results together with packages versions in [this link](https://github.com/huggingface/optimum-benchmark/tree/main/examples/running-mistrals).
-
-From the results it appears that AWQ quantization method is the fastest quantization method for inference, text generation and among the lowest peak memory for text generation. However, AWQ seems to have the largest forward latency per batch size. 
-
-
-### Make use of fused modules
-
-You can benefit from fused modules by passing an `AwqConfig` with `fuse_modules=True` and your expected maximum sequence length for generation to `fuse_max_seq_len`. For architectures that do not support `do_fuse=True`, you can still fuse the modules, however you need to pass a custom `fusing_mapping` to `AwqConfig()`. Let's dive into these specific usecases.
-
-Note that you cannot combine fusing modules and other optimization techniques such as Flash Attention 2.
-
-#### Fusing modules for supported architectures
-
-Currently we support out of the box AWQ module fusing for `llama` and `mistral`. 
-
-To enable this feature for supported architectures simply create an `AwqConfig` and pass the arguments `fuse_max_seq_len` and `do_fuse=True`.
-
-For example to enable module fusing for the model `TheBloke/Mistral-7B-OpenOrca-AWQ`, run:
+For example, to fuse the AWQ modules of the [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-AWQ) model.
 
 ```python
 import torch
@@ -144,14 +117,10 @@ quantization_config = AwqConfig(
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config).to(0)
 ```
 
-Note that you need to define `fuse_max_seq_len` to `AwqConfig`. That total sequence length should include the context length and the expected generation length. You can set it to a large value to be on the safe zone.
+</hfoption>
+<hfoption id="unsupported architectures">
 
-You can also apply module fusing for other architectures that are not supported.
-
-#### Fusing modules for unsupported architectures
-
-For architectures that do not support out of the box module fusing, you can pass a custom fusing mapping; simply pass a dictionnary `modules_to_fuse` to `AwqConfig`, let's take an example with the Yi model:
-
+For architectures that don't support fused modules yet, you need to create a custom fusing mapping to define which modules need to be fused with the `modules_to_fuse` parameter. For example, to fuse the AWQ modules of the [TheBloke/Yi-34B-AWQ](https://huggingface.co/TheBloke/Yi-34B-AWQ) model.
 
 ```python
 import torch
@@ -176,55 +145,18 @@ quantization_config = AwqConfig(
 model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config).to(0)
 ```
 
-The parameter `modules_to_fuse` needs to have the following respective fields: 
+The parameter `modules_to_fuse` should include:
 
-- `"attention"`: The names of the attention layers to fuse - in the order: query, key, value and output projection layer. In case you don't want to fuse the attention layers you can pass an empty list.
-- `"layernorm"`: The names of all the layernorm layers you want to replace with a custom fused layer norm. In case you don't want to fuse these layers you can also pass an empty list.
-- `"mlp"`: The names of the MLP layers you want to fuse into a single MLP layer in the order: (gate (dense layer post-attention) / up / down layers).
-- `"use_alibi"`: If you model uses alibi positional embedding
-- `"num_attention_heads"`: The number of attention heads
-- `"num_key_value_heads"`: This is the number of key value heads that should be used to implement Grouped Query Attention. If num_key_value_heads=num_attention_heads, the model will use Multi Head Attention (MHA), if num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. 
-- `"hidden_size"`: Dimension of the hidden representations.
+- `"attention"`: The names of the attention layers to fuse in the following order: query, key, value and output projection layer. If you don't want to fuse these layers, pass an empty list.
+- `"layernorm"`: The names of all the LayerNorm layers you want to replace with a custom fused LayerNorm. If you don't want to fuse these layers, pass an empty list.
+- `"mlp"`: The names of the MLP layers you want to fuse into a single MLP layer in the order: (gate (dense, layer, post-attention) / up / down layers).
+- `"use_alibi"`: If your model uses ALiBi positional embedding.
+- `"num_attention_heads"`: The number of attention heads.
+- `"num_key_value_heads"`: The number of key value heads that should be used to implement Grouped Query Attention (GQA). If `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if `num_key_value_heads=1` the model will use Multi Query Attention (MQA), otherwise GQA is used.
+- `"hidden_size"`: The dimension of the hidden representations.
 
-
-#### Benchmarks
-
-We benchmarked the model with and without fused modules first using only `batch_size=1` on the `TheBloke/Mistral-7B-OpenOrca-AWQ` model and below are the results:
-
-*unfused case*
-
-|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
-|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
-|            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
-|            1 |               64 |              64 |          1333.67   |           31.6604 | 4.50 GB (5.68%) |
-|            1 |              128 |             128 |          2434.06   |           31.6272 | 4.50 GB (5.68%) |
-|            1 |              256 |             256 |          3072.26   |           38.1731 | 4.50 GB (5.68%) |
-|            1 |              512 |             512 |          3184.74   |           31.6819 | 4.59 GB (5.80%) |
-|            1 |             1024 |            1024 |          3148.18   |           36.8031 | 4.81 GB (6.07%) |
-|            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
-
-*fused case*
-
-|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
-|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
-|            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |
-|            1 |               64 |              64 |          1756.1    |          106.26   | 4.00 GB (5.05%) |
-|            1 |              128 |             128 |          2479.32   |          105.631  | 4.00 GB (5.06%) |
-|            1 |              256 |             256 |          1813.6    |           85.7485 | 4.01 GB (5.06%) |
-|            1 |              512 |             512 |          2848.9    |           97.701  | 4.11 GB (5.19%) |
-|            1 |             1024 |            1024 |          3044.35   |           87.7323 | 4.41 GB (5.57%) |
-|            1 |             2048 |            2048 |          2715.11   |           89.4709 | 5.57 GB (7.04%) |
-
-We also performed benchmarks with [`optimum-benchmark`](https://github.com/huggingface/optimum-benchmark) library. And below are the results:
-
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_forward_memory_plot.png">
-</div>
-
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput_plot.png">
-</div>
-
+</hfoption>
+</hfoptions>
 
 ## AutoGPTQ
 
@@ -413,7 +345,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-Once a model is quantized to 4-bit, you can't push the quantized weights to the Hub.
+If you have `bitsandbytes>=0.41.3`, you can serialize 4-bit models and push them on Hugging Face Hub. Simply call `model.push_to_hub()` after loading it in 4-bit precision. You can also save the serialized 4-bit models locally with `model.save_pretrained()` command.  
 
 </hfoption>
 </hfoptions>
@@ -536,6 +468,7 @@ Try 4-bit quantization in this [notebook](https://colab.research.google.com/driv
 
 This section explores some of the specific features of 4-bit models, such as changing the compute data type, using the Normal Float 4 (NF4) data type, and using nested quantization.
 
+
 #### Compute data type
 
 To speedup computation, you can change the data type from float32 (the default value) to bf16 using the `bnb_4bit_compute_dtype` parameter in [`BitsAndBytesConfig`]:
@@ -610,3 +543,44 @@ To compare the speed, throughput, and latency of each quantization scheme, check
 </div>
 
 The benchmarks indicate AWQ quantization is the fastest for inference, text generation, and has the lowest peak memory for text generation. However, AWQ has the largest forward latency per batch size. For a more detailed discussion about the pros and cons of each quantization method, read the [Overview of natively supported quantization schemes in 🤗 Transformers](https://huggingface.co/blog/overview-quantization-transformers) blog post.
+
+### Fused AWQ modules
+
+The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-AWQ) model was benchmarked with `batch_size=1` with and without fused modules.
+
+<figcaption class="text-center text-gray-500 text-lg">Unfused module</figcaption>
+
+|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
+|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
+|            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
+|            1 |               64 |              64 |          1333.67   |           31.6604 | 4.50 GB (5.68%) |
+|            1 |              128 |             128 |          2434.06   |           31.6272 | 4.50 GB (5.68%) |
+|            1 |              256 |             256 |          3072.26   |           38.1731 | 4.50 GB (5.68%) |
+|            1 |              512 |             512 |          3184.74   |           31.6819 | 4.59 GB (5.80%) |
+|            1 |             1024 |            1024 |          3148.18   |           36.8031 | 4.81 GB (6.07%) |
+|            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
+
+<figcaption class="text-center text-gray-500 text-lg">Fused module</figcaption>
+
+|   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
+|-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
+|            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |
+|            1 |               64 |              64 |          1756.1    |          106.26   | 4.00 GB (5.05%) |
+|            1 |              128 |             128 |          2479.32   |          105.631  | 4.00 GB (5.06%) |
+|            1 |              256 |             256 |          1813.6    |           85.7485 | 4.01 GB (5.06%) |
+|            1 |              512 |             512 |          2848.9    |           97.701  | 4.11 GB (5.19%) |
+|            1 |             1024 |            1024 |          3044.35   |           87.7323 | 4.41 GB (5.57%) |
+|            1 |             2048 |            2048 |          2715.11   |           89.4709 | 5.57 GB (7.04%) |
+
+The speed and throughput of fused and unfused modules were also tested with the [optimum-benchmark](https://github.com/huggingface/optimum-benchmark) library.
+
+<div class="flex gap-4">
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_forward_memory_plot.png" alt="generate throughput per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">foward peak memory/batch size</figcaption>
+  </div>
+  <div>
+    <img class="rounded-xl" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/quantization/fused_generate_throughput_plot.png" alt="forward latency per batch size" />
+    <figcaption class="mt-2 text-center text-sm text-gray-500">generate throughput/batch size</figcaption>
+  </div>
+</div>

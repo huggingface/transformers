@@ -1658,7 +1658,7 @@ class DVCLiveCallback(TrainerCallback):
         """
         from dvclive import Live
 
-        self._initalized = True
+        self._initialized = True
         if self._log_model is not None:
             log_model_env = os.getenv("HF_DVCLIVE_LOG_MODEL")
             if log_model_env.upper() in ENV_VARS_TRUE_VALUES:

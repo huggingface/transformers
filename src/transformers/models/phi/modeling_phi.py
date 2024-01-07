@@ -484,8 +484,10 @@ class PhiFlashAttention2(PhiAttention):
         # in fp32.
 
         if query_states.dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -860,6 +862,13 @@ class PhiModel(PhiPreTrainedModel):
 
         past_key_values_length = 0
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
@@ -889,13 +898,6 @@ class PhiModel(PhiPreTrainedModel):
             )
 
         hidden_states = inputs_embeds
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1093,7 +1095,7 @@ class PhiForCausalLM(PhiPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
@@ -1225,9 +1227,10 @@ class PhiForSequenceClassification(PhiPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 

@@ -17,8 +17,7 @@ Processor class for Llava.
 """
 
 
-import warnings
-from typing import Callable, List, Optional, Union
+from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
@@ -45,23 +44,7 @@ class LlavaProcessor(ProcessorMixin):
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.__init__
-    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
-        feature_extractor = None
-        if "feature_extractor" in kwargs:
-            warnings.warn(
-                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
-                " instead.",
-                FutureWarning,
-            )
-            feature_extractor = kwargs.pop("feature_extractor")
-
-        image_processor = image_processor if image_processor is not None else feature_extractor
-        if image_processor is None:
-            raise ValueError("You need to specify an `image_processor`.")
-        if tokenizer is None:
-            raise ValueError("You need to specify a `tokenizer`.")
-
+    def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -70,7 +53,6 @@ class LlavaProcessor(ProcessorMixin):
         images: ImageInput = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
-        transform: Callable = None,
         max_length=None,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
@@ -103,10 +85,6 @@ class LlavaProcessor(ProcessorMixin):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            transform (`Callable`, *optional*):
-                A custom transform function that accepts a single image can be passed for training. For example,
-                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
-                set of transforms will be applied to the images
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -125,9 +103,7 @@ class LlavaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         if images is not None:
-            pixel_values = self.image_processor(images, transform=transform, return_tensors=return_tensors)[
-                "pixel_values"
-            ]
+            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         else:
             pixel_values = None
         text_inputs = self.tokenizer(

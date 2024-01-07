@@ -103,6 +103,7 @@ if is_torch_available():
 
     import transformers.optimization
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
         GlueDataset,
@@ -1558,7 +1559,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         class MockCudaOOMCallback(TrainerCallback):
             def on_step_end(self, args, state, control, **kwargs):
                 # simulate OOM on the first step
-                if state.train_batch_size == 16:
+                if state.train_batch_size >= 16:
                     raise RuntimeError("CUDA out of memory.")
 
         args = RegressionTrainingArguments(
@@ -1577,7 +1578,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # We can then make a new Trainer
         trainer = Trainer(model, args, train_dataset=train_dataset)
         # Check we are at 16 to start
-        self.assertEqual(trainer._train_batch_size, 16)
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
         trainer.train(resume_from_checkpoint=True)
         # We should be back to 8 again, picking up based upon the last ran Trainer
         self.assertEqual(trainer._train_batch_size, 8)
@@ -1844,6 +1845,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
+
+    @slow
+    def test_trainer_eval_multiple(self):
+        MODEL_ID = "gpt2"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+        dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in dataset.examples:
+            example["labels"] = example["input_ids"]
+        training_args = TrainingArguments(
+            output_dir="./examples",
+            use_cpu=True,
+            per_device_eval_batch_size=1,
+        )
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            eval_dataset={
+                "data1": dataset,
+                "data2": dataset,
+            },
+        )
+        result = trainer.evaluate()
+        self.assertIn("eval_data1_loss", result)
+        self.assertIn("eval_data2_loss", result)
 
     @slow
     def test_trainer_eval_lm(self):

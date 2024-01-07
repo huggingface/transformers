@@ -562,8 +562,10 @@ class WhisperFlashAttention2(WhisperAttention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -764,6 +766,8 @@ class WhisperSdpaAttention(WhisperAttention):
 
         query_states = self._shape(query_states, tgt_len, bsz)
 
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -2035,14 +2039,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 FutureWarning,
             )
 
+        if generation_config is None:
+            generation_config = copy.deepcopy(self.generation_config)
+
         return_dict_in_generate = (
             return_dict_in_generate
             if return_dict_in_generate is not None
-            else self.generation_config.return_dict_in_generate
+            else generation_config.return_dict_in_generate
         )
-
-        if generation_config is None:
-            generation_config = copy.deepcopy(self.generation_config)
 
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         if num_segment_frames is None:
@@ -2156,6 +2160,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                         f"Unsupported language: {generation_config.language}. Language should be one of:"
                         f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
                     )
+                if language_token not in generation_config.lang_to_id:
+                    raise ValueError(
+                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                        "(You should just add it to the generation config)"
+                    )
                 forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
             else:
                 forced_decoder_ids.append((1, None))  # automatically detect the language
@@ -2217,6 +2226,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if return_token_timestamps:
             kwargs["output_attentions"] = True
             return_dict_in_generate = True
+            kwargs["output_scores"] = True
 
             if getattr(generation_config, "task", None) == "translate":
                 logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
@@ -2548,22 +2558,74 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # of shape (batch size, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
-        if num_frames is not None:
-            weights = weights[..., : num_frames // 2]
 
-        # Normalize and smoothen the weights.
-        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
-        weights = (weights - mean) / std
-        weights = _median_filter(weights, self.config.median_filter_width)
+        if "beam_indices" in generate_outputs:
+            # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
+            # since the beam search strategy chooses the most probable sequences at the end of the search.
+            # In that case, the cross_attentions weights are too long and we have to make sure that they have the right output_length
+            weight_length = (generate_outputs.beam_indices != -1).sum(-1).max()
+            weights = weights[:, :, :weight_length]
 
-        # Average the different cross-attention heads.
-        matrix = weights.mean(dim=1)
+            # If beam index is still -1, it means that the associated token id is EOS
+            # We need to replace the index with 0 since index_select gives an error if any of the indexes is -1.
+            beam_indices = generate_outputs.beam_indices[:, :weight_length]
+            beam_indices = beam_indices.masked_fill(beam_indices == -1, 0)
+
+            # Select the cross attention from the right beam for each output sequences
+            weights = torch.stack(
+                [
+                    torch.index_select(weights[:, :, i, :], dim=0, index=beam_indices[:, i])
+                    for i in range(beam_indices.shape[1])
+                ],
+                dim=2,
+            )
 
         timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+        batch_size = timestamps.shape[0]
+
+        if num_frames is not None:
+            # two cases:
+            # 1. num_frames is the same for each sample -> compute the DTW matrix for each sample in parallel
+            # 2. num_frames is different, compute the DTW matrix for each sample sequentially
+
+            # we're using np.unique because num_frames can be int/list/tuple
+            if len(np.unique(num_frames)) == 1:
+                # if num_frames is the same, no need to recompute matrix, std and mean for each element of the batch
+                num_frames = num_frames if isinstance(num_frames, int) else num_frames[0]
+
+                weights = weights[..., : num_frames // 2]
+            else:
+                # num_frames is of shape (batch_size,) whereas batch_size is truely batch_size*num_return_sequences
+                repeat_time = batch_size if isinstance(num_frames, int) else batch_size // len(num_frames)
+                num_frames = np.repeat(num_frames, repeat_time)
+
+        if num_frames is None or isinstance(num_frames, int):
+            # Normalize and smoothen the weights.
+            std = torch.std(weights, dim=-2, keepdim=True, unbiased=False)
+            mean = torch.mean(weights, dim=-2, keepdim=True)
+            weights = (weights - mean) / std
+            weights = _median_filter(weights, self.config.median_filter_width)
+
+            # Average the different cross-attention heads.
+            weights = weights.mean(dim=1)
 
         # Perform dynamic time warping on each element of the batch.
-        for batch_idx in range(timestamps.shape[0]):
-            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
+        for batch_idx in range(batch_size):
+            if num_frames is not None and isinstance(num_frames, (tuple, list, np.ndarray)):
+                matrix = weights[batch_idx, ..., : num_frames[batch_idx] // 2]
+
+                # Normalize and smoothen the weights.
+                std = torch.std(matrix, dim=-2, keepdim=True, unbiased=False)
+                mean = torch.mean(matrix, dim=-2, keepdim=True)
+                matrix = (matrix - mean) / std
+                matrix = _median_filter(matrix, self.config.median_filter_width)
+
+                # Average the different cross-attention heads.
+                matrix = matrix.mean(dim=0)
+            else:
+                matrix = weights[batch_idx]
+
+            text_indices, time_indices = _dynamic_time_warping(-matrix.cpu().double().numpy())
             jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
             jump_times = time_indices[jumps] * time_precision
             timestamps[batch_idx, 1:] = torch.tensor(jump_times)
