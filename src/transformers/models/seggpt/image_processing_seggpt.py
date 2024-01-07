@@ -32,7 +32,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import TensorType, is_torch_available, logging, requires_backends
 
 
 if is_torch_available():
