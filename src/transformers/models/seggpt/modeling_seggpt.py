@@ -780,17 +780,6 @@ class SegGptModel(SegGptPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    def _prepare_input(
-        self,
-        pixel_values: torch.FloatTensor,
-        prompt_pixel_values: torch.FloatTensor,
-        prompt_masks: torch.FloatTensor,
-    ) -> Tuple[torch.Tensor]:
-        pixel_values = torch.cat((prompt_pixel_values, pixel_values), dim=2)
-        prompt_pixel_values = torch.cat((prompt_masks, prompt_masks), dim=2)
-
-        return pixel_values, prompt_pixel_values
-
     @add_start_docstrings_to_model_forward(SEGGPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SegGptEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -849,7 +838,9 @@ class SegGptModel(SegGptPreTrainedModel):
         if prompt_pixel_values.dtype != expected_dtype:
             prompt_pixel_values = prompt_pixel_values.to(expected_dtype)
 
-        pixel_values, prompt_pixel_values = self._prepare_input(pixel_values, prompt_pixel_values, prompt_masks)
+        # Prepera inputs
+        pixel_values = torch.cat((prompt_pixel_values, pixel_values), dim=2)
+        prompt_pixel_values = torch.cat((prompt_masks, prompt_masks), dim=2)
 
         if bool_masked_pos is None:
             num_patches = self.embeddings.patch_embeddings.num_patches
