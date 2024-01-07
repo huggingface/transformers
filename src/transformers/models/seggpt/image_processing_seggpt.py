@@ -75,7 +75,6 @@ class SegGptImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    # Modified from transformers.models.vit.image_processing_vit.ViTImageProcessor.__init__
     def __init__(
         self,
         do_resize: bool = True,
@@ -100,7 +99,6 @@ class SegGptImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
-    # Modifed from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -149,7 +147,6 @@ class SegGptImageProcessor(BaseImageProcessor):
             **kwargs,
         )
 
-    # Modified from transformers.models.vit.image_processing_vit.ViTImageProcessor.preprocess
     def _preprocess_step(
         self,
         images: ImageInput,
