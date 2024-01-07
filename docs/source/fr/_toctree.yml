@@ -9,7 +9,7 @@
 - sections:
     - local: pipeline_tutorial
       title: Pipelines pour l'inférence
-    - local: in_translation
+    - local: autoclass_tutorial
       title: Chargement d'instances pré-entraînées avec une AutoClass
     - local: in_translation
       title: Préparation des données
