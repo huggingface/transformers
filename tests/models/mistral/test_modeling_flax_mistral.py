@@ -146,11 +146,7 @@ class FlaxMistralModelTester:
 
         outputs = model(input_ids)
 
-        # To take in to acount sequence_classification_head
-        if len(outputs_cache_next[0].shape) <= 2:
-            diff = np.max(np.abs((outputs_cache_next[0] - outputs[0])))
-        else:
-            diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
     # Copied from tests.models.gpt_neo.test_modeling_flax_gpt_neo.FlaxGPTNeoModelTester.check_use_cache_forward_with_attn_mask
@@ -184,11 +180,7 @@ class FlaxMistralModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        # To take in to acount sequence_classification_head
-        if len(outputs_cache_next[0].shape) <= 2:
-            diff = np.max(np.abs((outputs_cache_next[0] - outputs[0])))
-        else:
-            diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
