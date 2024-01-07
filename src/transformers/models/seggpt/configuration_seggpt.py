@@ -120,6 +120,10 @@ class SegGptConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        if merge_index > min(output_indicies):
+            raise ValueError(
+                f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {output_indicies=}"
+            )
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -135,10 +139,6 @@ class SegGptConfig(PretrainedConfig):
         self.pretrain_image_size = pretrain_image_size
         self.decoder_hidden_size = decoder_hidden_size
         self.use_relative_position_embeddings = use_relative_position_embeddings
-        if merge_index > min(output_indicies):
-            raise ValueError(
-                f"Merge index must be less than the minimum encoder output index, but got {merge_index=} and {output_indicies=}"
-            )
         self.merge_index = merge_index
         self.output_indicies = output_indicies
         self.beta = beta
