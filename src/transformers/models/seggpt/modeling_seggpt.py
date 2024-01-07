@@ -870,12 +870,13 @@ class SegGptModel(SegGptPreTrainedModel):
         )
 
         return encoder_outputs
-    
+
+
 class SegGptLoss(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.beta = config.beta
-        self.config = config
+        self.patch_size = config.patch_size
 
     def forward(
         self,
@@ -885,15 +886,15 @@ class SegGptLoss(nn.Module):
         labels: torch.FloatTensor,
         bool_masked_pos: torch.BoolTensor,
     ):
-        patch_size = self.config.patch_size
-        mask = bool_masked_pos[:, :, None].repeat(1, 1, patch_size**2 * 3)
-        mask = unpatchify(mask, pixel_values.shape[1] // patch_size, pixel_values.shape[2] // patch_size)
+        mask = bool_masked_pos[:, :, None].repeat(1, 1, self.patch_size**2 * 3)
+        mask = unpatchify(mask, pixel_values.shape[1] // self.patch_size, pixel_values.shape[2] // self.patch_size)
         # Changing dummy mask in prompt_pixel_values to labels values
         prompt_pixel_values[:, :, prompt_pixel_values.shape[2] // 2 :, :] = labels
         loss = F.smooth_l1_loss(pred_masks, prompt_pixel_values, reduction="none", beta=self.beta)
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
 
         return loss
+
 
 @add_start_docstrings(
     "SegGpt model with a decoder on top for one-shot image segmentation.",
