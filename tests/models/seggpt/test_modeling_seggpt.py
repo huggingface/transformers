@@ -260,9 +260,6 @@ def prepare_img():
     return images, masks
 
 
-"./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-
 @require_torch
 @require_vision
 class SegGptModelIntegrationTest(unittest.TestCase):
