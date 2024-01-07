@@ -315,7 +315,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, atol=1e-4))
 
-        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        inputs = inputs.to(torch_device)
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
