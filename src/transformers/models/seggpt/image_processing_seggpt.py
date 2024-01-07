@@ -416,14 +416,14 @@ class SegGptImageProcessor(BaseImageProcessor):
         """
         requires_backends(self, ["torch"])
         # batch_size x num_channels x 2*height x width
-        masks = outputs.pred_masks  
+        masks = outputs.pred_masks
         # Take predicted mask as input and prompt are concatenated in the height dimension
         masks = masks[:, :, masks.shape[2] // 2 :, :]  # batch_size x num_channels x height x width
         # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
-        # batch_size x height x width x num_channels 
+        # batch_size x height x width x num_channels
         masks = masks.permute(0, 2, 3, 1) * torch.tensor(self.image_std) + torch.tensor(self.image_mean)
         # batch_size x num_channels x height x width
-        masks = mask.permute(0, 3, 1, 2)  
+        masks = masks.permute(0, 3, 1, 2)
 
         results = []
 
