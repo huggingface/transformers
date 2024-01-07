@@ -46,7 +46,7 @@ def get_config(model_name):
             num_attention_heads=12,
             global_attn_indexes=[2, 5, 8, 11],
         )
-    elif "slim-sam-77" in model_name:
+    elif "slimsam-77" in model_name:
         vision_config = SamVisionConfig(
             hidden_size=168,
             mlp_dim=696,
@@ -134,9 +134,9 @@ def replace_keys(state_dict):
 
 
 def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
-    if model_name == "slimsam-50":
+    if model_name == "slimsam-50-uniform":
         checkpoint_path = "/Users/nielsrogge/Documents/SlimSAM/SlimSAM-50-uniform.pth"
-    elif model_name == "slimsam-77":
+    elif model_name == "slimsam-77-uniform":
         checkpoint_path = "/Users/nielsrogge/Documents/SlimSAM/SlimSAM-77-uniform.pth"
     else:
         checkpoint_path = hf_hub_download("ybelkada/segment-anything", f"checkpoints/{model_name}.pth")
@@ -224,13 +224,14 @@ def convert_sam_checkpoint(model_name, pytorch_dump_folder, push_to_hub):
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        processor.push_to_hub(f"meta/{model_name}")
-        hf_model.push_to_hub(f"meta/{model_name}")
+        repo_id = f"nielsr/{model_name}" if "slimsam" in model_name else f"meta/{model_name}"
+        processor.push_to_hub(repo_id)
+        hf_model.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    choices = ["sam_vit_b_01ec64", "sam_vit_h_4b8939", "sam_vit_l_0b3195", "slimsam-50", "slimsam-77"]
+    choices = ["sam_vit_b_01ec64", "sam_vit_h_4b8939", "sam_vit_l_0b3195", "slimsam-50-uniform", "slimsam-77-uniform"]
     parser.add_argument(
         "--model_name",
         default="sam_vit_h_4b8939",
