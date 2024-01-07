@@ -520,9 +520,9 @@ TFSWIFTFORMER_START_DOCSTRING = r"""
     This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
-    
+
     <Tip>
-    
+
     TF 2.0 models accepts two formats as inputs:
     - having all inputs as keyword arguments (like PyTorch models), or
     - having all inputs as a list, tuple or dict in the first positional arguments.
@@ -535,7 +535,7 @@ TFSWIFTFORMER_START_DOCSTRING = r"""
       `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
       `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-      
+
     </Tip>
 
     Args:
@@ -622,11 +622,6 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TFBaseModelOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -673,12 +668,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TFSWIFTFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=TFImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
