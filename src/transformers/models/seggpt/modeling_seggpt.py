@@ -84,18 +84,18 @@ def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> tor
 @dataclass
 class SegGptEncoderOutput(BaseModelOutput):
     """
-    Output type of [*SegGptEncoderOutput*].
+    Output type of [`SegGptEncoderOutput`].
     Args:
-        last_hidden_state (*torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_hidden_states=True`):
-            Tuple of *torch.FloatTensor* (one for the output of the embeddings + one for the output of each layer)
-            of shape *(batch_size, patch_height, patch_width, hidden_size)*.
-        attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
+        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
-            *(batch_size, num_heads, seq_len, seq_len)*.
-        intermediate_features (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.out_indicies` is set):
-            Tuple of *torch.FloatTensor* of shape *(batch_size, patch_height, patch_width, hidden_size)*.
+            `(batch_size, num_heads, seq_len, seq_len)`.
+        intermediate_features (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.out_indicies` is set):
+            Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
             Each element in the Tuple corresponds to the output of the layer specified in `config.out_indicies`.
             Additionaly, each feature passes through a LayerNorm.
     """
@@ -109,16 +109,16 @@ class SegGptImageSegmentationOutput(ModelOutput):
     Output type of [`SegGptImageSegmentationOutput`].
 
     Args:
-        loss (*torch.FloatTensor*, *optional*, returned when `labels` is provided):
+        loss (`torch.FloatTensor`, `optional`, returned when `labels` is provided):
             The loss value.
-        pred_masks (*torch.FloatTensor* of shape *(batch_size, num_channels, height, width)*):
+        pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             The predicted masks.
-        hidden_states (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_hidden_states=True`):
-            Tuple of *torch.FloatTensor* (one for the output of the embeddings + one for the output of each layer)
-            of shape *(batch_size, patch_height, patch_width, hidden_size)*.
-        attentions (*Tuple[torch.FloatTensor]*, *optional*, returned when `config.output_attentions=True`):
-            Tuple of *torch.FloatTensor* (one for each layer) of shape
-            *(batch_size, num_heads, seq_len, seq_len)*.
+        hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape `(batch_size, patch_height, patch_width, hidden_size)`.
+        attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape
+            `(batch_size, num_heads, seq_len, seq_len)`.
     """
 
     pred_masks: Optional[torch.FloatTensor] = None
