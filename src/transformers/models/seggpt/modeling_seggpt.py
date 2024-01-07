@@ -62,7 +62,7 @@ def patchify(tensor: torch.Tensor, patch_size: int) -> torch.Tensor:
     patch_width = tensor.shape[3] // patch_size
 
     tensor = tensor.reshape(shape=(batch_size, 3, patch_height, patch_size, patch_width, patch_size))
-    tensor = torch.einsum("nchpwq->nhwpqc", tensor)
+    tensor = tensor.permute(0, 2, 4, 3, 5, 1)
     tensor = tensor.reshape(shape=(batch_size, patch_height * patch_width, patch_size**2 * 3))
 
     return tensor
@@ -75,7 +75,7 @@ def unpatchify(tensor: torch.Tensor, patch_height: int, patch_width: int) -> tor
         raise ValueError(f"Number of patches {tensor.shape[1]} does not match patch height and width.")
 
     tensor = tensor.reshape(shape=(batch_size, patch_height, patch_width, patch_size, patch_size, 3))
-    tensor = torch.einsum("nhwpqc->nchpwq", tensor)
+    tensor = tensor.permute(0, 5, 1, 3, 2, 4)
     tensor = tensor.reshape(shape=(batch_size, 3, patch_height * patch_size, patch_width * patch_size))
 
     return tensor
@@ -638,7 +638,7 @@ class SegGptDecoder(nn.Module):
         hidden_states = hidden_states.reshape(
             batch_size, patch_height, patch_width, self.patch_size, self.patch_size, self.decoder_hidden_size
         )
-        hidden_states = torch.einsum("nhwpqc->nchpwq", hidden_states)
+        hidden_states = hidden_states.permute(0, 5, 1, 3, 2, 4)
         hidden_states = hidden_states.reshape(
             shape=(batch_size, -1, patch_height * self.patch_size, patch_width * self.patch_size)
         )
