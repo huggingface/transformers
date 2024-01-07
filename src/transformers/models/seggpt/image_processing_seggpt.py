@@ -414,6 +414,7 @@ class SegGptImageProcessor(BaseImageProcessor):
             `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
             in the batch as predicted by the model.
         """
+        requires_backends(self, ["torch"])
         masks = outputs.pred_masks  # batch_size x num_channels x 2*height x width
         # Take predicted mask as input and prompt are concatenated in the height dimension
         masks = masks[:, :, masks.shape[2] // 2 :, :]  # batch_size x num_channels x height x width
