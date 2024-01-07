@@ -26,9 +26,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
