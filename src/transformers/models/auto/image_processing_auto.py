@@ -362,17 +362,26 @@ class AutoImageProcessor:
         if image_processor_class is None and image_processor_auto_map is None:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
-                logger.info(
-                    "Could not find image processor class in the image processor config or the model config. Loading"
-                    " based on pattern matching with the model's feature extractor configuration."
+                logger.warning(
+                    "Could not find image processor class in the image processor config or the model config. "
+                    f"If you are the owner of {pretrained_model_name_or_path}, please update the file "
+                    "`preprocessor_config.json` to use `image_processor_type` instead of `feature_extractor_type`. "
+                    "Otherwise, you can open a pull request on this Hub repository. "
+                    "This warning will be removed in v4.40. Currently, we try to load the image processor based on "
+                    "pattern matching with the model's feature extractor configuration."
                 )
                 image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
-                logger.info(
-                    "Could not find image processor auto map in the image processor config or the model config."
-                    " Loading based on pattern matching with the model's feature extractor configuration."
+                logger.warning(
+                    "Could not find image processor auto map in the image processor config or the model config. "
+                    f"If you are the owner of {pretrained_model_name_or_path}, please update the file "
+                    "`preprocessor_config.json` to use `AutoImageProcessor` instead of `AutoFeatureExtractor` and "
+                    "replace any `xxxFeatureExtractor` by `xxxImageProcessor`. "
+                    "Otherwise, you can open a pull request on this Hub repository. "
+                    "This warning will be removed in v4.40. Currently, we try to load the image processor based on "
+                    "pattern matching with the model's feature extractor configuration."
                 )
 
         # If we don't find the image processor class in the image processor config, let's try the model config.
