@@ -21,6 +21,7 @@ from collections import defaultdict
 from typing import Optional
 
 import numpy as np
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
@@ -220,7 +221,7 @@ class BarkProcessor(ProcessorMixin):
     def __call__(
         self,
         text=None,
-        voice_presets=None,
+        voice_preset=None,
         return_tensors="pt",
         max_length=256,
         add_special_tokens=False,
@@ -239,10 +240,11 @@ class BarkProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            voice_preset (`str`, `Dict[np.ndarray]`, List[Dict[np.ndarray]]):
+            voice_preset (`str`, `Dict[np.ndarray]`, `List[str]`, `List[Dict[np.ndarray]]`):
                 The voice preset, i.e the speaker embeddings. It can either be a valid voice_preset name, e.g
-                `"en_speaker_1"`, or directly a dictionnary of `np.ndarray` embeddings for each submodel of `Bark`. Or
-                it can be a valid file name of a local `.npz` single voice preset.
+                `"en_speaker_1"` (or list of names) or directly a dictionary (or list of dictionaries) of `np.ndarray`
+                 embeddings for each submodel of `Bark`. Or it can be a valid file name (or list of file names) of a local
+                 `.npz` single voice preset.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -250,16 +252,17 @@ class BarkProcessor(ProcessorMixin):
                 - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
-            Tuple([`BatchEncoding`], [`BatchFeature`]): A tuple composed of a [`BatchEncoding`], i.e the output of the
-            `tokenizer` and a [`BatchFeature`], i.e the voice preset with the right tensors type.
+            Dict[str, Union[Optional[`BatchFeature`], `BatchEncoding`]]: A dictionary composed of a
+            [`BatchEncoding`], i.e the output of the `tokenizer` and a list of [`BatchFeature`], i.e the voice presets
+            with the right tensors type.
         """
         output_voice_presets = None
-        if voice_presets is not None:
-            if isinstance(voice_presets, dict) or isinstance(voice_presets, str):
-                voice_presets = [voice_presets]
+        if voice_preset is not None:
+            if isinstance(voice_preset, dict) or isinstance(voice_preset, str):
+                voice_preset = [voice_preset]
 
             batch_size = len(text)
-            n_voice_presets = len(voice_presets)
+            n_voice_presets = len(voice_preset)
 
             if (batch_size != n_voice_presets) and (n_voice_presets != 1):
                 raise ValueError(
@@ -269,26 +272,24 @@ class BarkProcessor(ProcessorMixin):
 
             output_voice_presets = defaultdict(list)
 
-            for voice_preset in voice_presets:
-                if not isinstance(voice_preset, dict):
-                    if (
-                        isinstance(voice_preset, str)
-                        and self.speaker_embeddings is not None
-                        and voice_preset in self.speaker_embeddings
-                    ):
-                        voice_preset = self._load_voice_preset(voice_preset)
+            for vp in voice_preset:
+                if not isinstance(vp, dict):
+                    if isinstance(vp, str) and self.speaker_embeddings is not None and vp in self.speaker_embeddings:
+                        vp = self._load_voice_preset(vp)
 
                     else:
-                        if isinstance(voice_preset, str) and not voice_preset.endswith(".npz"):
-                            voice_preset = voice_preset + ".npz"
+                        if isinstance(vp, str) and not vp.endswith(".npz"):
+                            vp = vp + ".npz"
 
-                        voice_preset = np.load(voice_preset)
+                        vp = np.load(vp)
 
-                self._validate_voice_preset_dict(voice_preset, **kwargs)
-                voice_preset = BatchFeature(data=voice_preset, tensor_type=return_tensors)
-
-                for k, v in voice_preset.items():
+                self._validate_voice_preset_dict(vp, **kwargs)
+                for k, v in vp.items():
                     output_voice_presets[k].append(v)
+
+            # must used nested tensor as prompts might vary in length and BatchFeature does not accept list inputs
+            output_voice_presets = {k: torch.nested.nested_tensor(v) for k, v in output_voice_presets.items()}
+            output_voice_presets = BatchFeature(data=output_voice_presets, tensor_type=return_tensors)
 
         encoded_text = self.tokenizer(
             text,
