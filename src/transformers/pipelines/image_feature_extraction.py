@@ -8,7 +8,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 
-# Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
 class ImageFeatureExtractionPipeline(Pipeline):
     """
     Image feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
@@ -27,10 +26,10 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
-    `"feature-extraction"`.
+    This image feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    `"image-feature-extraction"`.
 
-    All models may be used for this pipeline. See a list of all models, including community-contributed models on
+    All vision models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).
 
     Arguments:
