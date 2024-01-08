@@ -21,6 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import RepositoryNotFoundError
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -336,8 +337,11 @@ def prepare_metadata(repo_path, class_info_file):
     fname = os.path.join("" if repo_path is None else repo_path, class_info_file)
 
     if not os.path.exists(fname) or not os.path.isfile(fname):
-        # File cannot be found locally, try downloading from hub
-        fname = hf_hub_download(repo_path, class_info_file, repo_type="dataset")
+        # We try downloading from a dataset by default for backward compatibility
+        try:
+            fname = hf_hub_download(repo_path, class_info_file, repo_type="dataset")
+        except RepositoryNotFoundError:
+            fname = hf_hub_download(repo_path, class_info_file)
 
     with open(fname, "r") as f:
         class_info = json.load(f)
