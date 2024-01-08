@@ -963,18 +963,17 @@ class BarkSemanticModel(BarkCausalModel):
 
         # ensure that the semantic prompts are all of the same length for batch processing
         if history_prompt is not None:
-            semantic_history = torch.cat(
-                [
-                    nn.functional.pad(
-                        sp[-max_input_semantic_length:],
-                        (0, max_input_semantic_length - len(sp[-max_input_semantic_length:])),
-                        value=semantic_generation_config.semantic_pad_token,
-                        mode="constant",
-                    ).unsqueeze(0)
-                    for sp in history_prompt["semantic_prompt"]
-                ],
-                dim=0,
-            ).to(self.device)
+            semantic_history = [sp[-max_input_semantic_length:] for sp in history_prompt["semantic_prompt"]]
+            semantic_history = [
+                nn.functional.pad(
+                    sp,
+                    (0, max_input_semantic_length - len(sp)),
+                    value=semantic_generation_config.semantic_pad_token,
+                    mode="constant",
+                )
+                for sp in semantic_history
+            ]
+            semantic_history = torch.stack(semantic_history).to(self.device)
 
         else:
             semantic_history = torch.tensor(
@@ -1037,11 +1036,11 @@ class BarkCoarseModel(BarkCausalModel):
     base_model_prefix = "coarse_acoustics"
     config_class = BarkCoarseConfig
 
-    def preprocess_histories(
+    def preprocess_single_speaker_histories(
         self,
         max_semantic_history: int,
         semantic_to_coarse_ratio: int,
-        semantic_generation_config: int,
+        semantic_vocab_size: int,
         codebook_size: int,
         x_semantic_history: Optional[torch.Tensor] = None,
         x_coarse_history: torch.Tensor = None,
@@ -1053,19 +1052,19 @@ class BarkCoarseModel(BarkCausalModel):
             max_semantic_history (`int`):
                 Maximum size of semantic tokens used.
             semantic_to_coarse_ratio (`int`):
-                Ratio of semantic to coarse frequency
-            semantic_generation_config (`BarkSemanticGenerationConfig`):
-                Generation config indicating how to generate the semantic tokens.
+                Ratio of semantic to coarse frequency.
+            semantic_vocab_size (`int`):
+                size of the vocabulary used for the semantic tokens.
             codebook_size (`int`):
                 Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
             x_semantic_history (`Optional[torch.Tensor]`):
-                Optional `Bark` speaker semantic prompt.
+                Optional `Bark` single speaker semantic prompt.
             x_coarse_history (`Optional[torch.Tensor]`):
-                Optional `Bark` speaker coarse prompt.
+                Optional `Bark` single speaker coarse prompt.
         Returns: Returns:
             `tuple(torch.FloatTensor)`:
-            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
-            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic single speaker prompt.
+            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse single speaker prompt.
         """
         if codebook_size is not None:
             for n in range(1, x_coarse_history.shape[0]):
@@ -1073,9 +1072,9 @@ class BarkCoarseModel(BarkCausalModel):
                 x_coarse_history[n, :] += codebook_size * n
 
         # flatten x_coarse_history
-        x_coarse_history = torch.transpose(x_coarse_history, 0, 1).view(-1)
+        x_coarse_history = torch.transpose(x_coarse_history, 0, 1).reshape(-1)
 
-        x_coarse_history = x_coarse_history + semantic_generation_config.semantic_vocab_size
+        x_coarse_history = x_coarse_history + semantic_vocab_size
 
         # trim histories correctly
         n_semantic_hist_provided = min(
@@ -1094,6 +1093,83 @@ class BarkCoarseModel(BarkCausalModel):
         x_coarse_history = x_coarse_history[:-2]
 
         return x_semantic_history, x_coarse_history
+
+    def preprocess_histories(
+        self,
+        max_semantic_history: int,
+        semantic_to_coarse_ratio: int,
+        semantic_vocab_size: int,
+        coarse_semantic_pad_token: int,
+        codebook_size: int,
+        batch_size: int,
+        history_prompt: Dict[str, torch.Tensor],
+    ):
+        """
+        Preprocess the optional `Bark` speaker prompts before `self.generate`.
+
+        Args:
+            max_semantic_history (`int`):
+                Maximum size of semantic tokens used.
+            semantic_to_coarse_ratio (`int`):
+                Ratio of semantic to coarse frequency.
+            semantic_vocab_size (`int`):
+                size of the vocabulary used for the semantic tokens.
+            coarse_semantic_pad_token (`int`):
+                token representing the padding for the coarse tokens.
+            codebook_size (`int`):
+                Codebook channel size, i.e. the size of the output vocabulary per codebook channel.
+            batch_size (`int`):
+                Size of the batch.
+            history_prompt (`Dict[str, torch.Tensor]`):
+                `Bark` single or multiple speaker prompts.
+        Returns: Returns:
+            `tuple(torch.FloatTensor)`:
+            - **x_semantic_history** (`Union[list[int],torch.FloatTensor]` -- Processed semantic speaker prompts.
+            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompts.
+            - **x_semantic_lens** (`list[int]`) -- Length of each speaker's semantic prompt.
+        """
+        x_semantic_history, x_coarse, x_semantic_lens = [], [], []
+        max_len_ch = 0
+        # iterate over the history prompts for processing before 'self.generate'
+        for x_ch, x_sh in zip(history_prompt["coarse_prompt"], history_prompt["semantic_prompt"]):
+            x_sh, x_ch = self.preprocess_single_speaker_histories(
+                x_coarse_history=x_ch.clone(),
+                x_semantic_history=x_sh,
+                max_semantic_history=max_semantic_history,
+                semantic_to_coarse_ratio=semantic_to_coarse_ratio,
+                semantic_vocab_size=semantic_vocab_size,
+                codebook_size=codebook_size,
+            )
+
+            x_semantic_lens.append(len(x_sh))
+            max_len_ch = len(x_ch) if len(x_ch) > max_len_ch else max_len_ch
+
+            x_semantic_history.append(x_sh)
+            x_coarse.append(x_ch)
+
+        # left padding as we will select the necessary history from right to left and hence right padding would result
+        # in lost information when batching speakers
+        x_coarse = torch.concat(
+            [
+                F.pad(
+                    x_c,
+                    (max_len_ch - x_c.shape[-1], 0),
+                    "constant",
+                    coarse_semantic_pad_token,
+                ).unsqueeze(0)
+                for x_c in x_coarse
+            ],
+            dim=0,
+        ).to(self.device)
+
+        if len(x_semantic_history) == 1:
+            x_semantic_history = torch.repeat_interleave(
+                torch.concat(x_semantic_history).unsqueeze(0), batch_size, dim=0
+            ).to(self.device)
+            x_coarse = torch.repeat_interleave(x_coarse, batch_size, dim=0).to(self.device)
+            x_semantic_lens = x_semantic_lens * batch_size
+
+        return x_semantic_history, x_coarse, x_semantic_lens
 
     def generate(
         self,
@@ -1164,63 +1240,21 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size = semantic_output.shape[0]
 
         if history_prompt is not None:
-            x_semantic_history, x_coarse = [], []
-            max_len_sh, max_len_ch = 0, 0
-
-            # iterate over the history prompts for processing before 'self.generate'
-            for x_ch, x_sh in zip(history_prompt["coarse_prompt"], history_prompt["semantic_prompt"]):
-                x_sh, x_ch = self.preprocess_histories(
-                    x_coarse_history=x_ch,
-                    x_semantic_history=x_sh,
-                    max_semantic_history=max_semantic_history,
-                    semantic_to_coarse_ratio=semantic_to_coarse_ratio,
-                    semantic_generation_config=semantic_generation_config,
-                    codebook_size=codebook_size,
-                )
-
-                max_len_ch = len(x_ch) if len(x_ch) > max_len_ch else max_len_ch
-                max_len_sh = len(x_sh) if len(x_sh) > max_len_sh else max_len_sh
-
-                x_semantic_history.append(x_sh.unsqueeze(0))
-                x_coarse.append(x_ch.unsqueeze(0))
-
-            x_semantic_history = torch.concat(
-                [
-                    nn.functional.pad(
-                        x_sh,
-                        (max_len_sh - len(x_sh), 0),
-                        value=coarse_generation_config.coarse_semantic_pad_token,
-                        mode="constant",
-                    )
-                    for x_sh in x_semantic_history
-                ],
-                dim=0,
-            ).to(self.device)
-
-            x_coarse = torch.concat(
-                [
-                    nn.functional.pad(
-                        x_ch,
-                        (max_len_ch - len(x_ch), 0),
-                        value=coarse_generation_config.coarse_semantic_pad_token,
-                        mode="constant",
-                    )
-                    for x_ch in x_coarse
-                ],
-                dim=0,
-            ).to(self.device)
-
-            if len(x_semantic_history) == 1:
-                x_semantic_history = torch.repeat_interleave(x_semantic_history, batch_size, dim=0).to(self.device)
-                x_coarse = torch.repeat_interleave(x_coarse, batch_size, dim=0).to(self.device)
+            x_semantic_history, x_coarse, x_semantic_lens = self.preprocess_histories(
+                history_prompt=history_prompt,
+                max_semantic_history=max_semantic_history,
+                semantic_to_coarse_ratio=semantic_to_coarse_ratio,
+                coarse_semantic_pad_token=coarse_generation_config.coarse_semantic_pad_token,
+                semantic_vocab_size=semantic_generation_config.semantic_vocab_size,
+                codebook_size=codebook_size,
+                batch_size=batch_size,
+            )
 
         else:
             x_semantic_history = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
             x_coarse = torch.tensor([[]] * batch_size, dtype=torch.int).to(self.device)
 
-        base_semantic_idx = x_semantic_history.shape[1]
-
-        semantic_output = torch.hstack([x_semantic_history, semantic_output])
+        semantic_output = [torch.hstack([x_sh, so]) for x_sh, so in zip(x_semantic_history, semantic_output)]
 
         n_window_steps = int(np.ceil(max_generated_len / sliding_window_len))
 
@@ -1229,17 +1263,24 @@ class BarkCoarseModel(BarkCausalModel):
         len_coarse_history = x_coarse.shape[1]
 
         for _ in range(n_window_steps):
-            semantic_idx = base_semantic_idx + int(round(total_generated_len / semantic_to_coarse_ratio))
+            # for each speaker, calculate the adjusted indices taking into account the length of each speaker semantic
+            # history length
+            semantic_indices = [
+                x_s_len + int(round(total_generated_len / semantic_to_coarse_ratio)) for x_s_len in x_semantic_lens
+            ]
+
+            # for each speaker select the appropriate length of semantic output to be used
+            input_coarse = [
+                semantic_output[i][np.max([0, s_idx - max_semantic_history]) :]
+                for i, s_idx in enumerate(semantic_indices)
+            ]
+
+            input_coarse = [input_coarse[idx][:max_coarse_input_length] for idx in range(batch_size)]
 
             # pad from right side
-            input_coarse = semantic_output[:, np.max([0, semantic_idx - max_semantic_history]) :]
-            input_coarse = input_coarse[:, :max_coarse_input_length]
-            input_coarse = F.pad(
-                input_coarse,
-                (0, max_coarse_input_length - input_coarse.shape[-1]),
-                "constant",
-                coarse_generation_config.coarse_semantic_pad_token,
-            )
+            input_coarse = nn.utils.rnn.pad_sequence(
+                input_coarse, batch_first=True, padding_value=coarse_generation_config.coarse_semantic_pad_token
+            ).to(self.device)
 
             input_coarse = torch.hstack(
                 [
@@ -1584,7 +1625,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         if history_prompt is not None:
             x_fine_history = history_prompt["fine_prompt"]
-            if len(x_fine_history) == 1:
+            if x_fine_history.size(0) == 1:
                 # transpose to get to shape (seq_len, n_fine_codebooks)
                 x_fine_history = torch.repeat_interleave(x_fine_history[0].T.unsqueeze(0), batch_size, dim=0)
 
