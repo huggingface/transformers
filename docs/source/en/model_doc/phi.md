@@ -64,11 +64,32 @@ promote further research on these urgent topics.*
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
+The original code for Phi-2 can be found [here](https://huggingface.co/microsoft/phi-2).
+
 
 ## Usage tips
 
 - This model is quite similar to `Llama` with the main difference in [`PhiDecoderLayer`], where they used [`PhiAttention`] and [`PhiMLP`] layers in parallel configuration.
 - The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
+
+
+## How to use Phi-2
+
+- The current weights at [microsoft/phi-2](https://huggingface.co/microsoft/phi-2) are not in proper order to be used with the library model. Until that is resolved, please use [susnato/phi-2](https://huggingface.co/susnato/phi-2) to load using the library `phi` model.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> model = AutoModelForCausalLM.from_pretrained("susnato/phi-2")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-2")
+
+>>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
+
+>>> outputs = model.generate(**inputs, max_length=30)
+>>> text = tokenizer.batch_decode(outputs)[0]
+>>> print(text)
+'Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce'
+```
 
 
 ### Example :
