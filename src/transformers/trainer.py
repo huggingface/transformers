@@ -214,7 +214,7 @@ if is_accelerate_available():
 def _is_peft_model(model):
     classes_to_check = (PeftModel,) if is_peft_available() else ()
     # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
-    if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
+    if is_peft_available() and version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
         from peft import PeftMixedModel
         classes_to_check = (*classes_to_check, PeftMixedModel)
     return is_peft_available() and isinstance(model, classes_to_check)
