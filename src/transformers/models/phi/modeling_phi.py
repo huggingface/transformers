@@ -59,8 +59,8 @@ _CONFIG_FOR_DOC = "PhiConfig"
 
 PHI_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/phi-1",
-    # "microsoft/phi-1_5",
-    # "microsoft/phi-2",
+    "microsoft/phi-1_5",
+    "microsoft/phi-2",
     # See all Phi models at https://huggingface.co/models?filter=phi
 ]
 
@@ -635,7 +635,6 @@ class PhiDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
