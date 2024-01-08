@@ -80,7 +80,7 @@ class Wav2Vec2BERTModelTester:
         mask_time_length=2,
         vocab_size=32,
         do_stable_layer_norm=False,
-        num_adapter_layers=1,
+        num_adapter_layers=2,
         adapter_stride=2,
         tdnn_dim=(32, 32),
         tdnn_kernel=(5, 3),
@@ -120,7 +120,10 @@ class Wav2Vec2BERTModelTester:
         self.output_seq_length = self.seq_length
         self.encoder_seq_length = self.output_seq_length
 
-        self.adapter_output_seq_length = (self.output_seq_length - 1) // adapter_stride + 1
+        self.adapter_output_seq_length = self.output_seq_length
+
+        for _ in range(num_adapter_layers):
+            self.adapter_output_seq_length = (self.adapter_output_seq_length - 1) // adapter_stride + 1
 
     def prepare_config_and_inputs(self, position_embeddings_type="relative"):
         input_shape = [self.batch_size, self.seq_length, self.feature_projection_input_dim]
