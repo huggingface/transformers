@@ -185,9 +185,12 @@ else:
 if is_safetensors_available():
     import safetensors.torch
 
-
+is_peftmix_available = False
 if is_peft_available():
-    from peft import PeftModel, PeftMixedModel
+    from peft import PeftModel
+    is_peftmix_available = version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0")
+    if is_peftmix_available:
+        from peft import PeftMixedModel
 
 
 if is_accelerate_available():
@@ -213,7 +216,7 @@ if is_accelerate_available():
 
 
 def _is_peft_model(model):
-    return is_peft_available() and isinstance(model, PeftModel) or is_peft_available() and isinstance(model, PeftMixedModel)
+    return is_peft_available() and isinstance(model, PeftModel) or is_peft_available() and is_peftmix_available and isinstance(model, PeftMixedModel)
 
 
 if TYPE_CHECKING:
