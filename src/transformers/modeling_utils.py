@@ -83,6 +83,7 @@ from .utils import (
     is_safetensors_available,
     is_torch_sdpa_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     logging,
     replace_return_docstrings,
     strtobool,
@@ -768,7 +769,11 @@ def _load_state_dict_into_meta_model(
                 # TODO: group all errors and raise at the end.
                 raise ValueError(f"{param_name} doesn't have any device set.")
             param_device = device_map[module_name]
-
+            if isinstance(param_device, int):
+                if is_torch_xpu_available():
+                    param_device = torch.device("xpu", param_device)
+                else:
+                    param_device = torch.device("cuda", param_device)
         if param_device == "disk":
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
@@ -3672,7 +3677,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
-
             if load_in_8bit or load_in_4bit:
                 # The LM head / tied weights or any last module can stay on disk / CPU
                 device_map_without_lm_head = {
