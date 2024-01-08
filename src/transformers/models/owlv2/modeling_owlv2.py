@@ -36,6 +36,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
+from .cnn_model import MenteeVisionModel
 
 
 if is_vision_available():
@@ -960,6 +961,49 @@ class Owlv2VisionTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+    
+
+# Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionTransformer with OWLVIT->OWLV2,OwlViT->Owlv2
+class Owlv2CNN(nn.Module):
+    def __init__(self, config: Owlv2VisionConfig):
+        super().__init__()
+        self.config = config
+        self.vision_model = MenteeVisionModel(config.name)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Owlv2VisionConfig)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # Cast the input to the expected `dtype`
+        expected_input_dtype = self.vision_model.backbone[1].weight.dtype
+        pixel_values = pixel_values.to(expected_input_dtype)
+
+        batch_size = pixel_values.shape[0]
+        last_hidden_state = self.vision_model(pixel_values)
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=None,
+            attentions=None,
+        )
 
 
 # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTVisionModel with OWLVIT->OWLV2,OwlViT->Owlv2,google/owlvit-base-patch32->google/owlv2-base-patch16
@@ -1041,7 +1085,10 @@ class Owlv2Model(Owlv2PreTrainedModel):
         self.vision_embed_dim = vision_config.hidden_size
 
         self.text_model = Owlv2TextTransformer(text_config)
-        self.vision_model = Owlv2VisionTransformer(vision_config)
+        if vision_config.name == 'vit':
+            self.vision_model = Owlv2VisionTransformer(vision_config)
+        else:
+            self.vision_model = Owlv2CNN(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
