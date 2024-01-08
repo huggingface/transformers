@@ -26,7 +26,7 @@ class SigmaMoEConfiguration(PretrainedConfig):
         embd_pdrop: float = 0.0,
         attention_dropout: float = 0.0,
         activation: str = "gelu_new",
-        initializer_range: float = 0.02,
+        initializer_range: float = 0.025,
         layer_norm_eps: float = 1e-5,
         use_cache: bool = False,
         tie_word_embeddings: bool = False,

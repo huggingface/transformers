@@ -767,7 +767,10 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
             config, layer_idx=layer_idx
         )
         self.mlp = SigmaMoEFeedForwardLayer(config, is_sparse=is_sparse)
-        self.input_layernorm = torch.nn.LayerNorm(
+        self.norm1 = torch.nn.LayerNorm(
+            config.d_model, eps=config.layer_norm_eps
+        )
+        self.norm2 = torch.nn.LayerNorm(
             config.d_model, eps=config.layer_norm_eps
         )
         self.resid_dropout = torch.nn.Dropout(config.resid_pdrop)
@@ -800,24 +803,21 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
+        hidden_states2 = self.norm1(hidden_states)
         # Self Attention
-        attn_outputs, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
+        hidden_states2, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states2,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
         )
-        attn_outputs = self.resid_dropout(attn_outputs)
+        hidden_states = hidden_states + self.resid_dropout(hidden_states2)
+        hidden_states2 = self.norm2(hidden_states)
+        hidden_states3, reg_loss = self.mlp(hidden_states2)
 
-        feed_forward_hidden_states, reg_loss = self.mlp(hidden_states)
-        feed_forward_hidden_states = self.resid_dropout(feed_forward_hidden_states)
-        hidden_states = attn_outputs + feed_forward_hidden_states + residual
+        hidden_states = hidden_states + self.resid_dropout(hidden_states3)
         outputs = (hidden_states,)
 
         if output_attentions:
@@ -862,20 +862,23 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         self.config: SigmaMoEConfiguration
-        std = self.config.initializer_range
         if isinstance(module, torch.nn.Linear):
+            std = 2.0 / math.sqrt(module.weight.size(-1) * self.config.num_hidden_layers)
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, torch.nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            torch.nn.init.kaiming_normal_(module.weight.data, mode="fan_in", nonlinearity="linear")
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, SigmaMoELayer):
-            module.expert_sel.data.normal_(mean=0.0, std=std)
+            std_expert_sel = 2.0 / math.sqrt(self.config.d_model * self.config.num_hidden_layers)
+            std_keys = 2.0 / math.sqrt(self.config.d_model * self.config.num_hidden_layers)
+            std_values = 2.0 / math.sqrt(self.config.d_ff * self.config.num_hidden_layers)
+            module.expert_sel.data.normal_(mean=0.0, std=std_expert_sel)
             module.renorm_keep_std(module.expert_sel, dim=1)
-            module.keys.data.normal_(mean=0.0, std=std)
-            module.values.data.normal_(mean=0.0, std=std)
+            module.keys.data.normal_(mean=0.0, std=std_keys)
+            module.values.data.normal_(mean=0.0, std=std_values)
             if module.bias is not None:
                 module.bias.data.zero_()
             if module.o_bias is not None:
