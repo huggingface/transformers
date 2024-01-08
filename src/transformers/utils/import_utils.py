@@ -487,11 +487,14 @@ def is_g2p_en_available():
 @lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
-    if not _torch_available or USE_TORCH_XLA not in ENV_VARS_TRUE_VALUES:
+    warnings.warn(
+        "`is_torch_tpu_available` is deprecated and will be removed in 4.39.0. "
+        "Please use the `is_torch_xla_available` instead.",
+        FutureWarning,
+    )
+
+    if not _torch_available:
         return False
-    import torch_xla.core.xla_model as xm
-    device = xm.xla_device()
-    xm.set_replication(device, [device])
     if importlib.util.find_spec("torch_xla") is not None:
         if check_device:
             # We need to check if `xla_device` can be found, will raise a RuntimeError if not
@@ -503,13 +506,36 @@ def is_torch_tpu_available(check_device=True):
             except RuntimeError:
                 return False
         return True
-    return False
+
+
+@lru_cache
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+    """
+    Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
+    the USE_TORCH_XLA to false.
+    """
+    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+
+    try:
+        import torch_xla.core.xla_model as xm
+
+        xla_device = xm.xla_device()
+        hardware_type = xm.xla_device_hw(xla_device)
+        return any(
+            [
+                check_is_tpu and hardware_type == "TPU",
+                check_is_gpu and hardware_type == "GPU",
+                not (check_is_tpu or check_is_gpu),
+            ]
+        )
+    except (ImportError, RuntimeError):
+        return False
 
 
 @lru_cache()
 def is_torch_neuroncore_available(check_device=True):
     if importlib.util.find_spec("torch_neuronx") is not None:
-        return is_torch_tpu_available(check_device)
+        return is_torch_xla_available(check_device)
     return False
 
 

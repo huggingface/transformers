@@ -72,7 +72,7 @@ if TYPE_CHECKING and _has_neptune:
 from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from ..training_args import ParallelMode  # noqa: E402
-from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+from ..utils import ENV_VARS_TRUE_VALUES, is_torch_xla_available  # noqa: E402
 
 
 # Integration functions:
@@ -752,7 +752,7 @@ class WandbCallback(TrainerCallback):
 
             # keep track of model topology and gradients, unsupported on TPU
             _watch_model = os.getenv("WANDB_WATCH", "false")
-            if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
+            if not is_torch_xla_available() and _watch_model in ("all", "parameters", "gradients"):
                 self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
             self._wandb.run._label(code="transformers_trainer")
 
