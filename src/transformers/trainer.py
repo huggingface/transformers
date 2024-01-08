@@ -708,7 +708,7 @@ class Trainer:
                 if hasattr(self.model, "get_base_model"):
                     model_to_inspect = self.model.get_base_model()
                 else:
-                    # PeftMixedModel
+                    # PeftMixedModel do not have `get_base_model` method
                     model_to_inspect = self.model.base_model.model
             signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
