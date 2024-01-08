@@ -114,11 +114,9 @@ class QuantizationConfigParser:
 
         elif isinstance(quantization_config, dict):
             quant_method = quantization_config.get("quant_method", None)
+
             if quant_method is None:
-                logger.warning(
-                    "the model's quantization_config has no `quant_method` attribute; assuming QuantizationMethod.BITS_AND_BYTES"
-                )
-                quant_method = QuantizationMethod.BITS_AND_BYTES
+                raise ValueError("The model's quantization config from the arguments has no `quant_method` attribute.")
 
             if quant_method == QuantizationMethod.BITS_AND_BYTES:
                 config_class = BitsAndBytesConfig
