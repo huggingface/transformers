@@ -39,12 +39,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "nielsr/siglip-base-patch16-224": "https://huggingface.co/nielsr/siglip-base-patch16-224/resolve/main/spiece.model",
+        "google/siglip-base-patch16-224": "https://huggingface.co/google/siglip-base-patch16-224/resolve/main/spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/siglip-base-patch16-224": 256,
+    "google/siglip-base-patch16-224": 256,
 }
 
 SPIECE_UNDERLINE = "▁"

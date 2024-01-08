@@ -596,8 +596,7 @@ def prepare_img():
 class SiglipModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # TODO update organization
-        model_name = "nielsr/siglip-base-patch16-224"
+        model_name = "google/siglip-base-patch16-224"
         model = SiglipModel.from_pretrained(model_name).to(torch_device)
         processor = SiglipProcessor.from_pretrained(model_name)
 

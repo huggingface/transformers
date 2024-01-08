@@ -247,8 +247,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     def test_siglip_model_pt(self):
         image_classifier = pipeline(
             task="zero-shot-image-classification",
-            # TODO update organization to google
-            model="nielsr/siglip-base-patch16-224",
+            model="google/siglip-base-patch16-224",
         )
         # This is an image of 2 cats with remotes and no planes
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")

@@ -52,7 +52,7 @@ The pipeline allows to use the model in a few lines of code:
 >>> import requests
 
 >>> # load pipe
->>> image_classifier = pipeline(task="zero-shot-image-classification", model="nielsr/siglip-base-patch16-224")
+>>> image_classifier = pipeline(task="zero-shot-image-classification", model="google/siglip-base-patch16-224")
 
 >>> # load image
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -75,8 +75,8 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> from transformers import AutoProcessor, SiglipModel
 >>> import torch
 
->>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
->>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
+>>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+>>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)

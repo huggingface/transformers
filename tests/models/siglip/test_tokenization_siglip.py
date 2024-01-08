@@ -132,7 +132,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def siglip_tokenizer(self):
-        return SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
+        return SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
     # Copied from tests.models.t5.test_tokenization_t5.T5TokenizationTest.get_tokenizer with T5->Siglip
     def get_tokenizer(self, **kwargs) -> SiglipTokenizer:
@@ -357,7 +357,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        tokenizer = SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
+        tokenizer = SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
         # fmt: off
         texts = [
@@ -380,7 +380,7 @@ class SiglipTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertListEqual(input_ids, expected)
 
     def test_some_edge_cases(self):
-        tokenizer = SiglipTokenizer.from_pretrained("nielsr/siglip-base-patch16-224", legacy=False)
+        tokenizer = SiglipTokenizer.from_pretrained("google/siglip-base-patch16-224", legacy=False)
 
         sp_tokens = tokenizer.sp_model.encode("</s>>", out_type=str)
         self.assertEqual(sp_tokens, ["</", "s", ">", ">"])

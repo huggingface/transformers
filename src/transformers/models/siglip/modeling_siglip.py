@@ -42,10 +42,10 @@ from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionCo
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nielsr/siglip-base-patch16-224"
+_CHECKPOINT_FOR_DOC = "google/siglip-base-patch16-224"
 
 SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nielsr/siglip-base-patch16-224",
+    "google/siglip-base-patch16-224",
     # See all SigLIP models at https://huggingface.co/models?filter=siglip
 ]
 
@@ -801,8 +801,8 @@ class SiglipTextModel(SiglipPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, SiglipTextModel
 
-        >>> model = SiglipTextModel.from_pretrained("nielsr/siglip-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> model = SiglipTextModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
         >>> # important: make sure to set padding="max_length" as that's how the model was trained
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
@@ -940,8 +940,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, SiglipVisionModel
 
-        >>> model = SiglipVisionModel.from_pretrained("nielsr/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1014,8 +1014,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from transformers import AutoTokenizer, SiglipModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
-        >>> tokenizer = AutoTokenizer.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
         >>> # important: make sure to set padding="max_length" as that's how the model was trained
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding="max_length", return_tensors="pt")
@@ -1063,8 +1063,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from transformers import AutoProcessor, SiglipModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1116,8 +1116,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> from transformers import AutoProcessor, SiglipModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("nielsr/siglip-base-patch16-224")
-        >>> processor = AutoProcessor.from_pretrained("nielsr/siglip-base-patch16-224")
+        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
