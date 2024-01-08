@@ -446,7 +446,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel):
                     )
 
                     # Filter out only the tokens that can be un-attended, this can happen
-                    # in the case one uses Llava + Fused modules where the cache on the
+                    # if one uses Llava + Fused modules where the cache on the
                     # first iteration is already big enough, or if one passes custom cache
                     valid_indices = non_attended_tokens < extended_attention_mask.size(-1)
                     new_batch_index = batch_index[valid_indices]
