@@ -334,10 +334,11 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         _ = model.generate(**inputs, max_new_tokens=20)
 
     @slow
+    @require_torch_gpu
     def test_llava_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/llava-1.5-13b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id)
+        model_id = "llava-hf/llava-1.5-7b-hf"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(torch_device)
 
         # Simulate some user inputs
         pixel_values = torch.randn(
