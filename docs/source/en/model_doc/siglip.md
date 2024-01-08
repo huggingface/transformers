@@ -72,10 +72,10 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 ```python
 >>> from PIL import Image
 >>> import requests
->>> from transformers import AutoProcessor, SiglipModel
+>>> from transformers import AutoProcessor, AutoModel
 >>> import torch
 
->>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+>>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
 >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
 >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

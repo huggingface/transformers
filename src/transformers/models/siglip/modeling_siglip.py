@@ -1011,10 +1011,10 @@ class SiglipModel(SiglipPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoTokenizer, SiglipModel
+        >>> from transformers import AutoTokenizer, AutoModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/siglip-base-patch16-224")
 
         >>> # important: make sure to set padding="max_length" as that's how the model was trained
@@ -1060,10 +1060,10 @@ class SiglipModel(SiglipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, SiglipModel
+        >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1113,10 +1113,10 @@ class SiglipModel(SiglipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, SiglipModel
+        >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
-        >>> model = SiglipModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> model = AutoModel.from_pretrained("google/siglip-base-patch16-224")
         >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
