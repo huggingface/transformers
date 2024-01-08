@@ -188,9 +188,6 @@ if is_safetensors_available():
 is_peftmix_available = False
 if is_peft_available():
     from peft import PeftModel
-    is_peftmix_available = version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0")
-    if is_peftmix_available:
-        from peft import PeftMixedModel
 
 
 if is_accelerate_available():
