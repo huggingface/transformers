@@ -513,6 +513,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
         ) or (is_fsdp_enabled() and not is_local_dist_rank_0()):
             map_location = "meta"
+            assert(0)
         else:
             map_location = "cpu"
 
