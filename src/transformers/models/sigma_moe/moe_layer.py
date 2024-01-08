@@ -18,11 +18,15 @@ try:
         raise ImportError("GPU must at least be Volta")
     IS_TRITON = True
 except ImportError:
+    from ...utils import logging
+    logger = logging.get_logger(__name__)
     if torch.cuda.is_available():
-        from ...utils import logging
-        logger = logging.get_logger(__name__)
         logger.warning(
             "Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead."
+        )
+    else:
+        logger.warning(
+            "GPU not available. Falling back to CPU verison of the MoE layer, which is equally fast as a dense layer."
         )
     from .cuda_src import cvmm, cvmm_prepare_sel, CVMMSel
 
