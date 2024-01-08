@@ -94,12 +94,11 @@ class QuantizationConfigParser:
                     "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
-
-        if self.quantization_method == QuantizationMethod.AWQ:
-            raise ValueError(
-                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
-                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
-            )
+        # if self.quantization_method == QuantizationMethod.AWQ:
+        #     raise ValueError(
+        #         "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
+        #         " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
+        #     )
 
         return kwargs
 
@@ -201,6 +200,12 @@ class QuantizationConfigParser:
 
             self.quantization_method = quantization_method_from_config
             self.quantization_status = QuantizationStatus.PREQUANTIZED
+
+        elif self.quantization_method == QuantizationMethod.AWQ:
+            raise ValueError(
+                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
+                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
+            )
 
         elif self.quantization_config is not None:
             # using quantization_config from args for fresh quantization

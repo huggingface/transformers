@@ -187,17 +187,17 @@ def fuse_awq_modules(model, quantization_config):
     Args:
         model (`~PreTrainedModel`):
             The model to fuse - note this model should have been converted into AWQ format beforehand.
-        quantization_config (`dict`):
+        quantization_config (`Union[AwqConfig, dict]`):
             The quantization configuration to use.
     """
     # We need to convert it from dict in order to get an AwqConfig object
     # otherwise the fields `backend` etc. will not be available
     # https://github.com/huggingface/transformers/pull/27411#discussion_r1414044495
-    awq_config = AwqConfig.from_dict(quantization_config)
-    backend = awq_config.backend
+    if not isinstance(quantization_config, AwqConfig):
+        quantization_config = AwqConfig.from_dict(quantization_config)
+    backend = quantization_config.backend
 
-    modules_to_fuse = get_modules_to_fuse(model, awq_config)
-    modules_to_not_convert = getattr(awq_config, "modules_to_not_convert", None)
+    modules_to_fuse = get_modules_to_fuse(model, quantization_config)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
