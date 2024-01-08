@@ -30,6 +30,11 @@ The abstract from the paper is the following:
 - Training is not yet supported. If you want to fine-tune SigLIP or train from scratch, refer to the loss function from [OpenCLIP](https://github.com/mlfoundations/open_clip/blob/73ad04ae7fb93ede1c02dc9040a828634cb1edf1/src/open_clip/loss.py#L307), which leverages various `torch.distributed` utilities.
 - When using the standalone [`SiglipTokenizer`], make sure to pass `padding="max_length"` as that's how the model was trained. The multimodal [`SiglipProcessor`] takes care of this behind the scenes.
 
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
+alt="drawing" width="600"/>
+
+<small> SigLIP evaluation results compared to CLIP. Taken from the <a href="https://arxiv.org/abs/2303.15343">original paper</a>.</small>
+
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/google-research/big_vision/tree/main).
 
