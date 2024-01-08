@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 
 from transformers import AutoTokenizer, BarkProcessor
 from transformers.testing_utils import require_torch, slow
@@ -29,6 +30,7 @@ class BarkProcessorTest(unittest.TestCase):
         self.checkpoint = "suno/bark-small"
         self.tmpdirname = tempfile.mkdtemp()
         self.voice_preset = "en_speaker_1"
+        self.voice_presets = ["en_speaker_0", "fr_speaker_0", "en_speaker_1"] * 7
         self.input_string = "This is a test string"
         self.speaker_embeddings_dict_path = "speaker_embeddings_path.json"
         self.speaker_embeddings_directory = "speaker_embeddings"
@@ -89,7 +91,7 @@ class BarkProcessorTest(unittest.TestCase):
         }
 
         # test providing already loaded voice_preset
-        inputs = processor(text=self.input_string, voice_presets=voice_presets)
+        inputs = processor(text=self.input_string, voice_preset=voice_presets)
 
         processed_voice_preset = inputs["history_prompt"]
         for key in voice_presets:
@@ -100,7 +102,7 @@ class BarkProcessorTest(unittest.TestCase):
         # test loading voice preset from npz file
         tmpfilename = os.path.join(self.tmpdirname, "file.npz")
         np.savez(tmpfilename, **voice_presets)
-        inputs = processor(text=self.input_string, voice_presets=tmpfilename)
+        inputs = processor(text=self.input_string, voice_preset=tmpfilename)
         processed_voice_preset = inputs["history_prompt"]
 
         for key in voice_presets:
@@ -109,7 +111,7 @@ class BarkProcessorTest(unittest.TestCase):
             )
 
         # test loading voice preset from the hub
-        inputs = processor(text=self.input_string, voice_presets=self.voice_preset)
+        inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
 
     def test_multiple_speaker_embeddings(self):
         processor = BarkProcessor.from_pretrained(
@@ -138,7 +140,7 @@ class BarkProcessorTest(unittest.TestCase):
         ] * 10
 
         # test providing already loaded voice_preset
-        inputs = processor(text=self.input_string, voice_presets=voice_presets)
+        inputs = processor(text=self.input_string, voice_preset=voice_presets)
 
         processed_voice_presets = inputs["history_prompt"]
         for i, voice_preset in enumerate(voice_presets):
@@ -154,7 +156,7 @@ class BarkProcessorTest(unittest.TestCase):
             np.savez(tmpfilename, **voice_presets[i])
             tmpfilenames.append(tmpfilename)
 
-        inputs = processor(text=self.input_string, voice_presets=tmpfilenames)
+        inputs = processor(text=self.input_string, voice_preset=tmpfilenames)
         processed_voice_presets = inputs["history_prompt"]
 
         for i, voice_preset in enumerate(voice_presets):
@@ -163,7 +165,15 @@ class BarkProcessorTest(unittest.TestCase):
                     voice_preset[key].tolist(), processed_voice_presets.get(key, np.array([]))[i].tolist()
                 )
         # test loading voice preset from the hub
-        inputs = processor(text=self.input_string, voice_presets=self.voice_preset)
+        inputs = processor(text=self.input_string, voice_preset=self.voice_presets)
+
+        # if the number of voices is different than 1 or batch size, an error should be raised
+        with pytest.raises(ValueError) as exception:
+            inputs = processor(text=self.input_string, voice_preset=self.voice_presets[:2])
+        assert (
+            exception.value.args[0] == "The number of voice presets 2 does not match batch size of size 21. "
+            "The number of voice presets should either be 1 or 21."
+        )
 
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
