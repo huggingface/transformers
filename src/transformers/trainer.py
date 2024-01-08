@@ -216,7 +216,11 @@ if is_accelerate_available():
 
 
 def _is_peft_model(model):
-    return is_peft_available() and isinstance(model, PeftModel) or is_peft_available() and is_peftmix_available and isinstance(model, PeftMixedModel)
+    classes_to_check = (PeftModel,)
+    if version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
+        from peft import PeftMixedModel
+        classes_to_check = (*classes_to_check, PeftMixedModel)
+    return is_peft_available() and isinstance(model, classes_to_check)
 
 
 if TYPE_CHECKING:
