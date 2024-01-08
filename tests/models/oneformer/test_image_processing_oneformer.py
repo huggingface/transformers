@@ -15,6 +15,7 @@
 
 
 import json
+import os
 import tempfile
 import unittest
 
@@ -69,7 +70,7 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
         self.class_info_file = class_info_file
-        self.metadata = prepare_metadata(class_info_file, repo_path)
+        self.metadata = prepare_metadata(repo_path, class_info_file)
         self.num_text = num_text
         self.repo_path = repo_path
 
