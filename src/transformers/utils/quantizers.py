@@ -152,15 +152,12 @@ class QuantizationConfigParser:
             " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
         )
 
-        if isinstance(config_quantization_config, GPTQConfig):
-            # special case for GPTQ config collision
+        if isinstance(config_quantization_config, (GPTQConfig, AwqConfig)):
+            # special case for GPTQ / AWQ config collision
             loading_attr_dict = self.quantization_config.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(config_quantization_config, attr, val)
-            warning_msg += (
-                " The only exception is loading attributes (e.g. disable_exllama, use_cuda_fp16, max_input_length),"
-                " which will be overwritten with the ones in `from_pretrained()`."
-            )
+            warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         logger.warning(warning_msg)
         return config_quantization_config
@@ -873,10 +870,10 @@ class AWQHFQuantizer(HFQuantizer):
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype
 
-    def process_model_before_weight_loading(self, model, device_map, torch_dtype, **kwargs):
-        super().process_model_before_weight_loading(model)
+    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
+        super().process_model_before_weight_loading(model, **kwargs)
 
-        from ..integrations import fuse_awq_modules, get_keys_to_not_convert, replace_with_awq_linear
+        from ..integrations import get_keys_to_not_convert, replace_with_awq_linear
 
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
