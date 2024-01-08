@@ -185,7 +185,6 @@ else:
 if is_safetensors_available():
     import safetensors.torch
 
-is_peftmix_available = False
 if is_peft_available():
     from peft import PeftModel
 
