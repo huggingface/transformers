@@ -4,8 +4,19 @@ import torch.nn.functional as F
 from typing import Tuple, Optional, Union
 import math
 
+def is_at_least_volta_gpu():
+    if torch.cuda.is_available():
+        gpu_properties = torch.cuda.get_device_properties(0)
+        if gpu_properties.major >= 7:
+            return True
+    return False
+
+IS_TRITON = False
 try:
-    from .triton_src import cvmm, cvmm_prepare_sel, CVMMSel
+    from .triton_src import cvmm, cvmm_prepare_sel2, CVMMSel
+    if not is_at_least_volta_gpu():
+        raise ImportError("GPU must at least be Volta")
+    IS_TRITON = True
 except ImportError:
     if torch.cuda.is_available():
         from ...utils import logging
@@ -114,7 +125,7 @@ class SigmaMoELayer(torch.nn.Module):
         return -entropy_l(sel).mean()
 
     def compute_scores(
-        self, input: torch.Tensor, index: Union[CVMMSel,torch.Tensor], expert_scores: torch.Tensor
+        self, input: torch.Tensor, index: Union[CVMMSel,torch.Tensor], expert_scores: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         IS_CUDA = input.is_cuda
         if IS_CUDA:
@@ -127,7 +138,8 @@ class SigmaMoELayer(torch.nn.Module):
                 scores = scores + index * self.bias
 
         scores = self.activation(scores)
-        scores = scores * expert_scores[..., None]
+        if not expert_scores is None:
+            scores = scores * expert_scores[..., None]
 
         if self.dropout > 0:
             # Standard dropout on the "up-projected scores"
@@ -215,35 +227,48 @@ class SigmaMoELayer(torch.nn.Module):
 
         # Preprocess the selection indices. They will be needed for both layers and save some time
         if IS_CUDA:
-            sel_indices = [
-                cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts)
-                for h in range(sel_index.shape[-1])
-            ]
+            if IS_TRITON:
+                sel_indices = cvmm_prepare_sel2(sel_index.int())
+            else:
+                sel_indices = [
+                    cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts)
+                    for h in range(sel_index.shape[-1])
+                ]
         else:
             sel_indices = [
                 self.create_index(sel_index[..., h].long())
                 for h in range(sel_index.shape[-1])
             ]
 
-        # "Up-projection" layer for each head
-        scores_l = [
-            self.compute_scores(input, sel_indices[h], sel_val[..., h])
-            for h in range(sel_index.shape[-1])
-        ]
 
-        # Down projection layer for each head
-        if IS_CUDA:
-            out = 0
-            for hi, scores in zip(sel_indices, scores_l):
-                out = out + cvmm(scores, hi, self.values)
-
+        if IS_CUDA and IS_TRITON:
+            # "Up-projection" layer for each head
+            scores = self.compute_scores(input, sel_indices)
+            # Down projection layer for each head
+            sel_indices = sel_indices.clone()
+            sel_indices.reduction_weight = sel_val
+            sel_indices.sel_index = sel_indices.out_index
+            sel_indices.out_index = None
+            out = cvmm(scores, sel_indices, self.values)
             res = out.view(*input.shape[:-1], self.v_dim)
         else:
-            res = 0
-            for scores in scores_l:
-                # we don't need to mask with the indices here since the
-                # hidden activations of the non-used experts are zero
-                res = res + F.linear(scores, self.values, None)
+            # "Up-projection" layer for each head
+            scores_l = [
+                self.compute_scores(input, sel_indices[h], sel_val[..., h])
+                for h in range(sel_index.shape[-1])
+            ]
+            # Down projection layer for each head
+            if IS_CUDA:
+                out = 0
+                for hi, scores in zip(sel_indices, scores_l):
+                    out = out + cvmm(scores, hi, self.values)
+                res = out.view(*input.shape[:-1], self.v_dim)
+            else:
+                res = 0
+                for scores in scores_l:
+                    # we don't need to mask with the indices here since the
+                    # hidden activations of the non-used experts are zero
+                    res = res + F.linear(scores, self.values, None)
 
         if self.o_bias is not None:
             res = res + self.o_bias

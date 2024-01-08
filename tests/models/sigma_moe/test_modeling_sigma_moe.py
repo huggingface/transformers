@@ -3,7 +3,7 @@ from transformers.models.sigma_moe.moe_layer import SigmaMoELayer
 from transformers.testing_utils import slow
 
 
-@slow
+# @slow
 def test_equivalence_cpu_cuda():
     torch.manual_seed(0)
 
@@ -33,3 +33,6 @@ def test_equivalence_cpu_cuda():
     cuda_x, _ = cuda_moe(inp.cuda())
 
     assert torch.allclose(cpu_x, cuda_x.cpu(), atol=1e-4)
+
+if __name__ == "__main__":
+    test_equivalence_cpu_cuda()

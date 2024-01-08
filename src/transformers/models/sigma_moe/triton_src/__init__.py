@@ -1,1 +1,1 @@
-from .cvmm import cvmm, cvmm_prepare_sel, CVMMSel
+from .cvmm import cvmm, cvmm_prepare_sel2, CVMMSel
