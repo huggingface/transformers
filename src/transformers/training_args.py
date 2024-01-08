@@ -1439,10 +1439,6 @@ class TrainingArguments:
                         raise ValueError(
                             "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
                         )
-                    elif is_torch_npu_available():
-                        # npu
-                        # needs `torch >= 1.11` for `bf16/npu` support: `transformers` require it to be satisfied now
-                        pass
                     elif not is_torch_xpu_available():
                         # xpu
                         from .pytorch_utils import is_torch_greater_or_equal_than_1_12
