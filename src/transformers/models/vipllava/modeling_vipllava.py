@@ -430,10 +430,13 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
                 if past_key_values is not None and pixel_values is not None and input_ids.shape[1] == 1:
                     # Retrieve the first layer to inspect the logits and mask out the hidden states
                     # that are set to 0
-                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, 0]
-                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value == 0)
+                    first_layer_past_key_value = past_key_values[0][0][:, 0, :, :]
+
+                    # Sum all dimensions of head_dim (-1) to avoid random errors such as: https://github.com/huggingface/transformers/pull/28032#issuecomment-1863691941
+                    batch_index, non_attended_tokens = torch.where(first_layer_past_key_value.float().sum(-1) == 0)
+
                     # Get the target length
-                    target_seqlen = first_layer_past_key_value.shape[-1] + 1
+                    target_seqlen = first_layer_past_key_value.shape[-2] + 1
 
                     extended_attention_mask = torch.ones(
                         (attention_mask.shape[0], target_seqlen - attention_mask.shape[1]),
@@ -500,7 +503,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
