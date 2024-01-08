@@ -882,6 +882,9 @@ class AWQHFQuantizer(HFQuantizer):
 
         self.modules_to_not_convert = get_keys_to_not_convert(model)
 
+        if self.quantization_config.modules_to_not_convert is not None:
+            self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
+
         model, has_been_replaced = replace_with_awq_linear(
             model, quantization_config=self.quantization_config, modules_to_not_convert=self.modules_to_not_convert
         )
