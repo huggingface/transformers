@@ -216,6 +216,7 @@ def _is_peft_model(model):
     # Here we also check if the model is an instance of `PeftMixedModel` introduced in peft>=0.7.0: https://github.com/huggingface/transformers/pull/28321
     if is_peft_available() and version.parse(importlib.metadata.version("peft")) >= version.parse("0.7.0"):
         from peft import PeftMixedModel
+
         classes_to_check = (*classes_to_check, PeftMixedModel)
     return is_peft_available() and isinstance(model, classes_to_check)
 
@@ -707,7 +708,7 @@ class Trainer:
                 if hasattr(self.model, "get_base_model"):
                     model_to_inspect = self.model.get_base_model()
                 else:
-                    #PeftMixedModel
+                    # PeftMixedModel
                     model_to_inspect = self.model.base_model.model
             signature = inspect.signature(model_to_inspect.forward)
             self._signature_columns = list(signature.parameters.keys())
