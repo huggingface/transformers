@@ -129,6 +129,8 @@ class DynamicCache(Cache):
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
+        if cache_kwargs is not None:
+            return  self.key_cache[layer_idx], self.value_cache[layer_idx],cache_kwargs.get("attention_mask")
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -381,10 +383,12 @@ class StaticCache(Cache):
             self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
         
-        _, _, query_length, past_length = attention_mask.shape
-        final_mask = self.causal_4d_mask.to(attention_mask.device)
-        final_mask[:,:,:query_length,:past_length] = attention_mask
-        final_mask[:,:, query_length:,past_length:] = -65504
+        if attention_mask is not None:
+            _, _, query_length, past_length = attention_mask.shape
+            final_mask = self.causal_4d_mask.to(attention_mask.device)
+            final_mask[:,:,:query_length,:past_length] = attention_mask
+            final_mask[:,:, query_length:,past_length:] = -65504
+            attention_mask = final_mask[:,:,:query_length,:]
         
         # Update the cache
         if len(self.key_cache) + 1 == self.max_sequence_length:
@@ -398,7 +402,7 @@ class StaticCache(Cache):
         if layer_idx == self.num_layers - 1:
             self.seen_tokens += key_states.shape[-2]
             
-        return self.key_cache[layer_idx], self.value_cache[layer_idx], final_mask[:,:,:query_length,:]
+        return self.key_cache[layer_idx], self.value_cache[layer_idx], attention_mask
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
