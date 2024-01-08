@@ -762,6 +762,14 @@ _import_structure = {
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
+    "models.siglip": [
+        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SiglipConfig",
+        "SiglipProcessor",
+        "SiglipTextConfig",
+        "SiglipTokenizer",
+        "SiglipVisionConfig",
+    ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1290,6 +1298,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
@@ -3153,6 +3162,15 @@ else:
             "SEWDForSequenceClassification",
             "SEWDModel",
             "SEWDPreTrainedModel",
+        ]
+    )
+    _import_structure["models.siglip"].extend(
+        [
+            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipModel",
+            "SiglipPreTrainedModel",
+            "SiglipTextModel",
+            "SiglipVisionModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5441,6 +5459,14 @@ if TYPE_CHECKING:
     )
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+        SiglipProcessor,
+        SiglipTextConfig,
+        SiglipTokenizer,
+        SiglipVisionConfig,
+    )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5966,6 +5992,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.siglip import SiglipImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
@@ -7507,6 +7534,13 @@ if TYPE_CHECKING:
             SEWDForSequenceClassification,
             SEWDModel,
             SEWDPreTrainedModel,
+        )
+        from .models.siglip import (
+            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipModel,
+            SiglipPreTrainedModel,
+            SiglipTextModel,
+            SiglipVisionModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
