@@ -74,7 +74,6 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
 
     if num_heads_power_of_2 != num_heads:
         slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[:, :num_heads, ...]
-        print(slopes.shape)
 
     alibi = alibi * slopes
     return alibi.squeeze(0)
