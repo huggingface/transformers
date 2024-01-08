@@ -26,11 +26,11 @@ from torch import nn
 
 from ...generation.configuration_utils import GenerationConfig
 from ...generation.logits_process import (
+    ForceTokensLogitsProcessor,
     LogitsProcessorList,
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     WhisperNoSpeechDetection,
-    ForceTokensLogitsProcessor,
     WhisperTimeStampLogitsProcessor,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -1170,9 +1170,9 @@ class WhisperGenerationMixin:
         if is_shortform and generation_config.forced_decoder_ids is not None:
             forced_tokens_proc = ForceTokensLogitsProcessor(generation_config.forced_decoder_ids)
             # TODO(Patrick): It's important that the `forced_tokens_proc` processor is appended after
-            # the suppress_tokens processor or else it might happen that all token logits are suppressed to -inf 
+            # the suppress_tokens processor or else it might happen that all token logits are suppressed to -inf
             # which would lead to unexpected behavior
-            # The better approach here is to NOT make use of the `forced_tokens_proc` for Whisper and instead 
+            # The better approach here is to NOT make use of the `forced_tokens_proc` for Whisper and instead
             # initialize all of them as `decoder_input_ids`.
             logits_processor = (
                 [forced_tokens_proc] if logits_processor is None else logits_processor + [forced_tokens_proc]
