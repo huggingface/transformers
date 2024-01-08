@@ -61,8 +61,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
     """
 
     def _sanitize_parameters(self, return_tensors=None, **kwargs):
-        preprocess_params = {}
-        postprocess_params = {}
+        preprocess_params = kwargs.pop("preprocess_kwargs", {})
+        postprocess_params = kwargs.pop("postprocess_kwargs", {})
 
         if return_tensors is not None:
             postprocess_params["return_tensors"] = return_tensors

@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+import pytest
 from PIL import Image
 
 from transformers import (
@@ -74,17 +75,22 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
         feature_extractor = pipeline(
             task="image-feature-extraction", model="hf-internal-testing/tiny-random-vit", framework="pt"
         )
-        # test with empty parameters
         img = prepare_img()
         outputs = feature_extractor(img)
         self.assertEqual(
             nested_simplify(outputs[0][0]),
             [-1.417, -0.392, -1.264, -1.196, 1.648, 0.885, 0.56, -0.606, -1.175, 0.823, 1.912, 0.081, -0.053, 1.119, -0.062, -1.757, -0.571, 0.075, 0.959, 0.118, 1.201, -0.672, -0.498, 0.364, 0.937, -1.623, 0.228, 0.19, 1.697, -1.115, 0.583, -0.981])  # fmt: skip
 
-        # test with various tokenizer parameters
+        # test with image processor parameters
         preprocess_kwargs = {"size": {"height": 300, "width": 300}}
         img = prepare_img()
-        outputs = feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+        with pytest.raises(ValueError):
+            # Image doesn't match model input size
+            feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+
+        preprocess_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
+        img = prepare_img()
+        feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
     @require_tf
@@ -99,10 +105,16 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
             nested_simplify(outputs[0][0]),
             [-1.417, -0.392, -1.264, -1.196, 1.648, 0.885, 0.56, -0.606, -1.175, 0.823, 1.912, 0.081, -0.053, 1.119, -0.062, -1.757, -0.571, 0.075, 0.959, 0.118, 1.201, -0.672, -0.498, 0.364, 0.937, -1.623, 0.228, 0.19, 1.697, -1.115, 0.583, -0.981])  # fmt: skip
 
-        # test with various tokenizer parameters
+        # test with image processor parameters
         preprocess_kwargs = {"size": {"height": 300, "width": 300}}
         img = prepare_img()
-        outputs = feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+        with pytest.raises(ValueError):
+            # Image doesn't match model input size
+            feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+
+        preprocess_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
+        img = prepare_img()
+        feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
     @require_torch
