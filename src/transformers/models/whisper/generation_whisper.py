@@ -30,6 +30,7 @@ from ...generation.logits_process import (
     SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     WhisperNoSpeechDetection,
+    ForceTokensLogitsProcessor,
     WhisperTimeStampLogitsProcessor,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
@@ -488,14 +489,16 @@ class WhisperGenerationMixin:
 
         # 5. If we're in shortform mode, simple generate the whole input at once and return the output
         if is_shortform:
+            if temperature is not None:
+                kwargs["temperature"] = temperature
+
             outputs = super().generate(
                 input_features,
-                generation_config,
-                logits_processor,
-                stopping_criteria,
-                prefix_allowed_tokens_fn,
-                synced_gpus,
-                temperature=temperature,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                stopping_criteria=stopping_criteria,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                synced_gpus=synced_gpus,
                 **kwargs,
             )
 
@@ -1163,6 +1166,18 @@ class WhisperGenerationMixin:
                 [no_speech_detector] if logits_processor is None else [no_speech_detector] + logits_processor
             )
             no_speech_detector.set_model(self)
+
+        if is_shortform and generation_config.forced_decoder_ids is not None:
+            forced_tokens_proc = ForceTokensLogitsProcessor(generation_config.forced_decoder_ids)
+            # TODO(Patrick): It's important that the `forced_tokens_proc` processor is appended after
+            # the suppress_tokens processor or else it might happen that all token logits are suppressed to -inf 
+            # which would lead to unexpected behavior
+            # The better approach here is to NOT make use of the `forced_tokens_proc` for Whisper and instead 
+            # initialize all of them as `decoder_input_ids`.
+            logits_processor = (
+                [forced_tokens_proc] if logits_processor is None else logits_processor + [forced_tokens_proc]
+            )
+            generation_config.forced_decoder_ids = None
 
         return logits_processor
 
