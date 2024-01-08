@@ -15,6 +15,7 @@
 """Image processor class for OneFormer."""
 
 import json
+import os
 import warnings
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
@@ -332,8 +333,15 @@ def get_oneformer_resize_output_image_size(
 
 
 def prepare_metadata(repo_path, class_info_file):
-    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), "r") as f:
+    fname = os.path.join("" if repo_path is None else repo_path, class_info_file)
+
+    if not os.path.exists(fname) or not os.path.isfile(fname):
+        # File cannot be found locally, try downloading from hub
+        fname = hf_hub_download(repo_path, class_info_file, repo_type="dataset")
+
+    with open(fname, "r") as f:
         class_info = json.load(f)
+
     metadata = {}
     class_names = []
     thing_ids = []
@@ -387,7 +395,8 @@ class OneFormerImageProcessor(BaseImageProcessor):
             is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
             The background label will be replaced by `ignore_index`.
         repo_path (`str`, defaults to `shi-labs/oneformer_demo`, *optional*, defaults to `"shi-labs/oneformer_demo"`):
-            Dataset repository on huggingface hub containing the JSON file with class information for the dataset.
+            Path to dataset repo or local directory containing the JSON file with class information for the dataset.
+            If unset, will load `class_info_file` from the current working directory.
         class_info_file (`str`, *optional*):
             JSON file containing class information for the dataset. It is stored inside on the `repo_path` dataset
             repository.
@@ -409,7 +418,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
-        repo_path: str = "shi-labs/oneformer_demo",
+        repo_path: Optional[str] = "shi-labs/oneformer_demo",
         class_info_file: str = None,
         num_text: Optional[int] = None,
         **kwargs,
