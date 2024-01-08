@@ -906,7 +906,6 @@ class Wav2Vec2BERTGumbelVectorQuantizer(nn.Module):
 
 
 class Wav2Vec2BERTAdapter(nn.Module):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Adapter.__init__ with Wav2Vec2->Wav2Vec2BERT
     def __init__(self, config):
         super().__init__()
         # feature dim might need to be down-projected
@@ -918,21 +917,37 @@ class Wav2Vec2BERTAdapter(nn.Module):
         self.layers = nn.ModuleList(Wav2Vec2BERTAdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
+        self.kernel_size = config.adapter_kernel_size
+        self.stride = config.adapter_stride
+
+    def _compute_sub_sample_lengths_from_attention_mask(self, seq_lens):
+        if seq_lens is None:
+            return seq_lens
+        pad = self.kernel_size // 2
+        seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
+        return seq_lens.floor()
+
     def forward(self, hidden_states, attention_mask=None):
         # down project hidden_states if necessary
         if self.proj is not None and self.proj_layer_norm is not None:
             hidden_states = self.proj(hidden_states)
             hidden_states = self.proj_layer_norm(hidden_states)
 
+        sub_sampled_lengths = None
+        if attention_mask is not None:
+            sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
+
         for layer in self.layers:
             layerdrop_prob = np.random.random()
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
             if not self.training or (layerdrop_prob > self.layerdrop):
-                hidden_states = layer(hidden_states, attention_mask=attention_mask)
+                hidden_states = layer(
+                    hidden_states, attention_mask=attention_mask, sub_sampled_lengths=sub_sampled_lengths
+                )
 
         return hidden_states
 
 
-# Copied from transformers.models.seamless_m4t.modeling_seamless_m4t.SeamlessM4TConformerAdapterLayer with SeamlessM4T->Wav2Vec2BERT, adaptor_dropout->conformer_conv_dropout, adaptor->adapter, hidden_size->output_hidden_size
 class Wav2Vec2BERTAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -970,19 +985,12 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu", hidden_size=embed_dim)
 
-    def _compute_sub_sample_lengths_from_attention_mask(self, attention_mask):
-        pad = self.kernel_size // 2
-        seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
-
-        seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
-
-        return seq_lens.floor()
-
     def forward(
         self,
         hidden_states,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        sub_sampled_lengths: Optional[torch.Tensor] = None,
     ):
         residual = self.residual_layer_norm(hidden_states)
 
@@ -1005,9 +1013,6 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask).to(
-                hidden_states.device
-            )
             attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
             attention_mask = _prepare_4d_attention_mask(
                 attention_mask,
