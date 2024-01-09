@@ -367,6 +367,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "audio-classification": WhisperForAudioClassification,
             "automatic-speech-recognition": WhisperForConditionalGeneration,
             "feature-extraction": WhisperModel,
+            "text-generation": WhisperForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -890,12 +891,13 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 
@@ -935,11 +937,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict[model.main_input_name][:1]
@@ -980,6 +982,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
+        configs_no_init._attn_implementation = "eager"
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
             model.to(torch_device)
@@ -1848,6 +1851,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
 
     @slow
+    def test_tiny_token_timestamp_batch_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+
+        num_samples = 4
+        num_return_sequences = 2
+
+        input_speech = self._load_datasamples(num_samples)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
+
+        generate_outputs = model.generate(
+            input_features,
+            max_length=448,
+            return_timestamps=True,
+            return_token_timestamps=True,
+            num_beams=3,
+            num_return_sequences=num_return_sequences,
+        )
+
+        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+
+        self.assertEqual(len(generate_outputs.sequences), num_return_sequences * num_samples)
+
+    @slow
     def test_tiny_specaugment_librispeech(self):
         torch_device = "cpu"
         set_seed(0)
@@ -2336,13 +2368,20 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
             with torch.no_grad():
                 outputs = model(**inputs)[0]
 
-            input_ids = inputs["input_features"]
-            del inputs["input_features"]
-
             encoder = model.encoder
 
+            encoder_inputs = {"input_features": inputs["input_features"]}
+            del inputs["input_features"]
+
+            if "head_mask" in inputs:
+                encoder_inputs["head_mask"] = inputs["head_mask"]
+            if "attention_mask" in inputs:
+                encoder_inputs["attention_mask"] = inputs["attention_mask"]
+            if "output_attentions" in inputs:
+                encoder_inputs["output_attentions"] = inputs["output_attentions"]
+
             with torch.no_grad():
-                inputs["encoder_outputs"] = encoder(input_ids)
+                inputs["encoder_outputs"] = encoder(**encoder_inputs)
                 outputs_embeds = model(**inputs)[0]
 
             self.assertTrue((outputs_embeds == outputs).all())

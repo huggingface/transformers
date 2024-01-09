@@ -96,7 +96,7 @@ if stale_egg_info.exists():
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
     "Pillow>=10.0.1,<=15.0",
-    "accelerate>=0.20.3",
+    "accelerate>=0.21.0",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "codecarbon==1.2.0",
@@ -149,13 +149,13 @@ _deps = [
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.8.0",
-    "ray[tune]",
+    "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
-    "ruff>=0.1.5,<=0.2",
+    "ruff==0.1.5",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "safetensors>=0.3.1",
@@ -428,7 +428,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.36.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.37.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
