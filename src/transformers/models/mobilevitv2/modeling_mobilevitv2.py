@@ -58,7 +58,7 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 MOBILEVITV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevitv2-1.0-imagenet1k-256"
+    "apple/mobilevitv2-1.0-imagenet1k-256" "apple/mobilevitv2-1.0-voc-deeplabv3"
     # See all MobileViTV2 models at https://huggingface.co/models?filter=mobilevitv2
 ]
 
@@ -980,8 +980,8 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
-        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-voc-deeplabv3")
+        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-voc-deeplabv3")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
