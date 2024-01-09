@@ -17,6 +17,7 @@ env:
   MKL_NUM_THREADS: 8
   RUN_SLOW: yes
   SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
 
 
 # Important note: each job (run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu, run_pipelines_torch_gpu) requires all the previous jobs before running.
