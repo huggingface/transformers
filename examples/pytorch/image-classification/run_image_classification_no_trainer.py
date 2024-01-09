@@ -288,9 +288,9 @@ def main():
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
 
     # Rename image and label columns if needed (e.g. Cifar10)
-    if "img" in dataset["train"].features:
+    if "img" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
         dataset = dataset.rename_column("img", "image")
-    if "label" in dataset["train"].features:
+    if "label" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
         dataset = dataset.rename_column("label", "labels")
 
     # If we don't have a validation split, split off a percentage of train as validation.
