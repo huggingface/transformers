@@ -3470,7 +3470,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
-
             if low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()):
                 # In case some weights need to be kept in float32 and accelerate is not installed,
                 # we later on want to take the path where state_dict is not None, that is the one
