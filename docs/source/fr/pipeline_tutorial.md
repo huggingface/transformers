@@ -149,7 +149,7 @@ Par exemple, le pipeline [`~transformers.AutomaticSpeechRecognitionPipeline`] a 
 ```python
 >>> transcriber = pipeline(model="openai/whisper-large-v2", chunk_length_s=30, return_timestamps=True)
 >>> transcriber("https://huggingface.co/datasets/sanchit-gandhi/librispeech_long/resolve/main/audio.wav")
-{'text': " Chapter 16. I might have told you of the beginning of this liaison in a few lines, but I wanted you to see every step by which we came.  I, too, agree to whatever Marguerite wished, Marguerite to be unable to live apart from me. It was the day after the evening...}
+{'text': " Chapter 16. I might have told you of the beginning of this liaison in a few lines, but I wanted you to see every step by which we came.  I, too, agree to whatever Marguerite wished, Marguerite to be unable to live apart from me. It was the day after the evening..."}
 ```
 
 Si vous ne trouvez pas un paramètre qui serait vraiment utile, n'hésitez pas à [le demander](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml) !
