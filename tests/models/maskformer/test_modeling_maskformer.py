@@ -379,6 +379,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.assertIsNotNone(outputs.auxiliary_logits)
             self.assertEqual(len(outputs.auxiliary_logits), self.model_tester.num_channels - 1)
 
+
 TOLERANCE = 1e-4
 
 
