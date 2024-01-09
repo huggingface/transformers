@@ -25,7 +25,7 @@ import tensorflow as tf
 
 from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
-from ...modeling_outputs import ModelOutput
+from ...modeling_tf_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...modeling_tf_utils import (
      shape_list,
