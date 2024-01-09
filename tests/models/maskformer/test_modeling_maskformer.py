@@ -364,7 +364,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.auxiliary_loss = True
+        config.use_auxiliary_loss = True
         config.output_auxiliary_logits = True
 
         # only test for object detection and segmentation model
