@@ -2390,9 +2390,9 @@ class Trainer:
                     os.rename(staging_output_dir, output_dir)
 
                     # Ensure rename completed in cases where os.rename is not atomic
-                    with open(output_dir, "r") as f:
-                        f.flush()
-                        os.fsync(f.fileno())
+                    fd = os.open(output_dir, os.O_RDONLY)
+                    os.fsync(fd)
+                    os.close(fd)
 
             # Maybe delete some older checkpoints.
             if self.args.should_save:
