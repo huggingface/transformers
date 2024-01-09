@@ -19,12 +19,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import (
-    flip_channel_order,
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_transforms import flip_channel_order, get_resize_output_image_size, resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -178,9 +173,19 @@ class MobileViTImageProcessor(BaseImageProcessor):
         """
         return flip_channel_order(image, data_format=data_format, input_data_format=input_data_format)
 
+    def __call__(self, images, segmentation_maps=None, **kwargs):
+        """
+        Preprocesses a batch of images and optionally segmentation maps.
+
+        Overrides the `__call__` method of the `Preprocessor` class so that both images and segmentation maps can be
+        passed in as positional arguments.
+        """
+        return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
+
     def preprocess(
         self,
         images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -201,6 +206,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            segmentation_maps (`ImageInput`, *optional*):
+                Segmentation map to preprocess.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -251,10 +258,18 @@ class MobileViTImageProcessor(BaseImageProcessor):
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         images = make_list_of_images(images)
+        if segmentation_maps is not None:
+            segmentation_maps = make_list_of_images(segmentation_maps, expected_ndims=2)
 
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
+                "torch.Tensor, tf.Tensor or jax.ndarray."
+            )
+
+        if segmentation_maps is not None and not valid_images(segmentation_maps):
+            raise ValueError(
+                "Invalid segmentation map type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
@@ -306,6 +321,48 @@ class MobileViTImageProcessor(BaseImageProcessor):
         ]
 
         data = {"pixel_values": images}
+
+        if segmentation_maps is not None:
+            segmentation_maps = [to_numpy_array(segmentation_map) for segmentation_map in segmentation_maps]
+
+            # Add channel dimension if missing - needed for certain transformations
+            if segmentation_maps[0].ndim == 2:
+                added_channel_dim = True
+                segmentation_maps = [segmentation_map[None, ...] for segmentation_map in segmentation_maps]
+                input_data_format = ChannelDimension.FIRST
+            else:
+                added_channel_dim = False
+                if input_data_format is None:
+                    input_data_format = infer_channel_dimension_format(segmentation_maps[0], num_channels=1)
+
+            if do_resize:
+                segmentation_maps = [
+                    self.resize(
+                        image=segmentation_map,
+                        size=size,
+                        resample=PILImageResampling.NEAREST,
+                        input_data_format=input_data_format,
+                    )
+                    for segmentation_map in segmentation_maps
+                ]
+
+            if do_center_crop:
+                segmentation_maps = [
+                    self.center_crop(
+                        image=segmentation_map,
+                        size=crop_size,
+                        input_data_format=input_data_format,
+                    )
+                    for segmentation_map in segmentation_maps
+                ]
+
+            # Remove extra channel dimension if added for processing
+            if added_channel_dim:
+                segmentation_maps = [segmentation_map.squeeze(0) for segmentation_map in segmentation_maps]
+            segmentation_maps = segmentation_maps.astype(np.int64)
+
+            data["labels"] = segmentation_maps
+
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
