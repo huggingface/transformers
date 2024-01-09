@@ -3684,6 +3684,18 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
+        # Add additional tags in the case the model has already some tags and users pass
+        # "tags" argument to `push_to_hub` so that trainer automatically handles internal tags
+        # from all models since Trainer does not call `model.push_to_hub`.
+        if "tags" in kwargs and getattr(self.model, "model_tags", None) is not None:
+            # If it is a string, convert it to an array
+            if isinstance(kwargs["tags"], str):
+                kwargs["tags"] = [kwargs["tags"]]
+
+            for model_tag in self.model.model_tags:
+                if model_tag not in kwargs["tags"]:
+                    kwargs["tags"].append(model_tag)
+
         self.create_model_card(model_name=model_name, **kwargs)
 
         # Wait for the current upload to be finished.

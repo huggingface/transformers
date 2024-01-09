@@ -1227,9 +1227,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
-        # Default the model tags with `"transformers"`
-        self._model_tags = ["transformers"]
-
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
@@ -2491,7 +2488,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if push_to_hub:
             # Eventually create an empty model card
-            model_card = create_and_tag_model_card(repo_id, self._model_tags)
+            model_card = create_and_tag_model_card(repo_id, self.model_tags)
 
             # Update model card if needed:
             if model_card is not None:
@@ -2508,8 +2505,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
         if "tags" not in kwargs:
-            kwargs["tags"] = self._model_tags
-        elif "tags" in kwargs and self._model_tags is not None:
+            kwargs["tags"] = self.model_tags
+        elif "tags" in kwargs and self.model_tags is not None:
             logger.warning(
                 "You manually passed `tags` to `push_to_hub` method and the model has already some tags set, we will use the tags that you passed."
             )

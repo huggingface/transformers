@@ -1102,8 +1102,9 @@ def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
         model_card = ModelCard.load(repo_id)
     except EntryNotFoundError:
         # Otherwise create a simple model card from template
-        card_data = ModelCardData(language="en", tags=[])
-        model_card = ModelCard.from_template(card_data)
+        model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
+        card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
+        model_card = ModelCard.from_template(card_data, model_description=model_description)
 
     if model_card is not None and tags is not None:
         for model_tag in tags:
