@@ -2385,9 +2385,9 @@ class Trainer:
         # Then go through the rewriting process, only renaming from main process(es)
         if staging_output_dir != output_dir:
             if (
-                self.args.distributed_state.is_local_main_process
+                self.is_local_process_zero
                 if self.args.save_on_each_node
-                else self.args.distributed_state.is_main_process
+                else self.is_world_process_zero
             ):
                 if os.path.exists(staging_output_dir):
                     os.rename(staging_output_dir, output_dir)
