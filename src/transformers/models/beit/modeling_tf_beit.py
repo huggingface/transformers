@@ -105,11 +105,11 @@ class TFBeitDropPath(tf.keras.layers.Layer):
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path, **kwargs):
+    def __init__(self, drop_path: float, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x, training=None):
+    def call(self, x: tf.Tensor, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
@@ -409,12 +409,21 @@ class TFBeitIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFBeitOutput(tf.keras.layers.Layer):
