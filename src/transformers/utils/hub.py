@@ -1106,7 +1106,7 @@ def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
         card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
         model_card = ModelCard.from_template(card_data, model_description=model_description)
 
-    if model_card is not None and tags is not None:
+    if tags is not None:
         for model_tag in tags:
             if model_tag not in model_card.data.tags:
                 model_card.data.tags.append(model_tag)
