@@ -74,8 +74,6 @@ class YolosConfig(PretrainedConfig):
             The number of detection tokens.
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
-        auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -123,7 +121,6 @@ class YolosConfig(PretrainedConfig):
         qkv_bias=True,
         num_detection_tokens=100,
         use_mid_position_embeddings=True,
-        auxiliary_loss=False,
         class_cost=1,
         bbox_cost=5,
         giou_cost=2,
@@ -149,7 +146,6 @@ class YolosConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.num_detection_tokens = num_detection_tokens
         self.use_mid_position_embeddings = use_mid_position_embeddings
-        self.auxiliary_loss = auxiliary_loss
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
