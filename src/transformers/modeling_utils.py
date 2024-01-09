@@ -2491,8 +2491,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_card = create_and_tag_model_card(repo_id, self.model_tags)
 
             # Update model card if needed:
-            if model_card is not None:
-                model_card.save(os.path.join(save_directory, "README.md"))
+            model_card.save(os.path.join(save_directory, "README.md"))
 
             self._upload_modified_files(
                 save_directory,

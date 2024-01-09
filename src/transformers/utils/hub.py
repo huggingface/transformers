@@ -873,8 +873,7 @@ class PushToHubMixin:
             self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
             # Update model card if needed:
-            if model_card is not None:
-                model_card.save(os.path.join(work_dir, "README.md"))
+            model_card.save(os.path.join(work_dir, "README.md"))
 
             return self._upload_modified_files(
                 work_dir,
