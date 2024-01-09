@@ -272,7 +272,7 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(args.dataset_name, task="image-classification")
+        dataset = load_dataset(args.dataset_name)
     else:
         data_files = {}
         if args.train_dir is not None:
@@ -283,10 +283,15 @@ def main():
             "imagefolder",
             data_files=data_files,
             cache_dir=args.cache_dir,
-            task="image-classification",
         )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
+
+    # Rename image and label columns if needed (e.g. Cifar10)
+    if "img" in dataset["train"].features:
+        dataset = dataset.rename_column("img", "image")
+    if "label" in dataset["train"].features:
+        dataset = dataset.rename_column("label", "labels")
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split

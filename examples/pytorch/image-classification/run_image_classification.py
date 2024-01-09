@@ -255,7 +255,6 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
             token=model_args.token,
         )
     else:
@@ -268,8 +267,13 @@ def main():
             "imagefolder",
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
         )
+
+    # Rename image and label columns if needed (e.g. Cifar10)
+    if "img" in dataset["train"].features:
+        dataset = dataset.rename_column("img", "image")
+    if "label" in dataset["train"].features:
+        dataset = dataset.rename_column("label", "labels")
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
