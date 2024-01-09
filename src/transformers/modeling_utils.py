@@ -1159,11 +1159,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     config_class = None
     base_model_prefix = ""
     main_input_name = "input_ids"
+    model_tags = None
+
     _auto_class = None
     _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
-    _model_tags = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1243,9 +1244,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
 
-    def set_model_tags(self, tags: Union[List[str], str]) -> None:
+    def add_model_tags(self, tags: Union[List[str], str]) -> None:
         r"""
-        Manually set the model tags with `tags`
+        Add all tags in `tags` to `model_tags`.
 
         Args:
             tags (`Union[List[str], str]`):
@@ -1254,12 +1255,50 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if isinstance(tags, str):
             tags = [tags]
 
-        if self._model_tags is None:
-            self._model_tags = []
+        if self.model_tags is None:
+            self.model_tags = []
 
         for tag in tags:
-            if tag not in self._model_tags:
-                self._model_tags.append(tag)
+            if tag not in self.model_tags:
+                self.model_tags.append(tag)
+
+    def set_model_tags(self, tags: Union[List[str], str]) -> None:
+        r"""
+        Manually force-set the model tags with `tags`
+
+        Args:
+            tags (`Union[List[str], str]`):
+                The desired tags to inject in the model
+        """
+        if isinstance(tags, str):
+            tags = [tags]
+
+        self.model_tags = tags
+
+    def reset_model_tags(self) -> None:
+        r"""
+        Manually reset the model tags with an empty list
+        """
+        if self.model_tags is not None:
+            self.model_tags = []
+
+    def remove_model_tags(self, tags: Union[List[str], str]) -> None:
+        r"""
+        Manually remove all elements of `tags` in the model tags
+
+        Args:
+            tags (`Union[List[str], str]`):
+                The desired tags to remove from the model
+        """
+        if isinstance(tags, str):
+            tags = [tags]
+
+        if self.model_tags is None:
+            return
+
+        for tag in tags:
+            if tag in self.model_tags:
+                self.model_tags.remove(tag)
 
     @classmethod
     def _from_config(cls, config, **kwargs):
