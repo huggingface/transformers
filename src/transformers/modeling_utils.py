@@ -2428,7 +2428,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 metadata = {"format": "pt"}
 
                 if model_tags is not None:
-                    model_tags = {i: model_tag for i, model_tag in enumerate(model_tags)}
                     # Convert as strings
                     metadata["model_tags"] = json.dumps(model_tags, indent=2, sort_keys=True)
 
