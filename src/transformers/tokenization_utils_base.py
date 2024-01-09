@@ -3566,7 +3566,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pair_ids_to_move = second_remove - second_remove // 2
             else:
                 ids_to_move = second_remove // 2
-                pair_ids_to_move = first_remove + (second_remove - second_remove // 2)
+                pair_ids_to_move = first_remove + second_remove - (second_remove // 2)
 
             if self.truncation_side == "right":
                 ids = ids[:-ids_to_move] if ids_to_move > 0 else ids
