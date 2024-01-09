@@ -2507,9 +2507,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if "tags" not in kwargs:
             kwargs["tags"] = self.model_tags
         elif "tags" in kwargs and self.model_tags is not None:
-            logger.warning(
-                "You manually passed `tags` to `push_to_hub` method and the model has already some tags set, we will use the tags that you passed."
-            )
+            for model_tag in self.model_tags:
+                # merge the tags together
+                if model_tag not in kwargs["tags"]:
+                    kwargs["tags"].append(model_tag)
         return super().push_to_hub(*args, **kwargs)
 
     def get_memory_footprint(self, return_buffers=True):
