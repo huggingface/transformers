@@ -2433,11 +2433,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
 
-                if self._model_tags is not None:
-                    logger.warning(
-                        "Detected tags in the model but you are not using safe_serialization, they will be silently ignored. To properly save these tags you should use safe serialization."
-                    )
-
         if index is None:
             weights_file_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
             path_to_weights = os.path.join(save_directory, _add_variant(weights_file_name, variant))
