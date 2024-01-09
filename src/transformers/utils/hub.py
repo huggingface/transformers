@@ -1093,7 +1093,7 @@ def extract_info_from_url(url):
     return {"repo": cache_repo, "revision": revision, "filename": filename}
 
 
-def create_and_tag_model_card(repo_id, tags=None):
+def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
     """
     Creates a dummy model card and tags it.
     """
