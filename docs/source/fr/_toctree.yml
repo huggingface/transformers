@@ -17,7 +17,7 @@
       title: Fine-tune un modèle pré-entraîné
     - local: accelerate
       title: Entraînement distribué avec 🤗 Accelerate
-    - local: accelerate
+    - local: in_translation
       title: Partager un modèle
   title: Tutoriels
 - sections:
