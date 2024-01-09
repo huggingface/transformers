@@ -382,13 +382,12 @@ class StaticCache(Cache):
         if self.seen_tokens == 0:
             self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
+            self.causal_4d_mask = self.causal_4d_mask.to(value_states.device)
         
         if attention_mask is not None:
             _, _, query_length, past_length = attention_mask.shape
-            final_mask = self.causal_4d_mask.to(attention_mask.device)
-            final_mask[:,:,:query_length,:past_length] = attention_mask
-            final_mask[:,:, query_length:,past_length:] = -65504
-            attention_mask = final_mask[:,:,:query_length,:]
+            self.causal_4d_mask[:,:,self.seen_tokens:self.seen_tokens + key_states.shape[-2],:past_length] = attention_mask
+            attention_mask = self.causal_4d_mask[:,:, self.seen_tokens:self.seen_tokens + key_states.shape[-2],:]
         
         # Update the cache
         if len(self.key_cache) + 1 == self.max_sequence_length:
