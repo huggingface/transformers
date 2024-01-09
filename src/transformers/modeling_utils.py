@@ -1163,6 +1163,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     _no_split_modules = None
     _skip_keys_device_placement = None
     _keep_in_fp32_modules = None
+    _model_tags = None
 
     # a list of `re` patterns of `state_dict` keys that should be removed from the list of missing
     # keys we find (keys inside the model but not in the checkpoint) and avoid unnecessary warnings.
@@ -1225,6 +1226,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when a different component (e.g. language_model) is used.
         self._keep_in_fp32_modules = copy.copy(self.__class__._keep_in_fp32_modules)
 
+        # Default the model tags with `"transformers"`
+        self._model_tags = ["transformers"]
+
     def post_init(self):
         """
         A method executed at the end of each Transformer model initialization, to execute code that needs the model's
@@ -1238,6 +1242,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self.gradient_checkpointing_enable()
             # Remove the attribute now that is has been consumed, so it's no saved in the config.
             delattr(self.config, "gradient_checkpointing")
+
+    def set_model_tags(self, tags: Union[List[str], str]) -> None:
+        r"""
+        Manually set the model tags with `tags`
+
+        Args:
+            tags (`Union[List[str], str]`):
+                The desired tags to inject in the model
+        """
+        if isinstance(tags, str):
+            tags = [tags]
+
+        if self._model_tags is None:
+            self._model_tags = []
+
+        for tag in tags:
+            if tag not in self._model_tags:
+                self._model_tags.append(tag)
 
     @classmethod
     def _from_config(cls, config, **kwargs):
@@ -2401,11 +2423,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         for shard_file, shard in shards.items():
             if safe_serialization:
+                # Retrieve model tags and convert it to a dict of strings
+                model_tags = self._model_tags
+                metadata = {"format": "pt"}
+
+                if model_tags is not None:
+                    model_tags = {i: model_tag for i, model_tag in enumerate(model_tags)}
+                    # Convert as strings
+                    metadata["model_tags"] = json.dumps(model_tags, indent=2, sort_keys=True)
+
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
-                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+                safe_save_file(
+                    shard,
+                    os.path.join(save_directory, shard_file),
+                    metadata=metadata,
+                )
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
+
+                if self._model_tags is not None:
+                    logger.warning(
+                        "Detected tags in the model but you are not using safe_serialization, they will be silently ignored. To properly save these tags you should use safe serialization."
+                    )
 
         if index is None:
             weights_file_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
