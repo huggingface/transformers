@@ -31,7 +31,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -71,7 +71,7 @@ jobs:
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
         machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
