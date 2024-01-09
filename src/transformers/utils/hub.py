@@ -1097,8 +1097,6 @@ def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
     """
     Creates a dummy model card and tags it.
     """
-    model_card = None
-
     try:
         # Check if the model card is present on the remote repo
         model_card = ModelCard.load(repo_id)
