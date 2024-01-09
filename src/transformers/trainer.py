@@ -2167,7 +2167,7 @@ class Trainer:
             deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
         elif self.is_fsdp_enabled:
             load_result = load_fsdp_model(
-                self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+                self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint, adapter_only=True
             )
         elif (
             os.path.exists(best_model_path)
