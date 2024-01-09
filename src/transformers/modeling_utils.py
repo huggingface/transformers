@@ -743,7 +743,8 @@ def _load_state_dict_into_meta_model(
             else:
                 param = param.to(dtype)
 
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model
+        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter. Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
         if dtype is None:
             old_param = model
             splits = param_name.split(".")
@@ -754,6 +755,9 @@ def _load_state_dict_into_meta_model(
 
             if old_param is not None:
                 param = param.to(old_param.dtype)
+
+                if old_param.is_contiguous():
+                    param = param.contiguous()
 
         set_module_kwargs["value"] = param
 
@@ -3465,6 +3469,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
+
             if low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()):
                 # In case some weights need to be kept in float32 and accelerate is not installed,
                 # we later on want to take the path where state_dict is not None, that is the one
