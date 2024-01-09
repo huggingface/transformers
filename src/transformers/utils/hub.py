@@ -1109,7 +1109,8 @@ def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
 
     if model_card is not None and tags is not None:
         for model_tag in tags:
-            model_card.data.tags.append(model_tag)
+            if model_tag not in model_card.data.tags:
+                model_card.data.tags.append(model_tag)
 
     return model_card
 
