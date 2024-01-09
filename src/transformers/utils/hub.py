@@ -33,6 +33,8 @@ import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
+    ModelCard,
+    ModelCardData,
     constants,
     create_branch,
     create_commit,
@@ -762,6 +764,7 @@ class PushToHubMixin:
         safe_serialization: bool = True,
         revision: str = None,
         commit_description: str = None,
+        tags: List[str] = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -795,6 +798,8 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
+            tags (`List[str]`, *optional*):
+                List of tags to push on the Hub.
 
         Examples:
 
@@ -855,6 +860,9 @@ class PushToHubMixin:
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
+        # Create a new empty model card and eventually tag it
+        model_card = create_and_tag_model_card(repo_id, tags)
+
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
 
@@ -863,6 +871,10 @@ class PushToHubMixin:
 
             # Save all files.
             self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+
+            # Update model card if needed:
+            if model_card is not None:
+                model_card.save(os.path.join(work_dir, "README.md"))
 
             return self._upload_modified_files(
                 work_dir,
@@ -1079,6 +1091,27 @@ def extract_info_from_url(url):
     repo, revision, filename = search.groups()
     cache_repo = "--".join(["models"] + repo.split("/"))
     return {"repo": cache_repo, "revision": revision, "filename": filename}
+
+
+def create_and_tag_model_card(repo_id, tags=None):
+    """
+    Creates a dummy model card and tags it.
+    """
+    model_card = None
+
+    try:
+        # Check if the model card is present on the remote repo
+        model_card = ModelCard.load(repo_id)
+    except EntryNotFoundError:
+        # Otherwise create a simple model card from template
+        card_data = ModelCardData(language="en", tags=[])
+        model_card = ModelCard.from_template(card_data)
+
+    if model_card is not None and tags is not None:
+        for model_tag in tags:
+            model_card.data.tags.append(model_tag)
+
+    return model_card
 
 
 def clean_files_for(file):

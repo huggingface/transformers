@@ -87,7 +87,7 @@ from .utils import (
     replace_return_docstrings,
     strtobool,
 )
-from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
+from .utils.hub import convert_file_size_to_int, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     ENV_VARS_TRUE_VALUES,
     is_sagemaker_mp_enabled,
@@ -2423,20 +2423,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Save the model
         for shard_file, shard in shards.items():
             if safe_serialization:
-                # Retrieve model tags and convert it to a dict of strings
-                model_tags = self._model_tags
-                metadata = {"format": "pt"}
-
-                if model_tags is not None:
-                    # Convert as strings
-                    metadata["model_tags"] = json.dumps(model_tags, indent=2, sort_keys=True)
-
                 # At some point we will need to deal better with save_function (used for TPU and other distributed
                 # joyfulness), but for now this enough.
                 safe_save_file(
                     shard,
                     os.path.join(save_directory, shard_file),
-                    metadata=metadata,
+                    metadata={"format": "pt"},
                 )
             else:
                 save_function(shard, os.path.join(save_directory, shard_file))
@@ -2464,6 +2456,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if push_to_hub:
+            # Eventually create an empty model card
+            model_card = create_and_tag_model_card(repo_id, self._model_tags)
+
+            # Update model card if needed:
+            if model_card is not None:
+                model_card.save(os.path.join(save_directory, "README.md"))
+
             self._upload_modified_files(
                 save_directory,
                 repo_id,
@@ -2471,6 +2470,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 commit_message=commit_message,
                 token=token,
             )
+
+    @wraps(PushToHubMixin.push_to_hub)
+    def push_to_hub(self, *args, **kwargs):
+        if "tags" not in kwargs:
+            kwargs["tags"] = self._model_tags
+        elif "tags" in kwargs and self._model_tags is not None:
+            logger.warning(
+                "You manually passed `tags` to `push_to_hub` method and the model has already some tags set, we will use the tags that you passed."
+            )
+        return super().push_to_hub(*args, **kwargs)
 
     def get_memory_footprint(self, return_buffers=True):
         r"""
