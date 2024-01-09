@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Entraînement distribué avec 🤗 Accelerate
 
-Comme les modèles deviennent plus gros, le parallélisme est devenu une stratégie pour entraîner des modèles plus grands sur du matériel aux capacités limitées et accélérer la vitesse d'entraînement de plusieurs ordres de grandeur. Hugging Face fournit la librairie [🤗 Accelerate](https://huggingface.co/docs/accelerate) pour aider les utilisateurs à entraîner facilement un modèle 🤗 Transformers sur n'importe quel type de configuration distribuée, qu'il s'agisse de plusieurs GPU sur une machine ou de plusieurs GPU sur plusieurs machines. Dans ce tutoriel, vous apprenez à personnaliser votre boucle d'entraînement avec PyTorch pour permettre l'entraînement dans un environnement distribué.
+Comme la taille des modèles augmente, le parallélisme est devenu une stratégie pour entraîner des modèles plus gros sur du matériel aux capacités limitées et accélérer la vitesse d'entraînement de plusieurs ordres de grandeur. Hugging Face fournit la librairie [🤗 Accelerate](https://huggingface.co/docs/accelerate) pour aider les utilisateurs à entraîner facilement un modèle 🤗 Transformers sur n'importe quel type de configuration distribuée, qu'il s'agisse de plusieurs GPU sur une machine ou de plusieurs GPU sur plusieurs machines. Dans ce tutoriel, vous apprendrez à personnaliser votre cycle d'entraînement avec PyTorch pour permettre l'entraînement dans un environnement distribué.
 
 ## Configuration
 
@@ -26,7 +26,7 @@ Commencez par installer 🤗 Accelerate :
 pip install accelerate
 ```
 
-Ensuite, importez et créez un objet [`~accelerate.Accelerator`]. L'objet [`~accelerate.Accelerator`] détectera automatiquement votre type de configuration distribuée et initialisera tous les composants nécessaires à l'entraînement. Vous n'avez pas besoin de placer explicitement votre modèle sur une carte graphique ou CPU.
+Ensuite, importez et créez un objet [`~accelerate.Accelerator`]. L'objet [`~accelerate.Accelerator`] détectera automatiquement votre type de configuration distribuée et initialisera tous les composants nécessaires à l'entraînement. Vous n'avez pas besoin de placer explicitement votre modèle sur une unité de calcul (GPU, CPU ou TPU).
 
 ```py
 >>> from accelerate import Accelerator
@@ -46,7 +46,7 @@ L'étape suivante consiste à passer tous les objets d'entraînement pertinents 
 
 ## Retropropagation
 
-La dernière étape consiste à remplacer `loss.backward()` dans votre boucle d'entraînement par la fonction [`~accelerate.Accelerator.backward`] de 🤗 Accelerate :
+La dernière étape consiste à remplacer `loss.backward()` dans votre cycle d'entraînement par la fonction [`~accelerate.Accelerator.backward`] de 🤗 Accelerate :
 
 ```py
 >>> for epoch in range(num_epochs):
@@ -61,7 +61,7 @@ La dernière étape consiste à remplacer `loss.backward()` dans votre boucle d'
 ...         progress_bar.update(1)
 ```
 
-Comme vous pouvez le voir dans le code dessous, vous avez seulement besoin d'ajouter quatre lignes de code à votre boucle d'entraînement pour activer l'entraînement distribué !
+Comme vous pouvez le voir dans le code ci-dessous, il vous suffit seulement d'ajouter quatre lignes de code à votre cycle d'entraînement pour activer l'entraînement distribué !
 
 ```diff
 + from accelerate import Accelerator
@@ -125,7 +125,7 @@ accelerate launch train.py
 
 ### Entraînement avec un notebook
 
-🤗 Accelerate peut aussi etre utilisé dans un notebook si vous prévoyez d'utiliser les TPUs de Colaboratory. Créez une fonction contenant le code responsable de l'entraînement, et passez-la à [`~accelerate.notebook_launcher`]:
+🤗 Accelerate peut aussi être utilisé dans un notebook si vous prévoyez d'utiliser les TPUs de Colaboratory. Créez une fonction contenant le code responsable de l'entraînement, et passez-la à [`~accelerate.notebook_launcher`]:
 
 ```py
 >>> from accelerate import notebook_launcher
