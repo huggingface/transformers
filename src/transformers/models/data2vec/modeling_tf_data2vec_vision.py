@@ -1151,104 +1151,76 @@ class TFData2VecVisionConvModule(tf.keras.layers.Layer):
                 self.bn.build((None, None, None, self.out_channels))
 
 
-class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
-    def __init__(self, output_dims: Tuple[int, int], input_ordering: str = "NHWC", **kwargs):
+# Copied from:
+# https://gist.github.com/Rocketknight1/43abbe6e73f1008e6e459486e01e0ceb
+class TFAdaptiveAvgPool1D(tf.keras.layers.Layer):
+    def __init__(self, output_dim, mode="dense", **kwargs):
         super().__init__(**kwargs)
-        self.output_dims = output_dims
-        self.input_ordering = input_ordering
-        if input_ordering not in ("NCHW", "NHWC"):
-            raise ValueError("Unrecognized input_ordering, should be 'NCHW' or 'NHWC'!")
-        self.h_axis = input_ordering.index("H")
-        self.w_axis = input_ordering.index("W")
+        self.output_dim = output_dim
+        self.mode = mode
+        self.map = None
 
-    def pseudo_1d_pool(self, inputs: tf.Tensor, h_pooling: bool):
-        # Figure out which axis we're pooling on
-        if h_pooling:
-            axis = self.h_axis
-            output_dim = self.output_dims[0]
+    def build(self, input_shape):
+        super().build(input_shape)
+        """We pre-compute the sparse matrix for the build() step once. The below code comes
+        from https://stackoverflow.com/questions/53841509/how-does-adaptive-pooling-in-pytorch-work/63603993#63603993."""
+
+        def get_kernels(ind, outd) -> List:
+            """Returns a List [(kernel_offset_start,kernel_length)] defining all the pooling kernels for a 1-D adaptive
+            pooling layer that takes an input of dimension `ind` and yields an output of dimension `outd`"""
+
+            def start_index(a, b, c):
+                return math.floor((float(a) * float(c)) / b)
+
+            def end_index(a, b, c):
+                return math.ceil((float(a + 1) * float(c)) / b)
+
+            results = []
+            for ow in range(outd):
+                start = start_index(ow, outd, ind)
+                end = end_index(ow, outd, ind)
+                sz = end - start
+                results.append((start, sz))
+            return results
+
+        in_dim = int(input_shape[-1])
+        kernels = get_kernels(in_dim, self.output_dim)
+        sparse_map = np.zeros((in_dim, self.output_dim), dtype=np.float32)
+        for i, kernel in enumerate(kernels):
+            sparse_map[kernel[0] : kernel[0] + kernel[1], i] = 1 / kernel[1]
+        if self.mode == "dense":
+            self.map = tf.constant(sparse_map)
         else:
-            axis = self.w_axis
-            output_dim = self.output_dims[1]
-        input_dim = inputs.shape[axis]
+            self.map = tf.sparse.from_dense(sparse_map)
 
-        # Figure out the potential pooling windows
-        # This is the key idea - the torch op always uses only two
-        # consecutive pooling window sizes, like 3 and 4. Therefore,
-        # if we pool with both possible sizes, we simply need to gather
-        # the 'correct' pool at each position to reimplement the torch op.
-        small_window = math.ceil(input_dim / output_dim)
-        big_window = small_window + 1
-        if h_pooling:
-            output_dim = self.output_dims[0]
-            small_window_shape = (small_window, 1)
-            big_window_shape = (big_window, 1)
+    def call(self, inputs):
+        if self.mode == "dense":
+            return inputs @ self.map
         else:
-            output_dim = self.output_dims[1]
-            small_window_shape = (1, small_window)
-            big_window_shape = (1, big_window)
+            input_dims = inputs.shape
+            input_matrix = tf.reshape(inputs, (-1, input_dims[-1]))
+            out = tf.sparse.sparse_dense_matmul(input_matrix, self.map)
+            return tf.reshape(out, input_dims[:-1].as_list() + [-1])
 
-        # For resizes to 1, or integer resizes, we can take quick shortcuts
-        if output_dim == input_dim:
-            return inputs
-        elif output_dim == 1:
-            return tf.reduce_mean(inputs, axis=axis, keepdims=True)
-        elif input_dim % output_dim == 0:
-            return tf.nn.avg_pool2d(
-                inputs,
-                ksize=small_window_shape,
-                strides=small_window_shape,
-                padding="VALID",
-                data_format=self.input_ordering,
-            )
-        # When upscaling by an integer factor we can also take a quick shortcut
-        elif output_dim > input_dim and output_dim % input_dim == 0:
-            return tf.repeat(inputs, repeats=output_dim // input_dim, axis=axis)
+    def get_config(self):
+        config = super().get_config()
+        config.update({"output_dim": self.output_dim, "mode": self.mode})
+        return config
 
-        # For non-integer resizes, we pool with both possible window sizes and concatenate them
-        if output_dim < input_dim:
-            small_pool = tf.nn.avg_pool2d(
-                inputs, ksize=small_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
-            )
-            big_pool = tf.nn.avg_pool2d(
-                inputs, ksize=big_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
-            )
-            both_pool = tf.concat([small_pool, big_pool], axis=axis)
-        else:
-            # When we're actually upscaling instead, then we build the pools a bit differently
-            small_pool = inputs
-            big_pool = tf.nn.avg_pool2d(
-                inputs, ksize=big_window_shape, strides=1, padding="VALID", data_format=self.input_ordering
-            )
-            both_pool = tf.concat([small_pool, big_pool], axis=axis)
 
-        # We compute vectors of the start and end positions for each pooling window
-        # Each (start, end) pair here corresponds to a single output position
-        window_starts = tf.math.floor((tf.range(output_dim, dtype=tf.float32) * input_dim) / output_dim)
-        window_starts = tf.cast(window_starts, tf.int64)
-        window_ends = tf.math.ceil((tf.range(1, output_dim + 1, dtype=tf.float32) * input_dim) / output_dim)
-        window_ends = tf.cast(window_ends, tf.int64)
-
-        # pool_selector is a boolean array of shape (output_dim,) where 1 indicates that output position
-        # has a big receptive field and 0 indicates that that output position has a small receptive field
-        pool_selector = tf.cast(window_ends - window_starts - small_window, tf.bool)
-
-        # Since we concatenated the small and big pools, we need to do a bit of
-        # pointer arithmetic to get the indices of the big pools
-        small_indices = window_starts
-        big_indices = window_starts + small_pool.shape[axis]
-
-        # Finally, we use the pool_selector to generate a list of indices, one per output position
-        gather_indices = tf.where(pool_selector, big_indices, small_indices)
-
-        # Gathering from those indices yields the final, correct pooling
-        return tf.gather(both_pool, gather_indices, axis=axis)
+class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
+    def __init__(self, output_shape, mode="dense", **kwargs):
+        super().__init__(**kwargs)
+        self.mode = mode
+        self.h_pool = TFAdaptiveAvgPool1D(output_shape[0], mode=mode, name="h_pool")
+        self.w_pool = TFAdaptiveAvgPool1D(output_shape[1], mode=mode, name="w_pool")
 
     def call(self, inputs):
         # Rearrange from batch_size, height, width, channels -> batch_size, channels, height, width
         inputs = tf.transpose(inputs, perm=[0, 3, 1, 2])
         # Perform W-pooling
         inputs = self.w_pool(inputs)
-        # Rearrange batch_size, channels, height, width -> batch_size, channels, width, height
+        # Rearrange from batch_size, channels, height, width -> batch_size, channels, width, height
         inputs = tf.transpose(inputs, perm=[0, 1, 3, 2])
         # Perform H-pooling
         inputs = self.h_pool(inputs)
@@ -1260,7 +1232,6 @@ class TFAdaptiveAvgPool2D(tf.keras.layers.Layer):
         config = super().get_config()
         config.update({"mode": self.mode})
         return config
-
 
 class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     """
