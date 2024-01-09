@@ -769,7 +769,14 @@ class AutoTokenizer:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         has_remote_code = tokenizer_auto_map is not None
-        has_local_code = config_tokenizer_class is not None or type(config) in TOKENIZER_MAPPING
+        has_local_code = False
+        if type(config) in TOKENIZER_MAPPING:
+            has_local_code = True
+        elif config_tokenizer_class is not None:
+            for module_name, tokenizers in TOKENIZER_MAPPING_NAMES.items():
+                if config_tokenizer_class in tokenizers:
+                    has_local_code = True
+                    break
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )
