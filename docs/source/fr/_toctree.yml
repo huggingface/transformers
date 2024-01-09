@@ -15,7 +15,7 @@
       title: Préparation des données
     - local: in_translation
       title: Fine-tune un modèle pré-entraîné
-    - local: in_translation
+    - local: accelerate
       title: Entraînement distribué avec 🤗 Accelerate
     - local: accelerate
       title: Partager un modèle
