@@ -2114,7 +2114,7 @@ class Trainer:
                     # release memory
                     del state_dict
             elif self.is_fsdp_enabled:
-                load_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, model, resume_from_checkpoint)
+                load_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, model, resume_from_checkpoint, adapter_only=True)
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
@@ -2486,7 +2486,7 @@ class Trainer:
                 self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
-            save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
+            save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, adapter_only=True)
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
@@ -2580,6 +2580,7 @@ class Trainer:
                             self.optimizer,
                             self.model,
                             checkpoint,
+                            adapter_only=True,
                         )
                     else:
                         self.optimizer.load_state_dict(
