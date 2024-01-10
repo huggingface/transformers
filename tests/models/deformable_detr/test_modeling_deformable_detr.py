@@ -149,8 +149,8 @@ class DeformableDetrModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
-            backbone_config=resnet_config,
             backbone=None,
+            backbone_config=resnet_config,
             use_pretrained_backbone=False,
         )
 
@@ -520,6 +520,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.use_timm_backbone = True
+        config.backbone_config = None
 
         for model_class in self.all_model_classes:
             model = model_class(config)
