@@ -267,7 +267,7 @@ class HFQuantizer(ABC):
         """checking env after instantiation, including modules presence and versions"""
         ...
 
-    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
         """setting model attributes and/or converting model BEFORE weights loading"""
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
@@ -374,7 +374,7 @@ class GPTQHFQuantizer(HFQuantizer):
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
         return torch_dtype
 
-    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
         super().process_model_before_weight_loading(model, **kwargs)
         if model.__class__.main_input_name != "input_ids":
             raise RuntimeError("We can only quantize pure text model.")
@@ -382,9 +382,7 @@ class GPTQHFQuantizer(HFQuantizer):
         if self.quantization_status == QuantizationStatus.PREQUANTIZED:
             model = self.quantizer.convert_model(model)
 
-        return model
-
-    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
         super().process_model_after_weight_loading(model, **kwargs)
 
         if self.quantization_status == QuantizationStatus.FRESH:
@@ -485,7 +483,7 @@ class BnbHFQuantizer(HFQuantizer):
         device_map: DeviceMap,
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
-    ) -> PreTrainedModel:
+    ):
         super().process_model_before_weight_loading(model, **kwargs)
 
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
@@ -522,7 +520,7 @@ class BnbHFQuantizer(HFQuantizer):
 
         model.config.quantization_config = self.quantization_config
 
-    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
         super().process_model_after_weight_loading(model, **kwargs)
 
 
@@ -547,14 +545,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
                 "You have a version of `bitsandbytes` that is not compatible with 8bit inference and training"
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
-
-    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
-        super().process_model_before_weight_loading(model, **kwargs)
-
-        model.is_8bit_serializable = self.is_model_serializeable()
-        model.is_loaded_in_8bit = True
-
-        return model
 
     def adjust_target_dtype(self, target_dtype: torch.dtype) -> torch.dtype:
         if target_dtype != torch.int8:
@@ -636,6 +626,11 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
 
+    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
+        super().process_model_after_weight_loading(model, **kwargs)
+        model.is_8bit_serializable = self.is_model_serializeable()
+        model.is_loaded_in_8bit = True
+
 
 class Bnb4BitHFQuantizer(BnbHFQuantizer):
     """
@@ -683,14 +678,6 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
 
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
-
-    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
-        super().process_model_before_weight_loading(model, **kwargs)
-
-        model.is_4bit_serializable = self.is_model_serializeable()
-        model.is_loaded_in_4bit = True
-
-        return model
 
     def is_model_serializeable(self, model: PreTrainedModel = None) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
@@ -790,6 +777,11 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
             new_value = bnb.nn.Params4bit(new_value, requires_grad=False, **kwargs).to(target_device)
 
         module._parameters[tensor_name] = new_value
+
+    def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
+        super().process_model_after_weight_loading(model, **kwargs)
+        model.is_4bit_serializable = self.is_model_serializeable()
+        model.is_loaded_in_4bit = True
 
 
 class AWQHFQuantizer(HFQuantizer):
