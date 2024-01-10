@@ -21,8 +21,8 @@ from parameterized import parameterized
 from transformers import ChatGlmConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
-    slow,
     require_torch_gpu,
+    slow,
     torch_device,
 )
 
@@ -36,10 +36,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         ChatGlmForCausalLM,
         ChatGlmForSequenceClassification,
         ChatGlmModel,
-        AutoTokenizer,
     )
 
 
@@ -407,8 +407,8 @@ class ChatGlmIntegrationTest(unittest.TestCase):
         model_id = "ybelkada/chatglm3-6b-hf"
 
         model = ChatGlmForCausalLM.from_pretrained(
-            model_id, 
-            torch_dtype=torch.float16, 
+            model_id,
+            torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
@@ -420,14 +420,13 @@ class ChatGlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-
     def test_chat_glm_generation_6b_batched(self):
         # TODO: change to THUDM/chatglm3-6b in the future
         model_id = "ybelkada/chatglm3-6b-hf"
 
         model = ChatGlmForCausalLM.from_pretrained(
-            model_id, 
-            torch_dtype=torch.float16, 
+            model_id,
+            torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
 
@@ -436,5 +435,5 @@ class ChatGlmIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = "[gMASK]sop 你好，我是人工智能助手。很高兴认识你叫什么"
         inputs = tokenizer(["你好", "你"], return_tensors="pt").to(torch_device)
         output = model.generate(**inputs, max_new_tokens=10)
-        
+
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_TEXT)
