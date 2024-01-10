@@ -18,6 +18,10 @@
 import argparse
 
 import torch
+import torchaudio
+from fairseq2.data import Collater
+from fairseq2.data.audio import WaveformToFbankConverter
+from fairseq2.nn.padding import get_seqs_and_padding_mask
 from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
@@ -153,11 +157,6 @@ def convert_wav2vec2_bert_checkpoint(
         fe.push_to_hub(repo_id, create_pr=True)
 
     if args.audio_path:
-        import torchaudio
-        from fairseq2.data import Collater
-        from fairseq2.data.audio import WaveformToFbankConverter
-        from fairseq2.nn.padding import get_seqs_and_padding_mask
-
         waveform, sample_rate = torchaudio.load(args.audio_path)
         waveform = torchaudio.functional.resample(waveform, sample_rate, fe.sampling_rate)
 
