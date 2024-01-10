@@ -84,6 +84,10 @@ class YolosObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
             possible padding). You can use [`~YolosImageProcessor.post_process`] to retrieve the unnormalized bounding
             boxes.
+        auxiliary_outputs (`list[Dict]`, *optional*):
+            Optional, only returned when auxilary losses are activated (i.e. `config.use_auxiliary_loss` is set to `True`)
+            and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+            `pred_boxes`) for each decoder layer.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -100,6 +104,7 @@ class YolosObjectDetectionOutput(ModelOutput):
     loss_dict: Optional[Dict] = None
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
+    auxiliary_outputs: Optional[List[Dict]] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -788,7 +793,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         logits = self.class_labels_classifier(sequence_output)
         pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
 
-        loss, loss_dict = None, None
+        loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
             # First: create the matcher
             matcher = YolosHungarianMatcher(
@@ -807,15 +812,29 @@ class YolosForObjectDetection(YolosPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
+            if self.config.use_auxiliary_loss:
+                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
+                outputs_class = self.class_labels_classifier(intermediate)
+                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
+                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
             weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
             weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            if self.config.use_auxiliary_loss:
+                aux_weight_dict = {}
+                for i in range(self.config.decoder_layers - 1):
+                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         if not return_dict:
-            output = (logits, pred_boxes) + outputs
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes) + auxiliary_outputs + outputs
+            else:
+                output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
 
         return YolosObjectDetectionOutput(
@@ -823,6 +842,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
+            auxiliary_outputs=auxiliary_outputs,
             last_hidden_state=outputs.last_hidden_state,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
