@@ -1004,9 +1004,9 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    # Ignore Copy
     @add_start_docstrings_to_model_forward(CHATGLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore Copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
