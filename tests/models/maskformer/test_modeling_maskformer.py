@@ -55,7 +55,7 @@ class MaskFormerModelTester:
         parent,
         batch_size=2,
         is_training=True,
-        use_auxiliary_loss=False,
+        auxiliary_loss=False,
         num_queries=10,
         num_channels=3,
         min_size=32 * 4,
@@ -68,7 +68,7 @@ class MaskFormerModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
-        self.use_auxiliary_loss = use_auxiliary_loss
+        self.auxiliary_loss = auxiliary_loss
         self.num_queries = num_queries
         self.num_channels = num_channels
         self.min_size = min_size
@@ -364,7 +364,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_auxiliary_loss = True
+        config.auxiliary_loss = True
         config.output_auxiliary_logits = True
 
         # only test for object detection and segmentation model
