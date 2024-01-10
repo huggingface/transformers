@@ -216,6 +216,14 @@ def _is_peft_model(model):
     return is_peft_available() and isinstance(model, PeftModel)
 
 
+def _get_fsdp_ckpt_kwargs():
+    # TODO: @AjayP13, @younesbelkada replace this check with version check at the next `accelerate` release
+    if is_accelerate_available() and "adapter_only" in list(inspect.signature(save_fsdp_model).parameters):
+        return {"adapter_only": True}
+    else:
+        return {}
+
+
 if TYPE_CHECKING:
     import optuna
 
@@ -2119,7 +2127,7 @@ class Trainer:
                     self.accelerator,
                     model,
                     resume_from_checkpoint,
-                    adapter_only=True,
+                    **_get_fsdp_ckpt_kwargs(),
                 )
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
@@ -2177,7 +2185,7 @@ class Trainer:
                 self.accelerator,
                 model,
                 self.state.best_model_checkpoint,
-                adapter_only=True,
+                **_get_fsdp_ckpt_kwargs(),
             )
         elif (
             os.path.exists(best_model_path)
@@ -2497,7 +2505,7 @@ class Trainer:
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
             save_fsdp_model(
-                self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, adapter_only=True
+                self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **_get_fsdp_ckpt_kwargs()
             )
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
@@ -2592,7 +2600,7 @@ class Trainer:
                             self.optimizer,
                             self.model,
                             checkpoint,
-                            adapter_only=True,
+                            **_get_fsdp_ckpt_kwargs(),
                         )
                     else:
                         self.optimizer.load_state_dict(
