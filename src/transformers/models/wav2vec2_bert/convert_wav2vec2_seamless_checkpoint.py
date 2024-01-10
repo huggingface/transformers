@@ -21,8 +21,8 @@ import torch
 from seamless_communication.models.conformer_shaw import load_conformer_shaw_model
 
 from transformers import (
+    SeamlessM4TFeatureExtractor,
     Wav2Vec2BERTConfig,
-    Wav2Vec2BERTFeatureExtractor,
     Wav2Vec2BERTForPreTraining,
     logging,
 )
@@ -135,7 +135,7 @@ def convert_wav2vec2_bert_checkpoint(
         hf_wav2vec.push_to_hub(repo_id, create_pr=True)
 
     # save feature extractor
-    fe = Wav2Vec2BERTFeatureExtractor(padding_value=1)
+    fe = SeamlessM4TFeatureExtractor(padding_value=1)
     fe.save_pretrained(pytorch_dump_folder_path)
 
     if repo_id:

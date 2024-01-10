@@ -18,9 +18,10 @@ import shutil
 import tempfile
 import unittest
 
+from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.models.wav2vec2_bert import Wav2Vec2BERTFeatureExtractor, Wav2Vec2BERTProcessor
+from transformers.models.wav2vec2_bert import Wav2Vec2BERTProcessor
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
@@ -60,7 +61,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         return Wav2Vec2CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return Wav2Vec2BERTFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return SeamlessM4TFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -78,7 +79,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Wav2Vec2BERTFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = Wav2Vec2BERTProcessor(
@@ -97,7 +98,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Wav2Vec2BERTFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

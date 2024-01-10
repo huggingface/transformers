@@ -19,8 +19,8 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
+from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
-from .feature_extraction_wav2vec2_bert import Wav2Vec2BERTFeatureExtractor
 
 
 class Wav2Vec2BERTProcessor(ProcessorMixin):
@@ -28,17 +28,17 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
     Constructs a Wav2Vec2-BERT processor which wraps a Wav2Vec2-BERT feature extractor and a Wav2Vec2 CTC tokenizer into a single
     processor.
 
-    [`Wav2Vec2Processor`] offers all the functionalities of [`Wav2Vec2BERTFeatureExtractor`] and [`PreTrainedTokenizer`].
+    [`Wav2Vec2Processor`] offers all the functionalities of [`SeamlessM4TFeatureExtractor`] and [`PreTrainedTokenizer`].
     See the docstring of [`~Wav2Vec2Processor.__call__`] and [`~Wav2Vec2Processor.decode`] for more information.
 
     Args:
-        feature_extractor (`Wav2Vec2BERTFeatureExtractor`):
-            An instance of [`Wav2Vec2BERTFeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`SeamlessM4TFeatureExtractor`):
+            An instance of [`SeamlessM4TFeatureExtractor`]. The feature extractor is a required input.
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
 
-    feature_extractor_class = "Wav2Vec2BERTFeatureExtractor"
+    feature_extractor_class = "SeamlessM4TFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
@@ -60,15 +60,15 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
                 FutureWarning,
             )
 
-            feature_extractor = Wav2Vec2BERTFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            feature_extractor = SeamlessM4TFeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
             tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2BERTFeatureExtractor's
-        [`~Wav2Vec2BERTFeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to SeamlessM4TFeatureExtractor's
+        [`~SeamlessM4TFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
@@ -105,8 +105,8 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2BERTFeatureExtractor's
-        [`~Wav2Vec2BERTFeatureExtractor.pad`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to SeamlessM4TFeatureExtractor's
+        [`~SeamlessM4TFeatureExtractor.pad`] and returns its output. If used in the context
         [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
         """

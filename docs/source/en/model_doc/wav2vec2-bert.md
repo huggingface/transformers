@@ -46,11 +46,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 [[autodoc]] Wav2Vec2BERTConfig
 
-## Wav2Vec2BERTFeatureExtractor
-
-[[autodoc]] Wav2Vec2BERTFeatureExtractor
-    - __call__
-
 ## Wav2Vec2BERTProcessor
 
 [[autodoc]] Wav2Vec2BERTProcessor

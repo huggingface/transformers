@@ -55,7 +55,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
-            Input dimension of this model, i.e the dimension after processing input audios with [`Wav2Vec2BERTFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
+            Input dimension of this model, i.e the dimension after processing input audios with [`SeamlessM4TFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
         hidden_act (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.

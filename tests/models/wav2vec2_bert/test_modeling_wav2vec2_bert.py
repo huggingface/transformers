@@ -128,12 +128,12 @@ class Wav2Vec2BERTModelTester:
     def prepare_config_and_inputs(self, position_embeddings_type="relative"):
         input_shape = [self.batch_size, self.seq_length, self.feature_projection_input_dim]
 
-        input_values = floats_tensor(input_shape, self.vocab_size)
+        input_features = floats_tensor(input_shape, self.vocab_size)
         attention_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         config = self.get_config(position_embeddings_type=position_embeddings_type)
 
-        return config, input_values, attention_mask
+        return config, input_features, attention_mask
 
     def get_config(self, position_embeddings_type="relative"):
         return Wav2Vec2BERTConfig(
@@ -161,43 +161,43 @@ class Wav2Vec2BERTModelTester:
             position_embeddings_type=position_embeddings_type,
         )
 
-    def create_and_check_model(self, config, input_values, attention_mask):
+    def create_and_check_model(self, config, input_features, attention_mask):
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
-    def create_and_check_model_with_adapter(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter(self, config, input_features, attention_mask):
         config.add_adapter = True
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.adapter_output_seq_length, self.hidden_size)
         )
 
-    def create_and_check_model_with_adapter_for_ctc(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter_for_ctc(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 2 * config.hidden_size
         model = Wav2Vec2BERTForCTC(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.adapter_output_seq_length, self.vocab_size)
         )
 
-    def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_values, attention_mask):
+    def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.use_intermediate_ffn_before_adapter = True
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
@@ -208,25 +208,25 @@ class Wav2Vec2BERTModelTester:
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
-    def create_and_check_model_with_adapter_proj_dim(self, config, input_values, attention_mask):
+    def create_and_check_model_with_adapter_proj_dim(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 8
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_values, attention_mask=attention_mask)
+        result = model(input_features, attention_mask=attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
-    def create_and_check_model_float16(self, config, input_values, attention_mask):
+    def create_and_check_model_float16(self, config, input_features, attention_mask):
         model = Wav2Vec2BERTModel(config=config)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -237,118 +237,118 @@ class Wav2Vec2BERTModelTester:
         model.eval()
 
         with torch.no_grad():
-            result = model(input_values.type(dtype=torch.float16), attention_mask=attention_mask)
+            result = model(input_features.type(dtype=torch.float16), attention_mask=attention_mask)
 
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
-    def create_and_check_batch_inference(self, config, input_values, *args):
+    def create_and_check_batch_inference(self, config, input_features, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
         model = Wav2Vec2BERTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+        input_features = input_features[:3]
+        attention_mask = torch.ones(input_features.shape, device=torch_device, dtype=torch.bool)
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
+        batch_outputs = model(input_features, attention_mask=attention_mask).last_hidden_state
 
-        for i in range(input_values.shape[0]):
-            input_slice = input_values[i : i + 1, : input_lengths[i]]
+        for i in range(input_features.shape[0]):
+            input_slice = input_features[i : i + 1, : input_lengths[i]]
             output = model(input_slice).last_hidden_state
 
             batch_output = batch_outputs[i : i + 1, : output.shape[1]]
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
-    def check_ctc_loss(self, config, input_values, *args):
+    def check_ctc_loss(self, config, input_features, *args):
         model = Wav2Vec2BERTForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
         model.eval()
 
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape[:2], device=torch_device, dtype=torch.long)
+        input_features = input_features[:3]
+        attention_mask = torch.ones(input_features.shape[:2], device=torch_device, dtype=torch.long)
 
-        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
+        input_lengths = [input_features.shape[1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+        labels = ids_tensor((input_features.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
 
         model.config.ctc_loss_reduction = "sum"
-        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        sum_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
 
         model.config.ctc_loss_reduction = "mean"
-        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
+        mean_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
 
         self.parent.assertTrue(isinstance(sum_loss, float))
         self.parent.assertTrue(isinstance(mean_loss, float))
 
-    def check_seq_classifier_loss(self, config, input_values, *args):
+    def check_seq_classifier_loss(self, config, input_features, *args):
         model = Wav2Vec2BERTForSequenceClassification(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
         model.eval()
 
-        input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape[:2], device=torch_device, dtype=torch.long)
+        input_features = input_features[:3]
+        attention_mask = torch.ones(input_features.shape[:2], device=torch_device, dtype=torch.long)
 
-        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+        input_lengths = [input_features.shape[1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0
 
-        masked_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss.item()
-        unmasked_loss = model(input_values, labels=labels).loss.item()
+        masked_loss = model(input_features, attention_mask=attention_mask, labels=labels).loss.item()
+        unmasked_loss = model(input_features, labels=labels).loss.item()
 
         self.parent.assertTrue(isinstance(masked_loss, float))
         self.parent.assertTrue(isinstance(unmasked_loss, float))
         self.parent.assertTrue(masked_loss != unmasked_loss)
 
-    def check_ctc_training(self, config, input_values, *args):
+    def check_ctc_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
         model = Wav2Vec2BERTForCTC(config=config)
         model.to(torch_device)
         model.train()
 
-        input_values = input_values[:3]
+        input_features = input_features[:3]
 
-        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
+        input_lengths = [input_features.shape[1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+        labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
                 # it's important that we make sure that target lengths are at least
                 # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
-        loss = model(input_values, labels=labels).loss
+        loss = model(input_features, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
 
-    def check_seq_classifier_training(self, config, input_values, *args):
+    def check_seq_classifier_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
         model = Wav2Vec2BERTForSequenceClassification(config=config)
         model.to(torch_device)
@@ -357,21 +357,21 @@ class Wav2Vec2BERTModelTester:
         # freeze everything but the classification head
         model.freeze_base_model()
 
-        input_values = input_values[:3]
+        input_features = input_features[:3]
 
-        input_lengths = [input_values.shape[1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+        input_lengths = [input_features.shape[1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
 
-        loss = model(input_values, labels=labels).loss
+        loss = model(input_features, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
 
-    def check_xvector_training(self, config, input_values, *args):
+    def check_xvector_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
         model = Wav2Vec2BERTForXVector(config=config)
         model.to(torch_device)
@@ -380,37 +380,37 @@ class Wav2Vec2BERTModelTester:
         # freeze everything but the classification head
         model.freeze_base_model()
 
-        input_values = input_values[:3]
+        input_features = input_features[:3]
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
-        labels = ids_tensor((input_values.shape[0], 1), len(model.config.id2label))
+        input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((input_features.shape[0], 1), len(model.config.id2label))
 
         # pad input
         for i in range(len(input_lengths)):
-            input_values[i, input_lengths[i] :] = 0.0
+            input_features[i, input_lengths[i] :] = 0.0
 
-        loss = model(input_values, labels=labels).loss
+        loss = model(input_features, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
 
-    def check_labels_out_of_vocab(self, config, input_values, *args):
+    def check_labels_out_of_vocab(self, config, input_features, *args):
         model = Wav2Vec2BERTForCTC(config)
         model.to(torch_device)
         model.train()
 
-        input_values = input_values[:3]
+        input_features = input_features[:3]
 
-        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        input_lengths = [input_features.shape[-1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
-        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
+        labels = ids_tensor((input_features.shape[0], max(max_length_labels) - 2), model.config.vocab_size + 100)
 
         with self.parent.assertRaises(ValueError):
-            model(input_values, labels=labels)
+            model(input_features, labels=labels)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values, "attention_mask": attention_mask}
+        config, input_features, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {"input_features": input_features, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
@@ -532,7 +532,7 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    # `input_ids` is renamed to `input_features`
     def test_forward_signature(self):
         pass
 
@@ -570,14 +570,14 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # set layer drop to 0
         model.config.layerdrop = 0.0
 
-        input_values = inputs_dict["input_values"]
+        input_features = inputs_dict["input_features"]
 
         input_lengths = torch.tensor(
-            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+            [input_features.shape[1] for _ in range(input_features.shape[0])], dtype=torch.long, device=torch_device
         )
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
 
-        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        labels = ids_tensor((input_features.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
         inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
         inputs_dict["labels"] = labels
 
@@ -934,7 +934,7 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
         inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
-        features_shape = inputs["input_values"].shape[:2]
+        features_shape = inputs["input_features"].shape[:2]
 
         # apply augmentation
         model.wav2vec2_bert.config.apply_spec_augment = True

@@ -904,7 +904,6 @@ _import_structure = {
     "models.wav2vec2_bert": [
         "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2BERTConfig",
-        "Wav2Vec2BERTFeatureExtractor",
         "Wav2Vec2BERTProcessor",
     ],
     "models.wav2vec2_conformer": [
@@ -5598,7 +5597,6 @@ if TYPE_CHECKING:
     from .models.wav2vec2_bert import (
         WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2BERTConfig,
-        Wav2Vec2BERTFeatureExtractor,
         Wav2Vec2BERTProcessor,
     )
     from .models.wav2vec2_conformer import (

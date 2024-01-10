@@ -1037,7 +1037,7 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2Conformer->Wav2Vec2BERT,wav2vec2_conformer->wav2vec2_bert
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2Conformer->Wav2Vec2BERT,wav2vec2_conformer->wav2vec2_bert, input_values->input_features
 class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1046,7 +1046,7 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
 
     config_class = Wav2Vec2BERTConfig
     base_model_prefix = "wav2vec2_bert"
-    main_input_name = "input_values"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = True
 
     # Ignore copy
@@ -1152,10 +1152,10 @@ WAV2VEC2_BERT_START_DOCSTRING = r"""
 
 WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
     Args:
-        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
             conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BERTProcessor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
@@ -1258,7 +1258,7 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1271,7 +1271,7 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = input_values
+        extract_features = input_features
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
@@ -1355,7 +1355,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
     @replace_return_docstrings(output_type=Wav2Vec2BERTForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.BoolTensor] = None,
         sampled_negative_indices: Optional[torch.BoolTensor] = None,
@@ -1385,10 +1385,10 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         >>> model = Wav2Vec2BERTForPreTraining.from_pretrained("facebook/w2v-bert-2.0")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1
+        >>> input_features = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_features  # Batch size 1
 
         >>> # compute masked indices
-        >>> batch_size, raw_sequence_length = input_values.shape[:2]
+        >>> batch_size, raw_sequence_length = input_features.shape[:2]
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices(
         ...     shape=(batch_size, sequence_length), mask_prob=0.2, mask_length=2
@@ -1398,13 +1398,13 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         ...     num_negatives=model.config.num_negatives,
         ...     mask_time_indices=mask_time_indices,
         ... )
-        >>> mask_time_indices = torch.tensor(data=mask_time_indices, device=input_values.device, dtype=torch.long)
+        >>> mask_time_indices = torch.tensor(data=mask_time_indices, device=input_features.device, dtype=torch.long)
         >>> sampled_negative_indices = torch.tensor(
-        ...     data=sampled_negative_indices, device=input_values.device, dtype=torch.long
+        ...     data=sampled_negative_indices, device=input_features.device, dtype=torch.long
         ... )
 
         >>> with torch.no_grad():
-        ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
+        ...     outputs = model(input_features, mask_time_indices=mask_time_indices)
 
         >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
         >>> cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
@@ -1416,7 +1416,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
         >>> # for contrastive loss training model should be put into train mode
         >>> model = model.train()
         >>> loss = model(
-        ...     input_values, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
+        ...     input_features, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
         ... ).loss
         ```"""
 
@@ -1426,7 +1426,7 @@ class Wav2Vec2BERTForPreTraining(Wav2Vec2BERTPreTrainedModel):
             mask_time_indices = mask_time_indices.to(torch.bool)
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1551,7 +1551,7 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1569,7 +1569,7 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1590,7 +1590,7 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
             attention_mask = (
                 attention_mask
                 if attention_mask is not None
-                else torch.ones(input_values.shape[:2], device=input_values.device, dtype=torch.long)
+                else torch.ones(input_features.shape[:2], device=input_features.device, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
 
@@ -1664,10 +1664,10 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1685,7 +1685,7 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1767,10 +1767,10 @@ class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1788,7 +1788,7 @@ class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1932,10 +1932,10 @@ class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.forward with wav2vec2_conformer->wav2vec2_bert, input_values->input_features
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1953,7 +1953,7 @@ class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
