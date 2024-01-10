@@ -1791,3 +1791,170 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+    
+    # TODO: @assaf fix docs
+    # @add_start_docstrings_to_model_forward(OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=Owlv2ObjectDetectionOutput, config_class=Owlv2Config)
+    def predict(
+        self,
+        input_ids: torch.Tensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Owlv2ObjectDetectionOutput:
+        r"""
+        Returns:
+
+        Examples:
+        ```python
+        >>> import requests
+        >>> from PIL import Image
+        >>> import torch
+        >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
+
+        >>> processor = AutoProcessor.from_pretrained("google/owlv2-base-patch16-ensemble")
+        >>> model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensemble")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> texts = [["a photo of a cat", "a photo of a dog"]]
+        >>> inputs = processor(text=texts, images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        >>> target_sizes = torch.Tensor([image.size[::-1]])
+        >>> # Convert outputs (bounding boxes and class logits) to final bounding boxes and scores
+        >>> results = processor.post_process_object_detection(
+        ...     outputs=outputs, threshold=0.2, target_sizes=target_sizes
+        ... )
+
+        >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
+        >>> text = texts[i]
+        >>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
+
+        >>> for box, score, label in zip(boxes, scores, labels):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a photo of a cat with confidence 0.614 at location [341.67, 17.54, 642.32, 278.51]
+        Detected a photo of a cat with confidence 0.665 at location [6.75, 38.97, 326.62, 354.85]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        """ Image """
+        image_outputs: Owlv2ObjectDetectionOutput = self.process_images(pixel_values, output_attentions, output_hidden_states)
+
+        """ Text """
+        text_outputs: Owlv2ObjectDetectionOutput = self.process_text(input_ids, attention_mask, output_attentions, output_hidden_states)
+
+        return self.postprocess(input_ids, image_outputs, text_outputs, return_dict)
+
+    def postprocess(self, input_ids, attention_mask, image_outputs, text_outputs, return_dict=None):
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        text_embeds = text_outputs.text_embeds
+        if image_outputs.image_embeds.ndim == 4:
+            feature_map = image_outputs.image_embeds
+            batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
+            image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+        else:
+            image_feats = image_outputs.image_embeds
+            batch_size, _, hidden_dim = image_feats.shape
+
+        # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
+        max_text_queries = input_ids.shape[0] // batch_size
+        text_embeds = text_embeds.reshape(batch_size, max_text_queries, text_embeds.shape[-1])
+
+        # If first token is 0, then this is a padded query [batch_size, num_queries].
+        input_ids = input_ids.reshape(batch_size, max_text_queries, input_ids.shape[-1])
+        query_mask = input_ids[..., 0] > 0
+        if query_mask.all():
+            query_mask = None
+
+        # Predict object classes [batch_size, num_patches, num_queries+1]
+        pred_logits, class_embeds = self.class_predictor(image_feats, text_embeds, query_mask)
+
+        if not return_dict:
+            output = (
+                pred_logits,
+                image_outputs.pred_boxes,
+                image_outputs.objectness_logits,
+            )
+            output = tuple(x for x in output if x is not None)
+
+        else:
+            output = Owlv2ObjectDetectionOutput(
+                logits=pred_logits,
+                pred_boxes=image_outputs.pred_boxes,
+                objectness_logits=image_outputs.objectness_logits,
+            )
+        return output
+
+    def process_text(self, input_ids, attention_mask, output_attentions=None, output_hidden_states=None):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        text_outputs = self.owlv2.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+        text_embeds = text_outputs.pooler_output
+        text_embeds = self.owlv2.text_projection(text_embeds)
+        text_embeds = text_embeds / torch.linalg.norm(text_embeds, ord=2, dim=-1, keepdim=True)
+        text_outputs = Owlv2ObjectDetectionOutput(
+            text_embeds=text_embeds
+        )
+        return text_outputs
+
+    def process_images(self, pixel_values, output_attentions=None, output_hidden_states=None):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        vision_outputs = self.owlv2.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+        last_hidden_state = vision_outputs.last_hidden_state
+        image_embeds = self.owlv2.vision_model.post_layernorm(last_hidden_state)
+        # Resize class token
+        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
+        class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
+        # Merge image embedding with class tokens
+        image_feats = image_embeds[:, 1:, :] * class_token_out
+        image_feats = self.layer_norm(image_feats)
+        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        new_size = (
+            image_feats.shape[0],
+            int(np.sqrt(image_feats.shape[1])),
+            int(np.sqrt(image_feats.shape[1])),
+            image_feats.shape[-1],
+        )
+        feature_map = image_feats.reshape(new_size)
+
+        # Predict objectness
+        objectness_logits = self.objectness_predictor(image_feats)
+
+        # Predict object boxes
+        pred_boxes = self.box_predictor(image_feats, feature_map)
+
+        image_outputs = Owlv2ObjectDetectionOutput(
+            image_embeds=feature_map,
+            objectness_logits=objectness_logits,
+            pred_boxes=pred_boxes
+        )
+
+        return image_outputs
