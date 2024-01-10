@@ -190,7 +190,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/home/yoach/tmp/wav2vec_seamless/",
+        default=None,
         type=str,
         help="Path to the output PyTorch model.",
     )
@@ -199,16 +199,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--config_path",
-        default="facebook/w2v-bert-2.0",
+        default=None,
         type=str,
         help="Path to hf config.json of model to convert",
     )
-    parser.add_argument(
-        "--repo_id", default="ylacombe/w2v-bert-2.0", type=str, help="Push to this repo id if precised."
-    )
+    parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
     parser.add_argument(
         "--audio_path",
-        default="/home/yoach/transformers/audio_vits.wav",
+        default=None,
         type=str,
         help="If specified, check that the original model and the converted model produce the same outputs.",
     )
