@@ -1539,7 +1539,7 @@ The commit description supports markdown synthax see:
 
         model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
 
-        loaded_model_card = ModelCard.load("test-dynamic-model-with-tags")
+        loaded_model_card = ModelCard.load(f"{USER}/test-dynamic-model-with-tags")
         self.assertEqual(loaded_model_card.data.tags, new_tags)
 
 
