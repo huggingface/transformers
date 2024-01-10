@@ -64,6 +64,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
         preprocess_params = kwargs.pop("preprocess_kwargs", {})
         postprocess_params = kwargs.pop("postprocess_kwargs", {})
 
+        if "timeout" in kwargs:
+            preprocess_params["timeout"] = kwargs["timeout"]
         if return_tensors is not None:
             postprocess_params["return_tensors"] = return_tensors
 
