@@ -245,7 +245,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
-                prev_is_special = False         
+                prev_is_special = False
         out_string += " " + self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
