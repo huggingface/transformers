@@ -1004,9 +1004,9 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    # Ignore copy
     @add_start_docstrings_to_model_forward(CHATGLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1132,6 +1132,9 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+        elif position_ids is not None:
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
