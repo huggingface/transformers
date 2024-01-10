@@ -29,7 +29,7 @@ VOCAB_FILES_NAMES = {
     "tokenizer_file": "tokenizer.json",
 }
 
-# TODO: This is a mock. Update this when it is actually released.
+
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2/resolve/main/vocab.json"},
     "merges_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2/resolve/main/merges.txt"},
@@ -48,7 +48,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     ```python
     >>> from transformers import Qwen2Tokenizer
 
-    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen2")
+    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen2-7B-beta")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
