@@ -291,8 +291,8 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
         candidate_input_ids = torch.cat((input_ids, chosen_ids), dim=1)
-        # assisted_generation expects logits as well, but we don't have those here, so returning empty list
-        return candidate_input_ids, []
+        # assisted_generation expects logits as well, but we don't have those here, so returning None
+        return candidate_input_ids, None
 
     def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
         """
