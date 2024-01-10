@@ -152,16 +152,16 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (
                 1,
                 self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -175,16 +175,16 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (
                 self.image_processor_tester.batch_size,
                 self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 self.image_processor_tester.batch_size,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -200,16 +200,16 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (
                 1,
                 self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 1,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
@@ -225,16 +225,16 @@ class MobileViTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             (
                 2,
                 self.image_processor_tester.num_channels,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(
             encoding["labels"].shape,
             (
                 2,
-                self.image_processor_tester.size["height"],
-                self.image_processor_tester.size["width"],
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
             ),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
