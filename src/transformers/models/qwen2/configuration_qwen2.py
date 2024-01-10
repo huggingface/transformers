@@ -29,7 +29,9 @@ class Qwen2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2Model`]. It is used to instantiate an
     Qwen2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of Qwen2-7B.
+    with the defaults will yield a similar configuration to that of Qwen2-7B-beta.
+
+    [Qwen/Qwen2-7B-beta](https://huggingface.co/qwen/qwen2-7B-beta)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -37,7 +39,7 @@ class Qwen2Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the Mistral model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the Qwen2 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Qwen2Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
@@ -57,8 +59,7 @@ class Qwen2Config(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with. Mistral's sliding window attention
-            allows sequence of up to 4096*32 tokens.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -68,15 +69,16 @@ class Qwen2Config(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*):
             The id of the padding token.
-        bos_token_id (`int`, *optional*, defaults to 1):
+        bos_token_id (`int`, *optional*, defaults to 151643):
             The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 2):
+        eos_token_id (`int`, *optional*, defaults to 151643):
             The id of the "end-of-sequence" token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        use_sliding_window (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):
@@ -114,8 +116,8 @@ class Qwen2Config(PretrainedConfig):
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
+        bos_token_id=151643,
+        eos_token_id=151643,
         tie_word_embeddings=False,
         rope_theta=10000.0,
         use_sliding_window=False,

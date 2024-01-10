@@ -92,11 +92,6 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        # I think there are (de)serialization bugs in tokenizers: saving the
-        # loaded tokenizer gets different tokenizer.json
-        # (pre_tokenizer > pretokenizers > 1 > trim_offsets)
-        # I don't find the difference in results though.
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
