@@ -362,11 +362,15 @@ class TokenizerTesterMixin:
         model_main_input_name: str = "input_ids",
     ):
         for i_r in input_r.values():
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
 
         for i_r, i_p in zip(input_r[model_main_input_name], input_p[model_main_input_name]):
@@ -1565,7 +1569,9 @@ class TokenizerTesterMixin:
                 # Testing single inputs
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    sequence_0, add_special_tokens=True, return_special_tokens_mask=True  # , add_prefix_space=False
+                    sequence_0,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,  # , add_prefix_space=False
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]

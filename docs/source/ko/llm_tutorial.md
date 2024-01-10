@@ -74,14 +74,13 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 
 </Tip>
 
-<!-- TODO: update example to llama 2 (or a newer popular baseline) when it becomes ungated -->
 먼저, 모델을 불러오세요.
 
-```py
+```python
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
 ... )
 ```
 
@@ -94,18 +93,20 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 
 이어서 텍스트 입력을 [토크나이저](tokenizer_summary)으로 전처리하세요.
 
-```py
+```python
 >>> from transformers import AutoTokenizer
+>>> import torch
 
->>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
->>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to(device)
 ```
 
 `model_inputs` 변수에는 토큰화된 텍스트 입력과 함께 어텐션 마스크가 들어 있습니다. [`~generation.GenerationMixin.generate`]는 어텐션 마스크가 제공되지 않았을 경우에도 이를 추론하려고 노력하지만, 최상의 성능을 위해서는 가능하면 어텐션 마스크를 전달하는 것을 권장합니다. 
 
 마지막으로 [`~generation.GenerationMixin.generate`] 메소드를 호출해 생성된 토큰을 얻은 후, 이를 출력하기 전에 텍스트 형태로 변환하세요.
 
-```py
+```python
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 'A list of colors: red, blue, green, yellow, black, white, and brown'
@@ -121,10 +122,10 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 ```py
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
->>> tokenizer.pad_token = tokenizer.eos_token  # Llama has no pad token by default
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
+>>> tokenizer.pad_token = tokenizer.eos_token  # Mistral has no pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
-...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+...     "mistralai/Mistral-7B-v0.1", device_map="auto", load_in_4bit=True
 ... )
 ```
 
@@ -137,12 +138,12 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 >>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
 
 >>> # By default, the output will contain up to 20 tokens
->>> generated_ids = model.generate(**model_inputs)
+>>> generated_ids = model.generate(**model_inputs, pad_token_id=tokenizer.eos_token_id)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 'A sequence of numbers: 1, 2, 3, 4, 5'
 
 >>> # Setting `max_new_tokens` allows you to control the maximum length
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=50)
+>>> generated_ids = model.generate(**model_inputs, pad_token_id=tokenizer.eos_token_id, max_new_tokens=50)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
 ```
@@ -151,7 +152,7 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 
 기본적으로 [`~generation.GenerationConfig`] 파일에서 별도로 지정하지 않으면, `generate`는 각 반복에서 가장 확률이 높은 토큰을 선택합니다(그리디 디코딩). 하려는 작업에 따라 이 방법은 바람직하지 않을 수 있습니다. 예를 들어, 챗봇이나 에세이 작성과 같은 창의적인 작업은 샘플링이 적합할 수 있습니다. 반면, 오디오를 텍스트로 변환하거나 번역과 같은 입력 기반 작업은 그리디 디코딩이 더 적합할 수 있습니다. `do_sample=True`로 샘플링을 활성화할 수 있으며, 이 주제에 대한 자세한 내용은 이 [블로그 포스트](https://huggingface.co/blog/how-to-generate)에서 볼 수 있습니다.
 
-```py
+```python
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
 >>> from transformers import set_seed
 >>> set_seed(0)
@@ -173,7 +174,7 @@ LLM과 자기회귀 생성을 함께 사용할 때 핵심적인 부분은 이 �
 
 LLM은 [디코더 전용](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) 구조를 가지고 있어, 입력 프롬프트에 대해 지속적으로 반복 처리를 합니다. 입력 데이터의 길이가 다르면 패딩 작업이 필요합니다. LLM은 패딩 토큰에서 작동을 이어가도록 설계되지 않았기 때문에, 입력 왼쪽에 패딩이 추가 되어야 합니다. 그리고 어텐션 마스크도 꼭 `generate` 함수에 전달되어야 합니다!
 
-```py
+```python
 >>> # The tokenizer initialized above has right-padding active by default: the 1st sequence,
 >>> # which is shorter, has padding on the right side. Generation fails.
 >>> model_inputs = tokenizer(

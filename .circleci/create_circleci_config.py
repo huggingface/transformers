@@ -15,7 +15,6 @@
 
 import argparse
 import copy
-import glob
 import os
 import random
 from dataclasses import dataclass
@@ -239,7 +238,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         # Deeal with failed tests
         check_test_command += f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
@@ -249,7 +248,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         check_test_command += f'elif [ -s reports/{self.job_name}/stats.txt ]; then echo "All tests pass!"; '
 
@@ -283,7 +282,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -297,7 +296,7 @@ torch_and_flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -310,7 +309,7 @@ torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
     parallelism=1,
     pytest_num_workers=6,
@@ -397,13 +396,16 @@ custom_tokenizers_job = CircleCIJob(
 
 examples_torch_job = CircleCIJob(
     "examples_torch",
+    additional_env={"OMP_NUM_THREADS": 8},
     cache_name="torch_examples",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
     ],
+    pytest_num_workers=1,
 )
 
 
@@ -510,9 +512,10 @@ doc_test_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
-        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
         "pip install -U --upgrade-strategy eager natten",
+        "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.

@@ -75,4 +75,4 @@ class {{cookiecutter.camelcase_modelname}}TokenizationTest(TokenizerTesterMixin,
             "`self.tmpdirname`."
         )
 
-    # TODO: add tests with hard-coded target values 
+    # TODO: add tests with hard-coded target values

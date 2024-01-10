@@ -43,7 +43,7 @@ The figure below illustrates the architecture of SegFormer. Taken from the [orig
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version
 of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/NVlabs/SegFormer).
 
-Tips:
+## Usage tips
 
 - SegFormer consists of a hierarchical Transformer encoder, and a lightweight all-MLP decoder head.
   [`SegformerModel`] is the hierarchical Transformer encoder (which in the paper is also referred to
@@ -123,6 +123,9 @@ If you're interested in submitting a resource to be included here, please feel f
     - preprocess
     - post_process_semantic_segmentation
 
+<frameworkcontent>
+<pt>
+
 ## SegformerModel
 
 [[autodoc]] SegformerModel
@@ -143,6 +146,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] SegformerForSemanticSegmentation
     - forward
 
+</pt>
+<tf>
+
 ## TFSegformerDecodeHead
 
 [[autodoc]] TFSegformerDecodeHead
@@ -162,3 +168,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] TFSegformerForSemanticSegmentation
     - call
+
+</tf>
+</frameworkcontent>

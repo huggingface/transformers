@@ -44,17 +44,6 @@ and ADE20K (48.5 PQ), and instance segmentation model on Cityscapes (44.5 AP) an
 It also matches the state of the art specialized semantic segmentation models on ADE20K (58.2 mIoU),
 and ranks second on Cityscapes (84.5 mIoU) (no extra data). *
 
-Tips:
-- One can use the [`AutoImageProcessor`] API to prepare images for the model.
-- DiNAT can be used as a *backbone*. When `output_hidden_states = True`,
-it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, height, width, num_channels)`.
-
-Notes:
-- DiNAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention and Dilated Neighborhood Attention.
-You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten), or build on your system by running `pip install natten`.
-Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
-- Patch size of 4 is only supported at the moment.
-
 <img
 src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/dilated-neighborhood-attention-pattern.jpg"
 alt="drawing" width="600"/>
@@ -64,6 +53,17 @@ Taken from the <a href="https://arxiv.org/abs/2209.15001">original paper</a>.</s
 
 This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
 The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
+
+## Usage tips
+
+DiNAT can be used as a *backbone*. When `output_hidden_states = True`,
+it will output both `hidden_states` and `reshaped_hidden_states`. The `reshaped_hidden_states` have a shape of `(batch, num_channels, height, width)` rather than `(batch_size, height, width, num_channels)`.
+
+Notes:
+- DiNAT depends on [NATTEN](https://github.com/SHI-Labs/NATTEN/)'s implementation of Neighborhood Attention and Dilated Neighborhood Attention.
+You can install it with pre-built wheels for Linux by referring to [shi-labs.com/natten](https://shi-labs.com/natten), or build on your system by running `pip install natten`.
+Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
+- Patch size of 4 is only supported at the moment.
 
 ## Resources
 

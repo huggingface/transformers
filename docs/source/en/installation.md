@@ -70,7 +70,7 @@ pip install 'transformers[tf-cpu]'
 <Tip warning={true}>
 
 M1 / ARM Users
-    
+
 You will need to install the following before installing TensorFLow 2.0
 ```
 brew install cmake
@@ -147,10 +147,10 @@ Your Python environment will find the `main` version of 🤗 Transformers on the
 
 ## Install with conda
 
-Install from the conda channel `huggingface`:
+Install from the conda channel `conda-forge`:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Cache setup

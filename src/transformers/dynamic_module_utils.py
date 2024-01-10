@@ -25,6 +25,8 @@ import warnings
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from huggingface_hub import try_to_load_from_cache
+
 from .utils import (
     HF_MODULES_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
@@ -32,7 +34,6 @@ from .utils import (
     extract_commit_hash,
     is_offline_mode,
     logging,
-    try_to_load_from_cache,
 )
 
 
@@ -265,7 +266,8 @@ def get_cached_module_file(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -466,7 +468,8 @@ def get_class_from_dynamic_module(
     use_auth_token = kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")

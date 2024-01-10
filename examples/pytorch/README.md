@@ -98,7 +98,7 @@ the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html)
 use the following command:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
 	--all_arguments_of_the_script
 ```
@@ -107,7 +107,7 @@ As an example, here is how you would fine-tune the BERT large model (with whole 
 classification MNLI task using the `run_glue` script, with 8 GPUs:
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/text-classification/run_glue.py \
     --model_name_or_path bert-large-uncased-whole-word-masking \
     --task_name mnli \
@@ -201,6 +201,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
 * [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 * [ClearML](https://clear.ml/docs/latest/docs/getting_started/ds/ds_first_steps)
+* [DVCLive](https://dvc.org/doc/dvclive/ml-frameworks/huggingface)
 
 ### Weights & Biases
 
@@ -223,7 +224,7 @@ import wandb
 wandb.login()
 ```
 
-To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to all` if you have `wandb` installed.
+To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to_all` if you have `wandb` installed.
 
 Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
 

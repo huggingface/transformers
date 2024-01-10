@@ -639,9 +639,6 @@ class NatPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module: NatEncoder, value: bool = False) -> None:
-        pass
-
 
 NAT_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
@@ -653,6 +650,7 @@ NAT_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 NAT_INPUTS_DOCSTRING = r"""
     Args:

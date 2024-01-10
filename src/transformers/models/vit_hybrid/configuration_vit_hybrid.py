@@ -86,6 +86,7 @@ class ViTHybridConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit-hybrid"
 
     def __init__(
