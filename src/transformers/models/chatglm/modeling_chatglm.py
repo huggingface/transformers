@@ -538,7 +538,7 @@ class ChatGlmSdpaAttention(ChatGlmAttention):
             # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
                 "ChatGlmModel is using ChatGlmSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation='eager'` when loading the model."
             )
             return super().forward(
                 hidden_states=hidden_states,
@@ -1004,7 +1004,7 @@ class ChatGlmForCausalLM(ChatGlmPreTrainedModel):
     def get_decoder(self):
         return self.model
 
-    # Ignore Copy
+    # Ignore copy
     @add_start_docstrings_to_model_forward(CHATGLM_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
