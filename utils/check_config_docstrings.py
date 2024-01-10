@@ -38,7 +38,6 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "DecisionTransformerConfig",
     "EncoderDecoderConfig",
     "MusicgenConfig",
-    "Qwen2Config",
     "RagConfig",
     "SpeechEncoderDecoderConfig",
     "TimmBackboneConfig",
