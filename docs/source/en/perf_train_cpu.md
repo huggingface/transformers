@@ -40,6 +40,7 @@ Please run `pip list | grep torch` to get your `pytorch_version`, so you can get
 ```
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
+**___Note: Please check the upgraded versions in [ipex-whl-stable-cpu](https://developer.intel.com/ipex-whl-stable-cpu) if needed.___**
 
 Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html).
 
@@ -60,8 +61,9 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --max_seq_length 384 \
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
-<b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
+<b>--use_ipex</b> \
+<b>--bf16<b> \
+<b>--use_cpu</b></pre> 
 
 If you want to enable `use_ipex` and `bf16` in your script, just add some arguments in `TrainingArguments` like this:
 ```diff
@@ -69,6 +71,7 @@ training_args = TrainingArguments(
     output_dir=args.output_path,
 +   bf16=True,
 +   use_ipex=True,
++   use_cpu=True,
     **kwargs
 )
 ```
