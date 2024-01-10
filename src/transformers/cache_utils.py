@@ -382,11 +382,11 @@ class StaticCache(Cache, nn.Module):
             self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
             self.causal_4d_mask = self.causal_4d_mask.to(value_states.device)
         
-        # if attention_mask is not None:
-        #     # if the past length changes then we do have a problem
-        #     _, _, query_length, past_length = attention_mask.shape
-        #     self.causal_4d_mask[:,:,self.seen_tokens:self.seen_tokens + query_length,:past_length] = attention_mask
-        #     attention_mask = self.causal_4d_mask[:,:, self.seen_tokens:self.seen_tokens + query_length,:]
+        if attention_mask is not None:
+            # if the past length changes then we do have a problem
+            _, _, query_length, past_length = attention_mask.shape
+            self.causal_4d_mask[:,:,self.seen_tokens:self.seen_tokens + query_length,:past_length] = attention_mask
+            attention_mask = self.causal_4d_mask[:,:, self.seen_tokens:self.seen_tokens + query_length,:]
         
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
