@@ -31,11 +31,12 @@ IPEX release is following PyTorch, to install via pip:
 
 | PyTorch Version   | IPEX version   |
 | :---------------: | :----------:   |
+| 2.1.x             |  2.1.100+cpu   |
+| 2.0.x             |  2.0.100+cpu   |
 | 1.13              |  1.13.0+cpu    |
 | 1.12              |  1.12.300+cpu  |
-| 1.11              |  1.11.200+cpu  |
-| 1.10              |  1.10.100+cpu  |
 
+Please run `pip list | grep torch` to get your `pytorch_version`, so you can get the `IPEX version_name`.
 ```
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
@@ -61,6 +62,16 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex \</b>
 <b>--bf16 --no_cuda</b></pre> 
+
+If you want to enable `use_ipex` and `bf16` in your script, just add some arguments in `TrainingArguments` like this:
+```diff
+training_args = TrainingArguments(
+    output_dir=args.output_path,
++   bf16=True,
++   use_ipex=True,
+    **kwargs
+)
+```
 
 ### Practice example
 
