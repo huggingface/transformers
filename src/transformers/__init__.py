@@ -711,6 +711,7 @@ _import_structure = {
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
+    "models.qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
         "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2969,6 +2970,14 @@ else:
             "QDQBertModel",
             "QDQBertPreTrainedModel",
             "load_tf_weights_in_qdqbert",
+        ]
+    )
+    _import_structure["models.qwen2"].extend(
+        [
+            "Qwen2ForCausalLM",
+            "Qwen2ForSequenceClassification",
+            "Qwen2Model",
+            "Qwen2PreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
@@ -5405,6 +5414,7 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
+    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7373,6 +7383,12 @@ if TYPE_CHECKING:
             QDQBertModel,
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,
+        )
+        from .models.qwen2 import (
+            Qwen2ForCausalLM,
+            Qwen2ForSequenceClassification,
+            Qwen2Model,
+            Qwen2PreTrainedModel,
         )
         from .models.rag import (
             RagModel,

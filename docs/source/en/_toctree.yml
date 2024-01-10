@@ -446,6 +446,8 @@
         title: ProphetNet
       - local: model_doc/qdqbert
         title: QDQBert
+      - local: model_doc/qwen2
+        title: Qwen2
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
