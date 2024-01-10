@@ -1,9 +1,10 @@
 from typing import Dict
 
-from .base import GenericTensor, Pipeline
+from ..utils import add_end_docstrings
+from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
-# Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, supports_binary_output=False))
 class FeatureExtractionPipeline(Pipeline):
     """
     Feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base

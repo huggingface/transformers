@@ -737,6 +737,62 @@ PIPELINE_INIT_ARGS = r"""
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
 
+
+def build_pipeline_init_args(
+    has_tokenizer: bool = False,
+    has_feature_extractor: bool = False,
+    has_image_processor: bool = False,
+    supports_binary_output: bool = True,
+) -> str:
+    docstring = r"""
+    Arguments:
+        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
+            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
+            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow."""
+    if has_tokenizer:
+        docstring += r"""
+        tokenizer ([`PreTrainedTokenizer`]):
+            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
+            [`PreTrainedTokenizer`]."""
+    if has_feature_extractor:
+        docstring += r"""
+        feature_extractor ([`SequenceFeatureExtractor`]):
+            The feature extractor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`SequenceFeatureExtractor`]."""
+    if has_image_processor:
+        docstring += r"""
+        image_processor ([`BaseImageProcessor`]):
+            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`BaseImageProcessor`]."""
+    docstring += r"""
+        modelcard (`str` or [`ModelCard`], *optional*):
+            Model card attributed to the model for this pipeline.
+        framework (`str`, *optional*):
+            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
+            installed.
+
+            If no framework is specified, will default to the one currently installed. If no framework is specified and
+            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
+            provided.
+        num_workers (`int`, *optional*, defaults to 8):
+            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the number of
+            workers to be used.
+        batch_size (`int`, *optional*, defaults to 1):
+            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the size of
+            the batch to use, for inference this is not always beneficial, please read [Batching with
+            pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
+        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (`int`, *optional*, defaults to -1):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too"""
+    if supports_binary_output:
+        docstring += r"""
+        binary_output (`bool`, *optional*, defaults to `False`):
+            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text."""
+    return docstring
+
+
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
         PipelineChunkIterator,

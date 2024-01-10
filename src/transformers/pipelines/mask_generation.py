@@ -8,7 +8,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
-from .base import PIPELINE_INIT_ARGS, ChunkPipeline
+from .base import ChunkPipeline, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -19,7 +19,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
@@ -55,8 +55,9 @@ class MaskGenerationPipeline(ChunkPipeline):
         tokenizer ([`PreTrainedTokenizer`]):
             The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
             [`PreTrainedTokenizer`].
-        feature_extractor ([`SequenceFeatureExtractor`]):
-            The feature extractor that will be used by the pipeline to encode the input.
+        image_processor ([`BaseImageProcessor`]):
+            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
+            [`BaseImageProcessor`].
         points_per_batch (*optional*, int, default to 64):
             Sets the number of points run simultaneously by the model. Higher numbers may be faster but use more GPU
             memory.
@@ -64,6 +65,11 @@ class MaskGenerationPipeline(ChunkPipeline):
            Whether or not to output the bounding box predictions.
         output_rle_masks (`bool`, *optional*, default to `False`):
             Whether or not to output the masks in `RLE` format
+        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
+            Reference to the object in charge of parsing supplied pipeline parameters.
+        device (`int`, *optional*, defaults to -1):
+            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too
 
     Example:
 
