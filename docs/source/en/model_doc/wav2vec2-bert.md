@@ -20,7 +20,8 @@ rendered properly in your Markdown viewer.
 
 The Wav2Vec2-BERT model was proposed in [Seamless: Multilingual Expressive and Streaming Speech Translation](https://ai.meta.com/research/publications/seamless-multilingual-expressive-and-streaming-speech-translation/) by the Seamless Communication team from Meta AI.
 
-This model was pre-trained on 4.5M hours of unlabeled audio data covering more than 143 languages.
+This model was pre-trained on 4.5M hours of unlabeled audio data covering more than 143 languages. It requires finetuning to be used for downstream tasks such as Automatic Speech Recognition (ASR), or Audio Classification.
+
 The official results of the model can be found in Section 3.2.1 of the paper.
 
 The abstract from the paper is the following:
@@ -38,8 +39,15 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 ## Resources
 
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+<PipelineTag pipeline="automatic-speech-recognition"/>
+
+- [`Wav2Vec2BERTForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
+- You can also adapt these notebooks on [how to finetune a speech recognition model in English](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb), and [how to finetune a speech recognition model in any language](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb).
+
+<PipelineTag pipeline="audio-classification"/>
+
+- [`Wav2Vec2BERTForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
+- See also: [Audio classification task guide](../tasks/audio_classification)
 
 
 ## Wav2Vec2BERTConfig

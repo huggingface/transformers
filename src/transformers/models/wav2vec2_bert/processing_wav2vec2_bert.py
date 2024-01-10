@@ -42,7 +42,6 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
