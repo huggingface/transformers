@@ -1257,7 +1257,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def add_model_tags(self, tags: Union[List[str], str]) -> None:
         r"""
-        Add custom tags into the model that gets pushed in 🤗 Hub
+        Add custom tags into the model that gets pushed in 🤗 Hub. Will
+        not overwrite existing tags in the model.
 
         Args:
             tags (`Union[List[str], str]`):
