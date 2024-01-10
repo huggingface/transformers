@@ -318,10 +318,6 @@ class PhiAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        # Upcast queries and keys to prevent overflow in Phi-2
-        query_states = query_states.to(torch.float32)
-        key_states = key_states.to(torch.float32)
-
         if self.qk_layernorm:
             query_states = self.q_layernorm(query_states)
             key_states = self.k_layernorm(key_states)
@@ -364,7 +360,9 @@ class PhiAttention(nn.Module):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(
+            query_states.to(torch.float32), key_states.to(torch.float32).transpose(2, 3)
+        ) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
