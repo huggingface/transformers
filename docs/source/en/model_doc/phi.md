@@ -75,7 +75,11 @@ The original code for Phi-2 can be found [here](https://huggingface.co/microsoft
 
 ## How to use Phi-2
 
-- The current weights at [microsoft/phi-2](https://huggingface.co/microsoft/phi-2) are not in proper order to be used with the library model. Until that is resolved, please use [susnato/phi-2](https://huggingface.co/susnato/phi-2) to load using the library `phi` model.
+<Tip warning={true}>
+
+The current weights at [microsoft/phi-2](https://huggingface.co/microsoft/phi-2) are not in proper order to be used with the library model. Until that is resolved, please use [susnato/phi-2](https://huggingface.co/susnato/phi-2) to load using the library `phi` model.
+
+</Tip>
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
