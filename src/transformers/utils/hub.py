@@ -764,7 +764,7 @@ class PushToHubMixin:
         safe_serialization: bool = True,
         revision: str = None,
         commit_description: str = None,
-        tags: List[str] = None,
+        tags: Optional[List[str]] = None,
         **deprecated_kwargs,
     ) -> str:
         """
