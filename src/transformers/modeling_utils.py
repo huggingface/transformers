@@ -1257,11 +1257,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def add_model_tags(self, tags: Union[List[str], str]) -> None:
         r"""
-        Add all tags in `tags` to `model_tags`.
+        Add custom tags into the model that gets pushed in 🤗 Hub
 
         Args:
             tags (`Union[List[str], str]`):
                 The desired tags to inject in the model
+
+        Examples:
+
+        ```python
+        from transformers import AutoModel
+
+        model = AutoModel.from_pretrained("bert-base-cased")
+
+        model.add_model_tags(["custom", "custom-bert"])
+
+        # Push the model to your namespace with the name "my-custom-bert".
+        model.push_to_hub("my-custom-bert")
+        ```
         """
         if isinstance(tags, str):
             tags = [tags]
@@ -1272,44 +1285,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         for tag in tags:
             if tag not in self.model_tags:
                 self.model_tags.append(tag)
-
-    def set_model_tags(self, tags: Union[List[str], str]) -> None:
-        r"""
-        Manually force-set the model tags with `tags`
-
-        Args:
-            tags (`Union[List[str], str]`):
-                The desired tags to inject in the model
-        """
-        if isinstance(tags, str):
-            tags = [tags]
-
-        self.model_tags = tags
-
-    def reset_model_tags(self) -> None:
-        r"""
-        Manually reset the model tags with an empty list
-        """
-        if self.model_tags is not None:
-            self.model_tags = []
-
-    def remove_model_tags(self, tags: Union[List[str], str]) -> None:
-        r"""
-        Manually remove all elements of `tags` in the model tags
-
-        Args:
-            tags (`Union[List[str], str]`):
-                The desired tags to remove from the model
-        """
-        if isinstance(tags, str):
-            tags = [tags]
-
-        if self.model_tags is None:
-            return
-
-        for tag in tags:
-            if tag in self.model_tags:
-                self.model_tags.remove(tag)
 
     @classmethod
     def _from_config(cls, config, **kwargs):
