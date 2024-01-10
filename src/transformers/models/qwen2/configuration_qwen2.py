@@ -20,7 +20,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "Qwen/Qwen2-7B-beta": "https://huggingface.co/Qwen/Qwen2-7B-beta/resolve/main/config.json",
+}
 
 
 class Qwen2Config(PretrainedConfig):
@@ -54,7 +56,7 @@ class Qwen2Config(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to `32768`):
+        max_position_embeddings (`int`, *optional*, defaults to 32768):
             The maximum sequence length that this model might ever be used with. Mistral's sliding window attention
             allows sequence of up to 4096*32 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -74,6 +76,7 @@ class Qwen2Config(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        use_sliding_window (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         sliding_window (`int`, *optional*, defaults to 4096):
             Sliding window attention (SWA) window size. If not specified, will default to `4096`.
         max_window_layers (`int`, *optional*, defaults to 28):

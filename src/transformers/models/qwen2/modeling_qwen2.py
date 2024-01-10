@@ -55,11 +55,11 @@ if is_flash_attn_2_available():
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "Qwen/Qwen2-7B"
+_CHECKPOINT_FOR_DOC = "Qwen/Qwen2-7B-beta"
 _CONFIG_FOR_DOC = "Qwen2Config"
 
 QWEN2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Qwen/Qwen2",
+    "Qwen/Qwen2-7B-beta",
     # See all Qwen2 models at https://huggingface.co/models?filter=qwen2
 ]
 
@@ -1293,7 +1293,8 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
     """,
     QWEN2_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Qwen2
+
+
 class Qwen2ForSequenceClassification(Qwen2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)

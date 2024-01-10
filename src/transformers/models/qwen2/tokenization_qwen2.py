@@ -36,10 +36,9 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-# TODO: This is a mock. Update this when it is actually released.
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2/resolve/main/vocab.json"},
-    "merges_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2/resolve/main/merges.txt"},
+    "vocab_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2-7b-beta/resolve/main/vocab.json"},
+    "merges_file": {"qwen/qwen2": "https://huggingface.co/qwen/qwen2-7b-beta/resolve/main/merges.txt"},
 }
 
 PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
@@ -54,7 +53,6 @@ CHAT_TEMPLATE = (
 )
 
 
-# Copied from https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L8C1-L28
 # Code from the GitHub repo at https://github.com/openai/gpt-2 is licensed under Modified MIT License,
 # the text of which can be found thereof.
 @lru_cache()
@@ -82,7 +80,6 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-# Copied from https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L30-L40C17
 def get_pairs(word):
     """Return set of symbol pairs in a word.
 
@@ -106,7 +103,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import Qwen2Tokenizer
 
-    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen-72B-Chat")
+    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen2-7B-beta")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
@@ -228,7 +225,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> Dict[str, int]:
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    # Copied from https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L55-L94
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -292,7 +288,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    # Copied from https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L103-L106
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
@@ -317,7 +312,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
