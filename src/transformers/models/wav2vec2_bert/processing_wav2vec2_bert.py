@@ -16,7 +16,6 @@
 Speech processor class for Wav2Vec2-BERT
 """
 import warnings
-from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
 from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
@@ -44,7 +43,6 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
         self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -67,15 +65,11 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SeamlessM4TFeatureExtractor's
-        [`~SeamlessM4TFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
+        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
+        and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
+        `None` to pre-process the audio. To prepare the target sequences(s), this method forwards the `text` and `kwargs` arguments to
+        PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor(*args, **kwargs)
-
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")
@@ -105,15 +99,10 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SeamlessM4TFeatureExtractor's
-        [`~SeamlessM4TFeatureExtractor.pad`] and returns its output. If used in the context
-        [`~Wav2Vec2Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
-        [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
+        This method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] if `input_features` is not
+        `None` to pad the input features. To pad the label(s), this method forwards the `labels` and `kwargs` arguments to
+        PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`] if `labels` is not `None`. Please refer to the doctsring of the above two methods for more information.
         """
-        # For backward compatibility
-        if self._in_target_context_manager:
-            return self.current_processor.pad(*args, **kwargs)
-
         input_features = kwargs.pop("input_features", None)
         labels = kwargs.pop("labels", None)
         if len(args) > 0:
@@ -146,20 +135,3 @@ class Wav2Vec2BERTProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Wav2Vec2.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False

@@ -1219,9 +1219,7 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = input_features
-
-        hidden_states, extract_features = self.feature_projection(extract_features)
+        hidden_states, extract_features = self.feature_projection(input_features)
         hidden_states = self._mask_hidden_states(
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
