@@ -405,7 +405,7 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
         # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        if query_length > 1:
+        if query_length > 1 and not is_tracing:
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, attention_mask, unmasked_value=0.0
             )
