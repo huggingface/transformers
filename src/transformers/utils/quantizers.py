@@ -832,7 +832,12 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
 
 class AWQHFQuantizer(HFQuantizer):
     """
-    TODO: class docstring
+    4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978):
+        before loading: converts transformer layers usinf `replace_with_awq_linear`
+        saving:
+            from state dict, as usual
+        loading:
+            loading: preprocess model into special AWQ layers, then load into state_dict as usual
     """
 
     def __init__(self, quantization_config, **kwargs):
