@@ -111,6 +111,13 @@ class DataTrainingArguments:
             )
         },
     )
+    image_column_name: str = field(
+        default="image",
+        metadata={"help": "The name of the dataset column containing the image data. Defaults to 'image'."},
+    )
+    label_column_name: str = field(
+        default="label", metadata={"help": "The name of the dataset column containing the labels. Defaults to 'label'."}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
@@ -270,10 +277,10 @@ def main():
         )
 
     # Rename image and label columns if needed (e.g. Cifar10)
-    if "img" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column("img", "image")
-    if "label" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column("label", "labels")
+    if data_args.image_column_name != "image" and data_args.image_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
+        dataset = dataset.rename_column(data_args.image_column_name, "image")
+    if data_args.label_column_name != "labels" and data_args.label_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
+        dataset = dataset.rename_column(data_args.label_column_name, "labels")
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split

@@ -189,6 +189,18 @@ def parse_args():
         action="store_true",
         help="Whether or not to enable to load a pretrained model whose head dimensions are different.",
     )
+    parser.add_argument(
+        "--image_column_name",
+        type=str,
+        default="image",
+        help="The name of the dataset column containing the image data. Defaults to 'image'.",
+    )
+    parser.add_argument(
+        "--label_column_name",
+        type=str,
+        default="label",
+        help="The name of the dataset column containing the labels. Defaults to 'label'.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -288,10 +300,10 @@ def main():
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
 
     # Rename image and label columns if needed (e.g. Cifar10)
-    if "img" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column("img", "image")
-    if "label" in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column("label", "labels")
+    if args.image_column_name != "image" and args.image_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
+        dataset = dataset.rename_column(args.image_column_name, "image")
+    if args.label_column_name != "labels" and args.label_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
+        dataset = dataset.rename_column(args.label_column_name, "labels")
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
