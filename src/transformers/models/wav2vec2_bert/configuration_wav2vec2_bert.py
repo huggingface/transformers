@@ -67,8 +67,6 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for the feature projection.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BERTForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
@@ -111,16 +109,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (`int`, *optional*, defaults to 2):
             Number of codevector groups for product codevector quantization.
-        contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
-            The temperature *kappa* in the contrastive loss.
-        num_negatives (`int`, *optional*, defaults to 100):
-            Number of negative samples for the contrastive loss.
         codevector_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the quantized feature vectors.
-        proj_codevector_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the final projection of both the quantized and the transformer features.
-        diversity_loss_weight (`int`, *optional*, defaults to 0.1):
-            The weight of the codebook diversity loss component.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
             instance of [`Wav2Vec2BERTForCTC`].
@@ -212,7 +202,6 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         activation_dropout=0.0,
         attention_dropout=0.0,
         feat_proj_dropout=0.0,
-        feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
         initializer_range=0.02,
@@ -226,11 +215,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         mask_feature_min_masks=0,
         num_codevectors_per_group=320,
         num_codevector_groups=2,
-        contrastive_logits_temperature=0.1,
-        num_negatives=100,
         codevector_dim=768,
-        proj_codevector_dim=768,
-        diversity_loss_weight=0.1,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
@@ -308,12 +293,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         # parameters for pretraining with codevector quantized representations
         self.num_codevectors_per_group = num_codevectors_per_group
         self.num_codevector_groups = num_codevector_groups
-        self.contrastive_logits_temperature = contrastive_logits_temperature
-        self.feat_quantizer_dropout = feat_quantizer_dropout
-        self.num_negatives = num_negatives
         self.codevector_dim = codevector_dim
-        self.proj_codevector_dim = proj_codevector_dim
-        self.diversity_loss_weight = diversity_loss_weight
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
