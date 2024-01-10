@@ -59,13 +59,6 @@ def cvmm_kernel(
     BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
     GROUP_SIZE_M: tl.constexpr
 ):
-    """Kernel for computing the matmul C = A x B.
-    A has shape (M, K), B has shape (K, N) and C has shape (M, N)
-    """
-    # -----------------------------------------------------------
-    # Map program ids `pid` to the block of C it should compute.
-    # This is done in a grouped ordering to promote L2 data reuse.
-    # See above `L2 Cache Optimizations` section for details.
     pid = tl.program_id(axis=0)
 
     num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
@@ -82,30 +75,39 @@ def cvmm_kernel(
     sel_last = tl.load(sel_ptr + (min((pid_m + 1) * BLOCK_SIZE_M, M) - 1) * stride_sel)
     sel_all = tl.load(sel_ptr + stride_sel * ((pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M))
 
+    # sel_all could be
+    # [0, 0, 0, ..., 1, 1] with the length of this vector being BLOCK_SIZE_M
+    # in this case, sel_first = 0, sel_last = 1
+    # so matrix_id will be in [0, 1]
+
     for matrix_id in range(sel_first, sel_last + 1):
-        # ----------------------------------------------------------
-        # Create pointers for the first blocks of A and B.
-        # We will advance this pointer as we move in the K direction
-        # and accumulate
-        # `a_ptrs` is a block of [BLOCK_SIZE_M, BLOCK_SIZE_K] pointers
-        # `b_ptrs` is a block of [BLOCK_SIZE_K, BLOCK_SIZE_N] pointers
-        # See above `Pointer Arithmetics` section for details
         offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
         offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
 
+
+        # remap_offs_am would be something like [0, 2, 3, ..., 12, 15]
+        # they represent the tokens that are routed to [0, 0, 0, ..., 1, 1]
+        # for this round, we only want to save the ones corresponding to expert number matrix_id
+        # so we do a comparison with sel_all in the end.
         remap_offs_am = tl.load(index_ptr + stride_index * offs_am)
 
         # Create offset pointers
         offs_k = tl.arange(0, BLOCK_SIZE_K)
+        
+        # a_ptrs now represents a chunk of size [BLOCK_SIZE_M, BLOCK_SIZE_K] of tokens (or part of tokens)
+        # that mostly will be routed to the same expert. Some should be routed to another expert and
+        # we calculate it wrongly, but we mask this out.
         a_ptrs = a_ptr + (remap_offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
+
+        # b_ptrs now represents a chunk of size [BLOCK_SIZE_K, BLOCK_SIZE_N] of the expert matrix.
+        # the expert number is matrix_id. Each expert is of size [K, N], but this block is only [BLOCK_SIZE_K, BLOCK_SIZE_N]
+        # the result will be a [BLOCK_SIZE_M, BLOCK_SIZE_N] matrix so we need to iterate over some blocks of K and accumulate.
         b_ptrs = b_ptr + matrix_id * stride_bo + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
 
-        # -----------------------------------------------------------
-        # Iterate to compute a block of the C matrix.
-        # We accumulate into a `[BLOCK_SIZE_M, BLOCK_SIZE_N]` block
-        # of fp32 values for higher accuracy.
-        # `accumulator` will be converted back to fp16 after the loop.
+        # this will store the block result
         accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
+
+        # the computation of this block happens here. This is not so interesting.
         for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
             # Load the next block of A and B, generate a mask by checking the K dimension.
             # If it is out of bounds, set it to 0.
@@ -129,17 +131,26 @@ def cvmm_kernel(
         else:
             c = accumulator
 
-        # -----------------------------------------------------------
-        # Write back the block of the output matrix C with masks.
         offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
 
+        # this is where we now write the output into the output matrix.
         if out_index_is_none:
+            # if this is the down projection, the input was already [bsz * seq_len * top-k, d_ff]
+            # so the remap_offs_cm are in the range of [0, bsz * seq_len * top-k)
             remap_offs_cm = remap_offs_am
         else:
+            # if this is the up projection, the input is just [bsz * seq_len, d_model]
+            # but the output is [bsz * seq_len * top-k, d_ff]
+            # so we need to use the indices that range from [0, bsz * seq_len * top-k)
+            # which are stored in out_index_ptr
             remap_offs_cm = tl.load(out_index_ptr + stride_out_index * offs_am)
 
         offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
         c_ptrs = c_ptr + stride_cm * remap_offs_cm[:, None] + stride_cn * offs_cn[None, :]
+        
+        # we don't want to store the results where the tokens should have been routed to a different
+        # expert, so we mask it out with sel_all[:, None] == matrix_id
+        # sel_all is this vector [0, 0, 0, ..., 1, 1] and matrix id is an integer in this case between [0, 1]
         c_mask = ((offs_cm[:, None] < M) & (sel_all[:, None] == matrix_id)) & (offs_cn[None, :] < N)
         tl.store(c_ptrs, c, mask=c_mask)
 
@@ -327,6 +338,21 @@ def cvmm_triton(
     out_dtype: torch.dtype,
     out_index: torch.Tensor
 ):
+    """
+    TODO
+
+    Args:
+        x (torch.Tensor): Shape [bsz, seq_len, d_model] or [bsz, seq_len, top-k, d_ff]
+        sel_index (torch.Tensor): Shape [bsz * seq_len * top-k]
+        sel (torch.Tensor): Shape [bsz, seq_len, top-k]
+        keys (torch.Tensor): Shape [n_experts, d_model, d_ff] or [n_experts, d_ff, d_model]
+        out_dtype (torch.dtype): Type of output.
+        out_index (torch.Tensor): Shape [bsz * seq_len * top-k]
+
+    Returns:
+        _type_: _description_
+    """
+    # collapses all of the dimensions except the last one
     x = x.flatten(end_dim=-2)
     assert x.shape[-1] == keys.shape[1]
 

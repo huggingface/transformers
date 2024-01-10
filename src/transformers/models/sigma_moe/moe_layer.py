@@ -128,12 +128,26 @@ class SigmaMoELayer(torch.nn.Module):
         sel = log_mean(sel, -2)
         return -entropy_l(sel).mean()
 
+    def cvmm_wrapper(self, inputs: torch.Tensor, sel_indices: Union[CVMMSel,torch.Tensor], weights: torch.Tensor):
+        """
+        TODO
+
+        Args:
+            inputs (torch.Tensor): Shape [bsz, seq_len, d_model]
+            sel_indices (Union[CVMMSel,torch.Tensor]): _description_
+            weights (torch.Tensor): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        return cvmm(inputs, sel_indices, weights)
+
     def compute_scores(
         self, input: torch.Tensor, index: Union[CVMMSel,torch.Tensor], expert_scores: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         IS_CUDA = input.is_cuda
         if IS_CUDA:
-            scores = cvmm(input, index, self.keys)
+            scores = self.cvmm_wrapper(input, index, self.keys)
             if self.bias is not None:
                 scores = scores + self.bias[index.raw_sel]
         else:
@@ -253,7 +267,7 @@ class SigmaMoELayer(torch.nn.Module):
             sel_indices.reduction_weight = sel_val
             sel_indices.sel_index = sel_indices.out_index
             sel_indices.out_index = None
-            out = cvmm(scores, sel_indices, self.values)
+            out = self.cvmm_wrapper(scores, sel_indices, self.values)
             res = out.view(*input.shape[:-1], self.v_dim)
         else:
             # "Up-projection" layer for each head
@@ -265,7 +279,7 @@ class SigmaMoELayer(torch.nn.Module):
             if IS_CUDA:
                 out = 0
                 for hi, scores in zip(sel_indices, scores_l):
-                    out = out + cvmm(scores, hi, self.values)
+                    out = out + self.cvmm_wrapper(scores, hi, self.values)
                 res = out.view(*input.shape[:-1], self.v_dim)
             else:
                 res = 0

@@ -28,7 +28,7 @@ def test_equivalence_cpu_cuda():
 
     cuda_moe.load_state_dict(cpu_moe.state_dict())
 
-    inp = torch.randn(1, 1, 128)
+    inp = torch.randn(5, 10, 128)
     cpu_x, _ = cpu_moe(inp)
     cuda_x, _ = cuda_moe(inp.cuda())
 
