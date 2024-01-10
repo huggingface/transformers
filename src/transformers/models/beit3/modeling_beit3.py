@@ -765,8 +765,7 @@ class Beit3Encoder(nn.Module):
     BEIT3_START_DOCSTRING,
     """
         add_pooling_layer (`bool`, *optional*, defaults to `False`):
-        Whether or not to add a pooling layer on top of the encoder.
-
+                Whether or not to add a pooling layer on top of the encoder.
     """,
 )
 class Beit3Model(Beit3PreTrainedModel):
