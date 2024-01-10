@@ -1622,27 +1622,3 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
-
-    def build(self, input_shape=None):
-        if self.built:
-            return
-        self.built = True
-        if getattr(self, "data2vec_vision", None) is not None:
-            with tf.name_scope(self.data2vec_vision.name):
-                self.data2vec_vision.build(None)
-        if getattr(self, "decode_head", None) is not None:
-            with tf.name_scope(self.decode_head.name):
-                self.decode_head.build(None)
-        if getattr(self, "auxiliary_head", None) is not None:
-            with tf.name_scope(self.auxiliary_head.name):
-                self.auxiliary_head.build(None)
-        if getattr(self, "fpn1", None) is not None:
-            with tf.name_scope(self.fpn1[0].name):
-                self.fpn1[0].build([None, None, None, self.config.hidden_size])
-            with tf.name_scope(self.fpn1[1].name):
-                self.fpn1[1].build((None, None, None, self.config.hidden_size))
-            with tf.name_scope(self.fpn1[3].name):
-                self.fpn1[3].build([None, None, None, self.config.hidden_size])
-        if getattr(self, "fpn2", None) is not None:
-            with tf.name_scope(self.fpn2[0].name):
-                self.fpn2[0].build([None, None, None, self.config.hidden_size])
