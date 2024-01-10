@@ -116,7 +116,16 @@ class QuantizationConfigParser:
             quant_method = quantization_config.get("quant_method", None)
 
             if quant_method is None:
-                raise ValueError("The model's quantization config from the arguments has no `quant_method` attribute.")
+                if quantization_config.get("load_in_8bit", False) or quantization_config.get("load_in_4bit", False):
+                    logger.warning(
+                        "The model's quantization_config has no `quant_method` attribute, but has `load_in_8bit` or `load_in_4bit` parameter set. "
+                        "It is recommended to pass quantization config as `BitsAndBytesConfig`. "
+                    )
+                    quant_method = QuantizationMethod.BITS_AND_BYTES
+                else:
+                    raise ValueError(
+                        "The model's quantization config from the arguments has no `quant_method` attribute."
+                    )
 
             if quant_method == QuantizationMethod.BITS_AND_BYTES:
                 config_class = BitsAndBytesConfig
