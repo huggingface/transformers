@@ -1515,6 +1515,28 @@ The commit description supports markdown synthax see:
         new_model = AutoModel.from_config(config, trust_remote_code=True)
         self.assertEqual(new_model.__class__.__name__, "CustomModel")
 
+    def test_push_to_hub_with_tags(self):
+        from huggingface_hub import ModelCard
+
+        new_tags = ["tag-1", "tag-2"]
+
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
+
+        self.assertTrue(model.model_tags is None)
+
+        model.add_model_tags(new_tags)
+
+        self.assertTrue(model.model_tags == new_tags)
+
+        model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
+
+        loaded_model_card = ModelCard.load("test-dynamic-model-with-tags")
+        self.assertEqual(loaded_model_card.data.tags, new_tags)
+
 
 @require_torch
 class AttentionMaskTester(unittest.TestCase):
