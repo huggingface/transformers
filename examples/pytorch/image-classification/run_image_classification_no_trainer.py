@@ -299,11 +299,19 @@ def main():
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
 
-    # Rename image and label columns if needed (e.g. Cifar10)
-    if args.image_column_name != "image" and args.image_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column(args.image_column_name, "image")
-    if args.label_column_name != "labels" and args.label_column_name in (dataset["train"].features if "train" in dataset else dataset["validation"].features):
-        dataset = dataset.rename_column(args.label_column_name, "labels")
+    dataset_column_names = dataset["train"].column_names if "train" in dataset else dataset["validation"].column_names
+    if args.image_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--image_column_name {args.image_column_name} not found in dataset '{args.dataset_name}'. "
+            "Make sure to set `--image_column_name` to the correct audio column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
+    if args.label_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--label_column_name {args.label_column_name} not found in dataset '{args.dataset_name}'. "
+            "Make sure to set `--label_column_name` to the correct text column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
 
     # If we don't have a validation split, split off a percentage of train as validation.
     args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
@@ -314,7 +322,7 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = dataset["train"].features["labels"].names
+    labels = dataset["train"].features[args.label_column_name].names
     label2id = {label: str(i) for i, label in enumerate(labels)}
     id2label = {str(i): label for i, label in enumerate(labels)}
 
@@ -373,12 +381,16 @@ def main():
 
     def preprocess_train(example_batch):
         """Apply _train_transforms across a batch."""
-        example_batch["pixel_values"] = [train_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            train_transforms(image.convert("RGB")) for image in example_batch[args.image_column_name]
+        ]
         return example_batch
 
     def preprocess_val(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [val_transforms(image.convert("RGB")) for image in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            val_transforms(image.convert("RGB")) for image in example_batch[args.image_column_name]
+        ]
         return example_batch
 
     with accelerator.main_process_first():
@@ -394,7 +406,7 @@ def main():
     # DataLoaders creation:
     def collate_fn(examples):
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
-        labels = torch.tensor([example["labels"] for example in examples])
+        labels = torch.tensor([example[args.label_column_name] for example in examples])
         return {"pixel_values": pixel_values, "labels": labels}
 
     train_dataloader = DataLoader(
