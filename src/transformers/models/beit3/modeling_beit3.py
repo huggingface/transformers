@@ -40,20 +40,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Beit3Config"
 
 
-BEIT3_MODEL_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`Beit3Config`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        add_pooling_layer (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a pooling layer on top of the encoder.
-"""
-
-
 BEIT3_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -64,6 +50,7 @@ BEIT3_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 BEIT3_MODEL = r"""
     Args:
@@ -108,6 +95,7 @@ BEIT3_MODEL = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -136,8 +124,8 @@ BEIT3_FOR_VISUAL_REASONING_INPUTS_DOCSTRING = r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. A classification loss is computed (Cross-Entropy) against these labels.
-
 """
+
 
 BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
     Args:
@@ -156,6 +144,7 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
+
 
 BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
@@ -197,6 +186,7 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             classification loss is computed (Cross-Entropy) against these labels.
 """
 
+
 BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -224,6 +214,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
+
 
 BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
     Args:
@@ -771,7 +762,12 @@ class Beit3Encoder(nn.Module):
         utilizes [Multiway transformers] (https://arxiv.org/abs/2208.10442) for deep fusion and modality-specific
         encoding, and unifies masked modeling on images, texts, and image-text pairs, achieving top performance on
         multiple benchmarks.""",
-    BEIT3_MODEL_START_DOCSTRING,
+    BEIT3_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `False`):
+        Whether or not to add a pooling layer on top of the encoder.
+
+    """,
 )
 class Beit3Model(Beit3PreTrainedModel):
     def __init__(self, config, add_pooling_layer=False):

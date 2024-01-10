@@ -69,7 +69,7 @@ class Beit3Config(PretrainedConfig):
             The number of input channels.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        logit_scale_init_value (`float`, *optional*, defaults to 2.66):
+        logit_scale_init_value (`float`, *optional*, defaults to 2.65926):
             The inital value of the *logit_scale* parameter. Default is used as per the original CLIP implementation.
 
     Example:
