@@ -1889,7 +1889,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen)
 
     </Tip>
@@ -1948,7 +1948,7 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark)'s fine submodel. See the model documentation
     for examples.
 
@@ -2109,7 +2109,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
 
     <Tip warning={true}>
 
-    This logits processor is exclusivelly compatible with
+    This logits processor is exclusively compatible with
     [Bark](https://huggingface.co/docs/transformers/en/model_doc/bark). See the model documentation for examples.
 
     </Tip>
@@ -2138,6 +2138,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
 
             do_early_stop = probs[:, self.eos_token_id] > self.min_eos_p
+            do_early_stop = torch.any(do_early_stop, dim=1, keepdim=True)
             scores = torch.where(do_early_stop, early_stop_scores, scores)
 
         return scores
