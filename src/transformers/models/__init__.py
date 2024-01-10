@@ -137,6 +137,7 @@ from . import (
     megatron_gpt2,
     mgp_str,
     mistral,
+    starcoder2,
     mixtral,
     mluke,
     mobilebert,
