@@ -670,3 +670,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         np.testing.assert_allclose(outputs.logits_per_image.detach().numpy(), expected)
         np.testing.assert_allclose(outputs.logits_per_text.detach().numpy(), expected.T)
         self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)
+
+        actual_probabilites = outputs.logits_per_image.softmax(dim=0).detach().numpy()
+        expected_probabilties = np.array([[0.9974844, 0.9974844], [0.0025155, 0.0025155]])
+        np.testing.assert_almost_equal(actual_probabilites, expected_probabilties)
