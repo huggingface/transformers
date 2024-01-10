@@ -392,6 +392,7 @@ class Qwen2FlashAttention2(Qwen2Attention):
             _flash_supports_window_size
             and getattr(self.config, "sliding_window", None) is not None
             and kv_seq_len > self.config.sliding_window
+            and self.config.use_sliding_window
         )
 
         if not _flash_supports_window_size:
