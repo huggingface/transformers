@@ -333,7 +333,21 @@ def get_oneformer_resize_output_image_size(
     return output_size
 
 
-def prepare_metadata(repo_id, class_info_file):
+def prepare_metadata(class_info):
+    metadata = {}
+    class_names = []
+    thing_ids = []
+    for key, info in class_info.items():
+        metadata[key] = info["name"]
+        class_names.append(info["name"])
+        if info["isthing"]:
+            thing_ids.append(int(key))
+    metadata["thing_ids"] = thing_ids
+    metadata["class_names"] = class_names
+    return metadata
+
+
+def load_metadata(repo_id, class_info_file):
     fname = os.path.join("" if repo_id is None else repo_id, class_info_file)
 
     if not os.path.exists(fname) or not os.path.isfile(fname):
@@ -346,17 +360,7 @@ def prepare_metadata(repo_id, class_info_file):
     with open(fname, "r") as f:
         class_info = json.load(f)
 
-    metadata = {}
-    class_names = []
-    thing_ids = []
-    for key, info in class_info.items():
-        metadata[key] = info["name"]
-        class_names.append(info["name"])
-        if info["isthing"]:
-            thing_ids.append(int(key))
-    metadata["thing_ids"] = thing_ids
-    metadata["class_names"] = class_names
-    return metadata
+    return class_info
 
 
 class OneFormerImageProcessor(BaseImageProcessor):
@@ -458,7 +462,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         self.do_reduce_labels = do_reduce_labels
         self.class_info_file = class_info_file
         self.repo_path = repo_path
-        self.metadata = prepare_metadata(repo_path, class_info_file)
+        self.metadata = prepare_metadata(load_metadata(repo_path, class_info_file))
         self.num_text = num_text
 
     def resize(

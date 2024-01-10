@@ -70,7 +70,6 @@ class OneFormerImageProcessorTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
         self.class_info_file = class_info_file
-        self.metadata = prepare_metadata(repo_path, class_info_file)
         self.num_text = num_text
         self.repo_path = repo_path
 
@@ -95,7 +94,6 @@ class OneFormerImageProcessorTester(unittest.TestCase):
             "do_reduce_labels": self.do_reduce_labels,
             "ignore_index": self.ignore_index,
             "class_info_file": self.class_info_file,
-            "metadata": self.metadata,
             "num_text": self.num_text,
         }
 
@@ -320,21 +318,21 @@ class OneFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_can_load_with_local_metadata(self):
         # Create a temporary json file
-        metadata = {
+        class_info = {
             "0": {"isthing": 0, "name": "foo"},
             "1": {"isthing": 0, "name": "bar"},
             "2": {"isthing": 1, "name": "baz"},
         }
+        metadata = prepare_metadata(class_info)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             metadata_path = os.path.join(tmpdirname, "metadata.json")
             with open(metadata_path, "w") as f:
-                json.dump(metadata, f)
+                json.dump(class_info, f)
 
-            config_dict = self.image_processor_dict()
+            config_dict = self.image_processor_dict
             config_dict["class_info_file"] = metadata_path
             config_dict["repo_path"] = tmpdirname
-
             image_processor = self.image_processing_class(**config_dict)
 
         self.assertEqual(image_processor.metadata, metadata)
