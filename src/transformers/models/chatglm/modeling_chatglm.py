@@ -629,7 +629,9 @@ class ChatGlmDecoderLayer(nn.Module):
     def __init__(self, config: ChatGlmConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attention = CHATGLM_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attention = CHATGLM_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
         self.mlp = ChatGlmMLP(config)
         self.input_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ChatGlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
