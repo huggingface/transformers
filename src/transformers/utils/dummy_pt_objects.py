@@ -8716,13 +8716,6 @@ class Wav2Vec2BERTForCTC(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class Wav2Vec2BERTForPreTraining(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class Wav2Vec2BERTForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

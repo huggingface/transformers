@@ -23,7 +23,7 @@ from seamless_communication.models.conformer_shaw import load_conformer_shaw_mod
 from transformers import (
     SeamlessM4TFeatureExtractor,
     Wav2Vec2BERTConfig,
-    Wav2Vec2BERTForPreTraining,
+    Wav2Vec2BERTModel,
     logging,
 )
 
@@ -33,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 
 wav2vec_convert_list = [
-    ("encoder", "wav2vec2_bert.encoder"),
     ("encoder_frontend.model_dim_proj", "feature_projection.projection"),
     ("encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
     ("encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
@@ -58,12 +57,16 @@ wav2vec_convert_list = [
     ("encoder.proj1", "intermediate_ffn.intermediate_dense"),
     ("encoder.proj2", "intermediate_ffn.output_dense"),
     ("encoder.layer_norm", "inner_layer_norm"),
-    ("quantizer.entry_proj", "quantizer.weight_proj"),
-    ("final_proj", "project_hid"),
-    ("final_target_proj", "project_q"),
-    ("masker.temporal_mask_embed", "wav2vec2_bert.masked_spec_embed"),
-    ("quantizer.entries", "quantizer.codevectors"),
+    ("masker.temporal_mask_embed", "masked_spec_embed"),
 ]
+
+keys_to_remove = {
+    "quantizer.entry_proj",
+    "final_proj",
+    "final_target_proj",
+    "quantizer.entries",
+    "quantizer.num_updates",
+}
 
 
 def param_count(model):
@@ -87,7 +90,15 @@ def _convert_model(
         if ".layer_norm" in new_key and new_key.split(".layer_norm")[0][-1].isnumeric():
             new_key = new_key.replace("layer_norm", "final_layer_norm")
 
-        state_dict[new_key] = state_dict.pop(k)
+        add_key = True
+        for key in keys_to_remove:
+            if key in new_key:
+                state_dict.pop(k)
+                add_key = False
+                break
+
+        if add_key:
+            state_dict[new_key] = state_dict.pop(k)
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     extra_keys = set({k for k in extra_keys if "num_updates" not in k})  # filter unecessary param
@@ -96,7 +107,7 @@ def _convert_model(
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
         raise ValueError(f"missing keys: {missing_keys}")
-    hf_model.load_state_dict(state_dict, strict=False)
+    hf_model.load_state_dict(state_dict, strict=True)
     n_params = param_count(hf_model)
 
     logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
@@ -122,7 +133,7 @@ def convert_wav2vec2_bert_checkpoint(
     else:
         config = Wav2Vec2BERTConfig(apply_spec_augment=False)
 
-    hf_wav2vec = Wav2Vec2BERTForPreTraining(config)
+    hf_wav2vec = Wav2Vec2BERTModel(config)
 
     model = load_conformer_shaw_model(checkpoint_path, dtype=torch.float32)
     model.eval()
@@ -171,7 +182,7 @@ def convert_wav2vec2_bert_checkpoint(
 
         inputs = fe(waveform, return_tensors="pt", padding=True)
         with torch.no_grad():
-            outputs = hf_wav2vec.wav2vec2_bert(**inputs)
+            outputs = hf_wav2vec(**inputs)
 
         torch.testing.assert_close(original_output, outputs.last_hidden_state, atol=5e-3, rtol=5e-3)
 
@@ -180,7 +191,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
+        default="/home/yoach/tmp/wav2vec_seamless/",
         type=str,
         help="Path to the output PyTorch model.",
     )
@@ -189,14 +200,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--config_path",
-        default=None,
+        default="facebook/w2v-bert-2.0",
         type=str,
         help="Path to hf config.json of model to convert",
     )
-    parser.add_argument("--repo_id", default=None, type=str, help="Push to this repo id if precised.")
+    parser.add_argument(
+        "--repo_id", default="ylacombe/w2v-bert-2.0", type=str, help="Push to this repo id if precised."
+    )
     parser.add_argument(
         "--audio_path",
-        default=None,
+        default="/home/yoach/transformers/audio_vits.wav",
         type=str,
         help="If specified, check that the original model and the converted model produce the same outputs.",
     )

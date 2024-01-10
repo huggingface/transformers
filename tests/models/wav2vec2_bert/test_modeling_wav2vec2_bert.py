@@ -46,7 +46,6 @@ if is_torch_available():
         AutoFeatureExtractor,
         Wav2Vec2BERTForAudioFrameClassification,
         Wav2Vec2BERTForCTC,
-        Wav2Vec2BERTForPreTraining,
         Wav2Vec2BERTForSequenceClassification,
         Wav2Vec2BERTForXVector,
         Wav2Vec2BERTModel,
@@ -421,7 +420,6 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             Wav2Vec2BERTForCTC,
             Wav2Vec2BERTModel,
             Wav2Vec2BERTForSequenceClassification,
-            Wav2Vec2BERTForPreTraining,
             Wav2Vec2BERTForAudioFrameClassification,
             Wav2Vec2BERTForXVector,
         )
@@ -843,40 +841,8 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def check_inference_pretrained(self, model_id, model, inputs):
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # compute cosine similarity
-        cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked = cosine_sim[inputs["mask_time_indices"]]
-
-        # ... now compare to randomly initialized model
-
-        config = Wav2Vec2BERTConfig.from_pretrained(model_id)
-        model_rand = Wav2Vec2BERTForPreTraining(config).to(torch_device).eval()
-
-        with torch.no_grad():
-            outputs_rand = model_rand(**inputs)
-
-        # compute cosine similarity
-        cosine_sim_rand = torch.cosine_similarity(
-            outputs_rand.projected_states, outputs_rand.projected_quantized_states, dim=-1
-        )
-
-        # retrieve cosine sim of masked features
-        cosine_sim_masked_rand = cosine_sim_rand[inputs["mask_time_indices"]]
-
-        # a pretrained wav2vec2_bert model has learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states > 0.5
-        # a random wav2vec2_bert model has not learned to predict the quantized latent states
-        # => the cosine similarity between quantized states and predicted states is very likely < 0.1
-        self.assertTrue(cosine_sim_masked.mean().item() - 5 * cosine_sim_masked_rand.mean().item() > 0)
-
     def test_inference_w2v2_bert(self):
-        model = Wav2Vec2BERTForPreTraining.from_pretrained("ylacombe/w2v-bert-2.0")
+        model = Wav2Vec2BERTModel.from_pretrained("ylacombe/w2v-bert-2.0")
         model.to(torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained("ylacombe/w2v-bert-2.0")
 
@@ -886,7 +852,7 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
 
         model.eval()
         with torch.no_grad():
-            outputs = model.wav2vec2_bert(**inputs, output_attentions=True)
+            outputs = model(**inputs, output_attentions=True)
 
         # fmt: off
         expected_slice_0 = torch.tensor(
@@ -925,31 +891,3 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         self.assertAlmostEqual(outputs.last_hidden_state[1].std().item(), 0.1545, delta=2e-5)
 
         self.assertListEqual(list(outputs.last_hidden_state.shape), [2, 326, 1024])
-
-    def test_inference_pretrained(self):
-        model_id = "ylacombe/w2v-bert-2.0"
-        model = Wav2Vec2BERTForPreTraining.from_pretrained(model_id)
-        model.to(torch_device)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
-        input_speech = self._load_datasamples(2)
-        inputs = feature_extractor(input_speech, return_tensors="pt", padding=True).to(torch_device)
-        features_shape = inputs["input_features"].shape[:2]
-
-        # apply augmentation
-        model.wav2vec2_bert.config.apply_spec_augment = True
-
-        torch.manual_seed(0)
-
-        mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
-        )
-        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
-
-        inputs["output_attentions"] = True
-        inputs["mask_time_indices"] = mask_time_indices
-
-        self.check_inference_pretrained(model_id, model, inputs)

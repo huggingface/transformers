@@ -56,10 +56,6 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - batch_decode
     - decode
 
-## Wav2Vec2BERT specific outputs
-
-[[autodoc]] models.wav2vec2_bert.modeling_wav2vec2_bert.Wav2Vec2BERTForPreTrainingOutput
-
 ## Wav2Vec2BERTModel
 
 [[autodoc]] Wav2Vec2BERTModel
@@ -83,9 +79,4 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 ## Wav2Vec2BERTForXVector
 
 [[autodoc]] Wav2Vec2BERTForXVector
-    - forward
-
-## Wav2Vec2BERTForPreTraining
-
-[[autodoc]] Wav2Vec2BERTForPreTraining
     - forward
