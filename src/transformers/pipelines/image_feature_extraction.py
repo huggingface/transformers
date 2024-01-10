@@ -48,8 +48,6 @@ class ImageFeatureExtractionPipeline(Pipeline):
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
-        task (`str`, defaults to `""`, *optional*, defaults to `""`):
-            A task-identifier for the pipeline.
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
@@ -94,8 +92,19 @@ class ImageFeatureExtractionPipeline(Pipeline):
         Extract the features of the input(s).
 
         Args:
-            args (`str` or `List[str]`): One or several texts (or one list of texts) to get the features of.
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+                The pipeline handles three types of images:
 
+                - A string containing a http link pointing to an image
+                - A string containing a local path to an image
+                - An image loaded in PIL directly
+
+                The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
+                Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
+                images.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is used and
+                the call may block forever.
         Return:
             A nested list of `float`: The features computed by the model.
         """
