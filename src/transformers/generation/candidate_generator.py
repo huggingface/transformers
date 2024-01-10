@@ -243,7 +243,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor) -> -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
+    def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
 
