@@ -149,10 +149,10 @@ Votre environnement Python utilisera la version de la branche `main` lors de la 
 
 ## Installation avec conda
 
-Installation via le canal `huggingface` de conda :
+Installation via le canal `conda-forge` de conda :
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Configuration du cache
