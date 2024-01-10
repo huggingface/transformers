@@ -130,8 +130,8 @@ class TextNetImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
-        resized to keep the input aspect ratio.
+        Resize an image. The shortest edge of the image is resized to size["shortest_edge"] , with the longest edge
+        resized to keep the input aspect ratio. Both the height and width are resized to be divisible by 32.
 
         Args:
             image (`np.ndarray`):
@@ -156,10 +156,9 @@ class TextNetImageProcessor(BaseImageProcessor):
         else:
             raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
 
-        output_size = get_resize_output_image_size(
+        height, weight = get_resize_output_image_size(
             image, size=size, input_data_format=input_data_format, default_to_square=False
         )
-        height, weight = output_size
         if height % 32 != 0:
             height = height + (32 - height % 32)
         if weight % 32 != 0:

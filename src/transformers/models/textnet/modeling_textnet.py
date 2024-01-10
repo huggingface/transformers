@@ -214,7 +214,7 @@ class TextNetEncoder(nn.Module):
 
         stages = []
         num_stages = len(config.conv_layer_kernel_sizes)
-        for stage_ix in range(0, num_stages):
+        for stage_ix in range(num_stages):
             stages.append(TextNetStage(config, stage_ix))
 
         self.stages = nn.ModuleList(stages)
@@ -266,8 +266,7 @@ class TextNetModel(TextNetPreTrainedModel):
         self.encoder = TextNetEncoder(config)
 
         self.pooler = nn.AdaptiveAvgPool2d((2, 2))
-
-        self.init_weights()
+        self.post_init()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -340,6 +339,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         Returns:
+
         Examples:
         ```python
         >>> from transformers import TextNetForImageClassification,TextNetImageProcessor
