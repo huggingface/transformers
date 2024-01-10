@@ -162,9 +162,24 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Starcoder2
 class Starcoder2MLP(nn.Module):
+    def __init__(self, config: Starcoder2Config):
+        super().__init__()
+        embed_dim = config.hidden_size
+        self.c_fc = nn.Linear(embed_dim, config.intermediate_size)
+        self.c_proj = nn.Linear(config.intermediate_size, embed_dim)
+        self.act = ACT2FN[config.activation_function]
+
+    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
+        hidden_states = self.c_fc(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.c_proj(hidden_states)
+        return hidden_states
+
+
+class Starcoder2GatedMLP(nn.Module):
     def __init__(self, config):
+        # TODO: Dropout?
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -191,7 +206,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralAttention with Mistral->Starcoder2
 class Starcoder2Attention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -216,6 +230,7 @@ class Starcoder2Attention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
+        self.use_bias = config.use_bias
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
 
@@ -224,10 +239,10 @@ class Starcoder2Attention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=self.use_bias)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.use_bias)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=self.use_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=self.use_bias)
 
         self.rotary_emb = Starcoder2RotaryEmbedding(
             self.head_dim,
@@ -238,6 +253,7 @@ class Starcoder2Attention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    # Copied from transformers.models.mistral.modeling_mistral.MistralAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -709,7 +725,18 @@ STARCODER2_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer with MISTRAL->STARCODER2,Mistral->Starcoder2
+STARCODER2_NORMALIZATION_CLASSES = {
+    "layer_norm": nn.LayerNorm,
+    "rms_norm": Starcoder2RMSNorm,
+}
+
+
+STARCODER2_MLP_CLASSES = {
+    "default": Starcoder2MLP,
+    "gated": Starcoder2GatedMLP,
+}
+
+
 class Starcoder2DecoderLayer(nn.Module):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
@@ -717,10 +744,16 @@ class Starcoder2DecoderLayer(nn.Module):
 
         self.self_attn = STARCODER2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
-        self.mlp = Starcoder2MLP(config)
-        self.input_layernorm = Starcoder2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Starcoder2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = STARCODER2_MLP_CLASSES[config.mlp_type](config)
 
+        self.input_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
+            config.hidden_size, eps=config.norm_eps
+        )
+        self.post_attention_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
+            config.hidden_size, eps=config.norm_eps
+        )
+
+    # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,

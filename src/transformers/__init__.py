@@ -601,7 +601,6 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
-    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
@@ -802,6 +801,7 @@ _import_structure = {
         "SqueezeBertConfig",
         "SqueezeBertTokenizer",
     ],
+    "models.starcoder2": ["STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Starcoder2Config"],
     "models.swiftformer": [
         "SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SwiftFormerConfig",
@@ -2614,14 +2614,6 @@ else:
             "MistralPreTrainedModel",
         ]
     )
-    _import_structure["models.starcoder2"].extend(
-        [
-            "Starcoder2ForCausalLM",
-            "Starcoder2ForSequenceClassification",
-            "Starcoder2Model",
-            "Starcoder2PreTrainedModel",
-        ]
-    )
     _import_structure["models.mixtral"].extend(
         ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
     )
@@ -3224,6 +3216,14 @@ else:
             "SqueezeBertModel",
             "SqueezeBertModule",
             "SqueezeBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.starcoder2"].extend(
+        [
+            "Starcoder2ForCausalLM",
+            "Starcoder2ForSequenceClassification",
+            "Starcoder2Model",
+            "Starcoder2PreTrainedModel",
         ]
     )
     _import_structure["models.swiftformer"].extend(
@@ -5297,7 +5297,6 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
-    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5508,6 +5507,7 @@ if TYPE_CHECKING:
         SqueezeBertConfig,
         SqueezeBertTokenizer,
     )
+    from .models.starcoder2 import STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP, Starcoder2Config
     from .models.swiftformer import (
         SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SwiftFormerConfig,
@@ -7091,12 +7091,6 @@ if TYPE_CHECKING:
             MistralModel,
             MistralPreTrainedModel,
         )
-        from .models.starcoder2 import (
-            Starcoder2ForCausalLM,
-            Starcoder2ForSequenceClassification,
-            Starcoder2Model,
-            Starcoder2PreTrainedModel,
-        )
         from .models.mixtral import (
             MixtralForCausalLM,
             MixtralForSequenceClassification,
@@ -7596,6 +7590,12 @@ if TYPE_CHECKING:
             SqueezeBertModel,
             SqueezeBertModule,
             SqueezeBertPreTrainedModel,
+        )
+        from .models.starcoder2 import (
+            Starcoder2ForCausalLM,
+            Starcoder2ForSequenceClassification,
+            Starcoder2Model,
+            Starcoder2PreTrainedModel,
         )
         from .models.swiftformer import (
             SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -25,10 +25,10 @@ STARCODER2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class Starcoder2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate an
+    # TODO: Update ckpt name
+    This is the configuration class to store the configuration of a [`Starcoder2Model`]. It is used to instantiate a
     Starcoder2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Starcoder2-7B-v0.1 or Starcoder2-7B-Instruct-v0.1.
 
@@ -39,6 +39,7 @@ class Starcoder2Config(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
 
+    # TODO: Update
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Starcoder2 model. Defines the number of different tokens that can be represented by the
@@ -80,8 +81,8 @@ class Starcoder2Config(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention window size. If not specified, will default to `4096`.
+        sliding_window (`int`, *optional*, defaults to None):
+            Sliding window attention window size. If not specified, will default to `None` (no sliding window).
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
 
@@ -103,24 +104,31 @@ class Starcoder2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=4096 * 32,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        vocab_size=49152,
+        hidden_size=3072,
+        intermediate_size=12288,
+        num_hidden_layers=30,
+        num_attention_heads=24,
+        num_key_value_heads=2,
+        # TODO: Infer from hidden_act?
+        mlp_type="default",
+        hidden_act="gelu_pytorch_tanh",
+        max_position_embeddings=4096,
+        # TODO: Check init method.
+        initializer_range=0.018042,
+        norm_type="layer_norm",
+        norm_epsilon=1e-5,
         use_cache=True,
-        pad_token_id=None,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
+        # TODO: Wrong defaults?
+        bos_token_id=50256,
+        eos_token_id=50256,
         rope_theta=10000.0,
-        sliding_window=4096,
+        sliding_window=None,
         attention_dropout=0.0,
+        # TODO: Implement
+        use_bias: bool = True,
+        # TODO: Other dropouts?
+        # TODO: Allow normal pos embeddings for santacoder/starcoder1?
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -130,23 +138,24 @@ class Starcoder2Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
+        self.use_bias = use_bias
 
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.mlp_type = mlp_type
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
+        self.norm_type = norm_type
+        self.norm_epsilon = norm_epsilon
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
 
         super().__init__(
-            pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )

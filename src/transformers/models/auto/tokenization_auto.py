@@ -252,12 +252,6 @@ else:
                 ),
             ),
             (
-                "starcoder2",
-                (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            (
                 "mixtral",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -387,6 +381,7 @@ else:
                 "squeezebert",
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
+            ("starcoder2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "switch_transformers",
                 (
