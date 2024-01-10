@@ -479,10 +479,48 @@ class BnbHFQuantizer(HFQuantizer):
                 """
             )
 
-    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+    def process_model_before_weight_loading(
+        self,
+        model: PreTrainedModel,
+        device_map: DeviceMap,
+        keep_in_fp32_modules: List[str] = [],
+        **kwargs,
+    ) -> PreTrainedModel:
         super().process_model_before_weight_loading(model, **kwargs)
-        model.is_loaded_in_4bit = False
-        model.is_loaded_in_8bit = False
+
+        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
+
+        load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
+
+        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
+        if self.quantization_config.llm_int8_skip_modules is None:
+            self.modules_to_not_convert = get_keys_to_not_convert(model)
+        else:
+            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
+
+        if not isinstance(self.modules_to_not_convert, list):
+            self.modules_to_not_convert = [self.modules_to_not_convert]
+
+        self.modules_to_not_convert.extend(keep_in_fp32_modules)
+
+        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
+        if isinstance(device_map, dict) and len(device_map.keys()) > 1:
+            keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
+
+            if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
+                raise ValueError(
+                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
+                    "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
+                    " converted to 8-bit but kept in 32-bit."
+                )
+            self.modules_to_not_convert.extend(keys_on_cpu)
+
+        model = replace_with_bnb_linear(
+            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
+        )
+        # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
+
+        model.config.quantization_config = self.quantization_config
 
     def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
         super().process_model_after_weight_loading(model, **kwargs)
@@ -510,50 +548,12 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
 
-    def process_model_before_weight_loading(
-        self,
-        model: PreTrainedModel,
-        device_map: DeviceMap,
-        keep_in_fp32_modules: List[str] = [],
-    ) -> PreTrainedModel:
-        super().process_model_before_weight_loading(model)
+    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+        super().process_model_before_weight_loading(model, **kwargs)
 
-        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
-
-        load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
-
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.llm_int8_skip_modules is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
-
-        # Extend the modules to not convert to keys that are supposed to be offloaded to `cpu` or `disk`
-        if isinstance(device_map, dict) and len(device_map.keys()) > 1:
-            keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
-
-            if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
-                raise ValueError(
-                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                    "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
-                    " converted to 8-bit but kept in 32-bit."
-                )
-            self.modules_to_not_convert.extend(keys_on_cpu)
-
-        model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
-        )
-        # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
-
-        model.config.quantization_config = self.quantization_config
         model.is_8bit_serializable = self.is_model_serializeable()
-
         model.is_loaded_in_8bit = True
+
         return model
 
     def adjust_target_dtype(self, target_dtype: torch.dtype) -> torch.dtype:
@@ -684,50 +684,12 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
 
-    def process_model_before_weight_loading(
-        self,
-        model: PreTrainedModel,
-        device_map: DeviceMap,
-        keep_in_fp32_modules: List[str] = [],
-    ) -> PreTrainedModel:
-        super().process_model_before_weight_loading(model)
+    def process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs) -> PreTrainedModel:
+        super().process_model_before_weight_loading(model, **kwargs)
 
-        # TODO: consider moving parts common with 8bits to super()
-        from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
-
-        load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
-
-        # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-        if self.quantization_config.llm_int8_skip_modules is None:
-            self.modules_to_not_convert = get_keys_to_not_convert(model)
-        else:
-            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
-
-        if not isinstance(self.modules_to_not_convert, list):
-            self.modules_to_not_convert = [self.modules_to_not_convert]
-
-        self.modules_to_not_convert.extend(keep_in_fp32_modules)
-
-        # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
-        if isinstance(device_map, dict) and len(device_map.keys()) > 1:
-            keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
-
-            if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
-                raise ValueError(
-                    "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                    "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
-                    " converted to 8-bit but kept in 32-bit."
-                )
-            self.modules_to_not_convert.extend(keys_on_cpu)
-
-        model = replace_with_bnb_linear(
-            model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
-        )
-        # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
-
-        model.config.quantization_config = self.quantization_config
         model.is_4bit_serializable = self.is_model_serializeable()
         model.is_loaded_in_4bit = True
+
         return model
 
     def is_model_serializeable(self, model: PreTrainedModel = None) -> bool:
