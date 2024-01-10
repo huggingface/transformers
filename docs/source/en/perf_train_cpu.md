@@ -62,7 +62,7 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
 <b>--use_ipex</b> \
-<b>--bf16<b> \
+<b>--bf16</b> \
 <b>--use_cpu</b></pre> 
 
 If you want to enable `use_ipex` and `bf16` in your script, just add some arguments in `TrainingArguments` like this:
