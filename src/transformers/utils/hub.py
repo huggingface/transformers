@@ -816,6 +816,7 @@ class PushToHubMixin:
         ```
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -861,7 +862,9 @@ class PushToHubMixin:
         )
 
         # Create a new empty model card and eventually tag it
-        model_card = create_and_tag_model_card(repo_id, tags)
+        model_card = create_and_tag_model_card(
+            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
+        )
 
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
@@ -1092,13 +1095,29 @@ def extract_info_from_url(url):
     return {"repo": cache_repo, "revision": revision, "filename": filename}
 
 
-def create_and_tag_model_card(repo_id: str, tags: Optional[List[str]] = None):
+def create_and_tag_model_card(
+    repo_id: str,
+    tags: Optional[List[str]] = None,
+    token: Optional[str] = None,
+    ignore_metadata_errors: bool = False,
+):
     """
-    Creates a dummy model card and tags it.
+    Creates or loads an existing model card and tags it.
+
+    Args:
+        repo_id (`str`):
+            The repo_id where to look for the model card.
+        tags (`List[str]`, *optional*):
+            The list of tags to add in the model card
+        token (`str`, *optional*):
+            Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
+        ignore_metadata_errors (`str`):
+            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
+            the process. Use it at your own risk.
     """
     try:
         # Check if the model card is present on the remote repo
-        model_card = ModelCard.load(repo_id)
+        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
     except EntryNotFoundError:
         # Otherwise create a simple model card from template
         model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
