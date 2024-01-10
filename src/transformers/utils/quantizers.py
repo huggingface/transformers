@@ -34,7 +34,7 @@ DeviceMap = TypeVar("DeviceMap", str, Dict[str, int])
 QuantizationConfig = TypeVar("QuantizationConfig", QuantizationConfigMixin, Dict)
 StateDict = TypeVar("StateDict", bound=Dict[str, Any])
 MaxMemory = TypeVar("MaxMemory", bound=Dict[Union[int, str], Union[int, str]])
-PreTrainedModel = TypeVar("PreTrainedModel", bound=Any)  # TODO: proper type def
+PreTrainedModel = TypeVar("PreTrainedModel", bound=Any)
 
 
 class QuantizationStatus(str, Enum):
@@ -464,8 +464,6 @@ class BnbHFQuantizer(HFQuantizer):
 
     def validate_device_map(self, device_map: DeviceMap):
         """called after infer_auto_device_map()"""
-        # TODO: consider combining with  .update_device_map()
-        # TODO: consider combining with  .adjust_max_memory()
         device_map_without_lm_head = {
             key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
         }
@@ -698,7 +696,6 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
-        assert load_in_8bit_fp32_cpu_offload is False  # TODO remove  # Check if this still occurs in 4-bit q-configs!
 
         # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
         if self.quantization_config.llm_int8_skip_modules is None:
@@ -711,7 +708,6 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
 
         self.modules_to_not_convert.extend(keep_in_fp32_modules)
 
-        # TODO check if we still need this functionality in 4bit
         # Extend `self.modules_to_not_convert` to keys that are supposed to be offloaded to `cpu` or `disk`
         if isinstance(device_map, dict) and len(device_map.keys()) > 1:
             keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
@@ -731,7 +727,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
 
         model.config.quantization_config = self.quantization_config
         model.is_4bit_serializable = self.is_model_serializeable()
-        model.is_loaded_in_4bit = True  # TODO: consider replacing with ref to Q-config
+        model.is_loaded_in_4bit = True
         return model
 
     def is_model_serializeable(self, model: PreTrainedModel = None) -> bool:

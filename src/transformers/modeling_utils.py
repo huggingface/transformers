@@ -3549,7 +3549,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         quantizer=None,
         keep_in_fp32_modules=None,
     ):
-        # `is_quantized` is not used. Use `getattr(quantizer, "requires_parameters_quantization", False)`` if needed. TODO update the refs
         is_safetensors = False
 
         if device_map is not None and "disk" in device_map.values():
