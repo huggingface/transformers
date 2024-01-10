@@ -1428,6 +1428,11 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
+        except HTTPError:
+            pass
+
     @unittest.skip("This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
