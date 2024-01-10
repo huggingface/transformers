@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import regex as re
-import tensorflow as tf
 import torch
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -296,7 +295,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = False,
         spaces_between_special_tokens: bool = False,

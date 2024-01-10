@@ -16,9 +16,8 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_torch_available,
-    is_sentencepiece_available,
     is_tokenizers_available,
+    is_torch_available,
 )
 
 
@@ -26,9 +25,8 @@ _import_structure = {
     "configuration_qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
 }
 
-
 try:
-    if not is_sentencepiece_available():
+    if not is_tokenizers_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -59,6 +57,22 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_qwen2 import Qwen2Tokenizer
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_qwen2_fast import Qwen2TokenizerFast
 
     try:
         if not is_torch_available():
