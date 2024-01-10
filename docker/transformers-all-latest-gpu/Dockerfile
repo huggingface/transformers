@@ -58,14 +58,14 @@ RUN python3 -m pip install --no-cache-dir einops
 # Add autoawq for quantization testing
 RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.1.8/autoawq-0.1.8+cu118-cp38-cp38-linux_x86_64.whl
 
-# For bettertransformer + gptq 
+# For bettertransformer + gptq
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
-RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+RUN python3 -m pip install --no-cache-dir natten<0.15.0 -f https://shi-labs.com/natten/wheels/$CUDA/
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
