@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Wie erstellt man eine benutzerdefinierte Pipeline?
 
-In dieser Anleitung sehen wir uns an, wie Sie eine benutzerdefinierte Pipeline erstellen und sie auf dem [Hub](https://huggingface.co/models) freigeben oder sie der
+In dieser Anleitung sehen wir uns an, wie Sie eine benutzerdefinierte Pipeline erstellen und sie auf dem [Hub](https://hf.co/models) freigeben oder sie der
 🤗 Transformers-Bibliothek hinzufügen.
 
 Zuallererst müssen Sie entscheiden, welche Roheingaben die Pipeline verarbeiten kann. Es kann sich um Strings, rohe Bytes,
