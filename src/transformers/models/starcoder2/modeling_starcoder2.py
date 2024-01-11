@@ -168,7 +168,7 @@ class Starcoder2MLP(nn.Module):
         embed_dim = config.hidden_size
         self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
         self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
-        self.act = ACT2FN[config.activation_function]
+        self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
@@ -747,10 +747,10 @@ class Starcoder2DecoderLayer(nn.Module):
         self.mlp = STARCODER2_MLP_CLASSES[config.mlp_type](config)
 
         self.input_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
-            config.hidden_size, eps=config.norm_eps
+            config.hidden_size, eps=config.norm_epsilon
         )
         self.post_attention_layernorm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](
-            config.hidden_size, eps=config.norm_eps
+            config.hidden_size, eps=config.norm_epsilon
         )
 
     # Copied from transformers.models.mistral.modeling_mistral.MistralDecoderLayer.forward
@@ -950,7 +950,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
             [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](config.hidden_size, eps=config.norm_eps)
+        self.norm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](config.hidden_size, eps=config.norm_epsilon)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
