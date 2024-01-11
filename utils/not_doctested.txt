@@ -748,6 +748,8 @@ src/transformers/models/qdqbert/configuration_qdqbert.py
 src/transformers/models/qdqbert/modeling_qdqbert.py
 src/transformers/models/qwen2/configuration_qwen2.py
 src/transformers/models/qwen2/modeling_qwen2.py
+src/transformers/models/qwen2/tokenization_qwen2.py
+src/transformers/models/qwen2/tokenization_qwen2_fast.py
 src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
