@@ -95,8 +95,8 @@ def set_seed(seed: int):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
-    if is_torch_npu_available():
-        torch.npu.manual_seed_all(seed)
+        if is_torch_npu_available():
+            torch.npu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
     if is_tf_available():
