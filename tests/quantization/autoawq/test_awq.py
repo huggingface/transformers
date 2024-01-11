@@ -265,7 +265,7 @@ class AwqFusedTest(unittest.TestCase):
 
     EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
-    EXPECTED_GENERATION_MIXTRAL = prompt + "\n\nThe answer is the North Pole. You can"
+    EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
     def tearDown(self):
         gc.collect()
