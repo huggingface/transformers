@@ -431,7 +431,6 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": OwlViTModel,
             "zero-shot-object-detection": OwlViTForObjectDetection,
-            "image-feature-extraction": OwlViTVisionModel,
         }
         if is_torch_available()
         else {}

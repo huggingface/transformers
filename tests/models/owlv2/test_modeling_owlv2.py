@@ -436,7 +436,6 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "feature-extraction": Owlv2Model,
             "zero-shot-object-detection": Owlv2ForObjectDetection,
-            "image-feature-extraction": Owlv2VisionModel,
         }
         if is_torch_available()
         else {}

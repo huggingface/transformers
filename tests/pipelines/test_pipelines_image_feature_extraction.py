@@ -44,7 +44,7 @@ def prepare_img():
 
 
 @is_pipeline_test
-class FeatureExtractionPipelineTests(unittest.TestCase):
+class ImageFeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING
 

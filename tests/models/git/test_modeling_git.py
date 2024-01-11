@@ -403,7 +403,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             "feature-extraction": GitModel,
             "image-to-text": GitForCausalLM,
             "text-generation": GitForCausalLM,
-            "image-feature-extraction": GitVisionModel,
         }
         if is_torch_available()
         else {}

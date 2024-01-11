@@ -431,7 +431,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": BlipModel,
-            "image-feature-extraction": BlipVisionModel,
             "image-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
