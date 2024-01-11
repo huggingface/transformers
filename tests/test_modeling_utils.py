@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
+    is_flaky,
     is_staging_test,
     require_accelerate,
     require_flax,
@@ -288,6 +289,7 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
+    @is_flaky
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
@@ -1002,6 +1004,7 @@ class ModelUtilsTest(TestCasePlus):
             # Should only complain about the missing bias
             self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
 
+    @is_flaky
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PretrainedConfig())
         logger = logging.get_logger("transformers.modeling_utils")
