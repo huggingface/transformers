@@ -1855,6 +1855,12 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif self.deepspeed:
+            # Need to do similar for Accelerator init
+            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
+            del os.environ["ACCELERATE_USE_DEEPSPEED"]
+            self._n_gpu = 1
         elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
             os.environ["ACCELERATE_USE_XPU"] = "true"
             self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
@@ -1862,12 +1868,6 @@ class TrainingArguments:
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             self.distributed_state = PartialState(_use_sagemaker_dp=True)
-            self._n_gpu = 1
-        elif self.deepspeed:
-            # Need to do similar for Accelerator init
-            os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
-            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
-            del os.environ["ACCELERATE_USE_DEEPSPEED"]
             self._n_gpu = 1
         else:
             self.distributed_state = PartialState(
@@ -1892,7 +1892,7 @@ class TrainingArguments:
             if "ACCELERATE_USE_XPU" not in os.environ:
                 os.environ["ACCELERATE_USE_XPU"] = "true"
             self._n_gpu = 1
-            device = torch.device("xpu:0")
+            device = torch.device("xpu", self.local_rank)
             torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
