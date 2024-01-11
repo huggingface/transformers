@@ -36,7 +36,7 @@ deps = {
     "keras-nlp": "keras-nlp>=0.3.1",
     "librosa": "librosa",
     "nltk": "nltk",
-    "natten": "natten>=0.14.6",
+    "natten": "natten>=0.14.6,<0.15.0",
     "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
