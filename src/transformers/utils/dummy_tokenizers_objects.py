@@ -331,6 +331,13 @@ class PegasusTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class Qwen2TokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class RealmTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -360,13 +367,6 @@ class RobertaTokenizerFast(metaclass=DummyObject):
 
 
 class RoFormerTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
-class Qwen2TokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
