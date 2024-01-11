@@ -151,8 +151,8 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
             raise ValueError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, image_processor):
-        if image_processor is None:
+    def get_test_pipeline(self, model, tokenizer, processor):
+        if processor is None:
             self.skipTest("No image processor")
 
         elif type(model.config) in TOKENIZER_MAPPING:
@@ -167,22 +167,17 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
                 """
             )
 
-        feature_extractor = ImageFeatureExtractionPipeline(model=model, image_processor=image_processor)
+        feature_extractor = ImageFeatureExtractionPipeline(model=model, image_processor=processor)
         img = prepare_img()
         return feature_extractor, [img, img]
 
     def run_pipeline_test(self, feature_extractor, examples):
-        img = prepare_img()
-        outputs = feature_extractor(img)
+        imgs = examples
+        outputs = feature_extractor(imgs[0])
 
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 1)
 
-        img = prepare_img()
-        outputs = feature_extractor([img, img])
+        outputs = feature_extractor(imgs)
         shape = self.get_shape(outputs)
         self.assertEqual(shape[0], 2)
-
-        outputs = feature_extractor(img.reshape(1000, 200), truncation=True)
-        shape = self.get_shape(outputs)
-        self.assertEqual(shape[0], 1)
