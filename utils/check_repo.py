@@ -88,6 +88,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "FuyuForCausalLM",  # Not tested fort now
     "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
+    "UMT5ForTokenClassification",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
