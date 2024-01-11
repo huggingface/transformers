@@ -34,6 +34,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
     logging,
@@ -830,6 +831,22 @@ class ModelUtilsTest(TestCasePlus):
             )
             outputs2 = new_model_with_offload(inputs)
             self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
+
+    @slow
+    @require_torch
+    def test_from_pretrained_non_contiguous_checkpoint(self):
+        # See: https://github.com/huggingface/transformers/pull/28414
+        model = OwlViTForObjectDetection.from_pretrained("hf-tiny-model-private/tiny-random-OwlViTModel")
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        model = OwlViTForObjectDetection.from_pretrained(
+            "hf-tiny-model-private/tiny-random-OwlViTModel", device_map="auto"
+        )
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir, safe_serialization=True)
 
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
