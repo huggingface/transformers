@@ -18,11 +18,9 @@ import json
 import os
 import unicodedata
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import regex as re
-import torch
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -295,7 +293,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
 
     def decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor"],
+        token_ids,
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = False,
         spaces_between_special_tokens: bool = False,
