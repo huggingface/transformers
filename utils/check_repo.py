@@ -76,6 +76,9 @@ PRIVATE_MODELS = [
     "Kosmos2TextModel",
     "Kosmos2TextForCausalLM",
     "Kosmos2VisionModel",
+    "SeamlessM4Tv2TextToUnitModel",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2TextToUnitForConditionalGeneration",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -87,6 +90,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
+    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -156,6 +161,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",
+    "FastSpeech2ConformerWithHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -207,7 +214,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
-    "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
     "ClvpModel",
@@ -248,6 +254,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Owlv2TextModel",
     "Owlv2VisionModel",
     "OwlViTForObjectDetection",
+    "PatchTSMixerForPrediction",
+    "PatchTSMixerForPretraining",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
@@ -296,6 +304,12 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
+    "SeamlessM4Tv2NARTextToUnitModel",
+    "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
+    "SiglipVisionModel",
+    "SiglipTextModel",
 ]
 
 # DO NOT edit this list!
@@ -904,6 +918,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
+    "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
@@ -979,6 +994,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "PvtV2Backbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "Swinv2Backbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",

@@ -64,6 +64,8 @@ promote further research on these urgent topics.*
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
 The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
+The original code for Phi-2 can be found [here](https://huggingface.co/microsoft/phi-2).
+
 
 ## Usage tips
 
@@ -71,12 +73,35 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 - The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
 
 
+## How to use Phi-2
+
+<Tip warning={true}>
+
+The current weights at [microsoft/phi-2](https://huggingface.co/microsoft/phi-2) are not in proper order to be used with the library model. Until that is resolved, please use [susnato/phi-2](https://huggingface.co/susnato/phi-2) to load using the library `phi` model.
+
+</Tip>
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> model = AutoModelForCausalLM.from_pretrained("susnato/phi-2")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-2")
+
+>>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
+
+>>> outputs = model.generate(**inputs, max_length=30)
+>>> text = tokenizer.batch_decode(outputs)[0]
+>>> print(text)
+'Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce'
+```
+
+
 ### Example :
 
 ```python
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
->>> # define the model and tokenzier.
+>>> # define the model and tokenizer.
 >>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
 >>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
 
@@ -92,6 +117,46 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> tokenizer.batch_decode(generated_output)[0]
 'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
 ```
+
+
+## Combining Phi and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16``)
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> from transformers import PhiForCausalLM, AutoTokenizer
+
+>>> # define the model and tokenizer and push the model and tokens to the GPU.
+>>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
+>>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+
+>>> # feel free to change the prompt to your liking.
+>>> prompt = "If I were an AI that had just achieved"
+
+>>> # apply the tokenizer.
+>>> tokens = tokenizer(prompt, return_tensors="pt").to("cuda")
+
+>>> # use the model to generate new tokens.
+>>> generated_output = model.generate(**tokens, use_cache=True, max_new_tokens=10)
+
+>>> tokenizer.batch_decode(generated_output)[0]
+'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
+```
+
+### Expected speedups
+Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `susnato/phi-1_dev` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/phi_1_speedup_plot.jpg">
+</div>
 
 
 ## PhiConfig
