@@ -836,12 +836,10 @@ class ModelUtilsTest(TestCasePlus):
     @require_torch
     def test_from_pretrained_non_contiguous_checkpoint(self):
         # See: https://github.com/huggingface/transformers/pull/28414
-        model = OwlViTForObjectDetection.from_pretrained("hf-tiny-model-private/tiny-random-OwlViTModel")
+        model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
-        model = OwlViTForObjectDetection.from_pretrained(
-            "hf-tiny-model-private/tiny-random-OwlViTModel", device_map="auto"
-        )
+        model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16", device_map="auto")
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
         with tempfile.TemporaryDirectory() as tmp_dir:
