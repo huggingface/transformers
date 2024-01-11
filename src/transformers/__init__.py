@@ -711,7 +711,11 @@ _import_structure = {
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
-    "models.qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
+    "models.qwen2": [
+        "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Qwen2Config",
+        "Qwen2Tokenizer",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
         "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1111,6 +1115,7 @@ else:
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.nllb"].append("NllbTokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
+    _import_structure["models.qwen2"].append("Qwen2Tokenizer")
     _import_structure["models.plbart"].append("PLBartTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
@@ -1186,6 +1191,7 @@ else:
     _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")

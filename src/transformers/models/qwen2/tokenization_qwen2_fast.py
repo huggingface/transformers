@@ -46,9 +46,9 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
     ```python
-    >>> from transformers import Qwen2Tokenizer
+    >>> from transformers import Qwen2TokenizerFast
 
-    >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen2-7B-beta")
+    >>> tokenizer = Qwen2TokenizerFast.from_pretrained("Qwen/Qwen2-7B-beta")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
 
