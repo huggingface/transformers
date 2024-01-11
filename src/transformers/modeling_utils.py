@@ -97,7 +97,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
-from .utils.versions import require_version_core
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -2898,10 +2897,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
-            if device_map is not None:
-                # The max memory utils require PyTorch >= 1.10 to have torch.cuda.mem_get_info.
-                require_version_core("torch>=1.10")
-
             if is_deepspeed_zero3_enabled():
                 raise ValueError(
                     "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
