@@ -336,7 +336,7 @@ else:
             (
                 "qwen2",
                 (
-                    "Qwen2Tokenizer" if is_tokenizers_available() else None,
+                    "Qwen2Tokenizer",
                     "Qwen2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
