@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -396,7 +396,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if data_args.remove_splits is not None:
         for split in data_args.remove_splits.split(","):
@@ -633,23 +633,23 @@ def main():
 
     if data_args.metric_name is not None:
         metric = (
-            evaluate.load(data_args.metric_name, config_name="multilabel")
+            evaluate.load(data_args.metric_name, config_name="multilabel", cache_dir=model_args.cache_dir)
             if is_multi_label
-            else evaluate.load(data_args.metric_name)
+            else evaluate.load(data_args.metric_name, cache_dir=model_args.cache_dir)
         )
         logger.info(f"Using metric {data_args.metric_name} for evaluation.")
     else:
         if is_regression:
-            metric = evaluate.load("mse")
+            metric = evaluate.load("mse", cache_dir=model_args.cache_dir)
             logger.info("Using mean squared error (mse) as regression score, you can use --metric_name to overwrite.")
         else:
             if is_multi_label:
-                metric = evaluate.load("f1", config_name="multilabel")
+                metric = evaluate.load("f1", config_name="multilabel", cache_dir=model_args.cache_dir)
                 logger.info(
                     "Using multilabel F1 for multi-label classification task, you can use --metric_name to overwrite."
                 )
             else:
-                metric = evaluate.load("accuracy")
+                metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
                 logger.info("Using accuracy as classification score, you can use --metric_name to overwrite.")
 
     def compute_metrics(p: EvalPrediction):

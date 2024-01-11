@@ -15,7 +15,6 @@
 
 import argparse
 import copy
-import glob
 import os
 import random
 from dataclasses import dataclass
@@ -239,7 +238,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         # Deeal with failed tests
         check_test_command += f'elif [ -s reports/{self.job_name}/failures_short.txt ]; '
@@ -249,7 +248,7 @@ class CircleCIJob:
 
         py_command = f'import os; fp = open("reports/{self.job_name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
-        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
+        check_test_command += 'cat summary_short.txt; echo ""; exit -1; '
 
         check_test_command += f'elif [ -s reports/{self.job_name}/stats.txt ]; then echo "All tests pass!"; '
 
@@ -471,7 +470,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
-        "pip install -U --upgrade-strategy eager natten",
+        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
@@ -515,7 +514,8 @@ doc_test_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -e .[dev]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
-        "pip install -U --upgrade-strategy eager natten",
+        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
+        "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.

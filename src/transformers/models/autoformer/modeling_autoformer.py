@@ -219,7 +219,7 @@ class AutoformerStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor

@@ -727,6 +727,8 @@ class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
     NO_SHARD = "no_shard"
+    HYBRID_SHARD = "hybrid_shard"
+    HYBRID_SHARD_ZERO2 = "hybrid_shard_zero2"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 

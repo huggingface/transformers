@@ -63,6 +63,14 @@ class GenerationConfig(PushToHubMixin):
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
+    <Tip>
+
+    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    description of the possible manipulations, as well as examples of their usage.
+
+    </Tip>
+
     Arg:
         > Parameters that control the length of the output
 
@@ -409,6 +417,10 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2. detect beam-only parameterization when not in beam mode
+        if self.num_beams is None:
+            warnings.warn("`num_beams` is set to None - defaulting to 1.", UserWarning)
+            self.num_beams = 1
+
         if self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
                 "`num_beams` is set to 1. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
@@ -491,6 +503,24 @@ class GenerationConfig(PushToHubMixin):
                 raise ValueError(
                     f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
                     f"({self.num_beams})."
+                )
+
+        # 5. check common issue: passing `generate` arguments inside the generation config
+        generate_arguments = (
+            "logits_processor",
+            "stopping_criteria",
+            "prefix_allowed_tokens_fn",
+            "synced_gpus",
+            "assistant_model",
+            "streamer",
+            "negative_prompt_ids",
+            "negative_prompt_attention_mask",
+        )
+        for arg in generate_arguments:
+            if hasattr(self, arg):
+                raise ValueError(
+                    f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
+                    "`generate()` (or a pipeline) directly."
                 )
 
     def save_pretrained(
@@ -750,9 +780,14 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        config = cls.from_dict(config_dict, **kwargs)
-        config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
-        return config
+        if kwargs.get("return_unused_kwargs") is True:
+            config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            return config, unused_kwargs
+        else:
+            config = cls.from_dict(config_dict, **kwargs)
+            config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            return config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):

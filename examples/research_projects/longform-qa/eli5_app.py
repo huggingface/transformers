@@ -158,9 +158,7 @@ header_full = """
     </span>
   </body>
 </html>
-""" % (
-    header_html,
-)
+""" % (header_html,)
 st.sidebar.markdown(
     header_full,
     unsafe_allow_html=True,

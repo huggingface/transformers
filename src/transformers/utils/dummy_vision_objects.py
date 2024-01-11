@@ -471,6 +471,13 @@ class SegformerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class SiglipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Swin2SRImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -479,6 +486,13 @@ class Swin2SRImageProcessor(metaclass=DummyObject):
 
 
 class TvltImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class TvpImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

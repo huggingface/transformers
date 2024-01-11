@@ -890,13 +890,11 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 dummy_input = inputs_dict["input_ids"][:1]
@@ -949,12 +947,13 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 
@@ -1029,10 +1028,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
     def test_generate_semantic(self):
         input_ids = self.inputs
 
-        # fmt: off
         # check first ids
-        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
-        # fmt: on
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]  # fmt: skip
 
         # greedy decoding
         with torch.no_grad():
@@ -1049,10 +1046,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
         input_ids = self.inputs
         min_eos_p = 0.01
 
-        # fmt: off
         # check first ids
-        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]
-        # fmt: on
+        expected_output_ids = [7363, 321, 41, 1461, 6915, 952, 326, 41, 41, 927,]  # fmt: skip
 
         # Should be able to read min_eos_p from kwargs
         with torch.no_grad():
@@ -1095,10 +1090,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
 
         history_prompt = input_ids["history_prompt"]
 
-        # fmt: off
         # check first ids
-        expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]
-        # fmt: on
+        expected_output_ids = [11018, 11391, 10651, 11418, 10857, 11620, 10642, 11366, 10312, 11528, 10531, 11516, 10474, 11051, 10524, 11051, ]  # fmt: skip
 
         with torch.no_grad():
             output_ids = self.model.semantic.generate(

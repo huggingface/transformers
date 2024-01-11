@@ -92,7 +92,7 @@ class InformerStdScaler(nn.Module):
         super().__init__()
         self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
-        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-10
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
 
     def forward(
         self, data: torch.Tensor, observed_indicator: torch.Tensor
@@ -1224,7 +1224,8 @@ class InformerEncoder(InformerPreTrainedModel):
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerDecoder with TimeSeriesTransformer->Informer,TimeSeriesTransformerConfig->InformerConfig,time-series-transformer->informer,Transformer->Informer,TimeSeries->Informer
 class InformerDecoder(InformerPreTrainedModel):
     """
-    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a [`InformerDecoderLayer`]
+    Informer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    [`InformerDecoderLayer`]
 
     Args:
         config: InformerConfig
@@ -1783,7 +1784,9 @@ class InformerForPrediction(InformerPreTrainedModel):
         ... )
         >>> batch = torch.load(file)
 
-        >>> model = InformerForPrediction.from_pretrained("huggingface/informer-tourism-monthly")
+        >>> model = InformerForPrediction.from_pretrained(
+        ...     "huggingface/informer-tourism-monthly"
+        ... )
 
         >>> # during training, one provides both past and future values
         >>> # as well as possible additional features

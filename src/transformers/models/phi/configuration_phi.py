@@ -23,8 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PHI_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "susnato/phi-1_dev": "https://huggingface.co/susnato/phi-1_dev/resolve/main/config.json",
-    "susnato/phi-1_5_dev": "https://huggingface.co/susnato/phi-1_5_dev/resolve/main/config.json",
+    "microsoft/phi-1": "https://huggingface.co/microsoft/phi-1/resolve/main/config.json",
+    "microsoft/phi-1_5": "https://huggingface.co/microsoft/phi-1_5/resolve/main/config.json",
+    "microsoft/phi-2": "https://huggingface.co/microsoft/phi-2/resolve/main/config.json",
 }
 
 
@@ -33,7 +34,7 @@ class PhiConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PhiModel`]. It is used to instantiate an Phi
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Phi
-    [susnato/phi-1_dev](https://huggingface.co/susnato/phi-1_dev).
+    [microsoft/phi-1](https://huggingface.co/microsoft/phi-1).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -50,6 +51,14 @@ class PhiConfig(PretrainedConfig):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
         resid_pdrop (`float`, *optional*, defaults to 0.0):
             Dropout probability for mlp outputs.
         embd_pdrop (`int`, *optional*, defaults to 0.0):
@@ -83,7 +92,7 @@ class PhiConfig(PretrainedConfig):
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
             Percentage of the query and keys which will have rotary embedding.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether or not to normalize the Queries and Keys after projecting the hidden states
+            Whether or not to normalize the Queries and Keys after projecting the hidden states.
         bos_token_id (`int`, *optional*, defaults to 1):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -95,7 +104,7 @@ class PhiConfig(PretrainedConfig):
     >>> from transformers import PhiModel, PhiConfig
 
     >>> # Initializing a Phi-1 style configuration
-    >>> configuration = PhiConfig.from_pretrained("susnato/phi-1_dev")
+    >>> configuration = PhiConfig.from_pretrained("microsoft/phi-1")
 
     >>> # Initializing a model from the configuration
     >>> model = PhiModel(configuration)
@@ -103,6 +112,7 @@ class PhiConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "phi"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -113,6 +123,7 @@ class PhiConfig(PretrainedConfig):
         intermediate_size=8192,
         num_hidden_layers=24,
         num_attention_heads=32,
+        num_key_value_heads=None,
         resid_pdrop=0.0,
         embd_pdrop=0.0,
         attention_dropout=0.0,
@@ -135,6 +146,11 @@ class PhiConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
         self.attention_dropout = attention_dropout

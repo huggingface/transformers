@@ -486,8 +486,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         token_classifier.model.config.id2label = {0: "O", 1: "MISC", 2: "PER", 3: "ORG", 4: "LOC"}
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -495,8 +494,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -504,9 +502,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0.9986497163772583, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,
@@ -542,8 +538,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
         )
         example = [
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9968166351318359, 0, 0, 0]),  # fmt : skip
                 "index": 1,
                 "is_subword": False,
                 "word": "En",
@@ -551,8 +546,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 2,
             },
             {
-                # fmt : off
-                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),
+                "scores": np.array([0, 0, 0, 0, 0.9957635998725891, 0, 0, 0]),  # fmt : skip
                 "index": 2,
                 "is_subword": True,
                 "word": "##zo",
@@ -560,9 +554,7 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 "end": 4,
             },
             {
-                # fmt: off
-                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0, ]),
-                # fmt: on
+                "scores": np.array([0, 0, 0, 0, 0, 0.9986497163772583, 0, 0]),  # fmt : skip
                 "index": 7,
                 "word": "UN",
                 "is_subword": False,
