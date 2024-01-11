@@ -351,6 +351,8 @@ def load_metadata(repo_id, class_info_file):
     fname = os.path.join("" if repo_id is None else repo_id, class_info_file)
 
     if not os.path.exists(fname) or not os.path.isfile(fname):
+        if repo_id is None:
+            raise ValueError(f"Could not file {fname} locally. repo_id must be defined if loading from the hub")
         # We try downloading from a dataset by default for backward compatibility
         try:
             fname = hf_hub_download(repo_id, class_info_file, repo_type="dataset")
@@ -404,7 +406,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
             The background label will be replaced by `ignore_index`.
         repo_path (`str`, *optional*, defaults to `"shi-labs/oneformer_demo"`):
             Path to hub repo or local directory containing the JSON file with class information for the dataset.
-            If unset, will load `class_info_file` from the current working directory.
+            If unset, will look for `class_info_file` in the current working directory.
         class_info_file (`str`, *optional*):
             JSON file containing class information for the dataset. See `shi-labs/oneformer_demo/cityscapes_panoptic.json` for an example.
         num_text (`int`, *optional*):
