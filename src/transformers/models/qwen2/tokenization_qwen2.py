@@ -139,9 +139,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             to not split special tokens. This means that if `<|endoftext|>` is the `eos_token`, then `tokenizer.tokenize("<|endoftext|>") =
             ['<|endoftext|>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<|endoftext|>")` will be give `['<',
             '|', 'endo', 'ft', 'ext', '|', '>']`. This argument is only supported for `slow` tokenizers for the moment.
-        chat_template (`str`, *optional*):
-            A Jinja template string that will be used to format lists of chat messages. See
-            https://huggingface.co/docs/transformers/chat_templating for a full description.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -159,7 +156,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         pad_token="<|endoftext|>",
         clean_up_tokenization_spaces=False,
         split_special_tokens=False,
-        chat_template=CHAT_TEMPLATE,
         **kwargs,
     ):
         # Qwen vocab does not contain control tokens; added tokens need to be special
@@ -204,12 +200,15 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
 
         self.pat = re.compile(PRETOKENIZE_REGEX)
 
+        if "chat_template" not in kwargs:
+            # if not specified, Qwen2 models should default to the CHATML template
+            kwargs["chat_template"] = CHAT_TEMPLATE
+        
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
             unk_token=unk_token,
-            chat_template=chat_template,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             split_special_tokens=split_special_tokens,
             **kwargs,
