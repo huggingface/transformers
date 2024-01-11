@@ -131,6 +131,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "hubert",
     "layoutlm",
+    "llama",
     "lxmert",
     "m2m_100",
     "marian",
@@ -155,6 +156,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "wav2vec2",
     #    "xlnet",
 ]
+
+_FX_SUPPORTED_MODELS_WITH_KV_CACHE = ["llama", "opt"]
 
 _REGULAR_SUPPORTED_MODELS = []
 for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
@@ -514,6 +517,14 @@ def torch_nn_functional_one_hot(tensor, num_classes=-1):
     return torch.empty(shape, device="meta")
 
 
+def torch_nn_functional_scaled_dot_product_attention(
+    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None
+):
+    L = query.shape[-2]
+    Ev = value.shape[-1]
+    return torch.empty((*query.shape[:-2], L, Ev), device="meta")
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -597,6 +608,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.unique_consecutive: torch_unique_consecutive,
     torch.nn.functional.one_hot: torch_nn_functional_one_hot,
+    torch.nn.functional.scaled_dot_product_attention: torch_nn_functional_scaled_dot_product_attention,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
@@ -868,6 +880,23 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
+        elif "past_key_values" in input_name:
+            if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                raise NotImplementedError(
+                    f"Symbolic trace with past_key_values input is not supported yet for the model {model.config.model_type}. Please open an issue or a PR in Transformers repository if you would like to see the support added."
+                )
+            num_heads = model.config.num_attention_heads
+            head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+            cache_shape = (shape[0], num_heads, 0, head_dim)
+            pkv = tuple(
+                (
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                )
+                for i in range(model.config.num_hidden_layers)
+            )
+            inputs_dict[input_name] = pkv
         else:
             shape_with_hidden_size = shape + [model.config.hidden_size]
             inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
@@ -1022,6 +1051,7 @@ class HFTracer(Tracer):
                 A FX `torch.fx.Graph` representing the semantics of the passed-in `root`.
 
         """
+
         sig = inspect.signature(root.forward if isinstance(root, torch.nn.Module) else root)
 
         if concrete_args is None:
@@ -1075,6 +1105,7 @@ class HFTracer(Tracer):
         for param in sig.parameters.values():
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
+
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
             target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -1248,6 +1279,7 @@ def symbolic_trace(
 
     # Tracing.
     tracer = tracer_cls()
+
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 

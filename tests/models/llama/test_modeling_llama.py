@@ -292,6 +292,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_headmasking = False
     test_pruning = False
+    fx_compatible = True
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
