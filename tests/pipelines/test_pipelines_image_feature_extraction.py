@@ -16,7 +16,6 @@ import unittest
 
 import numpy as np
 import pytest
-from PIL import Image
 
 from transformers import (
     MODEL_MAPPING,
@@ -25,6 +24,7 @@ from transformers import (
     ImageFeatureExtractionPipeline,
     is_tf_available,
     is_torch_available,
+    is_vision_available,
     pipeline,
 )
 from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
@@ -35,6 +35,9 @@ if is_torch_available():
 
 if is_tf_available():
     import tensorflow as tf
+
+if is_vision_available():
+    from PIL import Image
 
 
 # We will verify our results on an image of cute cats
