@@ -1051,7 +1051,6 @@ class HFTracer(Tracer):
                 A FX `torch.fx.Graph` representing the semantics of the passed-in `root`.
 
         """
-
         sig = inspect.signature(root.forward if isinstance(root, torch.nn.Module) else root)
 
         if concrete_args is None:
@@ -1105,7 +1104,6 @@ class HFTracer(Tracer):
         for param in sig.parameters.values():
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
-
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
             target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -1279,7 +1277,6 @@ def symbolic_trace(
 
     # Tracing.
     tracer = tracer_cls()
-
     traced_graph = tracer.trace(model, concrete_args=concrete_args)
     traced = torch.fx.GraphModule(model, traced_graph)
 
