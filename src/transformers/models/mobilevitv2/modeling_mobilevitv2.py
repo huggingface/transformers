@@ -980,8 +980,8 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-voc-deeplabv3")
-        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-voc-deeplabv3")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
