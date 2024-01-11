@@ -40,7 +40,9 @@ for any dataset specific training. For instance, we match the accuracy of the or
 without needing to use any of the 1.28 million training examples it was trained on. We release our code and pre-trained
 model weights at this https URL.*
 
-## Usage
+This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
+
+## Usage tips and example
 
 CLIP is a multi-modal vision and language model. It can be used for image-text similarity and for zero-shot image
 classification. CLIP uses a ViT like transformer to get visual features and a causal language model to get the text
@@ -76,8 +78,6 @@ encode the text and prepare the images. The following example shows how to get t
 >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
 >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
-
-This model was contributed by [valhalla](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/openai/CLIP).
 
 ## Resources
 
@@ -142,6 +142,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] CLIPProcessor
 
+<frameworkcontent>
+<pt>
+
 ## CLIPModel
 
 [[autodoc]] CLIPModel
@@ -164,11 +167,13 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] CLIPVisionModelWithProjection
     - forward
 
-
 ## CLIPVisionModel
 
 [[autodoc]] CLIPVisionModel
     - forward
+
+</pt>
+<tf>
 
 ## TFCLIPModel
 
@@ -186,6 +191,9 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] TFCLIPVisionModel
     - call
+
+</tf>
+<jax>
 
 ## FlaxCLIPModel
 
@@ -208,3 +216,6 @@ The resource should ideally demonstrate something new instead of duplicating an 
 
 [[autodoc]] FlaxCLIPVisionModel
     - __call__
+
+</jax>
+</frameworkcontent>

@@ -25,9 +25,6 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
-@patrickvonplaten
-
 ## Overview
 
 The Bart model was proposed in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation,
@@ -45,7 +42,9 @@ According to the abstract,
   state-of-the-art results on a range of abstractive dialogue, question answering, and summarization tasks, with gains
   of up to 6 ROUGE.
 
-Tips:
+This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/bart).
+
+## Usage tips:
 
 - BART is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
   the left.
@@ -56,18 +55,6 @@ Tips:
   * mask a span of k tokens with a single mask token (a span of 0 tokens is an insertion of a mask token)
   * permute sentences
   * rotate the document to make it start at a specific token
-
-This model was contributed by [sshleifer](https://huggingface.co/sshleifer). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/bart).
-
-
-### Examples
-
-- Examples and scripts for fine-tuning BART and other models for sequence to sequence tasks can be found in
-  [examples/pytorch/summarization/](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization/README.md).
-- An example of how to train [`BartForConditionalGeneration`] with a Hugging Face `datasets`
-  object can be found in this [forum discussion](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904).
-- [Distilled checkpoints](https://huggingface.co/models?search=distilbart) are described in this [paper](https://arxiv.org/abs/2010.13002).
-
 
 ## Implementation Notes
 
@@ -112,6 +99,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 - [`BartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb).
 - [`TFBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
 - [`FlaxBartForConditionalGeneration`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/summarization).
+- An example of how to train [`BartForConditionalGeneration`] with a Hugging Face `datasets` object can be found in this [forum discussion](https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904)
 - [Summarization](https://huggingface.co/course/chapter7/5?fw=pt#summarization) chapter of the 🤗 Hugging Face course.
 - [Summarization task guide](../tasks/summarization)
 
@@ -134,6 +122,7 @@ See also:
 - [Text classification task guide](../tasks/sequence_classification)
 - [Question answering task guide](../tasks/question_answering)
 - [Causal language modeling task guide](../tasks/language_modeling)
+- [Distilled checkpoints](https://huggingface.co/models?search=distilbart) are described in this [paper](https://arxiv.org/abs/2010.13002).
 
 ## BartConfig
 
@@ -149,6 +138,10 @@ See also:
 
 [[autodoc]] BartTokenizerFast
     - all
+
+
+<frameworkcontent>
+<pt>
 
 ## BartModel
 
@@ -175,6 +168,9 @@ See also:
 [[autodoc]] BartForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFBartModel
 
 [[autodoc]] TFBartModel
@@ -189,6 +185,9 @@ See also:
 
 [[autodoc]] TFBartForSequenceClassification
     - call
+
+</tf>
+<jax>
 
 ## FlaxBartModel
 
@@ -222,3 +221,8 @@ See also:
 
 [[autodoc]] FlaxBartForCausalLM
     - __call__
+</jax>
+</frameworkcontent>
+
+
+

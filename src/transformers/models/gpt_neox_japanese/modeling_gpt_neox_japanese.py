@@ -48,7 +48,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
     config_class = GPTNeoXJapaneseConfig
     base_model_prefix = "gpt_neox_japanese"
-    supports_gradient_checkpointing = True
     _no_split_modules = ["GPTNeoXJapaneseLayer"]
     _skip_keys_device_placement = "past_key_values"
 
@@ -65,10 +64,6 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GPTNeoXJapaneseModel):
-            module.gradient_checkpointing = value
 
 
 class GPTNeoXJapaneseAttention(nn.Module):
@@ -258,7 +253,7 @@ class RotaryEmbedding(nn.Module):
         self.max_seq_len_cached = seq_len
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
-        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)

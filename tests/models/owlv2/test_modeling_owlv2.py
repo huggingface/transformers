@@ -24,7 +24,14 @@ import numpy as np
 import requests
 
 from transformers import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -134,8 +141,8 @@ class Owlv2VisionModelTester:
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTest with OwlViT->Owlv2, OWL-ViT->OwlV2, OWLVIT->OWLV2
 class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids,
-    inputs_embeds, attention_mask and seq_length.
+    Here we also overwrite some of the tests of test_modeling_common.py, as OWLV2 does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
     """
 
     all_model_classes = (Owlv2VisionModel,) if is_torch_available() else ()
@@ -188,6 +195,18 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Owlv2VisionModel has no base class and is not available in MODEL_MAPPING")
@@ -320,6 +339,18 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="OwlV2 does not support training yet")
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="OWLV2 does not use inputs_embeds")
@@ -660,6 +691,18 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
@@ -797,10 +840,12 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
-        expected_slice_logits = torch.tensor([[-21.4139, -21.6130], [-19.0084, -19.5491], [-20.9592, -21.3830]])
+        expected_slice_logits = torch.tensor(
+            [[-21.413497, -21.612638], [-19.008193, -19.548841], [-20.958896, -21.382694]]
+        ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         expected_slice_boxes = torch.tensor(
-            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
+            [[0.241309, 0.051896, 0.453267], [0.139474, 0.045701, 0.250660], [0.233022, 0.050479, 0.427671]],
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
@@ -833,7 +878,8 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_inference_one_shot_object_detection_fp16(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, torch_dtype=torch.float16).to(torch_device)

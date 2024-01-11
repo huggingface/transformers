@@ -306,6 +306,7 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
     decoder module when created with the :meth*~transformers.FlaxAutoModel.from_pretrained* class method for the
     encoder and :meth*~transformers.FlaxAutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = EncoderDecoderConfig
     base_model_prefix = "encoder_decoder"
     module_class = FlaxEncoderDecoderModule

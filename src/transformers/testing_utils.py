@@ -29,14 +29,15 @@ import sys
 import tempfile
 import time
 import unittest
+from collections import defaultdict
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
+from unittest.mock import patch
 
-import huggingface_hub
-import requests
+import urllib3
 
 from transformers import logging as transformers_logging
 
@@ -45,12 +46,14 @@ from .integrations import (
     is_optuna_available,
     is_ray_available,
     is_sigopt_available,
+    is_tensorboard_available,
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
+    is_auto_awq_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
     is_bs4_available,
@@ -64,6 +67,7 @@ from .utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -104,6 +108,7 @@ from .utils import (
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -361,6 +366,13 @@ def require_fsdp(test_case, min_version: str = "1.12.0"):
     )
 
 
+def require_g2p_en(test_case):
+    """
+    Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
+
+
 def require_safetensors(test_case):
     """
     Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
@@ -435,6 +447,15 @@ def require_flash_attn(test_case):
 
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+
+
+def require_torch_sdpa(test_case):
+    """
+    Decorator marking a test that requires PyTorch's SDPA.
+
+    These tests are skipped when requirements are not met (torch version).
+    """
+    return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
 def require_peft(test_case):
@@ -628,6 +649,20 @@ def require_torch_multi_gpu(test_case):
     return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
 
 
+def require_torch_multi_accelerator(test_case):
+    """
+    Decorator marking a test that requires a multi-accelerator (in PyTorch). These tests are skipped on a machine
+    without multiple accelerators. To run *only* the multi_accelerator tests, assuming all test names contain
+    multi_accelerator: $ pytest -sv ./tests -k "multi_accelerator"
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    return unittest.skipUnless(backend_device_count(torch_device) > 1, "test requires multiple accelerators")(
+        test_case
+    )
+
+
 def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
@@ -640,6 +675,16 @@ def require_torch_non_multi_gpu(test_case):
     return unittest.skipUnless(torch.cuda.device_count() < 2, "test requires 0 or 1 GPU")(test_case)
 
 
+def require_torch_non_multi_accelerator(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 accelerator setup (in PyTorch).
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    return unittest.skipUnless(backend_device_count(torch_device) < 2, "test requires 0 or 1 accelerator")(test_case)
+
+
 def require_torch_up_to_2_gpus(test_case):
     """
     Decorator marking a test that requires 0 or 1 or 2 GPU setup (in PyTorch).
@@ -650,6 +695,17 @@ def require_torch_up_to_2_gpus(test_case):
     import torch
 
     return unittest.skipUnless(torch.cuda.device_count() < 3, "test requires 0 or 1 or 2 GPUs")(test_case)
+
+
+def require_torch_up_to_2_accelerators(test_case):
+    """
+    Decorator marking a test that requires 0 or 1 or 2 accelerator setup (in PyTorch).
+    """
+    if not is_torch_available():
+        return unittest.skip("test requires PyTorch")(test_case)
+
+    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
+    (test_case)
 
 
 def require_torch_tpu(test_case):
@@ -773,7 +829,9 @@ def require_torch_gpu(test_case):
 
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
-    return unittest.skipUnless(torch_device != "cpu", "test requires accelerator")(test_case)
+    return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
+        test_case
+    )
 
 
 def require_torch_fp16(test_case):
@@ -911,11 +969,25 @@ def require_optimum(test_case):
     return unittest.skipUnless(is_optimum_available(), "test requires optimum")(test_case)
 
 
+def require_tensorboard(test_case):
+    """
+    Decorator for `tensorboard` dependency
+    """
+    return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
+
+
 def require_auto_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
     return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+
+
+def require_auto_awq(test_case):
+    """
+    Decorator for auto_awq dependency
+    """
+    return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1930,32 +2002,40 @@ def run_command(command: List[str], return_stdout=False):
 class RequestCounter:
     """
     Helper class that will count all requests made online.
+
+    Might not be robust if urllib3 changes its logging format but should be good enough for us.
+
+    Usage:
+    ```py
+    with RequestCounter() as counter:
+        _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+    assert counter["GET"] == 0
+    assert counter["HEAD"] == 1
+    assert counter.total_calls == 1
+    ```
     """
 
     def __enter__(self):
-        self.head_request_count = 0
-        self.get_request_count = 0
-        self.other_request_count = 0
-
-        # Mock `get_session` to count HTTP calls.
-        self.old_get_session = huggingface_hub.utils._http.get_session
-        self.session = requests.Session()
-        self.session.request = self.new_request
-        huggingface_hub.utils._http.get_session = lambda: self.session
+        self._counter = defaultdict(int)
+        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self.mock = self.patcher.start()
         return self
 
-    def __exit__(self, *args, **kwargs):
-        huggingface_hub.utils._http.get_session = self.old_get_session
+    def __exit__(self, *args, **kwargs) -> None:
+        for call in self.mock.call_args_list:
+            log = call.args[0] % call.args[1:]
+            for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
+                if method in log:
+                    self._counter[method] += 1
+                    break
+        self.patcher.stop()
 
-    def new_request(self, method, **kwargs):
-        if method == "GET":
-            self.get_request_count += 1
-        elif method == "HEAD":
-            self.head_request_count += 1
-        else:
-            self.other_request_count += 1
+    def __getitem__(self, key: str) -> int:
+        return self._counter[key]
 
-        return requests.request(method=method, **kwargs)
+    @property
+    def total_calls(self) -> int:
+        return sum(self._counter.values())
 
 
 def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, description: Optional[str] = None):

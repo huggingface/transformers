@@ -212,8 +212,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
 
-        Blenderbot tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will
-        greedily comprise the space before the *<mask>*.
+        Blenderbot tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        comprise the space before the *<mask>*.
         """
         if self._mask_token is None:
             if self.verbose:
@@ -264,8 +264,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):

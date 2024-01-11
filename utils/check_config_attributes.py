@@ -96,6 +96,21 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_encoder_layers",
         "t2u_max_position_embeddings",
     ],
+    # Actually used in the config or generation config, in that case necessary for the sub-components generation
+    "SeamlessM4Tv2Config": [
+        "max_new_tokens",
+        "t2u_decoder_attention_heads",
+        "t2u_decoder_ffn_dim",
+        "t2u_decoder_layers",
+        "t2u_encoder_attention_heads",
+        "t2u_encoder_ffn_dim",
+        "t2u_encoder_layers",
+        "t2u_max_position_embeddings",
+        "t2u_variance_pred_dropout",
+        "t2u_variance_predictor_embed_dim",
+        "t2u_variance_predictor_hidden_dim",
+        "t2u_variance_predictor_kernel_size",
+    ],
 }
 
 
@@ -108,6 +123,7 @@ SPECIAL_CASES_TO_ALLOW.update(
         "DinatConfig": True,
         "DonutSwinConfig": True,
         "EfficientFormerConfig": True,
+        "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
         "JukeboxConfig": True,
         "LayoutLMv2Config": True,
@@ -127,7 +143,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "SwitchTransformersConfig": True,
         "TableTransformerConfig": True,
         "TapasConfig": True,
-        "TransfoXLConfig": True,
         "UniSpeechConfig": True,
         "UniSpeechSatConfig": True,
         "WavLMConfig": True,
