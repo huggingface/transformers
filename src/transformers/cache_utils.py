@@ -375,19 +375,21 @@ class StaticCache(Cache):
         """
         attention_mask = cache_kwargs.get("attention_mask")
         position_ids = cache_kwargs.get("position_ids")
-
+        position_ids = torch.arange(key_states.shape[-2])
         # place each cache on the correct layer device, not optimised?
-        # if self.seen_tokens == 0:
-        #     self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
-        #     self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
-        #     self.causal_4d_mask = self.causal_4d_mask.to(value_states.device)
+
+        # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
+        # self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device, non_blocking=True)
+        # self.causal_4d_mask = self.causal_4d_mask.to(value_states.device, non_blocking=True)
         
         k_out = self.key_cache[layer_idx]
         v_out = self.value_cache[layer_idx]
         # prev_pos = self.seen_tokens//self.num_layers => faster already
-
-        k_out[:, :, position_ids] = key_states
-        v_out[:, :, position_ids] = value_states
+        # try to use the same memory sapce to make sure graph is called
+        k_out[:, :, position_ids].copy_(key_states)
+        v_out[:, :, position_ids].copy_(value_states)
+        # k_out[:, :, position_ids] = key_states
+        # v_out[:, :, position_ids] = value_states
 
         # if attention_mask is not None:
         #     # if the past length changes then we do have a problem
@@ -402,9 +404,9 @@ class StaticCache(Cache):
             # if self.seen_tokens + key_states.shape[-2] > self.max_sequence_length:
             #     self.seen_tokens = 1
             #     # raise ValueError("Your are going outside the allocated cache")
-        self.seen_tokens += key_states.shape[-2]
+        # self.seen_tokens += key_states.shape[-2]
             
-        return k_out, v_out , attention_mask
+        return k_out, v_out, attention_mask
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
