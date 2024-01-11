@@ -5418,7 +5418,7 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
-    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
+    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5886,6 +5886,7 @@ if TYPE_CHECKING:
         from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
+        from .models.qwen2 import Qwen2TokenizerFast
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
