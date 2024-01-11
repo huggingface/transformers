@@ -344,7 +344,7 @@ class StaticCache(Cache):
         # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         # self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
-        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = 0 
         
         # We cache a big mask that will be updated with the input mask
         # self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
@@ -375,9 +375,9 @@ class StaticCache(Cache):
         """
         attention_mask = cache_kwargs.get("attention_mask")
         position_ids = cache_kwargs.get("position_ids")
-        position_ids = torch.arange(key_states.shape[-2])
+        # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         # place each cache on the correct layer device, not optimised?
-
+        self._seen_tokens = key_states.shape[-2] * (position_ids+1)
         # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
         # self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device, non_blocking=True)
         # self.causal_4d_mask = self.causal_4d_mask.to(value_states.device, non_blocking=True)
@@ -386,10 +386,9 @@ class StaticCache(Cache):
         v_out = self.value_cache[layer_idx]
         # prev_pos = self.seen_tokens//self.num_layers => faster already
         # try to use the same memory sapce to make sure graph is called
-        k_out[:, :, position_ids].copy_(key_states)
-        v_out[:, :, position_ids].copy_(value_states)
-        # k_out[:, :, position_ids] = key_states
-        # v_out[:, :, position_ids] = value_states
+        k_out[:, :, position_ids] = key_states
+        v_out[:, :, position_ids] = value_states
+
 
         # if attention_mask is not None:
         #     # if the past length changes then we do have a problem
@@ -408,9 +407,13 @@ class StaticCache(Cache):
             
         return k_out, v_out, attention_mask
 
+    @property
+    def seen_tokens(self):
+        return  self._seen_tokens # // self.num_layers
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
-        return self.seen_tokens
+        return self._seen_tokens #// self.num_layers
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""

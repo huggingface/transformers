@@ -147,12 +147,12 @@ class LlamaRotaryEmbedding(nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        # if seq_len > self.max_seq_len_cached:
+        #     self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+            self.cos_cached.to(dtype=x.dtype),
+            self.sin_cached.to(dtype=x.dtype),
         )
 
 
@@ -719,17 +719,17 @@ class LlamaSdpaAttention(LlamaAttention):
         query_states, key_states, value_states = map(lambda x: x.transpose(1, 2), (query_states, key_states, value_states))
 
         # get_usable_length make the whole code a lot slower
-        # kv_seq_len = key_states.shape[-2]
-        # if past_key_value is not None:
-        #     kv_seq_len += 0
-        # cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_seq_length()
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
             cache_kwargs = {'position_ids':position_ids}
             # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
-            key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states, _ = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
