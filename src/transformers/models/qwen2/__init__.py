@@ -50,14 +50,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_qwen2 import Qwen2Tokenizer
+    from .tokenization_qwen2 import Qwen2Tokenizer
 
     try:
         if not is_tokenizers_available():
