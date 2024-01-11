@@ -166,8 +166,6 @@ OBJECTS_TO_IGNORE = [
     "ElectraTokenizerFast",
     "EncoderDecoderModel",
     "EncoderRepetitionPenaltyLogitsProcessor",
-    "ErnieConfig",
-    "ErnieMConfig",
     "ErnieMModel",
     "ErnieModel",
     "ErnieMTokenizer",

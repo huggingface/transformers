@@ -66,7 +66,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 >>> device = "cuda" # the device to load the model onto
 
 >>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-8x7B")
+>>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
 >>> prompt = "My favourite condiment is"
 
