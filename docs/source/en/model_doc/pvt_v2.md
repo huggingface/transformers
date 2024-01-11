@@ -58,7 +58,7 @@ processed = image_processor(image)
 outputs = model(torch.tensor(processed["pixel_values"]))
 ```
 
-To use the PVTv2 with a more complex architecture like DeformableDETR, you can use AutoBackbone (this model would need fine-tuning as you're replacing the backbone in the pretrained model):
+To use the PVTv2 as a backbone for more complex architectures like DeformableDETR, you can use AutoBackbone (this model would need fine-tuning as you're replacing the backbone in the pretrained model):
 
 ```python
 import requests
