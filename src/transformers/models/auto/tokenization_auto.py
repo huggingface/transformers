@@ -336,7 +336,6 @@ else:
             (
                 "qwen2",
                 (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "Qwen2Tokenizer" if is_tokenizers_available() else None,
                     "Qwen2TokenizerFast" if is_tokenizers_available() else None,
                 ),
