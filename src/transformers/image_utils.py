@@ -29,6 +29,7 @@ from .utils import (
     is_torch_available,
     is_torch_tensor,
     is_vision_available,
+    logging,
     requires_backends,
     to_numpy,
 )
@@ -56,6 +57,9 @@ if TYPE_CHECKING:
         import torch
 
 
+logger = logging.get_logger(__name__)
+
+
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
 ]  # noqa
@@ -64,6 +68,19 @@ ImageInput = Union[
 class ChannelDimension(ExplicitEnum):
     FIRST = "channels_first"
     LAST = "channels_last"
+
+
+class AnnotationFormat(ExplicitEnum):
+    COCO_DETECTION = "coco_detection"
+    COCO_PANOPTIC = "coco_panoptic"
+
+
+class AnnotionFormat(ExplicitEnum):
+    COCO_DETECTION = AnnotationFormat.COCO_DETECTION.value
+    COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
+
+
+AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
 def is_pil_image(img):
@@ -664,3 +681,40 @@ class ImageFeatureExtractionMixin:
         return image.rotate(
             angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
         )
+
+
+def promote_annotation_format(annotation_format: Union[AnnotionFormat, AnnotationFormat]) -> AnnotationFormat:
+    # can be removed when `AnnotionFormat` is fully deprecated
+    return AnnotationFormat(annotation_format.value)
+
+
+def validate_annotations(
+    annotation_format: AnnotationFormat,
+    supported_annotation_formats: Tuple[AnnotationFormat, ...],
+    annotations: List[Dict],
+) -> None:
+    if isinstance(annotation_format, AnnotionFormat):
+        logger.warning_once(
+            f"`{annotation_format.__class__.__name__}` is deprecated and will be removed in v4.38. "
+            f"Please use `{AnnotationFormat.__name__}` instead."
+        )
+        annotation_format = promote_annotation_format(annotation_format)
+
+    if annotation_format not in supported_annotation_formats:
+        raise ValueError(f"Unsupported annotation format: {format} must be one of {supported_annotation_formats}")
+
+    if annotation_format is AnnotationFormat.COCO_DETECTION:
+        if not valid_coco_detection_annotations(annotations):
+            raise ValueError(
+                "Invalid COCO detection annotations. Annotations must a dict (single image) or list of dicts "
+                "(batch of images) with the following keys: `image_id` and `annotations`, with the latter "
+                "being a list of annotations in the COCO format."
+            )
+
+    if annotation_format is AnnotationFormat.COCO_PANOPTIC:
+        if not valid_coco_panoptic_annotations(annotations):
+            raise ValueError(
+                "Invalid COCO panoptic annotations. Annotations must a dict (single image) or list of dicts "
+                "(batch of images) with the following keys: `image_id`, `file_name` and `segments_info`, with "
+                "the latter being a list of annotations in the COCO format."
+            )

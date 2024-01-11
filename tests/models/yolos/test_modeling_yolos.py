@@ -352,11 +352,11 @@ class YolosModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice_logits = torch.tensor(
-            [[-24.0248, -10.3024, -14.8290], [-42.0392, -16.8200, -27.4334], [-27.2743, -11.8154, -18.7148]],
+            [[-23.7219, -10.3165, -14.9083], [-41.5429, -15.2403, -24.1478], [-29.3909, -12.7173, -19.4650]],
             device=torch_device,
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2559, 0.5455, 0.4706], [0.2989, 0.7279, 0.1875], [0.7732, 0.4017, 0.4462]], device=torch_device
+            [[0.2536, 0.5449, 0.4643], [0.2037, 0.7735, 0.3672], [0.7692, 0.4056, 0.4549]], device=torch_device
         )
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
@@ -365,9 +365,9 @@ class YolosModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9994, 0.9790, 0.9964, 0.9972, 0.9861]).to(torch_device)
+        expected_scores = torch.tensor([0.9991, 0.9801, 0.9978, 0.9875, 0.9848]).to(torch_device)
         expected_labels = [75, 75, 17, 63, 17]
-        expected_slice_boxes = torch.tensor([335.0609, 79.3848, 375.4216, 187.2495]).to(torch_device)
+        expected_slice_boxes = torch.tensor([331.8438, 80.5440, 369.9546, 188.0579]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 5)
         self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-4))

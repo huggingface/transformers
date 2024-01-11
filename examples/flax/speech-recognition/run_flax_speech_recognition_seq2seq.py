@@ -60,7 +60,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risk.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
 
@@ -640,7 +640,7 @@ def main():
 
     # Create learning rate schedule
     linear_decay_lr_schedule_fn = create_learning_rate_fn(
-        len(vectorized_datasets["train"]),
+        total_train_steps,
         training_args.warmup_steps,
         training_args.learning_rate,
     )

@@ -1535,7 +1535,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
         ...     0
@@ -1826,9 +1826,9 @@ class DetrForSegmentation(DetrPreTrainedModel):
             outputs_loss["pred_masks"] = pred_masks
             if self.config.auxiliary_loss:
                 intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_class = self.detr.class_labels_classifier(intermediate)
+                outputs_coord = self.detr.bbox_predictor(intermediate).sigmoid()
+                auxiliary_outputs = self.detr._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)

@@ -38,6 +38,7 @@ from transformers import (
     AutoTokenizer,
     IntervalStrategy,
     PretrainedConfig,
+    TrainerCallback,
     TrainingArguments,
     get_polynomial_decay_schedule_with_warmup,
     is_torch_available,
@@ -56,6 +57,7 @@ from transformers.testing_utils import (
     get_tests_dir,
     is_staging_test,
     require_accelerate,
+    require_deepspeed,
     require_intel_extension_for_pytorch,
     require_optuna,
     require_ray,
@@ -79,7 +81,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -101,6 +104,7 @@ if is_torch_available():
 
     import transformers.optimization
     from transformers import (
+        AutoModelForCausalLM,
         AutoModelForSequenceClassification,
         EarlyStoppingCallback,
         GlueDataset,
@@ -1310,6 +1314,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
+    def test_save_checkpoints_is_atomic(self):
+        class UnsaveableTokenizer(PreTrainedTokenizerBase):
+            def save_pretrained(self, *args, **kwargs):
+                raise OSError("simulated file write error")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir, save_steps=5)
+            # Attach unsaveable tokenizer to partially fail checkpointing
+            trainer.tokenizer = UnsaveableTokenizer()
+            with self.assertRaises(OSError) as _context:
+                trainer.train()
+            assert get_last_checkpoint(tmpdir) is None
+
     @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
@@ -1442,6 +1459,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
+    @unittest.skip(
+        reason="@muellerzr: Fix once Trainer can take an accelerate configuration. Need to set `seedable_sampler=True`."
+    )
     def test_resume_training_with_randomness(self):
         # For more than 1 GPUs, since the randomness is introduced in the model and with DataParallel (which is used
         # in this test for more than 2 GPUs), the calls to the torch RNG will happen in a random order (sometimes
@@ -1531,6 +1551,86 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         testargs[-1] = "1"
         with patch.object(sys, "argv", testargs):
             run_glue.main()
+
+    @require_deepspeed
+    def test_auto_batch_size_with_resume_from_checkpoint_with_deepspeed(self):
+        train_dataset = RegressionDataset(length=128)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        class MockCudaOOMCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                # simulate OOM on the first step
+                if state.train_batch_size >= 16:
+                    raise RuntimeError("CUDA out of memory.")
+
+        deepspeed = {
+            "zero_optimization": {
+                "stage": 1,
+            },
+            "train_batch_size": "auto",
+            "train_micro_batch_size_per_gpu": "auto",
+        }
+
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+            deepspeed=deepspeed,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+        trainer.train()
+        # After `auto_find_batch_size` is ran we should now be at 8
+        self.assertEqual(trainer._train_batch_size, 8)
+
+        # We can then make a new Trainer
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        # Check we are at 16 to start
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
+        trainer.train(resume_from_checkpoint=True)
+        # We should be back to 8 again, picking up based upon the last ran Trainer
+        self.assertEqual(trainer._train_batch_size, 8)
+
+    def test_auto_batch_size_with_resume_from_checkpoint(self):
+        train_dataset = RegressionDataset(length=128)
+
+        config = RegressionModelConfig(a=0, b=2)
+        model = RegressionRandomPreTrainedModel(config)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+
+        class MockCudaOOMCallback(TrainerCallback):
+            def on_step_end(self, args, state, control, **kwargs):
+                # simulate OOM on the first step
+                if state.train_batch_size >= 16:
+                    raise RuntimeError("CUDA out of memory.")
+
+        args = RegressionTrainingArguments(
+            tmp_dir,
+            do_train=True,
+            max_steps=2,
+            save_steps=1,
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+        trainer.train()
+        # After `auto_find_batch_size` is ran we should now be at 8
+        self.assertEqual(trainer._train_batch_size, 8)
+
+        # We can then make a new Trainer
+        trainer = Trainer(model, args, train_dataset=train_dataset)
+        # Check we are at 16 to start
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
+        trainer.train(resume_from_checkpoint=True)
+        # We should be back to 8 again, picking up based upon the last ran Trainer
+        self.assertEqual(trainer._train_batch_size, 8)
 
     # regression for this issue: https://github.com/huggingface/transformers/issues/12970
     def test_training_with_resume_from_checkpoint_false(self):
@@ -1794,6 +1894,35 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
+
+    @slow
+    def test_trainer_eval_multiple(self):
+        MODEL_ID = "gpt2"
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
+        model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
+        dataset = LineByLineTextDataset(
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
+        )
+        for example in dataset.examples:
+            example["labels"] = example["input_ids"]
+        training_args = TrainingArguments(
+            output_dir="./examples",
+            use_cpu=True,
+            per_device_eval_batch_size=1,
+        )
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            eval_dataset={
+                "data1": dataset,
+                "data2": dataset,
+            },
+        )
+        result = trainer.evaluate()
+        self.assertIn("eval_data1_loss", result)
+        self.assertIn("eval_data2_loss", result)
 
     @slow
     def test_trainer_eval_lm(self):
