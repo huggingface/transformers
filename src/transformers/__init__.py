@@ -1190,6 +1190,7 @@ else:
     _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
