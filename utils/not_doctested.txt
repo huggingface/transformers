@@ -198,6 +198,7 @@ docs/source/en/model_doc/pop2piano.md
 docs/source/en/model_doc/prophetnet.md
 docs/source/en/model_doc/pvt.md
 docs/source/en/model_doc/qdqbert.md
+docs/source/en/model_doc/qwen2.md
 docs/source/en/model_doc/rag.md
 docs/source/en/model_doc/realm.md
 docs/source/en/model_doc/reformer.md
@@ -745,6 +746,8 @@ src/transformers/models/pvt/image_processing_pvt.py
 src/transformers/models/pvt/modeling_pvt.py
 src/transformers/models/qdqbert/configuration_qdqbert.py
 src/transformers/models/qdqbert/modeling_qdqbert.py
+src/transformers/models/qwen2/configuration_qwen2.py
+src/transformers/models/qwen2/modeling_qwen2.py
 src/transformers/models/rag/configuration_rag.py
 src/transformers/models/rag/modeling_rag.py
 src/transformers/models/rag/modeling_tf_rag.py
