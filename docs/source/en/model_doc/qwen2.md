@@ -58,6 +58,15 @@ In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inferen
 
 [[autodoc]] Qwen2Config
 
+## Qwen2Tokenizer
+
+[[autodoc]] Qwen2Tokenizer
+    - save_vocabulary
+
+## Qwen2TokenizerFast
+
+[[autodoc]] GPT2TokenizerFast
+
 ## Qwen2Model
 
 [[autodoc]] Qwen2Model
