@@ -203,7 +203,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         if "chat_template" not in kwargs:
             # if not specified, Qwen2 models should default to the CHATML template
             kwargs["chat_template"] = CHAT_TEMPLATE
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
