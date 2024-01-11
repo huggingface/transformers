@@ -23,15 +23,8 @@ from ...utils import (
 
 _import_structure = {
     "configuration_qwen2": ["QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Qwen2Config"],
+    "tokenization_qwen2": ["Qwen2Tokenizer"],
 }
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_qwen2"] = ["Qwen2Tokenizer"]
 
 try:
     if not is_tokenizers_available():
