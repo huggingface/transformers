@@ -78,6 +78,7 @@ class Qwen2ModelTester:
         num_labels=3,
         num_choices=4,
         pad_token_id=0,
+        bos_token_id=1,
         scope=None,
     ):
         self.parent = parent
@@ -106,6 +107,7 @@ class Qwen2ModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         self.scope = scope
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
@@ -151,6 +153,7 @@ class Qwen2ModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             pad_token_id=self.pad_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->Qwen2
