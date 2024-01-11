@@ -166,8 +166,8 @@ class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, config.intermediate_size)
-        self.c_proj = nn.Linear(config.intermediate_size, embed_dim)
+        self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
+        self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
         self.act = ACT2FN[config.activation_function]
 
     def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
@@ -178,15 +178,15 @@ class Starcoder2MLP(nn.Module):
 
 
 class Starcoder2GatedMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Starcoder2Config):
         # TODO: Dropout?
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -932,7 +932,6 @@ STARCODER2_INPUTS_DOCSTRING = r"""
     "The bare Starcoder2 Model outputting raw hidden-states without any specific head on top.",
     STARCODER2_START_DOCSTRING,
 )
-# Copied from transformers.models.mistral.modeling_mistral.MistralModel with MISTRAL->STARCODER2,Mistral->Starcoder2
 class Starcoder2Model(Starcoder2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
@@ -951,8 +950,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
             [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self._attn_implementation = config._attn_implementation
-        self.norm = Starcoder2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.norm = STARCODER2_NORMALIZATION_CLASSES[config.norm_type](config.hidden_size, eps=config.norm_eps)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -963,6 +961,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Copied from transformers.models.mistral.modeling_mistral.MistralModel.forward with MISTRAL->STARCODER2,Mistral->Starcoder2
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(
         self,
