@@ -178,9 +178,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         imgs = examples
         outputs = feature_extractor(imgs[0])
 
-        shape = self.get_shape(outputs)
-        self.assertEqual(shape[0], 1)
+        self.assertEqual(len(outputs), 1)
 
         outputs = feature_extractor(imgs)
-        shape = self.get_shape(outputs)
-        self.assertEqual(shape[0], 2)
+        self.assertEqual(len(outputs), 2)
