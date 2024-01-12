@@ -824,7 +824,7 @@ class Pipeline(_ScikitCompat):
             elif is_torch_xpu_available(check_device=True):
                 self.device = torch.device(f"xpu:{device}")
             else:
-                raise ValueError(f"xpu:{device} and cuda:{device} are not available")
+                raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
