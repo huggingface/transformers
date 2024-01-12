@@ -362,7 +362,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.assertIsNotNone(transformer_decoder_hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
 
-
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.use_auxiliary_loss = True
@@ -380,6 +379,7 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             self.assertIsNotNone(outputs.auxiliary_logits)
             self.assertEqual(len(outputs.auxiliary_logits), self.model_tester.num_channels - 1)
+
 
 TOLERANCE = 1e-4
 
