@@ -4878,7 +4878,8 @@ def top_k_top_p_filtering(
     """
     warnings.warn(
         "`top_k_top_p_filtering` is scheduled for deletion in v4.39. Use `TopKLogitsWarper` and `TopPLogitsWarper` "
-        "instead.", DeprecationWarning,
+        "instead.",
+        DeprecationWarning,
     )
 
     if top_k > 0:
