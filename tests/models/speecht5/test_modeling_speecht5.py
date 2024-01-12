@@ -1046,27 +1046,133 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         input_text = "Mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
         input_ids = processor(text=input_text, return_tensors="pt").input_ids.to(torch_device)
         speaker_embeddings = torch.zeros((1, 512), device=torch_device)
-        
+
         # Generate speech and validate output dimensions
-        set_seed(555) # Ensure deterministic behavior
+        set_seed(555)  # Ensure deterministic behavior
         generated_speech = model.generate_speech(input_ids, speaker_embeddings=speaker_embeddings)
         num_mel_bins = model.config.num_mel_bins
         self.assertEqual(
-            generated_speech.shape[1], 
-            num_mel_bins,
-            "Generated speech output has an unexpected number of mel bins."
+            generated_speech.shape[1], num_mel_bins, "Generated speech output has an unexpected number of mel bins."
         )
 
         # Validate generation with additional kwargs using model.generate;
         # same method than generate_speech
-        set_seed(555) # Reset seed for consistent results
+        set_seed(555)  # Reset seed for consistent results
         generated_speech_with_generate = model.generate(
             input_ids, attention_mask=None, speaker_embeddings=speaker_embeddings
         )
         self.assertEqual(
             generated_speech_with_generate.shape,
             generated_speech.shape,
-            "Shape mismatch between generate_speech and generate methods."
+            "Shape mismatch between generate_speech and generate methods.",
+        )
+
+    def test_one_to_many_generation(self):
+        model = self.default_model
+        processor = self.default_processor
+        vocoder = self.default_vocoder
+
+        input_text = [
+            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
+            "nor is mister quilter's manner less interesting than his matter",
+            "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
+        ]
+        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+        speaker_embeddings = torch.zeros((1, 512), device=torch_device)
+
+        # Generate spectrograms
+        set_seed(555)  # Ensure deterministic behavior
+        spectrograms, spectrogram_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            return_output_lengths=True,
+        )
+
+        # Validate generated spectrogram dimensions
+        expected_batch_size = len(input_text)
+        num_mel_bins = model.config.num_mel_bins
+        actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
+        self.assertEqual(actual_batch_size, expected_batch_size, "Batch size of generated spectrograms is incorrect.")
+        self.assertEqual(
+            actual_num_mel_bins, num_mel_bins, "Number of mel bins in batch generated spectrograms is incorrect."
+        )
+
+        # Generate waveforms using the vocoder
+        waveforms = vocoder(spectrograms)
+        waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
+
+        # Validate generation with integrated vocoder
+        set_seed(555)  # Reset seed for consistent results
+        waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+            return_output_lengths=True,
+        )
+
+        # Check consistency between waveforms generated with and without standalone vocoder
+        self.assertTrue(
+            torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8),
+            "Mismatch in waveforms generated with and without the standalone vocoder.",
+        )
+        self.assertEqual(
+            waveform_lengths,
+            waveform_lengths_with_vocoder,
+            "Waveform lengths differ between standalone and integrated vocoder generation.",
+        )
+
+        # Test generation consistency without returning lengths
+        set_seed(555)  # Reset seed for consistent results
+        waveforms_with_vocoder_no_lengths = model.generate_speech(
+            input_ids=inputs["input_ids"],
+            speaker_embeddings=speaker_embeddings,
+            attention_mask=inputs["attention_mask"],
+            vocoder=vocoder,
+            return_output_lengths=False,
+        )
+
+        # Validate waveform consistency without length information
+        self.assertTrue(
+            torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
+            "Waveforms differ when generated with and without length information.",
+        )
+
+        # Validate batch vs. single instance generation consistency
+        for i, text in enumerate(input_text):
+            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+            set_seed(555)  # Reset seed for consistent results
+            spectrogram = model.generate_speech(
+                input_ids=inputs["input_ids"],
+                speaker_embeddings=speaker_embeddings,
+            )
+
+            # Check spectrogram shape consistency
+            self.assertEqual(
+                spectrogram.shape,
+                spectrograms[i][: spectrogram_lengths[i]].shape,
+                "Mismatch in spectrogram shape between batch and single instance generation.",
+            )
+
+            # Generate and validate waveform for single instance
+            waveform = vocoder(spectrogram)
+            self.assertEqual(
+                waveform.shape,
+                waveforms[i][: waveform_lengths[i]].shape,
+                "Mismatch in waveform shape between batch and single instance generation.",
+            )
+
+            # Check waveform consistency with integrated vocoder
+            set_seed(555)  # Reset seed for consistent results
+            waveform_with_integrated_vocoder = model.generate_speech(
+                input_ids=inputs["input_ids"],
+                speaker_embeddings=speaker_embeddings,
+                vocoder=vocoder,
+            )
+            self.assertTrue(
+                torch.allclose(waveform, waveform_with_integrated_vocoder, atol=1e-8),
+                "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
     def test_batch_generation(self):
@@ -1079,13 +1185,11 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "nor is mister quilter's manner less interesting than his matter",
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
-        inputs = processor(
-            text=input_text, padding="max_length", max_length=128, return_tensors="pt"
-        ).to(torch_device)
+        inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
         speaker_embeddings = torch.zeros((len(input_text), 512), device=torch_device)
 
         # Generate spectrograms
-        set_seed(555) # Ensure deterministic behavior
+        set_seed(555)  # Ensure deterministic behavior
         spectrograms, spectrogram_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1097,15 +1201,9 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         expected_batch_size = len(input_text)
         num_mel_bins = model.config.num_mel_bins
         actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
+        self.assertEqual(actual_batch_size, expected_batch_size, "Batch size of generated spectrograms is incorrect.")
         self.assertEqual(
-            actual_batch_size,
-            expected_batch_size,
-            "Batch size of generated spectrograms is incorrect."
-        )
-        self.assertEqual(
-            actual_num_mel_bins,
-            num_mel_bins,
-            "Number of mel bins in batch generated spectrograms is incorrect."
+            actual_num_mel_bins, num_mel_bins, "Number of mel bins in batch generated spectrograms is incorrect."
         )
 
         # Generate waveforms using the vocoder
@@ -1113,7 +1211,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         waveform_lengths = [int(waveforms.size(1) / max(spectrogram_lengths)) * i for i in spectrogram_lengths]
 
         # Validate generation with integrated vocoder
-        set_seed(555) # Reset seed for consistent results
+        set_seed(555)  # Reset seed for consistent results
         waveforms_with_vocoder, waveform_lengths_with_vocoder = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1125,16 +1223,16 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         # Check consistency between waveforms generated with and without standalone vocoder
         self.assertTrue(
             torch.allclose(waveforms, waveforms_with_vocoder, atol=1e-8),
-            "Mismatch in waveforms generated with and without the standalone vocoder."
+            "Mismatch in waveforms generated with and without the standalone vocoder.",
         )
         self.assertEqual(
             waveform_lengths,
             waveform_lengths_with_vocoder,
-            "Waveform lengths differ between standalone and integrated vocoder generation."
+            "Waveform lengths differ between standalone and integrated vocoder generation.",
         )
 
         # Test generation consistency without returning lengths
-        set_seed(555) # Reset seed for consistent results
+        set_seed(555)  # Reset seed for consistent results
         waveforms_with_vocoder_no_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1146,46 +1244,44 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         # Validate waveform consistency without length information
         self.assertTrue(
             torch.allclose(waveforms_with_vocoder_no_lengths, waveforms_with_vocoder, atol=1e-8),
-            "Waveforms differ when generated with and without length information."
+            "Waveforms differ when generated with and without length information.",
         )
 
         # Validate batch vs. single instance generation consistency
-        single_speaker_embedding = torch.zeros((1, 512), device=torch_device)
+        single_speaker_embeddings = torch.zeros((1, 512), device=torch_device)
         for i, text in enumerate(input_text):
-            inputs = processor(
-                text=text, padding="max_length", max_length=128, return_tensors="pt"
-            ).to(torch_device)
+            inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
             set_seed(555)  # Reset seed for consistent results
-            single_spectrogram = model.generate_speech(
+            spectrogram = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=single_speaker_embedding,
+                speaker_embeddings=single_speaker_embeddings,
             )
 
             # Check spectrogram shape consistency
             self.assertEqual(
-                single_spectrogram.shape,
-                spectrograms[i][:spectrogram_lengths[i]].shape,
-                "Mismatch in spectrogram shape between batch and single instance generation."
+                spectrogram.shape,
+                spectrograms[i][: spectrogram_lengths[i]].shape,
+                "Mismatch in spectrogram shape between batch and single instance generation.",
             )
 
             # Generate and validate waveform for single instance
-            waveform = vocoder(single_spectrogram)
+            waveform = vocoder(spectrogram)
             self.assertEqual(
                 waveform.shape,
-                waveforms[i][:waveform_lengths[i]].shape,
-                "Mismatch in waveform shape between batch and single instance generation."
+                waveforms[i][: waveform_lengths[i]].shape,
+                "Mismatch in waveform shape between batch and single instance generation.",
             )
 
             # Check waveform consistency with integrated vocoder
             set_seed(555)  # Reset seed for consistent results
             waveform_with_integrated_vocoder = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=single_speaker_embedding,
+                speaker_embeddings=single_speaker_embeddings,
                 vocoder=vocoder,
             )
             self.assertTrue(
                 torch.allclose(waveform, waveform_with_integrated_vocoder, atol=1e-8),
-                "Mismatch in waveform between standalone and integrated vocoder for single instance generation."
+                "Mismatch in waveform between standalone and integrated vocoder for single instance generation.",
             )
 
 

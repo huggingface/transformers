@@ -653,12 +653,15 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         super().__init__()
         self.config = config
 
-        self.layers = nn.ModuleList([
-            nn.Linear(
-                config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
-                config.speech_decoder_prenet_units
-            ) for i in range(config.speech_decoder_prenet_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.Linear(
+                    config.num_mel_bins if i == 0 else config.speech_decoder_prenet_units,
+                    config.speech_decoder_prenet_units,
+                )
+                for i in range(config.speech_decoder_prenet_layers)
+            ]
+        )
 
         self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
         self.encode_positions = SpeechT5ScaledPositionalEncoding(
@@ -2818,6 +2821,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch_size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
@@ -2904,6 +2917,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
