@@ -377,7 +377,9 @@ class PipelineTesterMixin:
         self.run_task_tests(task="image-to-text")
 
     @is_pipeline_test
+    @require_timm
     @require_vision
+    @require_torch
     def test_pipeline_image_feature_extraction(self):
         self.run_task_tests(task="image-feature-extraction")
 
