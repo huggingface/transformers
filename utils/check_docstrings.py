@@ -1216,7 +1216,10 @@ def check_docstrings(overwrite: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this."
+            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
+            "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
+            "`utils/check_docstrings.py`."
         )
         error_message += "\n" + "\n".join([f"- {name}" for name in failures])
     if len(to_clean) > 0:
