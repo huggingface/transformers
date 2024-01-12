@@ -295,7 +295,7 @@ class RegNetPreTrainedModel(PreTrainedModel):
 
 REGNET_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matters related to general usage and
     behavior.
 
     Parameters:
