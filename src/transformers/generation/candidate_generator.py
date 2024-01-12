@@ -286,7 +286,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
 
         if chosen_ids is None or len(chosen_ids) == 0:
             # Need to make a dummy tensor to avoid errors
-            chosen_ids = torch.tensor([0], dtype=torch.long, device=input_ids.device)
+            chosen_ids = torch.zeros((1), dtype=torch.long, device=input_ids.device)
 
         # Now need extend input_ids with chosen_ids
         chosen_ids = chosen_ids.unsqueeze(0)
