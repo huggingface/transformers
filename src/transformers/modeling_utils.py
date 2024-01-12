@@ -3592,7 +3592,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # a `modules_to_not_convert` attribute we need to manually set that attribute into the
             # passed `quantization_config`
             elif (
-                quantization_config.modules_to_not_convert is None
+                quantization_config.get("modules_to_not_convert") is None
                 and "modules_to_not_convert" in config.quantization_config
             ):
                 quantization_config.modules_to_not_convert = config.quantization_config["modules_to_not_convert"]
