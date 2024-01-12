@@ -1010,6 +1010,7 @@ class T5EncoderOnlyModelTester:
         outputs = model(
             input_ids=input_ids,
             labels=labels,
+            attention_mask=attention_mask,
         )
         # self.parent.assertEqual(len(outputs), 4)
         self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.seq_length, config.num_labels))
