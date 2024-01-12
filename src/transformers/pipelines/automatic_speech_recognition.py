@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from ..feature_extraction_sequence_utils import SequenceFeatureExtractor
     from ..modeling_utils import PreTrainedModel
+    from ..image_processing_utils import BaseImageProcessor
 
 logger = logging.get_logger(__name__)
 
@@ -203,6 +204,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         feature_extractor: Union["SequenceFeatureExtractor", str] = None,
         tokenizer: Optional[PreTrainedTokenizer] = None,
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
+        image_processor: Optional["BaseImageProcessor"] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -221,6 +223,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
+        # for compatibility with base pipeline methods
+        self.image_processor = image_processor
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
