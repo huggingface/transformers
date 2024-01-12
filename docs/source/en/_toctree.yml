@@ -144,6 +144,8 @@
       title: Multiple GPUs and parallelism
     - local: fsdp
       title: Fully Sharded Data Parallel
+    - local: deepspeed
+      title: DeepSpeed
     - local: perf_train_cpu
       title: Efficient training on CPU
     - local: perf_train_cpu_many
