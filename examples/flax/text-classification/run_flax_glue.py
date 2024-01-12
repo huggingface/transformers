@@ -599,9 +599,9 @@ def main():
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
     if data_args.task_name is not None:
-        metric = evaluate.load("glue", data_args.task_name)
+        metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
     else:
-        metric = evaluate.load("accuracy")
+        metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
     logger.info(f"===== Starting training ({num_epochs} epochs) =====")
     train_time = 0
