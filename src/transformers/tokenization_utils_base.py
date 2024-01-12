@@ -815,6 +815,8 @@ class SpecialTokensMixin:
         mask_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT).
+        prefix_token (`str` or `tokenizers.AddedToken`, *optional*):
+            A special token representing a prefix to the actual generated text.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional tokens, which will be marked as `special`, meaning that they will be
             skipped when decoding if `skip_special_tokens` is set to `True`.
@@ -828,6 +830,7 @@ class SpecialTokensMixin:
         "pad_token",
         "cls_token",
         "mask_token",
+        "prefix_token",
         "additional_special_tokens",
     ]
 
@@ -839,6 +842,7 @@ class SpecialTokensMixin:
         self._pad_token = None
         self._cls_token = None
         self._mask_token = None
+        self._prefix_token = None
         self._pad_token_type_id = 0
         self._additional_special_tokens = []
         self.verbose = verbose
@@ -1104,6 +1108,18 @@ class SpecialTokensMixin:
         return str(self._mask_token)
 
     @property
+    def prefix_token(self) -> str:
+        """
+        `str`: Prefix token, to use when training a chat language model with chat_template, to indicate the begining
+        for the generation from the model. Log an error if used while not having been set.
+        """
+        if self._prefix_token is None:
+            if self.verbose:
+                logger.error("Using prefix_token, but it is not set yet.")
+            return None
+        return str(self._prefix_token)
+
+    @property
     def additional_special_tokens(self) -> List[str]:
         """
         `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
@@ -1156,6 +1172,12 @@ class SpecialTokensMixin:
         if not isinstance(value, (str, AddedToken)) and value is not None:
             raise ValueError("Cannot set a non-string value as the MASK token")
         self._mask_token = value
+
+    @prefix_token.setter
+    def prefix_token(self, value):
+        if not isinstance(value, (str, AddedToken)) and value is not None:
+            raise ValueError("Cannot set a non-string value as the PREFIX token")
+        self._prefix_token = value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -1239,6 +1261,16 @@ class SpecialTokensMixin:
         return self.convert_tokens_to_ids(self.mask_token)
 
     @property
+    def prefix_token_id(self) -> Optional[int]:
+        """
+        `Optional[int]`: Id of the prefix token in the vocabulary, used when training a chat causal-language model.
+        Returns `None` if the token has not been set.
+        """
+        if self._prefix_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.prefix_token)
+
+    @property
     def additional_special_tokens_ids(self) -> List[int]:
         """
         `List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not having
@@ -1273,6 +1305,10 @@ class SpecialTokensMixin:
     @mask_token_id.setter
     def mask_token_id(self, value):
         self._mask_token = self.convert_ids_to_tokens(value) if value is not None else None
+
+    @prefix_token_id.setter
+    def prefix_token_id(self, value):
+        self._prefix_token = self.convert_ids_to_tokens(value) if value is not None else None
 
     @additional_special_tokens_ids.setter
     def additional_special_tokens_ids(self, values):
@@ -1524,6 +1560,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
         mask_token (`str` or `tokenizers.AddedToken`, *optional*):
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
+        prefix_token (`str` or `tokenizers.AddedToken`, *optional*):
+            A special token representing a prefix token (used by generative chat model training and inference, like
+            GPT-2). Will be associated to `self.prefix_token` and `self.prefix_token_id`.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Add them here to ensure they are skipped when decoding with
             `skip_special_tokens` is set to True. If they are not part of the vocabulary, they will be added at the end
@@ -1856,7 +1895,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Will be passed along to the Tokenizer `__init__` method.
             kwargs (additional keyword arguments, *optional*):
                 Will be passed to the Tokenizer `__init__` method. Can be used to set special tokens like `bos_token`,
-                `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`,
+                `eos_token`, `unk_token`, `sep_token`, `pad_token`, `cls_token`, `mask_token`, `prefix_token`,
                 `additional_special_tokens`. See parameters in the `__init__` for more details.
 
         <Tip>
