@@ -2049,7 +2049,6 @@ In this case you usually need to raise the value of `initial_scale_power`. Setti
 
 ### Notes
 
-- DeepSpeed works with the PyTorch [`Trainer`] but not TF [`TFTrainer`].
 - While DeepSpeed has a pip installable PyPI package, it is highly recommended that it gets installed from [source](https://github.com/microsoft/deepspeed#installation) to best match your hardware and also if you need to enable
   certain features, like 1-bit Adam, which aren't available in the pypi distribution.
 - You don't have to use the [`Trainer`] to use DeepSpeed with 🤗 Transformers - you can use any model
