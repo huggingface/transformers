@@ -32,16 +32,17 @@ Wheel files are available for the following Python versions:
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
+| 2.1.0             |            | √          | √          | √          | √           |
+| 2.0.0             |            | √          | √          | √          | √           |
 | 1.13.0            |            | √          | √          | √          | √           |
 | 1.12.100          |            | √          | √          | √          | √           |
 | 1.12.0            |            | √          | √          | √          | √           |
-| 1.11.0            |            | √          | √          | √          | √           |
-| 1.10.0            | √          | √          | √          | √          |             |
 
+Please run `pip list | grep torch` to get your `pytorch_version`.
 ```
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
-where `{pytorch_version}` should be your PyTorch version, for instance 1.13.0.
+where `{pytorch_version}` should be your PyTorch version, for instance 2.1.0.
 Check more approaches for [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
 Versions of oneCCL and PyTorch must match.
 
