@@ -3583,6 +3583,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if quantization_config is None:
                 quantization_config = AwqConfig.from_dict(config.quantization_config)
+            # In case a user passes a `AwqConfig` with `do_fuse=True` for models that have
+            # a `modules_to_not_convert` attribute we need to manually set that attribute into the
+            # passed `quantization_config`
+            elif (
+                getattr(quantization_config, "modules_to_not_convert", None) is None
+                and "modules_to_not_convert" in config.quantization_config
+            ):
+                quantization_config.modules_to_not_convert = config.quantization_config["modules_to_not_convert"]
 
             if quantization_config.modules_to_not_convert is not None:
                 modules_to_not_convert.extend(quantization_config.modules_to_not_convert)

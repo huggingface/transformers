@@ -933,6 +933,10 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
                 except Exception:
                     # Otherwise there is a math operator so we add a code block.
                     str_default = f"`{current_default}`"
+            elif isinstance(default, enum.Enum) and default.name == current_default.split(".")[-1]:
+                # When the default is an Enum (this is often the case for PIL.Image.Resampling), and the docstring
+                # matches the enum name, keep the existing docstring rather than clobbering it with the enum value.
+                str_default = f"`{current_default}`"
 
         if str_default is None:
             str_default = stringify_default(default)

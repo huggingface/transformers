@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # How to create a custom pipeline?
 
-In this guide, we will see how to create a custom pipeline and share it on the [Hub](hf.co/models) or add it to the
+In this guide, we will see how to create a custom pipeline and share it on the [Hub](https://hf.co/models) or add it to the
 🤗 Transformers library.
 
 First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
