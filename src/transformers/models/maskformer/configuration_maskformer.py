@@ -51,7 +51,7 @@ class MaskFormerConfig(PretrainedConfig):
             size.
         no_object_weight (`float`, *optional*, defaults to 0.1):
             Weight to apply to the null (no object) class.
-        auxiliary_loss(`bool`, *optional*, defaults to `False`):
+        use_auxiliary_loss(`bool`, *optional*, defaults to `False`):
             If `True` [`MaskFormerForInstanceSegmentationOutput`] will contain the auxiliary losses computed using the
             logits from each decoder's stage.
         backbone_config (`Dict`, *optional*):
@@ -105,7 +105,7 @@ class MaskFormerConfig(PretrainedConfig):
         fpn_feature_size: int = 256,
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
-        auxiliary_loss: bool = False,
+        use_auxiliary_loss: bool = False,
         backbone_config: Optional[Dict] = None,
         decoder_config: Optional[Dict] = None,
         init_std: float = 0.02,
@@ -171,7 +171,7 @@ class MaskFormerConfig(PretrainedConfig):
         self.cross_entropy_weight = cross_entropy_weight
         self.dice_weight = dice_weight
         self.mask_weight = mask_weight
-        self.auxiliary_loss = auxiliary_loss
+        self.use_auxiliary_loss = use_auxiliary_loss
         self.no_object_weight = no_object_weight
         self.output_auxiliary_logits = output_auxiliary_logits
 

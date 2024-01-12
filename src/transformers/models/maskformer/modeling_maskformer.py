@@ -1155,7 +1155,7 @@ class MaskFormerLoss(nn.Module):
             class_labels (`List[torch.Tensor]`):
                 List of class labels of shape `(labels)`.
             auxiliary_predictions (`Dict[str, torch.Tensor]`, *optional*):
-                if `auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
+                if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], then it contains the logits from the
                 inner layers of the Detr's Decoder.
 
         Returns:
@@ -1164,7 +1164,7 @@ class MaskFormerLoss(nn.Module):
             - **loss_mask** -- The loss computed using sigmoid focal loss on the predicted and ground truth masks.
             - **loss_dice** -- The loss computed using dice loss on the predicted on the predicted and ground truth
               masks.
-            if `auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
+            if `use_auxiliary_loss` was set to `true` in [`MaskFormerConfig`], the dictionary contains addional losses
             for each auxiliary predictions.
         """
 
@@ -1752,7 +1752,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         # get the auxiliary predictions (one for each decoder's layer)
         auxiliary_logits: List[str, Tensor] = []
         # This code is a little bit cumbersome, an improvement can be to return a list of predictions. If we have auxiliary loss then we are going to return more than one element in the list
-        if self.config.auxiliary_loss:
+        if self.config.use_auxiliary_loss:
             stacked_transformer_decoder_outputs = torch.stack(outputs.transformer_decoder_hidden_states)
             classes = self.class_predictor(stacked_transformer_decoder_outputs)
             class_queries_logits = classes[-1]
@@ -1889,7 +1889,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         raw_outputs = self.model(
             pixel_values,
             pixel_mask,
-            output_hidden_states=output_hidden_states or self.config.auxiliary_loss,
+            output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
             return_dict=return_dict,
             output_attentions=output_attentions,
         )
