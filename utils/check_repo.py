@@ -944,7 +944,6 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainer",
     "TFTrainingArguments",
 ]
 
