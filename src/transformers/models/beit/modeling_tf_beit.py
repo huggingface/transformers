@@ -137,18 +137,14 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
-            initializer=tf.random_normal_initializer(
-                stddev=self.config.initializer_range
-            ),
+            initializer=tf.random_normal_initializer(stddev=self.config.initializer_range),
             trainable=True,
             name="cls_token",
         )
         if self.config.use_mask_token:
             self.mask_token = self.add_weight(
                 shape=(1, 1, self.config.hidden_size),
-                initializer=tf.random_normal_initializer(
-                    stddev=self.config.initializer_range
-                ),
+                initializer=tf.random_normal_initializer(stddev=self.config.initializer_range),
                 trainable=True,
                 name="mask_token",
             )
@@ -158,9 +154,7 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
         if self.config.use_absolute_position_embeddings:
             self.position_embeddings = self.add_weight(
                 shape=(1, self.num_patches + 1, self.config.hidden_size),
-                initializer=tf.random_normal_initializer(
-                    stddev=self.config.initializer_range
-                ),
+                initializer=tf.random_normal_initializer(stddev=self.config.initializer_range),
                 trainable=True,
                 name="position_embeddings",
             )
@@ -169,18 +163,14 @@ class TFBeitEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None
-    ) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
         cls_tokens = tf.tile(self.cls_token, (batch_size, 1, 1))
 
         if bool_masked_pos is not None:
-            mask_tokens = tf.broadcast_to(
-                self.mask_token, (batch_size, seq_len, projection_dim)
-            )
+            mask_tokens = tf.broadcast_to(self.mask_token, (batch_size, seq_len, projection_dim))
             # replace the masked visual tokens by mask_tokens
             w = bool_masked_pos[..., None]
             w = tf.cast(w, mask_tokens.dtype)
@@ -207,19 +197,9 @@ class TFBeitPatchEmbeddings(tf.keras.layers.Layer):
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = (
-            image_size
-            if isinstance(image_size, collections.abc.Iterable)
-            else (image_size, image_size)
-        )
-        patch_size = (
-            patch_size
-            if isinstance(patch_size, collections.abc.Iterable)
-            else (patch_size, patch_size)
-        )
-        num_patches = (image_size[1] // patch_size[1]) * (
-            image_size[0] // patch_size[0]
-        )
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.image_size = image_size
         self.patch_size = patch_size
@@ -267,9 +247,7 @@ class TFBeitPatchEmbeddings(tf.keras.layers.Layer):
 
 
 class TFBeitSelfAttention(tf.keras.layers.Layer):
-    def __init__(
-        self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs
-    ):
+    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
 
         if config.hidden_size % config.num_attention_heads != 0:
@@ -344,9 +322,7 @@ class TFBeitSelfAttention(tf.keras.layers.Layer):
             # Passing `0.0` to the `relative_position_bias()` layer because otherwise Keras
             # might complain about `Layer.call()` not being invoked properly. In this case this input
             # i.e., 0.0 is not going to be used in any calculations so we're safe.
-            attention_scores = (
-                attention_scores + self.relative_position_bias(0.0)[None, ...]
-            )
+            attention_scores = attention_scores + self.relative_position_bias(0.0)[None, ...]
 
         # Add shared relative position bias if provided.
         if relative_position_bias is not None:
@@ -367,14 +343,8 @@ class TFBeitSelfAttention(tf.keras.layers.Layer):
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
-        attention_output = tf.reshape(
-            tensor=attention_output, shape=(batch_size, -1, self.all_head_size)
-        )
-        outputs = (
-            (attention_output, attention_probs)
-            if output_attentions
-            else (attention_output,)
-        )
+        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
 
@@ -409,14 +379,10 @@ class TFBeitSelfOutput(tf.keras.layers.Layer):
 
 
 class TFBeitAttention(tf.keras.layers.Layer):
-    def __init__(
-        self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs
-    ):
+    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
 
-        self.attention = TFBeitSelfAttention(
-            config, window_size=window_size, name="attention"
-        )
+        self.attention = TFBeitSelfAttention(config, window_size=window_size, name="attention")
         self.dense_output = TFBeitSelfOutput(config, name="output")
 
     def prune_heads(self, heads):
@@ -440,9 +406,7 @@ class TFBeitAttention(tf.keras.layers.Layer):
         attention_output = self.dense_output(
             hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
         )
-        outputs = (attention_output,) + self_outputs[
-            1:
-        ]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
         return outputs
 
@@ -453,9 +417,7 @@ class TFBeitIntermediate(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.intermediate_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -510,9 +472,7 @@ class TFBeitLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
 
-        self.attention = TFBeitAttention(
-            config, window_size=window_size, name="attention"
-        )
+        self.attention = TFBeitAttention(config, window_size=window_size, name="attention")
         self.intermediate = TFBeitIntermediate(config, name="intermediate")
         self.beit_output = TFBeitOutput(config, name="output")
 
@@ -569,9 +529,7 @@ class TFBeitLayer(tf.keras.layers.Layer):
             training=training,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[
-            1:
-        ]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # apply lambda_1 if present
         if self.lambda_1 is not None:
@@ -607,9 +565,7 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
         self.window_size = window_size
         # +3 for cls_token_pos_len
         # window_size can be something like (14, 14)
-        self.num_relative_distance = (2 * window_size[0] - 1) * (
-            2 * window_size[1] - 1
-        ) + 3
+        self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
 
         self.relative_position_index = self.get_position_index()
 
@@ -637,9 +593,7 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
             relative_coords, perm=[1, 2, 0]
         )  # [Window_height*Window_width, Window_height*Window_width, 2]
 
-        xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (
-            2 * self.window_size[1] - 1
-        )
+        xx = (relative_coords[:, :, 0] + self.window_size[0] - 1) * (2 * self.window_size[1] - 1)
         yy = relative_coords[:, :, 1] + self.window_size[1] - 1
         relative_coords = tf.stack([xx, yy], axis=-1)
 
@@ -647,15 +601,13 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
             relative_coords, axis=-1
         )  # [Window_height*Window_width, Window_height*Window_width]
 
-        top = tf.ones(
-            (1, relative_position_index.shape[1]), dtype=relative_position_index.dtype
-        ) * (self.num_relative_distance - 3)
-        left = tf.ones(
-            (relative_position_index.shape[0], 1), dtype=relative_position_index.dtype
-        ) * (self.num_relative_distance - 2)
-        corner = tf.ones((1, 1), dtype=relative_position_index.dtype) * (
-            self.num_relative_distance - 1
+        top = tf.ones((1, relative_position_index.shape[1]), dtype=relative_position_index.dtype) * (
+            self.num_relative_distance - 3
         )
+        left = tf.ones((relative_position_index.shape[0], 1), dtype=relative_position_index.dtype) * (
+            self.num_relative_distance - 2
+        )
+        corner = tf.ones((1, 1), dtype=relative_position_index.dtype) * (self.num_relative_distance - 1)
 
         left_corner = tf.concat([corner, left], axis=0)
         relative_position_index = tf.concat([top, relative_position_index], axis=0)
@@ -665,16 +617,12 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
         return relative_position_index
 
     def call(self, inputs=None) -> tf.Tensor:
-        relative_position_bias = tf.gather(
-            self.relative_position_bias_table, self.relative_position_index, axis=0
-        )
+        relative_position_bias = tf.gather(self.relative_position_bias_table, self.relative_position_index, axis=0)
         return tf.transpose(relative_position_bias, [2, 0, 1])
 
 
 class TFBeitEncoder(tf.keras.layers.Layer):
-    def __init__(
-        self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs
-    ):
+    def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         if config.use_shared_relative_position_bias:
@@ -716,9 +664,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
             # might complain about `Layer.call()` not being invoked properly. In this case this input
             # i.e., 0.0 is not going to be used in any calculations so we're safe.
             relative_position_bias = (
-                self.relative_position_bias(0.0)
-                if self.relative_position_bias is not None
-                else None
+                self.relative_position_bias(0.0) if self.relative_position_bias is not None else None
             )
             layer_outputs = layer_module(
                 hidden_states,
@@ -736,11 +682,7 @@ class TFBeitEncoder(tf.keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, all_hidden_states, all_self_attentions]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
         return TFBaseModelOutput(
             last_hidden_state=hidden_states,
@@ -768,9 +710,7 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
         self.layernorm = (
             tf.identity
             if config.use_mean_pooling
-            else tf.keras.layers.LayerNormalization(
-                epsilon=config.layer_norm_eps, name="layernorm"
-            )
+            else tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         )
 
         # We are setting the `data_format` like so because from here on we will revert to the
@@ -798,19 +738,11 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[tuple, TFBeitModelOutputWithPooling]:
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -825,9 +757,7 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
         else:
             head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos, training=training
-        )
+        embedding_output = self.embeddings(pixel_values, bool_masked_pos, training=training)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -840,16 +770,10 @@ class TFBeitMainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = (
-            self.pooler(sequence_output) if self.pooler is not None else None
-        )
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            head_outputs = (
-                (sequence_output, pooled_output)
-                if pooled_output is not None
-                else (sequence_output,)
-            )
+            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return TFBeitModelOutputWithPooling(
@@ -864,9 +788,7 @@ class TFBeitPooler(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, **kwargs):
         super().__init__(**kwargs)
         self.layernorm = (
-            tf.keras.layers.LayerNormalization(
-                epsilon=config.layer_norm_eps, name="layernorm"
-            )
+            tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
             if config.use_mean_pooling
             else None
         )
@@ -914,9 +836,7 @@ class TFBeitPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "pixel_values": tf.TensorSpec(
-                    (None, None, None, None), tf.float32, name="pixel_values"
-                ),
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
             }
         ]
     )
@@ -994,15 +914,11 @@ BEIT_INPUTS_DOCSTRING = r"""
     BEIT_START_DOCSTRING,
 )
 class TFBeitModel(TFBeitPreTrainedModel):
-    def __init__(
-        self, config: BeitConfig, add_pooling_layer: bool = True, *inputs, **kwargs
-    ):
+    def __init__(self, config: BeitConfig, add_pooling_layer: bool = True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.config = config
 
-        self.beit = TFBeitMainLayer(
-            config, add_pooling_layer=add_pooling_layer, name="beit"
-        )
+        self.beit = TFBeitMainLayer(config, add_pooling_layer=add_pooling_layer, name="beit")
 
     def get_input_embeddings(self):
         return self.beit.get_input_embeddings()
@@ -1039,19 +955,9 @@ class TFBeitModel(TFBeitPreTrainedModel):
 
         return outputs
 
-    def serving_output(
-        self, output: TFBeitModelOutputWithPooling
-    ) -> TFBeitModelOutputWithPooling:
-        hidden_states = (
-            tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None
-        )
-        attentions = (
-            tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None
-        )
+    def serving_output(self, output: TFBeitModelOutputWithPooling) -> TFBeitModelOutputWithPooling:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBeitModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
@@ -1076,9 +982,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         self.beit = TFBeitMainLayer(config, add_pooling_layer=False, name="beit")
 
         # Classifier head
-        self.layernorm = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm"
-        )
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.lm_head = tf.keras.layers.Dense(
             units=config.vocab_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -1087,9 +991,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1132,9 +1034,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"] >>> # mask labels
         of non-{mask} tokens >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100) >>>
         outputs = model(**inputs, labels=labels) >>> round(float(outputs.loss), 2)"""
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
             pixel_values=pixel_values,
@@ -1152,16 +1052,12 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = (
-                tf.keras.losses.SparseCategoricalCrossentropy()
-            )  # -100 index = padding token
+            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
-            return (
-                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-            )
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return TFMaskedLMOutput(
             loss=masked_lm_loss,
@@ -1171,20 +1067,10 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hidden_states = (
-            tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None
-        )
-        attentions = (
-            tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None
-        )
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits, hidden_states=hidden_states, attentions=attentions
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 @add_start_docstrings(
@@ -1210,9 +1096,7 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1252,9 +1136,7 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
         >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
         >>> print(model.config.id2label[predicted_label])
         ```"""
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
             pixel_values=pixel_values,
@@ -1269,11 +1151,7 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
 
         logits = self.classifier(pooled_output)
 
-        loss = (
-            None
-            if labels is None
-            else self.hf_compute_loss(labels=labels, logits=logits)
-        )
+        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1286,23 +1164,11 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
             attentions=outputs.attentions,
         )
 
-    def serving_output(
-        self, output: TFSequenceClassifierOutput
-    ) -> TFSequenceClassifierOutput:
-        hidden_states = (
-            tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None
-        )
-        attentions = (
-            tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None
-        )
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits, hidden_states=hidden_states, attentions=attentions
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 class TFBeitConvModule(tf.keras.layers.Layer):
@@ -1330,9 +1196,7 @@ class TFBeitConvModule(tf.keras.layers.Layer):
             dilation_rate=dilation,
             name="conv",
         )
-        self.bn = tf.keras.layers.BatchNormalization(
-            name="bn", momentum=0.9, epsilon=1e-5
-        )
+        self.bn = tf.keras.layers.BatchNormalization(name="bn", momentum=0.9, epsilon=1e-5)
         self.activation = tf.nn.relu
 
     def call(self, input: tf.Tensor) -> tf.Tensor:
@@ -1444,17 +1308,11 @@ class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
 
         self.layer_list = []
         for idx, pool_scale in enumerate(pool_scales):
-            pool_scale = (
-                pool_scale
-                if isinstance(pool_scale, collections.abc.Iterable)
-                else (pool_scale, pool_scale)
-            )
+            pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
                     TFAdaptiveAvgPool2D(output_shape=pool_scale),
-                    TFBeitConvModule(
-                        out_channels=self.channels, kernel_size=1, name=f"{idx}.1"
-                    ),
+                    TFBeitConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
                 ]
             )
 
@@ -1467,9 +1325,7 @@ class TFBeitPyramidPoolingModule(tf.keras.layers.Layer):
                 ppm_out = layer_module(x)
                 x = ppm_out
 
-            upsampled_ppm_out = tf.image.resize(
-                ppm_out, size=shape_list(inputs)[1:-1], method="bilinear"
-            )
+            upsampled_ppm_out = tf.image.resize(ppm_out, size=shape_list(inputs)[1:-1], method="bilinear")
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
 
@@ -1487,24 +1343,16 @@ class TFBeitUperHead(tf.keras.layers.Layer):
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
-        self.classifier = tf.keras.layers.Conv2D(
-            config.num_labels, kernel_size=1, name="classifier"
-        )
+        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
 
         # PSP Module
-        self.psp_modules = TFBeitPyramidPoolingModule(
-            self.pool_scales, self.channels, name="psp_modules"
-        )
-        self.bottleneck = TFBeitConvModule(
-            self.channels, kernel_size=3, padding="same", name="bottleneck"
-        )
+        self.psp_modules = TFBeitPyramidPoolingModule(self.pool_scales, self.channels, name="psp_modules")
+        self.bottleneck = TFBeitConvModule(self.channels, kernel_size=3, padding="same", name="bottleneck")
         # FPN Module
         self.lateral_convs = []
         self.fpn_convs = []
         for idx, _ in enumerate(self.in_channels[:-1]):  # skip the top layer
-            l_conv = TFBeitConvModule(
-                out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}"
-            )
+            l_conv = TFBeitConvModule(out_channels=self.channels, kernel_size=1, name=f"lateral_convs.{idx}")
             fpn_conv = TFBeitConvModule(
                 out_channels=self.channels,
                 kernel_size=3,
@@ -1532,10 +1380,7 @@ class TFBeitUperHead(tf.keras.layers.Layer):
 
     def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
         # build laterals
-        laterals = [
-            lateral_conv(encoder_hidden_states[i])
-            for i, lateral_conv in enumerate(self.lateral_convs)
-        ]
+        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -1543,21 +1388,15 @@ class TFBeitUperHead(tf.keras.layers.Layer):
         used_backbone_levels = len(laterals)
         for i in range(used_backbone_levels - 1, 0, -1):
             prev_shape = shape_list(laterals[i - 1])[1:-1]
-            laterals[i - 1] = laterals[i - 1] + tf.image.resize(
-                laterals[i], size=prev_shape, method="bilinear"
-            )
+            laterals[i - 1] = laterals[i - 1] + tf.image.resize(laterals[i], size=prev_shape, method="bilinear")
 
         # build outputs
-        fpn_outs = [
-            self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)
-        ]
+        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
         # append psp feature
         fpn_outs.append(laterals[-1])
 
         for i in range(used_backbone_levels - 1, 0, -1):
-            fpn_outs[i] = tf.image.resize(
-                fpn_outs[i], size=shape_list(fpn_outs[0])[1:-1], method="bilinear"
-            )
+            fpn_outs[i] = tf.image.resize(fpn_outs[i], size=shape_list(fpn_outs[0])[1:-1], method="bilinear")
         fpn_outs = tf.concat(fpn_outs, axis=-1)
         output = self.fpn_bottleneck(fpn_outs)
         output = self.classifier(output)
@@ -1627,9 +1466,7 @@ class TFBeitFCNHead(tf.keras.layers.Layer):
                 name="conv_cat",
             )
 
-        self.classifier = tf.keras.layers.Conv2D(
-            config.num_labels, kernel_size=1, name="classifier"
-        )
+        self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
 
     def call(self, encoder_hidden_states: tf.Tensor) -> tf.Tensor:
         # just take the relevant feature maps
@@ -1657,33 +1494,19 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
 
         # FPNs
         self.fpn1 = [
-            tf.keras.layers.Conv2DTranspose(
-                config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"
-            ),
-            tf.keras.layers.BatchNormalization(
-                name="fpn1.1", momentum=0.9, epsilon=1e-5
-            ),
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.0"),
+            tf.keras.layers.BatchNormalization(name="fpn1.1", momentum=0.9, epsilon=1e-5),
             tf.keras.layers.Activation("gelu"),
-            tf.keras.layers.Conv2DTranspose(
-                config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"
-            ),
+            tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn1.3"),
         ]
-        self.fpn2 = [
-            tf.keras.layers.Conv2DTranspose(
-                config.hidden_size, kernel_size=2, strides=2, name="fpn2.0"
-            )
-        ]
+        self.fpn2 = [tf.keras.layers.Conv2DTranspose(config.hidden_size, kernel_size=2, strides=2, name="fpn2.0")]
 
         self.fpn3 = tf.identity
         self.fpn4 = tf.keras.layers.MaxPool2D(pool_size=2, strides=2)
 
         # Semantic segmentation head(s)
         self.decode_head = TFBeitUperHead(config, name="decode_head")
-        self.auxiliary_head = (
-            TFBeitFCNHead(config, name="auxiliary_head")
-            if config.use_auxiliary_head
-            else None
-        )
+        self.auxiliary_head = TFBeitFCNHead(config, name="auxiliary_head") if config.use_auxiliary_head else None
 
     def compute_loss(self, logits, auxiliary_logits, labels):
         # upsample logits to the images' original size
@@ -1692,24 +1515,16 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         else:
             label_interp_shape = shape_list(labels)[-2:]
 
-        upsampled_logits = tf.image.resize(
-            logits, size=label_interp_shape, method="bilinear"
-        )
+        upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
         if auxiliary_logits is not None:
-            upsampled_auxiliary_logits = tf.image.resize(
-                auxiliary_logits, size=label_interp_shape, method="bilinear"
-            )
+            upsampled_auxiliary_logits = tf.image.resize(auxiliary_logits, size=label_interp_shape, method="bilinear")
         # compute weighted loss
-        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction="none"
-        )
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
 
         # Copied from https://www.tensorflow.org/text/tutorials/transformer#loss_and_metrics.
         # Utility to mask the index to ignore during computing the loss.
         def masked_loss(real, pred):
-            mask = tf.math.logical_not(
-                tf.math.equal(real, self.config.semantic_loss_ignore_index)
-            )
+            mask = tf.math.logical_not(tf.math.equal(real, self.config.semantic_loss_ignore_index))
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
@@ -1724,9 +1539,7 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -1760,13 +1573,9 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
         outputs = self.beit(
@@ -1780,11 +1589,7 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
-        features = [
-            feature
-            for idx, feature in enumerate(encoder_hidden_states)
-            if idx + 1 in self.config.out_indices
-        ]
+        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
         batch_size = shape_list(pixel_values)[0]
         patch_resolution = self.config.image_size // self.config.patch_size
 
@@ -1831,20 +1636,8 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(
-        self, output: TFSemanticSegmenterOutput
-    ) -> TFSemanticSegmenterOutput:
-        hidden_states = (
-            tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None
-        )
-        attentions = (
-            tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None
-        )
+    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSemanticSegmenterOutput(
-            logits=output.logits, hidden_states=hidden_states, attentions=attentions
-        )
+        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
