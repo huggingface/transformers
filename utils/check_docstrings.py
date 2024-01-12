@@ -697,6 +697,8 @@ OBJECTS_TO_IGNORE = [
     "TFSegformerModel",
     "TFSpeech2TextForConditionalGeneration",
     "TFSpeech2TextModel",
+    "TFSwiftFormerForImageClassification",
+    "TFSwiftFormerModel",
     "TFSwinForImageClassification",
     "TFSwinForMaskedImageModeling",
     "TFSwinModel",
@@ -1206,11 +1208,6 @@ def check_docstrings(overwrite: bool = False):
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
-            print("DEBUG:")
-            print("Class: ", obj)
-            print("Old doc: ", old_doc)
-            print("New doc: ", new_doc)
-            print("END DEBUG")
             if overwrite:
                 fix_docstring(obj, old_doc, new_doc)
             else:
