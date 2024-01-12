@@ -1,5 +1,4 @@
 import unittest
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Optional, Type
 from unittest.mock import patch
