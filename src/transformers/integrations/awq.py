@@ -43,6 +43,12 @@ AWQ_FUSED_MAPPINGS = {
         "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
         "use_alibi": False,
     },
+    "llava": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["gate_proj", "up_proj", "down_proj"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+    },
 }
 
 
@@ -150,10 +156,16 @@ def get_modules_to_fuse(model, quantization_config):
     elif model.config.model_type in AWQ_FUSED_MAPPINGS:
         current_fused_mapping = AWQ_FUSED_MAPPINGS[model.config.model_type]
 
+        # Properly deal with the case where we have a multi-modal model as well (e.g. Llava)
+        if not hasattr(model.config, "text_config"):
+            config = model.config
+        else:
+            config = model.config.text_config
+
         # Handle hidden_size, num_attention_heads, num_key_value_heads on our own.
-        hidden_size = model.config.hidden_size
-        num_attention_heads = model.config.num_attention_heads
-        num_key_value_heads = getattr(model.config, "num_key_value_heads", num_attention_heads)
+        hidden_size = config.hidden_size
+        num_attention_heads = config.num_attention_heads
+        num_key_value_heads = getattr(config, "num_key_value_heads", num_attention_heads)
 
         # Fill `current_fused_mapping` with the expected values
         current_fused_mapping["hidden_size"] = hidden_size
@@ -185,6 +197,7 @@ def fuse_awq_modules(model, quantization_config):
     backend = awq_config.backend
 
     modules_to_fuse = get_modules_to_fuse(model, awq_config)
+    modules_to_not_convert = getattr(awq_config, "modules_to_not_convert", None)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused
@@ -194,6 +207,10 @@ def fuse_awq_modules(model, quantization_config):
         raise ValueError("Fusing is only supported for the AutoAWQ backend")
 
     for name, module in model.named_modules():
+        if modules_to_not_convert is not None:
+            if any(module_name_to_not_convert in name for module_name_to_not_convert in modules_to_not_convert):
+                continue
+
         # Replace layer norms
         _fuse_awq_layernorm(modules_to_fuse["layernorm"], module, FasterTransformerRMSNorm)
 
@@ -255,7 +272,14 @@ def _fuse_awq_mlp(model, current_module_name, fuse_module_names, module, target_
         down_proj = getattr(module, fuse_module_names[2])
 
         previous_device = gate_proj.qweight.device
-        activation_fn = ACT2FN[model.config.hidden_act]
+
+        # Deal also with the case model has `text_config` attribute
+        hidden_act = (
+            model.config.hidden_act
+            if not hasattr(model.config, "text_config")
+            else model.config.text_config.hidden_act
+        )
+        activation_fn = ACT2FN[hidden_act]
         new_module = target_cls(gate_proj, down_proj, up_proj, activation_fn)
 
         parent_name, child_name = current_module_name.rsplit(".", 1)
@@ -291,7 +315,6 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
     if hasattr(module, modules_to_fuse["attention"][0]):
         # First, we pack the QKV layers together
         q_proj = getattr(module, modules_to_fuse["attention"][0])
-        previous_device = q_proj.qweight.device
 
         if isinstance(q_proj, WQLinear_GEMV):
             linear_target_cls = WQLinear_GEMV
@@ -301,6 +324,8 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             cat_dim = 1
         else:
             raise ValueError("Unsupported q_proj type: {type(q_proj)}")
+
+        previous_device = q_proj.qweight.device
 
         k_proj = getattr(module, modules_to_fuse["attention"][1])
         v_proj = getattr(module, modules_to_fuse["attention"][2])
