@@ -3105,6 +3105,12 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
     From: https://gist.github.com/thomwolf/1a5a29f6962089e871b94cbd09daf317
     """
+
+    warnings.warn(
+        "`tf_top_k_top_p_filtering` is scheduled for deletion in v4.39. Use `TFTopKLogitsWarper` and "
+        "`TFTopPLogitsWarper` instead.", DeprecationWarning,
+    )
+
     logits_shape = shape_list(logits)
 
     if top_k > 0:
