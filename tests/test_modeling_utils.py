@@ -289,7 +289,9 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
-    @is_flaky
+    @is_flaky(
+        description="Capturing logs is flaky: https://app.circleci.com/pipelines/github/huggingface/transformers/81004/workflows/4919e5c9-0ea2-457b-ad4f-65371f79e277/jobs/1038999"
+    )
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
@@ -1004,7 +1006,9 @@ class ModelUtilsTest(TestCasePlus):
             # Should only complain about the missing bias
             self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
 
-    @is_flaky
+    @is_flaky(
+        description="Capturing logs is flaky: https://app.circleci.com/pipelines/github/huggingface/transformers/81004/workflows/4919e5c9-0ea2-457b-ad4f-65371f79e277/jobs/1038999"
+    )
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PretrainedConfig())
         logger = logging.get_logger("transformers.modeling_utils")
