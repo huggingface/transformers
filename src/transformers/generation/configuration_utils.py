@@ -548,19 +548,10 @@ class GenerationConfig(PushToHubMixin):
         """
 
         # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance
-        try:
-            with warnings.catch_warnings(record=True) as caught_warnings:
-                self.validate()
-            for w in caught_warnings:
-                raise ValueError(w.message)
-        except ValueError as exc:
-            warnings.warn(
-                "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
-                "\n\nThrown during validation:\n" + str(exc),
-                UserWarning,
-            )
-            return
+        with warnings.catch_warnings(record=True) as caught_warnings:
+            self.validate()
+        for w in caught_warnings:
+            raise ValueError(w.message)
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
