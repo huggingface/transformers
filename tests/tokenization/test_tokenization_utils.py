@@ -283,3 +283,16 @@ class TokenizerUtilsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             bert_tokenizer.save(os.path.join(tmpdirname, "tokenizer.json"))
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
+
+    @require_tokenizers
+    def test_save_pretrained(self):
+        def save_tokenizer(tokenizer: PreTrainedTokenizer):
+            with tempfile.TemporaryDirectory() as dir:
+                tokenizer.save_pretrained(dir)
+
+        with self.subTest("No extra args"):
+            tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+            save_tokenizer(tokenizer)
+        with self.subTest("With add_special_token args"):
+            tokenizer = BertTokenizer.from_pretrained("bert-base-cased", add_special_tokens=True)
+            save_tokenizer(tokenizer)

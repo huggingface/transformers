@@ -2381,7 +2381,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         target_keys.update(["model_max_length", "clean_up_tokenization_spaces"])
 
         for k in target_keys:
-            if hasattr(self, k):
+            if hasattr(self, k) and not callable(getattr(self, k)):
                 tokenizer_config[k] = getattr(self, k)
 
         # Let's make sure we properly save the special tokens.
