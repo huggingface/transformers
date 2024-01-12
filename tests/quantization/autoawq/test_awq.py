@@ -304,6 +304,24 @@ class AwqFusedTest(unittest.TestCase):
         with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
 
+    def test_fused_modules_to_not_convert(self):
+        """
+        Test if fused + modules to_not_covnert work as expected
+        """
+        model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
+
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=128, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            quantization_config=quantization_config,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+
+        # Check if model has been correctly fused
+        self._check_fused_modules(model)
+        # Checks if the modules_to_not_convert (here gate layer) is a Linear
+        self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
+
     def test_generation_fused(self):
         """
         Test generation quality for fused models - single batch case
