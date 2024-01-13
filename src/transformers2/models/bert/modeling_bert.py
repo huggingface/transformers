@@ -1464,6 +1464,11 @@ class BertForMaskedLM(BertPreTrainedModel):
                 filtered_string += token
         return filtered_string
 
+    # def _create_wp_ids2(self, input_ids_tensor):
+    #     char_ids = input_ids_tensor.tolist()
+    #     pad_id = self.wordpiece_tokenizer.encode('[UNK]')[1]
+    #     wp_ids = torch.full(input_ids_tensor.shape, pad_id)
+    #     return wp_ids
 
     def _create_wp_ids(self, input_ids_tensor):
         if isinstance(input_ids_tensor, torch.Tensor):
