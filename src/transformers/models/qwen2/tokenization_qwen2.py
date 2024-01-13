@@ -200,6 +200,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             )
 
         super().__init__(
+            errors=errors,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
