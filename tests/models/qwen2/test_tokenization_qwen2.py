@@ -19,7 +19,7 @@ import os
 import unittest
 
 from transformers import Qwen2Tokenizer, Qwen2TokenizerFast
-from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES
+from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -38,39 +38,24 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "0",
-            "1",
-            "01",
-            "}",
-            ";",
-            "\u010a",
-            ";}",
-            ";}\u010a",
-            "\u0315",
-            "\u00cf",
-            "\u00cf\u0135",
-        ]
+        vocab = list(bytes_to_unicode().values())
+        vocab.extend(
+            [
+                "\u0120l",
+                "\u0120n",
+                "\u0120lo",
+                "\u0120low",
+                "er",
+                "\u0120lowest",
+                "\u0120newer",
+                "\u0120wider",
+                "01",
+                ";}",
+                ";}\u010a",
+                "\u00cf\u0135",
+            ]
+        )
+
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
         merges = [
@@ -86,7 +71,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
 
         # unk_token is needed, because this stub tokenizer is not complete at the byte level
-        self.special_tokens_map = {"eos_token": "<|endoftext|>", "pad_token": "<|endoftext|>", "unk_token": "<|unk|>"}
+        self.special_tokens_map = {"eos_token": "<|endoftext|>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
@@ -139,5 +124,5 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, bpe_tokens)
 
         input_tokens = tokens
-        input_bpe_tokens = [0, 1, 2, 15, 14, 15, 10, 9, 3, 2, 15, 10, 19, 20, 19, 26, 30, 29]
+        input_bpe_tokens = [75, 78, 86, 260, 259, 260, 220, 77, 68, 86, 260, 220, 15, 16, 15, 266, 268, 267]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
