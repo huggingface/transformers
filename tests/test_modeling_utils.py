@@ -25,6 +25,7 @@ import unittest.mock as mock
 import uuid
 from pathlib import Path
 
+import psutil
 import requests
 from huggingface_hub import HfApi, HfFolder, delete_repo
 from huggingface_hub.file_download import http_get
@@ -896,11 +897,16 @@ class ModelUtilsTest(TestCasePlus):
             offloaded_model = AutoModelForCausalLM.from_pretrained(
                 model_id, device_map=device_map, offload_folder=offload_folder
             )
+            presaved_memory = psutil.virtual_memory().used
             presaved_output = offloaded_model(input_tokens)[0]
-            offloaded_model.save_pretrained(tmp_dir, max_shard_size="500KB")  # model is 1.6MB
+            offloaded_model.save_pretrained(
+                tmp_dir, max_shard_size="500KB"
+            )  # model is 1.6MB, max shard size is on cpu
             saved_model = AutoModelForCausalLM.from_pretrained(tmp_dir, device_map=device_map)
+            postsaved_memory = psutil.virtual_memory().used
             postsaved_output = saved_model(input_tokens)[0]
 
+        self.assertTrue(postsaved_memory - presaved_memory < 6e5)  # memory plus shard size plus buff
         self.assertTrue(torch.allclose(cpu_output, presaved_output, atol=1e-4))
         self.assertTrue(torch.allclose(presaved_output, postsaved_output))
 
