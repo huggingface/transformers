@@ -77,25 +77,13 @@ We document here all output types.
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.GenerateDecoderOnlyOutput
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateEncoderDecoderOutput
 
-[[autodoc]] generation.SampleEncoderDecoderOutput
+[[autodoc]] generation.GenerateBeamDecoderOnlyOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
 ### TensorFlow
 
