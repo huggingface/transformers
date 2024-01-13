@@ -4591,11 +4591,10 @@ class GenerationMixin:
             cur_len = input_ids.shape[-1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator`
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(
-                input_ids.to(candidate_generator.assistant_model.device)
-            )
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
             candidate_input_ids = candidate_input_ids.to(self.device)
-            candidate_logits = candidate_logits.to(self.device)
+            if candidate_logits is not None:
+                candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
             last_assistant_token_is_eos = (
