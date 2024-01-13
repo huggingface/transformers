@@ -312,5 +312,3 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
         decoded_fast = self.tokenizer.decode(fast_tokens)
         decoded_slow = self.tokenizer.decode(slow_tokens)
         assert decoded_fast == decoded_slow == "en_XX<s> [special_token] normal text</s>"
-
-
