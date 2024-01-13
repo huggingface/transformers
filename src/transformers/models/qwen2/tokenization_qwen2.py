@@ -18,7 +18,7 @@ import json
 import os
 import unicodedata
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import regex as re
 
@@ -67,7 +67,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
-# copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
+# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
@@ -212,7 +212,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> Dict[str, int]:
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -255,8 +255,8 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize
-    def _tokenize(self, text: str) -> List[str]:
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize
+    def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
         for token in re.findall(self.pat, text):
@@ -266,17 +266,17 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
-    def _convert_token_to_id(self, token: str) -> int:
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
+    def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
-    def _convert_id_to_token(self, index: int) -> str:
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
+    def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
@@ -301,18 +301,16 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str]:
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
-            save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"],
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
         merge_file = os.path.join(
-            save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"],
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
@@ -320,6 +318,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
 
         index = 0
         with open(merge_file, "w", encoding="utf-8") as writer:
+            writer.write("#version: 0.2\n")
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(

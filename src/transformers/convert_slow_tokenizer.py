@@ -378,20 +378,22 @@ class Qwen2Converter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
                 pre_tokenizers.Split(
-                    Regex(r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""),
+                    Regex(
+                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+                    ),
                     behavior="isolated",
                     invert=False,
                 ),
                 pre_tokenizers.ByteLevel(
-                    add_prefix_space=False, # The slow tokenizer does not support add_prefix_space
+                    add_prefix_space=False,  # The slow tokenizer does not support add_prefix_space
                     use_regex=False,
-                )
+                ),
             ]
         )
-        
+
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-        
+
         return tokenizer
 
 
