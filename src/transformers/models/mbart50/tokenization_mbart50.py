@@ -246,7 +246,10 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
-        out_string += " " + self.sp_model.decode(current_sub_tokens)
+        if not prev_is_special:
+            out_string += " " + self.sp_model.decode(current_sub_tokens)
+        else:
+            out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
