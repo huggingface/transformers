@@ -126,3 +126,9 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = tokens
         input_bpe_tokens = [75, 78, 86, 260, 259, 260, 220, 77, 68, 86, 260, 220, 15, 16, 15, 266, 268, 267]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+
+    def test_pretokenized_inputs(self):
+        # the test case in parent class uses str.split to "pretokenize",
+        # which eats the whitespaces, which, in turn, is not reversible.
+        # the results, by nature, should be different.
+        pass
