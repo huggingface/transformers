@@ -277,6 +277,7 @@ class PretrainedConfig(PushToHubMixin):
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
@@ -303,7 +304,6 @@ class PretrainedConfig(PushToHubMixin):
         self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
         self.output_scores = kwargs.pop("output_scores", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
