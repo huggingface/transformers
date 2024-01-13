@@ -19,7 +19,7 @@ import os
 import unittest
 
 from transformers import Qwen2Tokenizer, Qwen2TokenizerFast
-from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES
+from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -84,7 +84,9 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ";} \u010a",
             "\u00cf \u0135",
         ]
-        self.special_tokens_map = {"eos_token": "<|endoftext|>", "pad_token": "<|endoftext|>"}
+
+        # unk_token is needed, because this stub tokenizer is not complete at the byte level
+        self.special_tokens_map = {"eos_token": "<|endoftext|>", "pad_token": "<|endoftext|>", "unk_token": "<|unk|>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
@@ -111,7 +113,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return input_text, output_text
 
     def test_python_full_tokenizer(self):
-        tokenizer = self.get_tokenizer(self.vocab_file, self.merges_file, **self.special_tokens_map)
+        tokenizer = self.get_tokenizer()
         sequence, _ = self.get_input_output_texts(tokenizer)
         bpe_tokens = [
             "l",
