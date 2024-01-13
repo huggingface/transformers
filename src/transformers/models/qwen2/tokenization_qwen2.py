@@ -40,28 +40,18 @@ PRETRAINED_VOCAB_FILES_MAP = {
 
 PRETOKENIZE_REGEX = r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
 
-CHAT_TEMPLATE = (
-    "{% for message in messages %}"
-    "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
-    "{% endfor %}"
-    "{% if add_generation_prompt %}"
-    "{{ '<|im_start|>assistant\n' }}"
-    "{% endif %}"
-)
 
-
-# Code from the GitHub repo at https://github.com/openai/gpt-2 is licensed under Modified MIT License,
-# the text of which can be found thereof.
+# copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 @lru_cache()
 def bytes_to_unicode():
     """
-    Returns list of utf-8 byte and a corresponding list of unicode strings.
-    The reversible bpe codes work on unicode strings.
-    This means you need a large # of unicode characters in your vocab if you want to avoid UNKs.
-    When you're at something like a 10B token dataset you end up needing around 5K for decent coverage.
-    This is a signficant percentage of your normal, say, 32K bpe vocab.
-    To avoid that, we want lookup tables between utf-8 bytes and unicode strings.
-    And avoids mapping to whitespace/control characters the bpe code barfs on.
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
     """
     bs = (
         list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
@@ -77,8 +67,10 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
+# copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
-    """Return set of symbol pairs in a word.
+    """
+    Return set of symbol pairs in a word.
 
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
@@ -180,9 +172,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             else pad_token
         )
 
-        # Adapted from
-        # - https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L44-L53
-        # - https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L108-L117
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -194,15 +183,17 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         # NOTE: the cache can grow without bound and will get really large for long running processes
-        # (esp. for texts of language that do not use space between word); technically not a memory leak
-        # but appears as one. GPT2Tokenizer has the same problem, let's be consistent.
+        # (esp. for texts of language that do not use space between word, e.g. Chinese); technically
+        # not a memory leak but appears as one.
+        # GPT2Tokenizer has the same problem, so let's be consistent.
         self.cache = {}
 
         self.pat = re.compile(PRETOKENIZE_REGEX)
 
-        if "chat_template" not in kwargs:
-            # if not specified, Qwen2 models should default to the CHATML template
-            kwargs["chat_template"] = CHAT_TEMPLATE
+        if kwargs.get("add_prefix_space", False):
+            logger.warning_once(
+                f"{self.__class__.__name} does not support `add_prefix_space`, setting it to True has no effect."
+            )
 
         super().__init__(
             bos_token=bos_token,
@@ -221,6 +212,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def get_vocab(self) -> Dict[str, int]:
         return dict(self.encoder, **self.added_tokens_encoder)
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -263,11 +255,9 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string."""
-        # Qwen uses NFC normalization
-        text = unicodedata.normalize("NFC", text)
-        # Adapted from https://github.com/openai/gpt-2/blob/a74da5d99abaaba920de8131d64da2862a8f213b/src/encoder.py#L96-L101
         bpe_tokens = []
         for token in re.findall(self.pat, text):
             token = "".join(
@@ -276,14 +266,17 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_id_to_token
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
@@ -298,8 +291,8 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        # why we do this? because `spaces_between_special_tokens` defaults to True
-        # for _decode in slow tokenizers and cannot be configured elsewhere.
+        # `spaces_between_special_tokens` defaults to True for _decode in slow tokenizers
+        # and cannot be configured elsewhere, but it should default to False for Qwen2Tokenizer
         return super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -308,6 +301,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str, str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -337,3 +331,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    def prepare_for_tokenization(self, text, **kwargs):
+        text = unicodedata.normalize("NFC", text)
+        return (text, kwargs)
