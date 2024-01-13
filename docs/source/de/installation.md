@@ -139,10 +139,10 @@ Ihre Python-Umgebung wird beim nächsten Ausführen die `main`-Version von 🤗 
 
 ## Installation mit conda
 
-Installation von dem conda Kanal `huggingface`:
+Installation von dem conda Kanal `conda-forge`:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Cache Einrichtung
@@ -157,7 +157,7 @@ Vorgefertigte Modelle werden heruntergeladen und lokal zwischengespeichert unter
 <Tip>
 
 Transformers verwendet die Shell-Umgebungsvariablen `PYTORCH_TRANSFORMERS_CACHE` oder `PYTORCH_PRETRAINED_BERT_CACHE`, wenn Sie von einer früheren Iteration dieser Bibliothek kommen und diese Umgebungsvariablen gesetzt haben, sofern Sie nicht die Shell-Umgebungsvariable `TRANSFORMERS_CACHE` angeben.
-  
+
 </Tip>
 
 ## Offline Modus
@@ -246,5 +246,5 @@ Sobald Ihre Datei heruntergeladen und lokal zwischengespeichert ist, geben Sie d
 <Tip>
 
 Weitere Informationen zum Herunterladen von Dateien, die auf dem Hub gespeichert sind, finden Sie im Abschnitt [Wie man Dateien vom Hub herunterlädt] (https://huggingface.co/docs/hub/how-to-downstream).
-  
+
 </Tip>
