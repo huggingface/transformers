@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.36.0.dev0"
+__version__ = "4.37.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
+    is_g2p_en_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
@@ -418,11 +419,16 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
-    "models.flaubert": [
-        "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FlaubertConfig",
-        "FlaubertTokenizer",
+    "models.fastspeech2_conformer": [
+        "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FastSpeech2ConformerConfig",
+        "FastSpeech2ConformerHifiGanConfig",
+        "FastSpeech2ConformerTokenizer",
+        "FastSpeech2ConformerWithHifiGanConfig",
     ],
+    "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FlavaConfig",
@@ -590,6 +596,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mistral": ["MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MistralConfig"],
+    "models.mixtral": ["MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP", "MixtralConfig"],
     "models.mluke": [],
     "models.mobilebert": [
         "MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -750,6 +757,14 @@ _import_structure = {
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
+    "models.siglip": [
+        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SiglipConfig",
+        "SiglipProcessor",
+        "SiglipTextConfig",
+        "SiglipTokenizer",
+        "SiglipVisionConfig",
+    ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -849,6 +864,10 @@ _import_structure = {
         "ViltFeatureExtractor",
         "ViltImageProcessor",
         "ViltProcessor",
+    ],
+    "models.vipllava": [
+        "VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "VipLlavaConfig",
     ],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": [
@@ -1274,6 +1293,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
@@ -1298,6 +1318,7 @@ else:
     _import_structure["activations"] = []
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
     _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
+    _import_structure["cache_utils"] = ["Cache", "DynamicCache", "SinkCache"]
     _import_structure["data.datasets"] = [
         "GlueDataset",
         "GlueDataTrainingArguments",
@@ -2123,6 +2144,15 @@ else:
             "FalconPreTrainedModel",
         ]
     )
+    _import_structure["models.fastspeech2_conformer"].extend(
+        [
+            "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastSpeech2ConformerHifiGan",
+            "FastSpeech2ConformerModel",
+            "FastSpeech2ConformerPreTrainedModel",
+            "FastSpeech2ConformerWithHifiGan",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2585,6 +2615,9 @@ else:
             "MistralModel",
             "MistralPreTrainedModel",
         ]
+    )
+    _import_structure["models.mixtral"].extend(
+        ["MixtralForCausalLM", "MixtralForSequenceClassification", "MixtralModel", "MixtralPreTrainedModel"]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -3134,6 +3167,15 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.siglip"].extend(
+        [
+            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipModel",
+            "SiglipPreTrainedModel",
+            "SiglipTextModel",
+            "SiglipVisionModel",
+        ]
+    )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
@@ -3207,6 +3249,7 @@ else:
     _import_structure["models.swinv2"].extend(
         [
             "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swinv2Backbone",
             "Swinv2ForImageClassification",
             "Swinv2ForMaskedImageModeling",
             "Swinv2Model",
@@ -3360,6 +3403,13 @@ else:
             "ViltLayer",
             "ViltModel",
             "ViltPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vipllava"].extend(
+        [
+            "VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VipLlavaForConditionalGeneration",
+            "VipLlavaPreTrainedModel",
         ]
     )
     _import_structure["models.vision_encoder_decoder"].extend(["VisionEncoderDecoderModel"])
@@ -4354,7 +4404,6 @@ else:
         "create_optimizer",
     ]
     _import_structure["tf_utils"] = []
-    _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
 try:
@@ -5062,11 +5111,16 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.flaubert import (
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FlaubertConfig,
-        FlaubertTokenizer,
+    from .models.fastspeech2_conformer import (
+        FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FastSpeech2ConformerConfig,
+        FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerTokenizer,
+        FastSpeech2ConformerWithHifiGanConfig,
     )
+    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -5231,6 +5285,7 @@ if TYPE_CHECKING:
         MgpstrTokenizer,
     )
     from .models.mistral import MISTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MistralConfig
+    from .models.mixtral import MIXTRAL_PRETRAINED_CONFIG_ARCHIVE_MAP, MixtralConfig
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MobileBertConfig,
@@ -5401,6 +5456,14 @@ if TYPE_CHECKING:
     )
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+        SiglipProcessor,
+        SiglipTextConfig,
+        SiglipTokenizer,
+        SiglipVisionConfig,
+    )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5500,6 +5563,10 @@ if TYPE_CHECKING:
         ViltFeatureExtractor,
         ViltImageProcessor,
         ViltProcessor,
+    )
+    from .models.vipllava import (
+        VIPLLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VipLlavaConfig,
     )
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import (
@@ -5922,6 +5989,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.siglip import SiglipImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
@@ -5943,6 +6011,7 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
+        from .cache_utils import Cache, DynamicCache, SinkCache
         from .data.datasets import (
             GlueDataset,
             GlueDataTrainingArguments,
@@ -6633,6 +6702,13 @@ if TYPE_CHECKING:
             FalconModel,
             FalconPreTrainedModel,
         )
+        from .models.fastspeech2_conformer import (
+            FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ConformerHifiGan,
+            FastSpeech2ConformerModel,
+            FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerWithHifiGan,
+        )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
@@ -7007,6 +7083,12 @@ if TYPE_CHECKING:
             MistralForSequenceClassification,
             MistralModel,
             MistralPreTrainedModel,
+        )
+        from .models.mixtral import (
+            MixtralForCausalLM,
+            MixtralForSequenceClassification,
+            MixtralModel,
+            MixtralPreTrainedModel,
         )
         from .models.mobilebert import (
             MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7456,6 +7538,13 @@ if TYPE_CHECKING:
             SEWDModel,
             SEWDPreTrainedModel,
         )
+        from .models.siglip import (
+            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipModel,
+            SiglipPreTrainedModel,
+            SiglipTextModel,
+            SiglipVisionModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7517,6 +7606,7 @@ if TYPE_CHECKING:
         )
         from .models.swinv2 import (
             SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
             Swinv2Model,
@@ -7635,6 +7725,11 @@ if TYPE_CHECKING:
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
+        )
+        from .models.vipllava import (
+            VIPLLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VipLlavaForConditionalGeneration,
+            VipLlavaPreTrainedModel,
         )
         from .models.vision_encoder_decoder import VisionEncoderDecoderModel
         from .models.vision_text_dual_encoder import VisionTextDualEncoderModel
@@ -8467,9 +8562,6 @@ if TYPE_CHECKING:
             WarmUp,
             create_optimizer,
         )
-
-        # Trainer
-        from .trainer_tf import TFTrainer
 
     try:
         if not (

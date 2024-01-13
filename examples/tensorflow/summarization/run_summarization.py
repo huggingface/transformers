@@ -54,7 +54,7 @@ from transformers.utils.versions import require_version
 
 # region Checking dependencies
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -627,7 +627,7 @@ def main():
 
         # region Metric and KerasMetricCallback
         if training_args.do_eval:
-            metric = evaluate.load("rouge")
+            metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
             if data_args.val_max_target_length is None:
                 data_args.val_max_target_length = data_args.max_target_length

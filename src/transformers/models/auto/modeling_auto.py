@@ -96,6 +96,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ernie_m", "ErnieMModel"),
         ("esm", "EsmModel"),
         ("falcon", "FalconModel"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("flaubert", "FlaubertModel"),
         ("flava", "FlavaModel"),
         ("fnet", "FNetModel"),
@@ -144,6 +145,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertModel"),
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mistral", "MistralModel"),
+        ("mixtral", "MixtralModel"),
         ("mobilebert", "MobileBertModel"),
         ("mobilenet_v1", "MobileNetV1Model"),
         ("mobilenet_v2", "MobileNetV2Model"),
@@ -192,6 +194,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
         ("sew-d", "SEWDModel"),
+        ("siglip", "SiglipModel"),
+        ("siglip_vision_model", "SiglipVisionModel"),
         ("speech_to_text", "Speech2TextModel"),
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
@@ -301,6 +305,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),
+        ("vipllava", "VipLlavaForConditionalGeneration"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
@@ -432,6 +437,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaForCausalLM"),
         ("megatron-bert", "MegatronBertForCausalLM"),
         ("mistral", "MistralForCausalLM"),
+        ("mixtral", "MixtralForCausalLM"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
         ("mvp", "MvpForCausalLM"),
@@ -598,6 +604,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2ForConditionalGeneration"),
         ("llava", "LlavaForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
+        ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
     ]
 )
@@ -770,6 +777,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mega", "MegaForSequenceClassification"),
         ("megatron-bert", "MegatronBertForSequenceClassification"),
         ("mistral", "MistralForSequenceClassification"),
+        ("mixtral", "MixtralForSequenceClassification"),
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
@@ -1072,6 +1080,7 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Text-To-Spectrogram mapping
+        ("fastspeech2_conformer", "FastSpeech2ConformerModel"),
         ("speecht5", "SpeechT5ForTextToSpeech"),
     ]
 )
@@ -1080,6 +1089,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
+        ("fastspeech2_conformer", "FastSpeech2ConformerWithHifiGan"),
         ("musicgen", "MusicgenForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
@@ -1096,6 +1106,7 @@ MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+        ("siglip", "SiglipModel"),
     ]
 )
 
@@ -1113,6 +1124,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
         ("swin", "SwinBackbone"),
+        ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
     ]

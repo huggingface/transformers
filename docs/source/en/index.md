@@ -133,6 +133,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
+|         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |
 |                      [FlauBERT](model_doc/flaubert)                      |       ✅        |         ✅         |      ❌      |
@@ -170,7 +171,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [LiLT](model_doc/lilt)                          |       ✅        |         ❌         |      ❌      |
 |                         [LLaMA](model_doc/llama)                         |       ✅        |         ❌         |      ✅      |
 |                        [Llama2](model_doc/llama2)                        |       ✅        |         ❌         |      ✅      |
-|                         [Llava](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
+|                         [LLaVa](model_doc/llava)                         |       ✅        |         ❌         |      ❌      |
 |                    [Longformer](model_doc/longformer)                    |       ✅        |         ✅         |      ❌      |
 |                        [LongT5](model_doc/longt5)                        |       ✅        |         ❌         |      ✅      |
 |                          [LUKE](model_doc/luke)                          |       ✅        |         ❌         |      ❌      |
@@ -190,6 +191,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                 [Megatron-GPT2](model_doc/megatron_gpt2)                 |       ✅        |         ✅         |      ✅      |
 |                       [MGP-STR](model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ❌         |      ❌      |
+|                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
 |                    [MobileBERT](model_doc/mobilebert)                    |       ✅        |         ✅         |      ❌      |
@@ -249,6 +251,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
+|                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |
@@ -280,6 +283,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [VAN](model_doc/van)                           |       ✅        |         ❌         |      ❌      |
 |                      [VideoMAE](model_doc/videomae)                      |       ✅        |         ❌         |      ❌      |
 |                          [ViLT](model_doc/vilt)                          |       ✅        |         ❌         |      ❌      |
+|                      [VipLlava](model_doc/vipllava)                      |       ✅        |         ❌         |      ❌      |
 |        [Vision Encoder decoder](model_doc/vision-encoder-decoder)        |       ✅        |         ✅         |      ✅      |
 |       [VisionTextDualEncoder](model_doc/vision-text-dual-encoder)        |       ✅        |         ✅         |      ✅      |
 |                   [VisualBERT](model_doc/visual_bert)                    |       ✅        |         ❌         |      ❌      |

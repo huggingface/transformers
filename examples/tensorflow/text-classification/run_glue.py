@@ -48,7 +48,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -379,7 +379,7 @@ def main():
     # endregion
 
     # region Metric function
-    metric = evaluate.load("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]

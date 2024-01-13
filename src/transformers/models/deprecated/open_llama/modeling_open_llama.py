@@ -578,6 +578,13 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if past_key_values is not None:
             past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
@@ -607,13 +614,6 @@ class OpenLlamaModel(OpenLlamaPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -730,8 +730,8 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, OpenLlamaForCausalLM
 
-        >>> model = OpenLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = OpenLlamaForCausalLM.from_pretrained("openlm-research/open_llama_7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -860,7 +860,6 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
     """,
     OPEN_LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->OPEN_LLAMA,Llama->OpenLlama
 class OpenLlamaForSequenceClassification(OpenLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -924,9 +923,10 @@ class OpenLlamaForSequenceClassification(OpenLlamaPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 

@@ -57,7 +57,7 @@ def convert_tf_weight_name_to_pt_weight_name(
           transposed with regards to each other
     """
     if name_scope is not None:
-        if not tf_name.startswith(name_scope):
+        if not tf_name.startswith(name_scope) and "final_logits_bias" not in tf_name:
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
@@ -186,7 +186,7 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            state_dict = torch.load(pt_path, map_location="cpu")
+            state_dict = torch.load(pt_path, map_location="cpu", weights_only=True)
 
         pt_state_dict.update(state_dict)
 
@@ -318,7 +318,14 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            name = tf_to_pt_weight_rename(name)
+            aliases = tf_to_pt_weight_rename(name)  # Is a tuple to account for possible name aliasing
+            for alias in aliases:  # The aliases are in priority order, take the first one that matches
+                if alias in tf_keys_to_pt_keys:
+                    name = alias
+                    break
+            else:
+                # If none of the aliases match, just use the first one (it'll be reported as missing)
+                name = aliases[0]
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:

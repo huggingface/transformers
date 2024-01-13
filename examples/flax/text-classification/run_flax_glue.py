@@ -55,7 +55,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -599,9 +599,9 @@ def main():
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
     if data_args.task_name is not None:
-        metric = evaluate.load("glue", data_args.task_name)
+        metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
     else:
-        metric = evaluate.load("accuracy")
+        metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
     logger.info(f"===== Starting training ({num_epochs} epochs) =====")
     train_time = 0

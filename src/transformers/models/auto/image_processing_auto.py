@@ -98,6 +98,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("resnet", "ConvNextImageProcessor"),
         ("sam", "SamImageProcessor"),
         ("segformer", "SegformerImageProcessor"),
+        ("siglip", "SiglipImageProcessor"),
         ("swiftformer", "ViTImageProcessor"),
         ("swin", "ViTImageProcessor"),
         ("swin2sr", "Swin2SRImageProcessor"),
@@ -110,6 +111,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("van", "ConvNextImageProcessor"),
         ("videomae", "VideoMAEImageProcessor"),
         ("vilt", "ViltImageProcessor"),
+        ("vipllava", "CLIPImageProcessor"),
         ("vit", "ViTImageProcessor"),
         ("vit_hybrid", "ViTHybridImageProcessor"),
         ("vit_mae", "ViTImageProcessor"),
@@ -363,16 +365,20 @@ class AutoImageProcessor:
             feature_extractor_class = config_dict.pop("feature_extractor_type", None)
             if feature_extractor_class is not None:
                 logger.warning(
-                    "Could not find image processor class in the image processor config or the model config. Loading"
-                    " based on pattern matching with the model's feature extractor configuration."
+                    "Could not find image processor class in the image processor config or the model config. Loading "
+                    "based on pattern matching with the model's feature extractor configuration. Please open a "
+                    "PR/issue to update `preprocessor_config.json` to use `image_processor_type` instead of "
+                    "`feature_extractor_type`. This warning will be removed in v4.40."
                 )
                 image_processor_class = feature_extractor_class.replace("FeatureExtractor", "ImageProcessor")
             if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
                 feature_extractor_auto_map = config_dict["auto_map"]["AutoFeatureExtractor"]
                 image_processor_auto_map = feature_extractor_auto_map.replace("FeatureExtractor", "ImageProcessor")
                 logger.warning(
-                    "Could not find image processor auto map in the image processor config or the model config."
-                    " Loading based on pattern matching with the model's feature extractor configuration."
+                    "Could not find image processor auto map in the image processor config or the model config. "
+                    "Loading based on pattern matching with the model's feature extractor configuration. Please open a "
+                    "PR/issue to update `preprocessor_config.json` to use `AutoImageProcessor` instead of "
+                    "`AutoFeatureExtractor`. This warning will be removed in v4.40."
                 )
 
         # If we don't find the image processor class in the image processor config, let's try the model config.

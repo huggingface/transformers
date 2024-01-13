@@ -365,18 +365,18 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->susnato/phi-1_5_dev
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1
     def test_flash_attn_2_generate_padding_right(self):
         """
         Overwritting the common test as the test is flaky on tiny models
         """
         model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_5_dev",
+            "microsoft/phi-1",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -389,7 +389,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         output_native = tokenizer.batch_decode(output_native)
 
         model = PhiForCausalLM.from_pretrained(
-            "susnato/phi-1_5_dev", load_in_4bit=True, device_map={"": 0}, use_flash_attention_2=True
+            "microsoft/phi-1", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
@@ -408,7 +408,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("susnato/phi-1_dev").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-1").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -424,7 +424,7 @@ class PhiIntegrationTest(unittest.TestCase):
             )
         }
 
-        model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev").to(torch_device)
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5").to(torch_device)
         model.eval()
 
         output = model(**input_ids).logits
@@ -432,3 +432,38 @@ class PhiIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT = torch.tensor([[12.2922, 13.3507,  8.6963,  9.1355,  9.3502,  9.2667, 14.2027, 13.1363, 13.5446, 11.1337,  9.9279, 16.7195, 13.0768, 14.9141, 11.9965,  8.0233, 10.3129, 10.6118, 10.0204,  9.3827,  8.8344,  8.2806,  8.0153,  8.0540, 7.0964, 16.5743, 11.1256,  9.6987, 11.4770, 10.5440], [12.3323, 14.6050,  8.9986,  8.1580,  9.5654,  6.6728, 12.5966, 12.6662, 12.2784, 11.7522,  8.2039, 16.3102, 11.2203, 13.6088, 12.0125,  9.1021, 9.8216, 10.0987,  9.0926,  8.4260,  8.8009,  7.6547,  6.8075,  7.7881, 7.4501, 15.7451, 10.5053,  8.3129, 10.0027,  9.2612]]).to(torch_device)  # fmt: skip
 
         self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+
+    def test_model_phi_2_logits(self):
+        input_ids = {
+            "input_ids": torch.tensor(
+                [[1212, 318, 281, 1672, 2643, 290, 428, 318, 257, 1332]], dtype=torch.long, device=torch_device
+            )
+        }
+
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-2").to(torch_device)
+        model.eval()
+
+        output = model(**input_ids).logits
+
+        EXPECTED_OUTPUT = torch.tensor([[6.4830,  6.1644,  3.4055,  2.2848,  5.4654,  2.8360,  5.5975,  5.5391, 7.3101,  4.2498,  2.5913, 10.3885,  6.4359,  8.7982,  5.6534,  0.5150, 2.7498,  3.1930,  2.4334,  1.7781,  1.5613,  1.3067,  0.8291,  0.5633, 0.6522,  9.8191,  5.5771,  2.7987,  4.2845,  3.7030], [6.0642,  7.8242,  3.4634,  1.9259,  4.3169,  2.0913,  6.0446,  3.6804, 6.6736,  4.0727,  2.1791, 11.4139,  5.6795,  7.5652,  6.2039,  2.7174, 4.3266,  3.6930,  2.8058,  2.6721,  2.3047,  2.0848,  2.0972,  2.0441, 1.3160,  9.2085,  4.5557,  3.0296,  2.6045,  2.4059]]).to(torch_device)  # fmt: skip
+
+        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-3, rtol=1e-3))
+
+    def test_phi_2_generation(self):
+        model = PhiForCausalLM.from_pretrained("microsoft/phi-2")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
+
+        inputs = tokenizer(
+            "Can you help me write a formal email to a potential business partner proposing a joint venture?",
+            return_tensors="pt",
+            return_attention_mask=False,
+        )
+
+        outputs = model.generate(**inputs, max_new_tokens=30)
+        output_text = tokenizer.batch_decode(outputs)
+
+        EXPECTED_OUTPUT = [
+            "Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)

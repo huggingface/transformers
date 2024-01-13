@@ -63,6 +63,14 @@ class GenerationConfig(PushToHubMixin):
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
+    <Tip>
+
+    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    description of the possible manipulations, as well as examples of their usage.
+
+    </Tip>
+
     Arg:
         > Parameters that control the length of the output
 
@@ -543,16 +551,13 @@ class GenerationConfig(PushToHubMixin):
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()
-            for w in caught_warnings:
-                raise ValueError(w.message)
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
         except ValueError as exc:
-            warnings.warn(
+            raise ValueError(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
-                "\n\nThrown during validation:\n" + str(exc),
-                UserWarning,
+                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
             )
-            return
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
