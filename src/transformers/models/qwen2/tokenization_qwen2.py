@@ -178,9 +178,13 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         self.errors = errors  # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+        bpe_merges = []
         with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
+            for line in merges_handle:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                bpe_merges.append(tuple(line.split()))
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         # NOTE: the cache can grow without bound and will get really large for long running processes
         # (esp. for texts of language that do not use space between word, e.g. Chinese); technically
