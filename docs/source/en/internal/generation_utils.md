@@ -45,7 +45,7 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-The `generation_output` object is a [`~generation.GreedySearchDecoderOnlyOutput`], as we can
+The `generation_output` object is a [`~generation.GenerateDecoderOnlyOutput`], as we can
 see in the documentation of that class below, it means it has the following attributes:
 
 - `sequences`: the generated sequences of tokens
