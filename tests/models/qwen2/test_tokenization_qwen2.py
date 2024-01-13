@@ -19,7 +19,7 @@ import os
 import unittest
 
 from transformers import Qwen2Tokenizer, Qwen2TokenizerFast
-from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES, bytes_to_unicode
+from transformers.models.qwen2.tokenization_qwen2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
