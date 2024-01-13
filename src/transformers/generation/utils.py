@@ -40,6 +40,7 @@ from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScor
 from .candidate_generator import (
     AssistedCandidateGenerator,
     CandidateGenerator,
+    PromptLookupCandidateGenerator,
     _crop_past_key_values,
     _prepare_attention_mask,
     _prepare_token_type_ids,
@@ -908,14 +909,19 @@ class GenerationMixin:
         """
         Returns the candidate generator to be used in `assisted_generation`
         """
-        candidate_generator = AssistedCandidateGenerator(
-            input_ids=input_ids,
-            assistant_model=assistant_model,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            model_kwargs=model_kwargs,
-            inputs_tensor=inputs_tensor,
-        )
+        if generation_config.prompt_lookup_num_tokens is not None:
+            candidate_generator = PromptLookupCandidateGenerator(
+                num_output_tokens=generation_config.prompt_lookup_num_tokens,
+            )
+        else:
+            candidate_generator = AssistedCandidateGenerator(
+                input_ids=input_ids,
+                assistant_model=assistant_model,
+                generation_config=generation_config,
+                logits_processor=logits_processor,
+                model_kwargs=model_kwargs,
+                inputs_tensor=inputs_tensor,
+            )
         return candidate_generator
 
     def _get_logits_warper(
@@ -995,7 +1001,7 @@ class GenerationMixin:
                 generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
-        if assistant_model is not None:
+        if assistant_model is not None or generation_config.prompt_lookup_num_tokens is not None:
             if generation_mode in ("greedy_search", "sample"):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
