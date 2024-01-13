@@ -1910,7 +1910,7 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 3. 次の出力:
 
-   ```bash 
+   ```bash
     python -c 'import torch; print(f"torch: {torch.__version__}")'
     python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
     python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
@@ -1994,7 +1994,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 ### Notes
 
-- DeepSpeed は PyTorch [`Trainer`] では動作しますが、TF [`TFTrainer`] では動作しません。
 - DeepSpeed には pip でインストール可能な PyPI パッケージがありますが、ハードウェアに最も適合するように、また有効にする必要がある場合は、[ソース](https://github.com/microsoft/deepspeed#installation) からインストールすることを強くお勧めします。
   1 ビット Adam などの特定の機能は、pypi ディストリビューションでは利用できません。
 - 🤗 Transformers で DeepSpeed を使用するために [`Trainer`] を使用する必要はありません - 任意のモデルを使用できます

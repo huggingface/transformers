@@ -366,7 +366,7 @@ def main():
     label2id = {v: str(k) for k, v in id2label.items()}
 
     # Load the mean IoU metric from the datasets package
-    metric = evaluate.load("mean_iou")
+    metric = evaluate.load("mean_iou", cache_dir=model_args.cache_dir)
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
