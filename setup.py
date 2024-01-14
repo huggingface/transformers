@@ -164,7 +164,7 @@ _deps = [
     "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt",
     "starlette",
-    "sudachipy>=0.6.6",
+    "sudachipy>=0.6.8",
     "sudachidict_core>=20220729",
     "tensorboard",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
