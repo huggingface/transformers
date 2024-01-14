@@ -224,6 +224,12 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人参政権"])
 
     @require_sudachi
+    def test_sudachi_tokenizer_projection(self):
+        tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="A", sudachi_projection="normalized_nouns")
+
+        self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
+
+    @require_sudachi
     def test_sudachi_tokenizer_lower(self):
         tokenizer = SudachiTokenizer(do_lower_case=True, sudachi_dict_type="core")
 
