@@ -1,5 +1,5 @@
 <!---
-Copyright 2020 The HuggingFace Team. All rights reserved.
+Copyright 2020 The HuggingFace Team and Nathan Cooper. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ accelerate launch run_fuyu_no_trainer.py \
     --output_dir /tmp/test-fuyu-finetune
 ```
 
-This takes about 5 minutes to train on a 8 x A100 80GB GPUs. It reaches a score of ~1.87 perplexity on the validation set.
+This takes about 3 minutes to train on a 8 x A100 80GB GPUs. It reaches a score of ~1.87 perplexity on the validation set.
 
 ## Streaming
 
