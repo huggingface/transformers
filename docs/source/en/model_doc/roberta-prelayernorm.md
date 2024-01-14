@@ -25,7 +25,7 @@ The abstract from the paper is the following:
 
 *fairseq is an open-source sequence modeling toolkit that allows researchers and developers to train custom models for translation, summarization, language modeling, and other text generation tasks. The toolkit is based on PyTorch and supports distributed training across multiple GPUs and machines. We also support fast mixed-precision training and inference on modern GPUs.*
 
-This model was contributed by [andreasmaden](https://huggingface.co/andreasmaden).
+This model was contributed by [andreasmaden](https://huggingface.co/andreasmadsen).
 The original code can be found [here](https://github.com/princeton-nlp/DinkyTrain).
 
 ## Usage tips

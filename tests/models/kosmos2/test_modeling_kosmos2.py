@@ -37,6 +37,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -244,14 +245,25 @@ class Kosmos2ModelTester:
 
 
 @require_torch
-class Kosmos2ModelTest(ModelTesterMixin, unittest.TestCase):
+class Kosmos2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": Kosmos2Model, "image-to-text": Kosmos2ForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+
+    # TODO: `image-to-text` pipeline for this model needs Processor.
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        return pipeline_test_casse_name == "ImageToTextPipelineTests"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -686,7 +698,7 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
 
         model = AutoModelForVision2Seq.from_pretrained("microsoft/kosmos-2-patch14-224").to(torch_device)
 
-        prompt = ["<grounding>An image of", "<grounding>Describe this image in detail:"]
+        prompt = ["<grounding>Describe this image in detail:", "<grounding>An image of"]
 
         # left padding
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224", padding_side="left")
@@ -699,10 +711,6 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
 
         # left padding gives identical results as non-padding
         EXPECTED_PROCESSED_TEXT_0 = (
-            "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> "
-            "warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
-        )
-        EXPECTED_PROCESSED_TEXT_1 = (
             "<grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire"
             "</phrase><object><patch_index_0005><patch_index_1007></object> in the snow. He is wearing<phrase> a hat"
             "</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object>"
@@ -712,27 +720,31 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
             "nearby. The snowman appears to be enjoying the warmth of the fire, and it appears to have a warm and cozy "
             "atmosphere."
         )
+        EXPECTED_PROCESSED_TEXT_1 = (
+            "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> "
+            "warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>."
+        )
         self.assertListEqual(processed_text, [EXPECTED_PROCESSED_TEXT_0, EXPECTED_PROCESSED_TEXT_1])
 
-        EXPECTED_FINAL_TEXT_0 = "An image of a snowman warming himself by a fire."
-        EXPECTED_FINAL_TEXT_1 = (
+        EXPECTED_FINAL_TEXT_0 = (
             "Describe this image in detail: The image features a snowman sitting by a campfire in the snow. He is "
             "wearing a hat, scarf, and gloves, with a pot nearby and a cup placed nearby. The snowman appears to be "
             "enjoying the warmth of the fire, and it appears to have a warm and cozy atmosphere."
         )
+        EXPECTED_FINAL_TEXT_1 = "An image of a snowman warming himself by a fire."
         self.assertListEqual(all_final_text, [EXPECTED_FINAL_TEXT_0, EXPECTED_FINAL_TEXT_1])
 
         EXPECTED_ENTITIES_0 = [
-            ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
-            ("a fire", (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)]),
-        ]
-        EXPECTED_ENTITIES_1 = [
             ("a campfire", (71, 81), [(0.171875, 0.015625, 0.484375, 0.984375)]),
             ("a hat", (109, 114), [(0.515625, 0.046875, 0.828125, 0.234375)]),
             ("scarf", (116, 121), [(0.515625, 0.234375, 0.890625, 0.578125)]),
             ("gloves", (127, 133), [(0.515625, 0.390625, 0.640625, 0.515625)]),
             ("a pot", (140, 145), [(0.078125, 0.609375, 0.265625, 0.859375)]),
             ("a cup", (157, 162), [(0.890625, 0.765625, 0.984375, 0.984375)]),
+        ]
+        EXPECTED_ENTITIES_1 = [
+            ("a snowman", (12, 21), [(0.390625, 0.046875, 0.984375, 0.828125)]),
+            ("a fire", (41, 47), [(0.171875, 0.015625, 0.484375, 0.890625)]),
         ]
         self.assertListEqual(all_entities, [EXPECTED_ENTITIES_0, EXPECTED_ENTITIES_1])
 
@@ -746,6 +758,6 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         all_entities = [x[1] for x in final_text_with_entities]
 
         # For right padding, only the non-padded sequences will give the same results as non-padding
-        self.assertEqual(processed_text[1], EXPECTED_PROCESSED_TEXT_1)
-        self.assertEqual(all_final_text[1], EXPECTED_FINAL_TEXT_1)
-        self.assertListEqual(all_entities[1], EXPECTED_ENTITIES_1)
+        self.assertEqual(processed_text[0], EXPECTED_PROCESSED_TEXT_0)
+        self.assertEqual(all_final_text[0], EXPECTED_FINAL_TEXT_0)
+        self.assertListEqual(all_entities[0], EXPECTED_ENTITIES_0)

@@ -225,12 +225,12 @@ limitations under the License.
     - విద్యావేత్తలు మరియు అభ్యాసకుల ప్రవేశానికి తక్కువ అవరోధం.
     - తెలుసుకోవడానికి కేవలం మూడు తరగతులతో కొన్ని వినియోగదారు-ముఖ సంగ్రహణలు.
     - మా అన్ని ప్రీట్రైన్డ్ మోడల్‌లను ఉపయోగించడం కోసం ఏకీకృత API.
-  
+
 2. తక్కువ గణన ఖర్చులు, చిన్న కార్బన్ పాదముద్ర:
     - పరిశోధకులు ఎల్లప్పుడూ మళ్లీ శిక్షణ పొందే బదులు శిక్షణ పొందిన నమూనాలను పంచుకోవచ్చు.
     - అభ్యాసకులు గణన సమయాన్ని మరియు ఉత్పత్తి ఖర్చులను తగ్గించగలరు.
     - అన్ని పద్ధతుల్లో 60,000 కంటే ఎక్కువ ప్రీట్రైన్డ్ మోడల్‌లతో డజన్ల కొద్దీ ఆర్కిటెక్చర్‌లు.
-  
+
 3. మోడల్ జీవితకాలంలో ప్రతి భాగానికి సరైన ఫ్రేమ్‌వర్క్‌ను ఎంచుకోండి:
     - 3 లైన్ల కోడ్‌లో స్టేట్ ఆఫ్ ది ఆర్ట్ మోడల్‌లకు శిక్షణ ఇవ్వండి.
     - TF2.0/PyTorch/JAX ఫ్రేమ్‌వర్క్‌ల మధ్య ఒకే మోడల్‌ను ఇష్టానుసారంగా తరలించండి.
@@ -251,7 +251,7 @@ limitations under the License.
 
 ### పిప్ తో
 
-ఈ రిపోజిటరీ పైథాన్ 3.8+, ఫ్లాక్స్ 0.4.1+, PyTorch 1.10+ మరియు TensorFlow 2.6+లో పరీక్షించబడింది.
+ఈ రిపోజిటరీ పైథాన్ 3.8+, ఫ్లాక్స్ 0.4.1+, PyTorch 1.11+ మరియు TensorFlow 2.6+లో పరీక్షించబడింది.
 
 మీరు [వర్చువల్ వాతావరణం](https://docs.python.org/3/library/venv.html)లో 🤗 ట్రాన్స్‌ఫార్మర్‌లను ఇన్‌స్టాల్ చేయాలి. మీకు పైథాన్ వర్చువల్ పరిసరాల గురించి తెలియకుంటే, [యూజర్ గైడ్](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) చూడండి.
 
@@ -270,13 +270,13 @@ pip install transformers
 
 ### కొండా తో
 
-ట్రాన్స్‌ఫార్మర్స్ వెర్షన్ v4.0.0 నుండి, మేము ఇప్పుడు కొండా ఛానెల్‌ని కలిగి ఉన్నాము: `huggingface`.
-
 🤗 కింది విధంగా కొండా ఉపయోగించి ట్రాన్స్‌ఫార్మర్‌లను ఇన్‌స్టాల్ చేయవచ్చు:
 
 ```shell script
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
+
+> **_గమనిక:_** `huggingface` ఛానెల్ నుండి `transformers` ఇన్‌స్టాల్ చేయడం పురాతనంగా ఉంది.
 
 Flax, PyTorch లేదా TensorFlow యొక్క ఇన్‌స్టాలేషన్ పేజీలను కొండాతో ఎలా ఇన్‌స్టాల్ చేయాలో చూడటానికి వాటిని అనుసరించండి.
 
@@ -402,6 +402,7 @@ Flax, PyTorch లేదా TensorFlow యొక్క ఇన్‌స్టా�
 1. **[LXMERT](https://huggingface.co/docs/transformers/model_doc/lxmert)** (from UNC Chapel Hill) released with the paper [LXMERT: Learning Cross-Modality Encoder Representations from Transformers for Open-Domain Question Answering](https://arxiv.org/abs/1908.07490) by Hao Tan and Mohit Bansal.
 1. **[M-CTC-T](https://huggingface.co/docs/transformers/model_doc/mctct)** (from Facebook) released with the paper [Pseudo-Labeling For Massively Multilingual Speech Recognition](https://arxiv.org/abs/2111.00161) by Loren Lugosch, Tatiana Likhomanenko, Gabriel Synnaeve, and Ronan Collobert.
 1. **[M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)** (from Facebook) released with the paper [Beyond English-Centric Multilingual Machine Translation](https://arxiv.org/abs/2010.11125) by Angela Fan, Shruti Bhosale, Holger Schwenk, Zhiyi Ma, Ahmed El-Kishky, Siddharth Goyal, Mandeep Baines, Onur Celebi, Guillaume Wenzek, Vishrav Chaudhary, Naman Goyal, Tom Birch, Vitaliy Liptchinsky, Sergey Edunov, Edouard Grave, Michael Auli, Armand Joulin.
+1. **[MADLAD-400](https://huggingface.co/docs/transformers/model_doc/madlad-400)** (from Google) released with the paper [MADLAD-400: A Multilingual And Document-Level Large Audited Dataset](https://arxiv.org/abs/2309.04662) by Sneha Kudugunta, Isaac Caswell, Biao Zhang, Xavier Garcia, Christopher A. Choquette-Choo, Katherine Lee, Derrick Xin, Aditya Kusupati, Romi Stella, Ankur Bapna, Orhan Firat.
 1. **[MarianMT](https://huggingface.co/docs/transformers/model_doc/marian)** Machine translation models trained using [OPUS](http://opus.nlpl.eu/) data by Jörg Tiedemann. The [Marian Framework](https://marian-nmt.github.io/) is being developed by the Microsoft Translator Team.
 1. **[MarkupLM](https://huggingface.co/docs/transformers/model_doc/markuplm)** (from Microsoft Research Asia) released with the paper [MarkupLM: Pre-training of Text and Markup Language for Visually-rich Document Understanding](https://arxiv.org/abs/2110.08518) by Junlong Li, Yiheng Xu, Lei Cui, Furu Wei.
 1. **[Mask2Former](https://huggingface.co/docs/transformers/model_doc/mask2former)** (from FAIR and UIUC) released with the paper [Masked-attention Mask Transformer for Universal Image Segmentation](https://arxiv.org/abs/2112.01527) by Bowen Cheng, Ishan Misra, Alexander G. Schwing, Alexander Kirillov, Rohit Girdhar.

@@ -128,6 +128,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )

@@ -60,6 +60,7 @@ class TimmBackboneConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "timm_backbone"
 
     def __init__(

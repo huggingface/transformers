@@ -407,7 +407,7 @@ class TFVisionEncoderDecoderMixin:
     def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
         pt_inputs_dict = {}
         for name, key in tf_inputs_dict.items():
-            if type(key) == bool:
+            if isinstance(key, bool):
                 pt_inputs_dict[name] = key
             elif name == "input_values":
                 pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
@@ -729,9 +729,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random ViT/GPT2 models for vit-gpt2 & initialize weights (+cross_attention weights)
         encoder = TFViTModel(config.encoder)
-        encoder.build()
+        encoder.build_in_name_scope()
         decoder = TFGPT2LMHeadModel(config.decoder)
-        decoder.build()
+        decoder.build_in_name_scope()
 
         encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
@@ -858,6 +858,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
                 pretrained_encoder_dir,
                 pretrained_decoder_dir,
             )
+            enc_dec_model.build_in_name_scope()
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)
             enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)

@@ -494,7 +494,7 @@ def main():
             token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     model = FlaxVisionEncoderDecoderModel.from_pretrained(
@@ -853,7 +853,7 @@ def main():
                 yield batch
 
     # Metric
-    metric = evaluate.load("rouge")
+    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]

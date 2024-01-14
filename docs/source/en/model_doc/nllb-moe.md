@@ -37,7 +37,7 @@ improvements to counteract overfitting while training on thousands of tasks. Cri
 a human-translated benchmark, Flores-200, and combined human evaluation with a novel toxicity benchmark covering all languages in Flores-200 to assess translation safety.
 Our model achieves an improvement of 44% BLEU relative to the previous state-of-the-art, laying important groundwork towards realizing a universal translation system.*
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArtZucker).
+This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/facebookresearch/fairseq).
 
 ## Usage tips

@@ -225,7 +225,7 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.build()  # may be needed for the get_bias() call below
+            model.build_in_name_scope()  # may be needed for the get_bias() call below
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in list_lm_models:

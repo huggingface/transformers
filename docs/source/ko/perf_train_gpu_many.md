@@ -145,7 +145,7 @@ python examples/pytorch/language-modeling/run_clm.py \
 
 # DDP w/ NVlink
 rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -153,7 +153,7 @@ python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-
 
 # DDP w/o NVlink
 rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-python -m torch.distributed.launch --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
+torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
 --model_name_or_path gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
 --do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
 
@@ -240,7 +240,7 @@ ZeRO가 모델 가중치를 분할하는 방식을 자세히 살펴보면, 텐�
 
 구현:
 
-- [DeepSpeed](https://www.deepspeed.ai/features/#the-zero-redundancy-optimizer)는 1단계 + 2단계 + 3단계의 ZeRO-DP를 제공합니다.
+- [DeepSpeed](https://www.deepspeed.ai/tutorials/zero/)는 1단계 + 2단계 + 3단계의 ZeRO-DP를 제공합니다.
 - [Fairscale](https://github.com/facebookresearch/fairscale/#optimizer-state-sharding-zero)은 1단계 + 2단계 + 3단계의 ZeRO-DP를 제공합니다.
 - [`transformers` 통합](main_classes/trainer#trainer-integrations)
 
@@ -362,7 +362,7 @@ Megatron 논문의 표기법을 따라 행렬의 점곱 부분을 `Y = GeLU(XA)`
 SageMaker는 더 효율적인 처리를 위해 TP와 DP를 결합합니다.
 
 대체 이름:
-- DeepSpeed는 이를 [텐서 슬라이싱](https://www.deepspeed.ai/features/#model-parallelism)이라고 부릅니다.
+- DeepSpeed는 이를 [텐서 슬라이싱](https://www.deepspeed.ai/training/#model-parallelism)이라고 부릅니다.
 
 구현:
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)은 내부 구현을 가지고 있으므로 모델에 매우 특화되어 있습니다.

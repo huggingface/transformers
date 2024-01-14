@@ -76,6 +76,9 @@ PRIVATE_MODELS = [
     "Kosmos2TextModel",
     "Kosmos2TextForCausalLM",
     "Kosmos2VisionModel",
+    "SeamlessM4Tv2TextToUnitModel",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2TextToUnitForConditionalGeneration",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -87,6 +90,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
+    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -114,7 +119,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "BridgeTowerTextModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BridgeTowerVisionModel",  # No need to test it as it is tested by BridgeTowerModel model.
     "BarkCausalModel",  # Building part of bigger (tested) model.
-    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests.
     "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
     "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
     "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
@@ -156,6 +161,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",
+    "FastSpeech2ConformerWithHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -185,6 +192,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
     "AutoformerForPrediction",
+    "PatchTSTForPretraining",
+    "PatchTSTForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "SamModel",
@@ -205,8 +214,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
-    "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
+    "ClvpForCausalLM",
+    "ClvpModel",
     "GroupViTTextModel",
     "GroupViTVisionModel",
     "TFCLIPTextModel",
@@ -244,6 +254,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Owlv2TextModel",
     "Owlv2VisionModel",
     "OwlViTForObjectDetection",
+    "PatchTSMixerForPrediction",
+    "PatchTSMixerForPretraining",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
@@ -291,6 +303,13 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TTextToUnitForConditionalGeneration",
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
+    "TvpForVideoGrounding",
+    "SeamlessM4Tv2NARTextToUnitModel",
+    "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
+    "SeamlessM4Tv2CodeHifiGan",
+    "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
+    "SiglipVisionModel",
+    "SiglipTextModel",
 ]
 
 # DO NOT edit this list!
@@ -394,13 +413,11 @@ def get_model_modules() -> List[str]:
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
         "modeling_timm_backbone",
-        "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
         "modeling_tf_outputs",
         "modeling_tf_pytorch_utils",
         "modeling_tf_utils",
-        "modeling_tf_transfo_xl_utilities",
         "modeling_tf_vision_encoder_decoder",
         "modeling_vision_encoder_decoder",
     ]
@@ -901,6 +918,7 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
+    "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
     "SingleSentenceClassificationProcessor",
@@ -926,7 +944,6 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainer",
     "TFTrainingArguments",
 ]
 
@@ -962,6 +979,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "TensorFlowBenchmark",
     "TensorFlowBenchmarkArguments",
     "AutoBackbone",
+    "BeitBackbone",
     "BitBackbone",
     "ConvNextBackbone",
     "ConvNextV2Backbone",
@@ -974,6 +992,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "Swinv2Backbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",

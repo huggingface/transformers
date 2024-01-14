@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+PyTorch-independent utilities for the Trainer class.
 """
 
 import copy
@@ -461,6 +461,11 @@ class TrainerMemoryTracker:
 
             self.torch = torch
             self.gpu = {}
+        elif is_torch_npu_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
         else:
             self.torch = None
 
@@ -517,6 +522,9 @@ class TrainerMemoryTracker:
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.reset_peak_memory_stats()
+                self.torch.npu.empty_cache()
 
         # gpu
         if self.torch is not None:
@@ -524,6 +532,8 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
 
         # cpu
         self.cpu_mem_used_at_start = self.cpu_mem_used()
@@ -551,6 +561,8 @@ class TrainerMemoryTracker:
                 self.torch.cuda.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
+            elif is_torch_npu_available():
+                self.torch.npu.empty_cache()
 
         # concepts:
         # - alloc_delta:  the difference of allocated memory between the end and the start
@@ -565,6 +577,9 @@ class TrainerMemoryTracker:
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
+            elif is_torch_npu_available():
+                self.gpu_mem_used_now = self.torch.npu.memory_allocated()
+                self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
             else:
                 raise ValueError("No available GPU device found!")
 
@@ -712,6 +727,8 @@ class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
     NO_SHARD = "no_shard"
+    HYBRID_SHARD = "hybrid_shard"
+    HYBRID_SHARD_ZERO2 = "hybrid_shard_zero2"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 

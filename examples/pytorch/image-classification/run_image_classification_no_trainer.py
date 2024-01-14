@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.36.0.dev0")
+check_min_version("4.37.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -282,7 +282,6 @@ def main():
         dataset = load_dataset(
             "imagefolder",
             data_files=data_files,
-            cache_dir=args.cache_dir,
             task="image-classification",
         )
         # See more about loading custom images at
