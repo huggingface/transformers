@@ -472,6 +472,7 @@ class SegformerImageProcessor(metaclass=DummyObject):
 
 
 class SegGptImageProcessor(metaclass=DummyObject):
+class SiglipImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

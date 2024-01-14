@@ -379,7 +379,7 @@ def main():
     # endregion
 
     # region Metric function
-    metric = evaluate.load("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]

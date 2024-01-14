@@ -194,6 +194,7 @@ from . import (
     seggpt,
     sew,
     sew_d,
+    siglip,
     speech_encoder_decoder,
     speech_to_text,
     speech_to_text_2,
