@@ -542,6 +542,7 @@ class SudachiTokenizer:
         sudachi_config_path=None,
         sudachi_resource_dir=None,
         sudachi_dict_type="core",
+        sudachi_projection=None,
     ):
         """
         Constructs a SudachiTokenizer.
@@ -562,6 +563,8 @@ class SudachiTokenizer:
             **sudachi_resource_dir**: (*optional*) string
             **sudachi_dict_type**: (*optional*) string
                 dict type of sudachi, choose from "small", "core", "full".
+            **sudachi_projection**: (*optional*) string
+                Word projection mode of sudachi, choose from "surface", "normalized", "reading", "dictionary", "dictionary_and_surface", "normalized_and_surface", "normalized_nouns".
         """
 
         self.do_lower_case = do_lower_case
@@ -586,9 +589,11 @@ class SudachiTokenizer:
         else:
             raise ValueError("Invalid sudachi_split_mode is specified.")
 
+        self.projection = sudachi_projection
+
         self.sudachi = dictionary.Dictionary(
             config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
-        ).create(self.split_mode)
+        ).create(self.split_mode, projection=self.projection)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
