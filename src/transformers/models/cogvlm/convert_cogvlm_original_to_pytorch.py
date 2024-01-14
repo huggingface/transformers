@@ -56,34 +56,31 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
 
     print("Original config:", original_model.config)
 
-    # verify chat example
-    query = "Describe this image"
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    url = "https://raw.githubusercontent.com/THUDM/CogVLM/main/assets/metrics-min.png"
+    # prepare dummy example
+
+    if model_name == "THUDM/cogvlm-grounding-base-hf":
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        query = "Can you provide a description of the image and include the coordinates [[x0,y0,x1,y1]] for each mentioned object?"
+    else:
+        query = "Describe this image"
+        url = "https://raw.githubusercontent.com/THUDM/CogVLM/main/assets/metrics-min.png"
+
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     tokenizer = LlamaTokenizer.from_pretrained(
         "lmsys/vicuna-7b-v1.5", model_input_names=["input_ids", "attention_mask", "token_type_ids"]
     )
 
-    if model_name == "THUDM/cogvlm-chat-hf":
-        # chat mode
-        inputs = original_model.build_conversation_input_ids(
-            tokenizer,
-            query=query,
-            history=[],
-            images=[image],
-            template_version="chat",
-        )
-    elif model_name in ["THUDM/cogvlm-base-224-hf", "THUDM/cogvlm-grounding-generalist-hf"]:
-        # base mode
-        inputs = original_model.build_conversation_input_ids(
-            tokenizer,
-            query=query,
-            history=[],
-            images=[image],
-            template_version="base",
-        )
+    template_version = original_model.config.template_version
+
+    # prepare original inputs
+    inputs = original_model.build_conversation_input_ids(
+        tokenizer,
+        query=query,
+        history=[],
+        images=[image],
+        template_version=template_version,
+    )
 
     def gather_inputs(inputs, device, use_bfloat16=True):
         dtype = torch.bfloat16 if use_bfloat16 else torch.float32
@@ -96,7 +93,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         return inputs
 
     original_inputs = gather_inputs(inputs, device=original_device)
-    gen_kwargs = {"max_length": 2048, "do_sample": False}  # TODO set to max_length: 2048
+    gen_kwargs = {"max_length": 2048, "do_sample": False}
 
     print("Original input_ids:", tokenizer.decode(original_inputs["input_ids"][0]))
 
@@ -134,12 +131,14 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     original_inputs = gather_inputs(inputs, device=hf_device)
     original_inputs["pixel_values"] = torch.stack(original_inputs.pop("images")[0])
 
-    if model_name == "THUDM/cogvlm-chat-hf":
+    if template_version == "chat":
         # chat history template
         prompt = f"Question: {query} Answer:"
-    elif model_name in ["THUDM/cogvlm-base-224-hf", "THUDM/cogvlm-grounding-generalist-hf"]:
+    elif template_version == "base":
         # base history template
         prompt = f"{query}"
+    else:
+        raise ValueError("Teplate version not supported")
 
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
