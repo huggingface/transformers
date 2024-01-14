@@ -304,7 +304,7 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
                 "forced_bos_token_id": 250001,
             },
         )
-        
+
     def test_inconsistent_decoding(self):
         text = "<s>[special_token] normal text"
         fast_tokens = self.tokenizer(text,use_fast=True)["input_ids"]

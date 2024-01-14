@@ -517,7 +517,7 @@ doc_test_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
         "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
-        "find . -name \*.pyc -delete",
+        r"find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
         "touch dummy.py",
         {
