@@ -48,7 +48,7 @@ In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inferen
 
 >>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=100, do_sample=True)
 >>> response = tokenizer.batch_decode(
-   generate_ids,
+   generated_ids,
    skip_special_tokens=False,
    clean_up_tokenization_spaces=False
 )[0][len(text):].strip('<|im_end|>')
