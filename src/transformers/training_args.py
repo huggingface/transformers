@@ -533,9 +533,9 @@ class TrainingArguments:
             This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will
             increase RAM usage. Will default to `False`.
         dataloader_prefetch_factor (`int`, *optional*, defaults to 1):
-            Number of batches loaded in advance by each worker. 
-            2 means there will be a total of 2 * num_workers batches prefetched across all workers. 
-            (default value depends on the set value for num_workers. 
+            Number of batches loaded in advance by each worker.
+            2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+            (default value depends on the set value for num_workers.
             If value of num_workers=0 default is None. Otherwise, if value of num_workers > 0 default is 2).
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
@@ -996,9 +996,9 @@ class TrainingArguments:
     )
     dataloader_prefetch_factor: int = field(
         default=2,
-        metadata={"help": """Number of batches loaded in advance by each worker. 
-                  2 means there will be a total of 2 * num_workers batches prefetched across all workers. 
-                  (default value depends on the set value for num_workers. 
+        metadata={"help": """Number of batches loaded in advance by each worker.
+                  2 means there will be a total of 2 * num_workers batches prefetched across all workers.
+                  (default value depends on the set value for num_workers.
                   If value of num_workers=0 default is None. Otherwise, if value of num_workers > 0 default is 2)."""},
     )
     past_index: int = field(
