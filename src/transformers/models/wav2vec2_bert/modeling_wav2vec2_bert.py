@@ -262,6 +262,7 @@ class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
         base = config.rotary_embedding_base
 
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        # Ignore copy
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
@@ -556,7 +557,7 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, probs
-    
+
     # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_rotary_embedding
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()

@@ -540,32 +540,35 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Wav2Vec2Bert has no inputs_embeds
+    # Ignore copy
+    @unittest.skip(reason="Wav2Vec2Bert has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_features`
+    # Ignore copy
+    @unittest.skip(reason="`input_ids` is renamed to `input_features`")
     def test_forward_signature(self):
         pass
 
-    # Wav2Vec2Bert cannot resize token embeddings
-    # since it has no tokens embeddings
+    # Ignore copy
+    @unittest.skip(reason="Wav2Vec2Bert has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2Bert has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
+    # Ignore copy
+    @unittest.skip(reason="Wav2Vec2Bert has no inputs_embeds")
     def test_model_common_attributes(self):
         pass
 
+    # Ignore copy
+    @unittest.skip(reason="non-robust architecture does not exist in Flax")
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
     def test_equivalence_flax_to_pt(self):
         pass
 
+    # Ignore copy
+    @unittest.skip(reason="non-robust architecture does not exist in Flax")
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
     def test_equivalence_pt_to_flax(self):
         pass
 
@@ -667,13 +670,13 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             module.masked_spec_embed.data.fill_(3)
 
     # Ignore copy
+    @unittest.skip(reason="Kept to make #Copied from working")
     def test_mask_feature_prob_ctc(self):
-        # kept to make #Copied from working
         pass
 
     # Ignore copy
+    @unittest.skip(reason="Kept to make #Copied from working")
     def test_mask_time_prob_ctc(self):
-        # kept to make #Copied from working
         pass
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
