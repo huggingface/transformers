@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Type
 from unittest.mock import patch
 
-import bitsandbytes as bnb
 from torch import nn
 from torch.nn import Linear, Module, ReLU
 
@@ -173,6 +172,8 @@ class TestReplaceWithBnbLinear(unittest.TestCase):
 
     @staticmethod
     def quantization_test_configs():
+        import bitsandbytes as bnb
+
         yield TestConfig(
             bnb_cfg=BitsAndBytesConfig(load_in_8bit=True),
             replacement_linear_class=bnb.nn.Linear8bitLt,
