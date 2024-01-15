@@ -1437,9 +1437,17 @@ class ClearMLCallback(TrainerCallback):
     - **CLEARML_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
         Whether to log models as artifacts during training.
     """
+
+    log_suffix = ""
+
+    _hparams_section = "Transformers"
+    _model_config_section = "Model Configuration"
+    _ignore_hparams_overrides = "_ignore_hparams_ui_overrides_"
+    _ignoge_model_config_overrides = "_ignore_model_config_ui_overrides_"
     _connect_counter = 0
     _train_run_counter = 0
     _task_created_in_callback = False
+    _should_close_task_on_train_end = None
 
     def __init__(self):
         if is_clearml_available():
@@ -1447,11 +1455,12 @@ class ClearMLCallback(TrainerCallback):
 
             self._clearml = clearml
         else:
-            raise RuntimeError("ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`.")
+            raise RuntimeError(
+                "ClearMLCallback requires 'clearml' to be installed. Run `pip install clearml`."
+            )
 
         self._initialized = False
         self._clearml_task = None
-        self._initialized_externally = False
 
         self._log_model = False
         self._checkpoints_saved = []
@@ -1467,42 +1476,132 @@ class ClearMLCallback(TrainerCallback):
             if self._clearml_task is None:
                 # This might happen when running inside of a pipeline, where the task is already initialized
                 # from outside of Hugging Face
-                if self._clearml.Task.current_task():
+                if (
+                    self._clearml.Task.running_locally()
+                    and self._clearml.Task.current_task()
+                ):
                     self._clearml_task = self._clearml.Task.current_task()
                     self._log_model = os.getenv(
-                        "CLEARML_LOG_MODEL", "FALSE" if not ClearMLCallback._task_created_in_callback else "TRUE"
+                        "CLEARML_LOG_MODEL",
+                        "FALSE"
+                        if not ClearMLCallback._task_created_in_callback
+                        else "TRUE",
                     ).upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
                     logger.info("External ClearML Task has been connected.")
+                    if ClearMLCallback._should_close_task_on_train_end is None:
+                        ClearMLCallback._should_close_on_train_end = False
                 else:
+                    if ClearMLCallback._should_close_task_on_train_end is None:
+                        if self._clearml.Task.running_locally():
+                            ClearMLCallback._should_close_task_on_train_end = True
+                        else:
+                            ClearMLCallback._should_close_task_on_train_end = False
                     self._clearml_task = self._clearml.Task.init(
-                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                        project_name=os.getenv(
+                            "CLEARML_PROJECT", "HuggingFace Transformers"
+                        ),
                         task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                        auto_connect_frameworks={
+                            "tensorboard": False,
+                            "pytorch": False,
+                        },
                         output_uri=True,
                     )
-                    self._log_model = os.getenv("CLEARML_LOG_MODEL", "TRUE").upper() in ENV_VARS_TRUE_VALUES.union(
-                        {"TRUE"}
-                    )
+                    self._log_model = os.getenv(
+                        "CLEARML_LOG_MODEL", "TRUE"
+                    ).upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
                     ClearMLCallback._task_created_in_callback = True
                     logger.info("ClearML Task has been initialized.")
                 self._initialized = True
 
-            suffix = "" if ClearMLCallback._connect_counter == 1 else "_" + str(ClearMLCallback._connect_counter)
-            flat_dict = {
-                str(k): v for k, v in self._clearml.utilities.proxy_object.flatten_dictionary(args.to_dict()).items()
-            }
-            self._clearml_task._arguments.copy_from_dict(flat_dict, prefix="Transformers" + suffix)
-            if hasattr(model, "config") and model.config is not None:
-                config = self._clearml_task.connect_configuration(
-                    model.config.to_dict(), "Model Configuration" + suffix
+            suffix = (
+                ""
+                if ClearMLCallback._connect_counter == 1
+                else ("_" + str(ClearMLCallback._connect_counter))
+            )
+            ignore_hparams_config_section = (
+                ClearMLCallback._hparams_section
+                + suffix
+                + "/"
+                + ClearMLCallback._ignore_hparams_overrides
+            )
+            if self._clearml.Task.running_locally():
+                self._clearml_task.set_parameter(
+                    name=ignore_hparams_config_section,
+                    value=True,
+                    description=(
+                        "If True, ignore hyperparameters overrides done in the UI section" +\
+                        "when running remotely. Otherwise, the overrides will be used"
+                    )
                 )
-                if not self._clearml_task.running_locally():
-                    model.config = model.config.from_dict(config)
+                flat_dict = {
+                    str(k): v
+                    for k, v in self._clearml.utilities.proxy_object.flatten_dictionary(
+                        args.to_dict()
+                    ).items()
+                }
+                self._clearml_task._arguments.copy_from_dict(
+                    flat_dict, prefix=ClearMLCallback._hparams_section + suffix
+                )
+            elif not self._clearml_task.get_parameter(
+                ignore_hparams_config_section, default=True, cast=True
+            ):
+                self._clearml_task.connect(
+                    args, ClearMLCallback._hparams_section + suffix
+                )
+            else:
+                flat_dict = {
+                    str(k): v
+                    for k, v in self._clearml.utilities.proxy_object.flatten_dictionary(
+                        args.to_dict()
+                    ).items()
+                }
+                self._clearml_task._arguments.copy_from_dict(
+                    flat_dict, prefix=ClearMLCallback._hparams_section + suffix
+                )
+            if hasattr(model, "config") and model.config is not None:
+                ignore_model_config_section = (
+                    ClearMLCallback._hparams_section
+                    + suffix
+                    + "/"
+                    + ClearMLCallback._ignoge_model_config_overrides
+                )
+                if self._clearml.Task.running_locally():
+                    self._clearml_task.set_parameter(
+                        name=ignore_model_config_section,
+                        value=True,
+                        description=(
+                            "If True, ignore model configuration overrides done in the UI section " +\
+                            "when running remotely. Otherwise, the overrides will be used"
+                        )
+                    )
+                    self._clearml_task._set_configuration(
+                        name=ClearMLCallback._model_config_section + suffix,
+                        config_dict=model.config.to_dict(),
+                    )
+                elif not self._clearml_task.get_parameter(
+                    ignore_model_config_section, default=True, cast=True
+                ):
+                    self._clearml_task.connect_configuration(
+                        model.config, ClearMLCallback._model_config_section + suffix
+                    )
+                else:
+                    self._clearml_task._set_configuration(
+                        name=ClearMLCallback._model_config_section + suffix,
+                        config_dict=model.config.to_dict(),
+                    )
 
-    def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
+    def on_train_begin(
+        self, args, state, control, model=None, tokenizer=None, **kwargs
+    ):
         if self._clearml is None:
             return
         ClearMLCallback._train_run_counter += 1
+        ClearMLCallback.log_suffix = (
+            ""
+            if ClearMLCallback._train_run_counter == 1
+            else "_" + str(ClearMLCallback._train_run_counter)
+        )
         self._checkpoints_saved = []
         if state.is_hyper_param_search:
             self._initialized = False
@@ -1510,10 +1609,12 @@ class ClearMLCallback(TrainerCallback):
             self.setup(args, state, model, tokenizer, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
-        return
+        if ClearMLCallback._should_close_task_on_train_end:
+            self._clearml_task.close()
 
-    def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
-        suffix = "" if ClearMLCallback._train_run_counter == 1 else "_" + str(ClearMLCallback._train_run_counter)
+    def on_log(
+        self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs
+    ):
         if self._clearml is None:
             return
         if not self._initialized:
@@ -1534,18 +1635,29 @@ class ClearMLCallback(TrainerCallback):
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
                     if k in single_value_scalars:
-                        self._clearml_task.get_logger().report_single_value(name=k + suffix, value=v)
+                        self._clearml_task.get_logger().report_single_value(
+                            name=k + ClearMLCallback.log_suffix, value=v
+                        )
                     elif k.startswith(eval_prefix):
                         self._clearml_task.get_logger().report_scalar(
-                            title="eval" + suffix, series=k[eval_prefix_len:], value=v, iteration=state.global_step
+                            title="eval" + ClearMLCallback.log_suffix,
+                            series=k[eval_prefix_len:],
+                            value=v,
+                            iteration=state.global_step,
                         )
                     elif k.startswith(test_prefix):
                         self._clearml_task.get_logger().report_scalar(
-                            title="test" + suffix, series=k[test_prefix_len:], value=v, iteration=state.global_step
+                            title="test" + ClearMLCallback.log_suffix,
+                            series=k[test_prefix_len:],
+                            value=v,
+                            iteration=state.global_step,
                         )
                     else:
                         self._clearml_task.get_logger().report_scalar(
-                            title="train" + suffix, series=k, value=v, iteration=state.global_step
+                            title="train" + ClearMLCallback.log_suffix,
+                            series=k,
+                            value=v,
+                            iteration=state.global_step,
                         )
                 else:
                     logger.warning(
@@ -1557,21 +1669,37 @@ class ClearMLCallback(TrainerCallback):
 
     def on_save(self, args, state, control, **kwargs):
         if self._log_model and self._clearml_task and state.is_world_process_zero:
-            suffix = "" if ClearMLCallback._train_run_counter == 1 else "_" + str(ClearMLCallback._train_run_counter)
             ckpt_dir = f"checkpoint-{state.global_step}"
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
-            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
-            name = ckpt_dir + suffix
+            logger.info(
+                f"Logging checkpoint artifacts in {ckpt_dir}. This may take time."
+            )
+            name = ckpt_dir + ClearMLCallback.log_suffix
             output_model = self._clearml.OutputModel(task=self._clearml_task, name=name)
             output_model.connect(task=self._clearml_task, name=name)
-            output_model.update_weights(
-                weights_filename=artifact_path,
+            output_model.update_weights_package(
+                weights_path=artifact_path,
+                target_filename=ckpt_dir,
                 iteration=state.global_step,
-                auto_delete_file=False
+                auto_delete_file=False,
             )
             self._checkpoints_saved.append(output_model)
-            while args.save_total_limit and args.save_total_limit < len(self._checkpoints_saved):
-                self._clearml.model.Model.remove(self._checkpoints_saved[0])
+            while args.save_total_limit and args.save_total_limit < len(
+                self._checkpoints_saved
+            ):
+                try:
+                    self._clearml.model.Model.remove(
+                        self._checkpoints_saved[0],
+                        delete_weights_file=True,
+                        force=True,
+                        raise_on_errors=True,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Could not remove checkpoint after going over the `save_total_limit`. Error is: "
+                        + str(e)
+                    )
+                    break
                 self._checkpoints_saved = self._checkpoints_saved[1:]
 
 
