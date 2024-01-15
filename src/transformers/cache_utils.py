@@ -570,7 +570,7 @@ class PagedAttentionCache(Cache):
         """Returns the maximum sequence length of the cached states. PagedAttentionCache does not have a maximum length."""
         return None
 
-    def get_all_context_states(
+    def get_entire_context_states(
         self,
         context_len: int,
         key_states: torch.Tensor,
@@ -581,20 +581,20 @@ class PagedAttentionCache(Cache):
             batch_size = key_states.shape[0]  # [batch, head, seq, dim]
             kv_head = key_states.shape[1]
             head_size = key_states.shape[-1]
-            context_len = context_len + key_states.shape[-2]
+            new_context_len = context_len + key_states.shape[-2]
             key = torch.zeros(
-                (batch_size, context_len, kv_head, head_size),
+                (batch_size, new_context_len, kv_head, head_size),
                 dtype=key_states.dtype,
                 device=key_states.device,
             )
             value = torch.zeros(
-                (batch_size, context_len, kv_head, head_size),
+                (batch_size, new_context_len, kv_head, head_size),
                 dtype=value_states.dtype,
                 device=value_states.device,
             )
             for batch_idx in range(batch_size):
                 seq_id = self.batch2seq[batch_idx][0]
-                for i in range(context_len):
+                for i in range(new_context_len):
                     block_idx = self.block_tables[seq_id][i // self.block_size]
                     block_offset = i % self.block_size
                     key[batch_idx][i] = self.key_cache[layer_idx][block_idx][
@@ -686,8 +686,8 @@ class PagedAttentionCache(Cache):
         context_len = (
             self.context_lens[0][layer_idx] if self.has_context(layer_idx, 0) else 0
         )
-        # step 4): update the key_states & value_states for each sequence in the batch
-        key_states, value_states = self.get_all_context_states(
+        # step 4): concat the past key/value with current key/value
+        key_states, value_states = self.get_entire_context_states(
             context_len, key_states, value_states, layer_idx
         )
 
