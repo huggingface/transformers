@@ -27,10 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation.configuration_utils import GenerationConfig
-from ...generation.logits_process import (
-    ClassifierFreeGuidanceLogitsProcessor,
-    LogitsProcessorList,
-)
+from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
