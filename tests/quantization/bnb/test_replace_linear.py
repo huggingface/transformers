@@ -6,7 +6,7 @@ from unittest.mock import patch
 from transformers import BitsAndBytesConfig
 from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 from transformers.testing_utils import require_bitsandbytes
-from transformers.utils import is_torch_available
+from transformers.utils import is_torch_available, is_bitsandbytes_available
 
 
 if is_torch_available():
@@ -213,8 +213,8 @@ class TestReplaceWithBnbLinear(unittest.TestCase):
                     expected_warning_message=warning_message,
                 )
 
-
-TestReplaceWithBnbLinear.generate_tests()
+if is_bitsandbytes_available():
+    TestReplaceWithBnbLinear.generate_tests()
 
 if __name__ == "__main__":
     unittest.main()
