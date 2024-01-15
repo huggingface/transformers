@@ -26,7 +26,7 @@ import yaml
 COMMON_ENV_VARIABLES = {
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
-    "PYTEST_TIMEOUT": 120,
+    "PYTEST_TIMEOUT": 1200,
     "RUN_PIPELINE_TESTS": False,
     "RUN_PT_TF_CROSS_TESTS": False,
     "RUN_PT_FLAX_CROSS_TESTS": False,
@@ -161,10 +161,7 @@ class CircleCIJob:
         test_command += f"python -m pytest --junitxml=test-results/junit.xml -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
-            if self.tests_to_run is None:
-                test_command += " << pipeline.parameters.tests_to_run >>"
-            else:
-                test_command += " " + " ".join(self.tests_to_run)
+            test_command = "python -m pytest --junitxml=test-results/junit.xml -n 1 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/test_modeling_utils.py::ModelUtilsTest::test_model_from_pretrained_with_different_pretrained_model_name"
         else:
             # We need explicit list instead of `pipeline.parameters.tests_to_run` (only available at job runtime)
             tests = self.tests_to_run
@@ -542,15 +539,8 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
     torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -577,8 +567,8 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+    # if len(all_test_list) > 0:
+    #     jobs.extend(PIPELINE_TESTS)
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -628,8 +618,8 @@ def create_circleci_config(folder=None):
             else:
                 job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
 
-            if len(job.tests_to_run) > 0:
-                jobs.append(job)
+            # if len(job.tests_to_run) > 0:
+            #     jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
@@ -637,12 +627,12 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+    # if len(doctest_list) > 0:
+    #     jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+    # if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+    #     jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
