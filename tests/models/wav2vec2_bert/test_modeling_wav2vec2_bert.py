@@ -51,7 +51,6 @@ if is_torch_available():
         Wav2Vec2BertModel,
     )
     from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import (
-        Wav2Vec2BertGumbelVectorQuantizer,
         _compute_mask_indices,
         _sample_negative_indices,
     )
@@ -783,18 +782,10 @@ class Wav2Vec2BertUtilsTest(unittest.TestCase):
         # make sure that non-padded examples cannot be padded
         self.assertFalse(mask[0][attention_mask[0].to(torch.bool).cpu()].any())
 
+    # Ignore copy
+    @unittest.skip(reason="Kept to make #Copied from working. Test a class used for pretraining, not yet supported.")
     def test_compute_perplexity(self):
-        probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
-
-        ppl = Wav2Vec2BertGumbelVectorQuantizer._compute_perplexity(probs)
-        self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
-
-        # mask half of the input
-        mask = torch.ones((2,), device=torch_device, dtype=torch.bool)
-        mask[0] = 0
-
-        ppl = Wav2Vec2BertGumbelVectorQuantizer._compute_perplexity(probs, mask)
-        self.assertTrue(abs(ppl.item() - 58.6757) < 1e-3)
+        pass
 
     def test_sample_negatives(self):
         batch_size = 2
