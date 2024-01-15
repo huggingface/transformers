@@ -2771,7 +2771,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 # set correct filename
                 if from_pt:
                     filename = WEIGHTS_NAME
-                elif is_safetensors_available():
+                elif use_safetensors:
                     filename = SAFE_WEIGHTS_NAME
                 else:
                     filename = TF2_WEIGHTS_NAME
