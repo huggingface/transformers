@@ -97,7 +97,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
         elif text is not None and audio is not None:
             raise ValueError(
-                "`Text` and `audio` are mututally exclusive when passed to `Wav2Vec2BertProcessor`. Specify one or another."
+                "`Text` and `audio` are mutually exclusive when passed to `Wav2Vec2BertProcessor`. Specify one or the other."
             )
 
         if audio is not None:
