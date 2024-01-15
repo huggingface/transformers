@@ -147,12 +147,12 @@ class LlamaRotaryEmbedding(nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
+        # if seq_len > self.max_seq_len_cached:
+        #     self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+            self.cos_cached.to(dtype=x.dtype),
+            self.sin_cached.to(dtype=x.dtype),
         )
 
 
@@ -311,12 +311,29 @@ class LlamaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-
+    
+        # total_head_dim = (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim
+        # self.wqkv = nn.Linear(self.hidden_size, total_head_dim, bias=False)
+        
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
+        
+        # cache_shape = (8,  self.num_heads, 4096, self.head_dim)
+        # self.register_buffer("key_cache",torch.zeros(cache_shape, dtype=torch.bfloat16, device = "cuda"), persistent=False)
+        # self.register_buffer("value_cache",torch.zeros(cache_shape, dtype=torch.bfloat16, device = "cuda"), persistent=False)
+
+    #     self._register_load_state_dict_pre_hook(self.load_hook)
+
+    # def load_hook(self, state_dict, prefix, *args):
+    #     if prefix + "q_proj.weight" in state_dict :
+    #         wq = state_dict.pop(prefix + "q_proj.weight")
+    #         wk = state_dict.pop(prefix + "k_proj.weight")
+    #         wv = state_dict.pop(prefix + "v_proj.weight")
+    #         state_dict[prefix + "wqkv.weight"] = torch.cat([wq, wk, wv])
+
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -344,9 +361,6 @@ class LlamaAttention(nn.Module):
                 )
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
@@ -676,50 +690,55 @@ class LlamaSdpaAttention(LlamaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-            )
+        # if output_attentions:
+        #     # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+        #     logger.warning_once(
+        #         "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+        #         'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+        #     )
+        #     return super().forward(
+        #         hidden_states=hidden_states,
+        #         attention_mask=attention_mask,
+        #         position_ids=position_ids,
+        #         past_key_value=past_key_value,
+        #         output_attentions=output_attentions,
+        #         use_cache=use_cache,
+        #     )
 
         bsz, q_len, _ = hidden_states.size()
-
+        # kv_size = self.num_key_value_heads * self.head_dim
+        # query_states, key_states, value_states = self.wqkv(hidden_states).split([self.hidden_size, kv_size, kv_size], dim=-1)
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
 
+        query_states, key_states, value_states = map(lambda x: x.transpose(1, 2), (query_states, key_states, value_states))
+
+        # get_usable_length make the whole code a lot slower
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += past_key_value.get_seq_length()
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
-            key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            cache_kwargs = {'position_ids':position_ids}
+            # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
+            key_states, value_states, _ = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
-                )
+        # if attention_mask is not None:
+        #     if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
+        #         raise ValueError(
+        #             f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
+        #         )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -739,7 +758,7 @@ class LlamaSdpaAttention(LlamaAttention):
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
 
@@ -1013,11 +1032,12 @@ class LlamaModel(LlamaPreTrainedModel):
                 use_cache = False
 
         past_key_values_length = 0
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
+        use_legacy_cache=False
+        # if use_cache:
+        #     use_legacy_cache = not isinstance(past_key_values, Cache)
+        #     if use_legacy_cache:
+        #         past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+        #     past_key_values_length = past_key_values.get_usable_length(seq_length)
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -1032,22 +1052,20 @@ class LlamaModel(LlamaPreTrainedModel):
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        # elif self._use_sdpa and not output_attentions:
-        #     # output_attentions=True can not be supported when using SDPA, and we fall back on
-        #     # the manual implementation that requires a 4D causal mask in all cases.
-        #     attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-        #         attention_mask,
-        #         (batch_size, seq_length),
-        #         inputs_embeds,
-        #         past_key_values_length,
+        elif self._use_sdpa and not output_attentions and attention_mask is None:
+            # output_attentions=True can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask,
+                (batch_size, seq_length),
+                inputs_embeds,
+                past_key_values_length,
+            )
+        # else:
+        #     # 4d mask is passed through the layers
+        #     attention_mask = _prepare_4d_causal_attention_mask(
+        #         attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
         #     )
-        else:
-            # 4d mask is passed through the layers
-            # attention_mask = _prepare_4d_causal_attention_mask(
-            #     attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-            # )
-            attention_mask = torch.triu(torch.full((input_ids.shape[0],1,seq_length,self.config.max_position_embeddings),  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
-
 
         # embed positions
         hidden_states = inputs_embeds

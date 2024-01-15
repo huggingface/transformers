@@ -324,32 +324,31 @@ class SinkCache(Cache):
             device = self.value_cache[layer_idx].device
             self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-
 class StaticCache(Cache):
 
     def __init__(self, config: PretrainedConfig, max_batch_size) -> None:
         super().__init__()
         self.num_layers = config.num_hidden_layers
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = config.max_position_embeddings
+        self.max_sequence_length = config.max_position_embedding if config.max_sequence_length is None else config.max_sequence_length 
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.shape = (max_batch_size, self.max_sequence_length, config.hidden_size // self.num_heads,  self.num_heads)
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
         
         # TODO device meta? 
+        cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
 
-        self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=self.dtype) for _ in range(self.num_layers)]
-        self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, self.num_heads, self.max_sequence_length, self.head_dim, dtype=self.dtype) for _ in range(self.num_layers)]
+        self.key_cache: List[torch.Tensor] = [torch.zeros(cache_shape, dtype=self.dtype, device = "cuda:2") for _ in range(self.num_layers)]
+        self.value_cache: List[torch.Tensor] = [torch.zeros(cache_shape, dtype=self.dtype, device = "cuda:2") for _ in range(self.num_layers)]
         
         # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         # self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
-        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self._seen_tokens = 0 
         
         # We cache a big mask that will be updated with the input mask
-        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
-
+        # self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
+        
     def update(
         self,
         key_states: torch.Tensor,
@@ -375,43 +374,55 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         attention_mask = cache_kwargs.get("attention_mask")
-
+        position_ids = cache_kwargs.get("position_ids")
+        # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         # place each cache on the correct layer device, not optimised?
-        if self.seen_tokens == 0:
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device)
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device)
-            self.causal_4d_mask = self.causal_4d_mask.to(value_states.device)
+        self._seen_tokens = key_states.shape[-2] * (position_ids+1)
+        # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
+        # self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device, non_blocking=True)
+        # self.causal_4d_mask = self.causal_4d_mask.to(value_states.device, non_blocking=True)
         
-        if attention_mask is not None:
-            # if the past length changes then we do have a problem
-            _, _, query_length, past_length = attention_mask.shape
-            self.causal_4d_mask[:,:,self.seen_tokens:self.seen_tokens + query_length,:past_length] = attention_mask
-            attention_mask = self.causal_4d_mask[:,:, self.seen_tokens:self.seen_tokens + query_length,:]
-        
-        self.key_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = key_states
-        self.value_cache[layer_idx][:, :, self.seen_tokens: self.seen_tokens + key_states.shape[-2]] = value_states
+        k_out = self.key_cache[layer_idx]
+        v_out = self.value_cache[layer_idx]
+        # prev_pos = self.seen_tokens//self.num_layers => faster already
+        # try to use the same memory sapce to make sure graph is called
+        k_out[:, :, position_ids] = key_states
+        v_out[:, :, position_ids] = value_states
 
-        # Update the number of seen tokens
-        if layer_idx == self.num_layers - 1:
-            # Update the cache
-            if self.seen_tokens + key_states.shape[-2] > self.max_sequence_length:
-                raise ValueError("Your are going outside the allocated cache")
-            self.seen_tokens += key_states.shape[-2]
+
+        # if attention_mask is not None:
+        #     # if the past length changes then we do have a problem
+        #     _, _, query_length, past_length = attention_mask.shape
+        #     # update the actual attention mask by masking padding tokens
+        #     # self.causal_4d_mask[:,:,self.seen_tokens + 1,:past_length] = attention_mask
+        #     attention_mask = self.causal_4d_mask[:,:, self.seen_tokens,:]
             
-        return self.key_cache[layer_idx], self.value_cache[layer_idx], attention_mask
+        # # Update the number of seen tokens
+        # if layer_idx == self.num_layers - 1:
+            # # Update the cache. calling self.seen+tokens make the code break and adds guards
+            # if self.seen_tokens + key_states.shape[-2] > self.max_sequence_length:
+            #     self.seen_tokens = 1
+            #     # raise ValueError("Your are going outside the allocated cache")
+        # self.seen_tokens += key_states.shape[-2]
+            
+        return k_out, v_out, attention_mask
+
+    @property
+    def seen_tokens(self):
+        return  self._seen_tokens # // self.num_layers
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
-        return self.seen_tokens
+        return self._seen_tokens #// self.num_layers
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return self.max_sequence_length
     
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-            device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+    # def reorder_cache(self, beam_idx: torch.LongTensor):
+    #     """Reorders the cache for beam search, given the selected beam indices."""
+    #     for layer_idx in range(len(self.key_cache)):
+    #         device = self.key_cache[layer_idx].device
+    #         self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
+    #         device = self.value_cache[layer_idx].device
+    #         self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
