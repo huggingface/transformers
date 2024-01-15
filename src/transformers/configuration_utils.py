@@ -901,9 +901,6 @@ class PretrainedConfig(PushToHubMixin):
 
         if hasattr(self, "model_type"):
             output["model_type"] = self.model_type
-        elif hasattr(self.__class__, "model_type"):
-            output["model_type"] = self.__class__.model_type
-
         if "_auto_class" in output:
             del output["_auto_class"]
         if "_commit_hash" in output:
