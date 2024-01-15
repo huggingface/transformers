@@ -3581,6 +3581,15 @@ class Trainer:
             library_name = ModelCard.load(model_card_filepath).data.get("library_name")
             is_peft_library = library_name == "peft"
 
+            # Append existing tags in `tags`
+            existing_tags = ModelCard.load(model_card_filepath).data.tags
+            if tags is not None:
+                if isinstance(tags, str):
+                    tags = [tags]
+                for tag in existing_tags:
+                    if tag not in tags:
+                        tags.append(tag)
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,

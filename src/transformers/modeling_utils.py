@@ -2492,9 +2492,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
         tags = self.model_tags if self.model_tags is not None else []
-        for tag in kwargs.get("tags", []):
+
+        tags_kwargs = kwargs.get("tags", [])
+        if isinstance(tags_kwargs, str):
+            tags_kwargs = [tags_kwargs]
+
+        for tag in tags_kwargs:
             if tag not in tags:
                 tags.append(tag)
+
         if tags:
             kwargs["tags"] = tags
         return super().push_to_hub(*args, **kwargs)
