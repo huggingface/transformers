@@ -893,7 +893,7 @@ class Wav2Vec2BertAdapter(nn.Module):
             sub_sampled_lengths = (attention_mask.size(1) - (1 - attention_mask.int()).sum(1)).to(hidden_states.device)
 
         for layer in self.layers:
-            layerdrop_prob = np.random.random()
+            layerdrop_prob = torch.rand([])
             sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(sub_sampled_lengths)
             if not self.training or (layerdrop_prob > self.layerdrop):
                 hidden_states = layer(
