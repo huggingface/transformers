@@ -931,7 +931,6 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
             stride=self.stride,
             padding=self.stride // 2,
         )
-        # Ignore copy
         self.self_attn = Wav2Vec2BertSelfAttention(config, is_adapter_attention=True)
         self.self_attn_dropout = nn.Dropout(dropout)
 
