@@ -553,7 +553,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 The time ratio to convert from token to time.
         """
         offsets = []
-        if hasattr(token_ids, "cpu") and callable(token_ids.cpu):
+        # ensure torch tensor of token ids is placed on cpu
+        if "torch" in str(type(token_ids)) and (hasattr(token_ids, "cpu") and callable(token_ids.cpu)):
             token_ids = token_ids.cpu()
         token_ids = np.array(token_ids)
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
