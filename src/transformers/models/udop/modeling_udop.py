@@ -225,22 +225,12 @@ class BaseModelOutputWithAttentionMask(ModelOutput):
 
 def get_visual_bbox(image_size=224, patch_size=16):
     image_feature_pool_shape = [image_size // patch_size, image_size // patch_size]
-    visual_bbox_x = (
-        torch.arange(
-            0,
-            1.0 * (image_feature_pool_shape[1] + 1),
-            1.0,
-        )
-        / image_feature_pool_shape[1]
-    )
-    visual_bbox_y = (
-        torch.arange(
-            0,
-            1.0 * (image_feature_pool_shape[0] + 1),
-            1.0,
-        )
-        / image_feature_pool_shape[0]
-    )
+    visual_bbox_x = torch.arange(0, 1.0 * (image_feature_pool_shape[1] + 1), 1.0)
+    visual_bbox_x /= image_feature_pool_shape[1]
+
+    visual_bbox_y = torch.arange(0, 1.0 * (image_feature_pool_shape[0] + 1), 1.0)
+    visual_bbox_y /= image_feature_pool_shape[0]
+
     visual_bbox_input = torch.stack(
         [
             visual_bbox_x[:-1].repeat(image_feature_pool_shape[0], 1),
@@ -1212,11 +1202,11 @@ class RelativePositionBiasAggregated(nn.Module):
     def forward(
         self, attention_mask: Optional[Tensor] = None, bbox: Optional[Dict[str, Any]] = None
     ) -> Union[float, Tensor]:
-        x = 0.0
+        output = 0.0
         for bias in self.biases:  # type: ignore
-            x = bias(attention_mask, bbox) + x
+            output = bias(attention_mask, bbox) + output
 
-        return x
+        return output
 
 
 BIAS_CLASSES = {

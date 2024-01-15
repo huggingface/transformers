@@ -419,14 +419,8 @@ class UdopTokenizer(PreTrainedTokenizer):
         state["sp_model"] = None
         return state
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
@@ -725,12 +719,6 @@ class UdopTokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
-
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
 
         Args:
             batch_text_or_text_pairs (`List[str]`, `List[Tuple[str, str]]`, `List[List[str]]`, `List[Tuple[List[str], List[str]]]`, and for not-fast tokenizers, also `List[List[int]]`, `List[Tuple[List[int], List[int]]]`):
