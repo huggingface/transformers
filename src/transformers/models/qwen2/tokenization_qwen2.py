@@ -18,7 +18,7 @@ import json
 import os
 import unicodedata
 from functools import lru_cache
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import regex as re
 
