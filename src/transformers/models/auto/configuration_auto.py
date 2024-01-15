@@ -243,7 +243,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
-        ("wav2vec2-bert", "Wav2Vec2BERTConfig"),
+        ("wav2vec2-bert", "Wav2Vec2BertConfig"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
         ("whisper", "WhisperConfig"),

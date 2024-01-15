@@ -41,7 +41,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
-from .configuration_wav2vec2_bert import Wav2Vec2BERTConfig
+from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
 logger = logging.get_logger(__name__)
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
-_CONFIG_FOR_DOC = "Wav2Vec2BERTConfig"
+_CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/w2v-bert-2.0"
@@ -250,8 +250,8 @@ def _sample_negative_indices(
     return sampled_negative_indices
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2BERT
-class Wav2Vec2BERTRotaryPositionalEmbedding(nn.Module):
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2Bert
+class Wav2Vec2BertRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
     Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://arxiv.org/pdf/2104.09864.pdf
     """
@@ -285,8 +285,8 @@ class Wav2Vec2BERTRotaryPositionalEmbedding(nn.Module):
         return self.cached_rotary_positional_embedding
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2BERT
-class Wav2Vec2BERTRelPositionalEmbedding(nn.Module):
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2Conformer->Wav2Vec2Bert
+class Wav2Vec2BertRelPositionalEmbedding(nn.Module):
     """Relative positional encoding module."""
 
     def __init__(self, config):
@@ -336,7 +336,7 @@ class Wav2Vec2BERTRelPositionalEmbedding(nn.Module):
         return relative_position_embeddings
 
 
-class Wav2Vec2BERTFeatureProjection(nn.Module):
+class Wav2Vec2BertFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
@@ -351,7 +351,7 @@ class Wav2Vec2BERTFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2BERTFeedForward(nn.Module):
+class Wav2Vec2BertFeedForward(nn.Module):
     def __init__(self, config, act_fn=None, hidden_size=None):
         super().__init__()
         act_fn = act_fn if act_fn is not None else config.hidden_act
@@ -375,7 +375,7 @@ class Wav2Vec2BERTFeedForward(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2BERTConvolutionModule(nn.Module):
+class Wav2Vec2BertConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
     def __init__(self, config):
@@ -447,8 +447,8 @@ class Wav2Vec2BERTConvolutionModule(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2BERTSelfAttention(nn.Module):
-    """Construct an Wav2Vec2BERTSelfAttention object.
+class Wav2Vec2BertSelfAttention(nn.Module):
+    """Construct an Wav2Vec2BertSelfAttention object.
     Can be enhanced with rotary or relative position embeddings.
     """
 
@@ -616,8 +616,8 @@ class Wav2Vec2BERTSelfAttention(nn.Module):
         return scores
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer with Wav2Vec2Conformer->Wav2Vec2BERT
-class Wav2Vec2BERTEncoderLayer(nn.Module):
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer with Wav2Vec2Conformer->Wav2Vec2Bert
+class Wav2Vec2BertEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
     def __init__(self, config):
@@ -627,19 +627,19 @@ class Wav2Vec2BERTEncoderLayer(nn.Module):
 
         # Feed-forward 1
         self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn1 = Wav2Vec2BERTFeedForward(config)
+        self.ffn1 = Wav2Vec2BertFeedForward(config)
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
         self.self_attn_dropout = nn.Dropout(dropout)
-        self.self_attn = Wav2Vec2BERTSelfAttention(config)
+        self.self_attn = Wav2Vec2BertSelfAttention(config)
 
         # Conformer Convolution
-        self.conv_module = Wav2Vec2BERTConvolutionModule(config)
+        self.conv_module = Wav2Vec2BertConvolutionModule(config)
 
         # Feed-forward 2
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn2 = Wav2Vec2BERTFeedForward(config)
+        self.ffn2 = Wav2Vec2BertFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     # Ignore copy
@@ -686,20 +686,20 @@ class Wav2Vec2BERTEncoderLayer(nn.Module):
         return hidden_states, attn_weigts
 
 
-class Wav2Vec2BERTEncoder(nn.Module):
+class Wav2Vec2BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
 
         if config.position_embeddings_type == "relative":
-            self.embed_positions = Wav2Vec2BERTRelPositionalEmbedding(config)
+            self.embed_positions = Wav2Vec2BertRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
-            self.embed_positions = Wav2Vec2BERTRotaryPositionalEmbedding(config)
+            self.embed_positions = Wav2Vec2BertRotaryPositionalEmbedding(config)
         else:
             self.embed_positions = None
 
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([Wav2Vec2BERTEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Wav2Vec2BertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -781,8 +781,8 @@ class Wav2Vec2BERTEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GumbelVectorQuantizer with Wav2Vec2->Wav2Vec2BERT
-class Wav2Vec2BERTGumbelVectorQuantizer(nn.Module):
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GumbelVectorQuantizer with Wav2Vec2->Wav2Vec2Bert
+class Wav2Vec2BertGumbelVectorQuantizer(nn.Module):
     """
     Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
     GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
@@ -859,7 +859,7 @@ class Wav2Vec2BERTGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-class Wav2Vec2BERTAdapter(nn.Module):
+class Wav2Vec2BertAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
         # feature dim might need to be down-projected
@@ -868,7 +868,7 @@ class Wav2Vec2BERTAdapter(nn.Module):
             self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
         else:
             self.proj = self.proj_layer_norm = None
-        self.layers = nn.ModuleList(Wav2Vec2BERTAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layers = nn.ModuleList(Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers))
         self.layerdrop = config.layerdrop
 
         self.kernel_size = config.adapter_kernel_size
@@ -902,7 +902,7 @@ class Wav2Vec2BERTAdapter(nn.Module):
         return hidden_states
 
 
-class Wav2Vec2BERTAdapterLayer(nn.Module):
+class Wav2Vec2BertAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         embed_dim = config.output_hidden_size
@@ -932,12 +932,12 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
             padding=self.stride // 2,
         )
         # Ignore copy
-        self.self_attn = Wav2Vec2BERTSelfAttention(config, is_adapter_attention=True)
+        self.self_attn = Wav2Vec2BertSelfAttention(config, is_adapter_attention=True)
         self.self_attn_dropout = nn.Dropout(dropout)
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
-        self.ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu", hidden_size=embed_dim)
+        self.ffn = Wav2Vec2BertFeedForward(config, act_fn="relu", hidden_size=embed_dim)
 
     def forward(
         self,
@@ -991,14 +991,14 @@ class Wav2Vec2BERTAdapterLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2Conformer->Wav2Vec2BERT,wav2vec2_conformer->wav2vec2_bert, input_values->input_features
-class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2Conformer->Wav2Vec2Bert,wav2vec2_conformer->wav2vec2_bert, input_values->input_features
+class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = Wav2Vec2BERTConfig
+    config_class = Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
     main_input_name = "input_features"
     supports_gradient_checkpointing = True
@@ -1007,16 +1007,16 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2BERTGumbelVectorQuantizer):
+        if isinstance(module, Wav2Vec2BertGumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
-        elif isinstance(module, Wav2Vec2BERTSelfAttention):
+        elif isinstance(module, Wav2Vec2BertSelfAttention):
             if hasattr(module, "pos_bias_u"):
                 nn.init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
                 nn.init.xavier_uniform_(module.pos_bias_v)
-        elif isinstance(module, Wav2Vec2BERTFeatureProjection):
+        elif isinstance(module, Wav2Vec2BertFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
             nn.init.uniform_(module.projection.weight, a=-k, b=k)
             nn.init.uniform_(module.projection.bias, a=-k, b=k)
@@ -1081,7 +1081,7 @@ class Wav2Vec2BERTPreTrainedModel(PreTrainedModel):
 
 
 WAV2VEC2_BERT_START_DOCSTRING = r"""
-    Wav2Vec2BERT was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
+    Wav2Vec2Bert was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
     Representations](https://arxiv.org/abs/2006.11477) by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael
     Auli.
 
@@ -1092,7 +1092,7 @@ WAV2VEC2_BERT_START_DOCSTRING = r"""
     regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and behavior.
 
     Parameters:
-        config ([`Wav2Vec2BERTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Wav2Vec2BertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -1104,7 +1104,7 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
             soundfile`). To prepare the array into `input_features`, the [`AutoProcessor`] should be used for padding and
-            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BERTProcessor.__call__`] for details.
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2BertProcessor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1125,26 +1125,26 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Wav2Vec2BERT Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Wav2Vec2Bert Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
-    def __init__(self, config: Wav2Vec2BERTConfig):
+class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
         self.config = config
-        self.feature_projection = Wav2Vec2BERTFeatureProjection(config)
+        self.feature_projection = Wav2Vec2BertFeatureProjection(config)
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
             self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
-        self.encoder = Wav2Vec2BERTEncoder(config)
+        self.encoder = Wav2Vec2BertEncoder(config)
 
-        self.adapter = Wav2Vec2BERTAdapter(config) if config.add_adapter else None
+        self.adapter = Wav2Vec2BertAdapter(config) if config.add_adapter else None
 
         self.intermediate_ffn = None
         if config.use_intermediate_ffn_before_adapter:
-            self.intermediate_ffn = Wav2Vec2BERTFeedForward(config, act_fn="relu")
+            self.intermediate_ffn = Wav2Vec2BertFeedForward(config, act_fn="relu")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1253,15 +1253,15 @@ class Wav2Vec2BERTModel(Wav2Vec2BERTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Wav2Vec2BERT Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
+    """Wav2Vec2Bert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForCTC.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
+class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForCTC.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
-        self.wav2vec2_bert = Wav2Vec2BERTModel(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         self.target_lang = target_lang
@@ -1270,7 +1270,7 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
             raise ValueError(
                 f"You are trying to instantiate {self.__class__} with a configuration that "
                 "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `Wav2Vec2BERTForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "instantiate the model as follows: `Wav2Vec2BertForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
@@ -1365,21 +1365,21 @@ class Wav2Vec2BERTForCTC(Wav2Vec2BERTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Wav2Vec2BERT Model with a sequence classification head on top (a linear layer over the pooled output) for
+    Wav2Vec2Bert Model with a sequence classification head on top (a linear layer over the pooled output) for
     tasks like SUPERB Keyword Spotting.
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert
+class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.__init__ with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Sequence classification does not support the use of Wav2Vec2BERT adapters (config.add_adapter=True)"
+                "Sequence classification does not support the use of Wav2Vec2Bert adapters (config.add_adapter=True)"
             )
-        self.wav2vec2_bert = Wav2Vec2BERTModel(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
@@ -1404,7 +1404,7 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
     )
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2BERT,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Bert,wav2vec2->wav2vec2_bert,WAV_2_VEC_2->WAV2VEC2_BERT, input_values->input_features
     def forward(
         self,
         input_features: Optional[torch.Tensor],
@@ -1469,20 +1469,20 @@ class Wav2Vec2BERTForSequenceClassification(Wav2Vec2BERTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Wav2Vec2BERT Model with a frame classification head on top for tasks like Speaker Diarization.
+    Wav2Vec2Bert Model with a frame classification head on top for tasks like Speaker Diarization.
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-class Wav2Vec2BERTForAudioFrameClassification(Wav2Vec2BERTPreTrainedModel):
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
+class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForAudioFrameClassification.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of Wav2Vec2BERT adapters (config.add_adapter=True)"
+                "Audio frame classification does not support the use of Wav2Vec2Bert adapters (config.add_adapter=True)"
             )
-        self.wav2vec2_bert = Wav2Vec2BERTModel(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
@@ -1615,16 +1615,16 @@ class TDNNLayer(nn.Module):
 
 @add_start_docstrings(
     """
-    Wav2Vec2BERT Model with an XVector feature extraction head on top for tasks like Speaker Verification.
+    Wav2Vec2Bert Model with an XVector feature extraction head on top for tasks like Speaker Verification.
     """,
     WAV2VEC2_BERT_START_DOCSTRING,
 )
-class Wav2Vec2BERTForXVector(Wav2Vec2BERTPreTrainedModel):
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.__init__ with Wav2Vec2Conformer->Wav2Vec2BERT,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
+class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerForXVector.__init__ with Wav2Vec2Conformer->Wav2Vec2Bert,WAV2VEC2_CONFORMER->WAV2VEC2_BERT,wav2vec2_conformer->wav2vec2_bert
     def __init__(self, config):
         super().__init__(config)
 
-        self.wav2vec2_bert = Wav2Vec2BERTModel(config)
+        self.wav2vec2_bert = Wav2Vec2BertModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)

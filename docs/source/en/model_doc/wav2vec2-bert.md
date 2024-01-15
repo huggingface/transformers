@@ -41,22 +41,22 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 <PipelineTag pipeline="automatic-speech-recognition"/>
 
-- [`Wav2Vec2BERTForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
+- [`Wav2Vec2BertForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
 - You can also adapt these notebooks on [how to finetune a speech recognition model in English](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb), and [how to finetune a speech recognition model in any language](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb).
 
 <PipelineTag pipeline="audio-classification"/>
 
-- [`Wav2Vec2BERTForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
+- [`Wav2Vec2BertForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
 - See also: [Audio classification task guide](../tasks/audio_classification)
 
 
-## Wav2Vec2BERTConfig
+## Wav2Vec2BertConfig
 
-[[autodoc]] Wav2Vec2BERTConfig
+[[autodoc]] Wav2Vec2BertConfig
 
-## Wav2Vec2BERTProcessor
+## Wav2Vec2BertProcessor
 
-[[autodoc]] Wav2Vec2BERTProcessor
+[[autodoc]] Wav2Vec2BertProcessor
     - __call__
     - pad
     - from_pretrained
@@ -64,27 +64,27 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
     - batch_decode
     - decode
 
-## Wav2Vec2BERTModel
+## Wav2Vec2BertModel
 
-[[autodoc]] Wav2Vec2BERTModel
+[[autodoc]] Wav2Vec2BertModel
     - forward
 
-## Wav2Vec2BERTForCTC
+## Wav2Vec2BertForCTC
 
-[[autodoc]] Wav2Vec2BERTForCTC
+[[autodoc]] Wav2Vec2BertForCTC
     - forward
 
-## Wav2Vec2BERTForSequenceClassification
+## Wav2Vec2BertForSequenceClassification
 
-[[autodoc]] Wav2Vec2BERTForSequenceClassification
+[[autodoc]] Wav2Vec2BertForSequenceClassification
     - forward
 
-## Wav2Vec2BERTForAudioFrameClassification
+## Wav2Vec2BertForAudioFrameClassification
 
-[[autodoc]] Wav2Vec2BERTForAudioFrameClassification
+[[autodoc]] Wav2Vec2BertForAudioFrameClassification
     - forward
 
-## Wav2Vec2BERTForXVector
+## Wav2Vec2BertForXVector
 
-[[autodoc]] Wav2Vec2BERTForXVector
+[[autodoc]] Wav2Vec2BertForXVector
     - forward

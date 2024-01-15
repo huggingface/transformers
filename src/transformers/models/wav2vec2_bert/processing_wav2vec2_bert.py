@@ -22,7 +22,7 @@ from ..seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExt
 from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 
-class Wav2Vec2BERTProcessor(ProcessorMixin):
+class Wav2Vec2BertProcessor(ProcessorMixin):
     r"""
     Constructs a Wav2Vec2-BERT processor which wraps a Wav2Vec2-BERT feature extractor and a Wav2Vec2 CTC tokenizer into a single
     processor.

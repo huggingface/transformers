@@ -762,7 +762,7 @@ OBJECTS_TO_IGNORE = [
     "VitMatteForImageMatting",
     "VitsTokenizer",
     "VivitModel",
-    "Wav2Vec2BERTForCTC",
+    "Wav2Vec2BertForCTC",
     "Wav2Vec2CTCTokenizer",
     "Wav2Vec2Config",
     "Wav2Vec2ConformerConfig",

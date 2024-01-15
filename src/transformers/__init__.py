@@ -903,8 +903,8 @@ _import_structure = {
     ],
     "models.wav2vec2_bert": [
         "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Wav2Vec2BERTConfig",
-        "Wav2Vec2BERTProcessor",
+        "Wav2Vec2BertConfig",
+        "Wav2Vec2BertProcessor",
     ],
     "models.wav2vec2_conformer": [
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -3491,12 +3491,12 @@ else:
     _import_structure["models.wav2vec2_bert"].extend(
         [
             "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Wav2Vec2BERTForAudioFrameClassification",
-            "Wav2Vec2BERTForCTC",
-            "Wav2Vec2BERTForSequenceClassification",
-            "Wav2Vec2BERTForXVector",
-            "Wav2Vec2BERTModel",
-            "Wav2Vec2BERTPreTrainedModel",
+            "Wav2Vec2BertForAudioFrameClassification",
+            "Wav2Vec2BertForCTC",
+            "Wav2Vec2BertForSequenceClassification",
+            "Wav2Vec2BertForXVector",
+            "Wav2Vec2BertModel",
+            "Wav2Vec2BertPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2_conformer"].extend(
@@ -5595,8 +5595,8 @@ if TYPE_CHECKING:
     )
     from .models.wav2vec2_bert import (
         WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Wav2Vec2BERTConfig,
-        Wav2Vec2BERTProcessor,
+        Wav2Vec2BertConfig,
+        Wav2Vec2BertProcessor,
     )
     from .models.wav2vec2_conformer import (
         WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7789,12 +7789,12 @@ if TYPE_CHECKING:
         )
         from .models.wav2vec2_bert import (
             WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Wav2Vec2BERTForAudioFrameClassification,
-            Wav2Vec2BERTForCTC,
-            Wav2Vec2BERTForSequenceClassification,
-            Wav2Vec2BERTForXVector,
-            Wav2Vec2BERTModel,
-            Wav2Vec2BERTPreTrainedModel,
+            Wav2Vec2BertForAudioFrameClassification,
+            Wav2Vec2BertForCTC,
+            Wav2Vec2BertForSequenceClassification,
+            Wav2Vec2BertForXVector,
+            Wav2Vec2BertModel,
+            Wav2Vec2BertPreTrainedModel,
         )
         from .models.wav2vec2_conformer import (
             WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

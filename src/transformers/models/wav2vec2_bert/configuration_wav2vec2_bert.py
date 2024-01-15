@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Wav2Vec2BERT model configuration"""
+""" Wav2Vec2Bert model configuration"""
 
 import functools
 import operator
@@ -28,11 +28,11 @@ WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Wav2Vec2BERTConfig(PretrainedConfig):
+class Wav2Vec2BertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Wav2Vec2BERTModel`]. It is used to
-    instantiate an Wav2Vec2BERT model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2BERT
+    This is the configuration class to store the configuration of a [`Wav2Vec2BertModel`]. It is used to
+    instantiate an Wav2Vec2Bert model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2Bert
     [facebook/wav2vec2-bert-rel-pos-large](https://huggingface.co/facebook/wav2vec2-bert-rel-pos-large)
     architecture.
 
@@ -42,10 +42,10 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*):
-            Vocabulary size of the Wav2Vec2BERT model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`Wav2Vec2BERTModel`]. Vocabulary size of the
+            Vocabulary size of the Wav2Vec2Bert model. Defines the number of different tokens that can be
+            represented by the `inputs_ids` passed when calling [`Wav2Vec2BertModel`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`Wav2Vec2BERTModel`].
+            method of [`Wav2Vec2BertModel`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 24):
@@ -55,7 +55,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         feature_projection_input_dim (`int`, *optional*, defaults to 160):
-            Input dimension of this model, i.e the dimension after processing input audios with [`SeamlessM4TFeatureExtractor`] or [`Wav2Vec2BERTProcessor`].
+            Input dimension of this model, i.e the dimension after processing input audios with [`SeamlessM4TFeatureExtractor`] or [`Wav2Vec2BertProcessor`].
         hidden_act (`str` or `function`, *optional*, defaults to `"swish"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
@@ -68,7 +68,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for the feature projection.
         final_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for the final projection layer of [`Wav2Vec2BERTForCTC`].
+            The dropout probability for the final projection layer of [`Wav2Vec2BertForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
             details.
@@ -113,14 +113,14 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Dimensionality of the quantized feature vectors.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`Wav2Vec2BERTForCTC`].
+            instance of [`Wav2Vec2BertForCTC`].
         ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
             Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
             occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`Wav2Vec2BERTForCTC`].
+            of [`Wav2Vec2BertForCTC`].
         use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
             Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`Wav2Vec2BERTForSequenceClassification`].
+            instance of [`Wav2Vec2BertForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 768):
             Dimensionality of the projection before token mean-pooling for classification.
         tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
@@ -138,8 +138,8 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 1): The id of the _padding_ token.
         eos_token_id (`int`, *optional*, defaults to 2): The id of the _end-of-stream_ token.
         add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional attention network should be stacked on top of the Wav2Vec2BERT Encoder. Can be very
-            useful for warm-starting Wav2Vec2BERT for SpeechEncoderDecoder models.
+            Whether a convolutional attention network should be stacked on top of the Wav2Vec2Bert Encoder. Can be very
+            useful for warm-starting Wav2Vec2Bert for SpeechEncoderDecoder models.
         adapter_kernel_size (`int`, *optional*, defaults to 3):
             Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
         adapter_stride (`int`, *optional*, defaults to 2):
@@ -148,7 +148,7 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
         use_intermediate_ffn_before_adapter (`bool`, *optional*, defaults to `False`):
-            Whether an intermediate feed-forward block should be stacked on top of the Wav2Vec2BERT Encoder and before the adapter network.
+            Whether an intermediate feed-forward block should be stacked on top of the Wav2Vec2Bert Encoder and before the adapter network.
              Only relevant if `add_adapter is True`.
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
@@ -175,13 +175,13 @@ class Wav2Vec2BERTConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Wav2Vec2BERTConfig, Wav2Vec2BERTModel
+    >>> from transformers import Wav2Vec2BertConfig, Wav2Vec2BertModel
 
-    >>> # Initializing a Wav2Vec2BERT facebook/wav2vec2-bert-rel-pos-large style configuration
-    >>> configuration = Wav2Vec2BERTConfig()
+    >>> # Initializing a Wav2Vec2Bert facebook/wav2vec2-bert-rel-pos-large style configuration
+    >>> configuration = Wav2Vec2BertConfig()
 
     >>> # Initializing a model (with random weights) from the facebook/wav2vec2-bert-rel-pos-large style configuration
-    >>> model = Wav2Vec2BERTModel(configuration)
+    >>> model = Wav2Vec2BertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

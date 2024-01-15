@@ -21,13 +21,13 @@ import unittest
 from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.models.wav2vec2_bert import Wav2Vec2BERTProcessor
+from transformers.models.wav2vec2_bert import Wav2Vec2BertProcessor
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
-class Wav2Vec2BERTProcessorTest(unittest.TestCase):
+class Wav2Vec2BertProcessorTest(unittest.TestCase):
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
@@ -70,10 +70,10 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = Wav2Vec2BERTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         processor.save_pretrained(self.tmpdirname)
-        processor = Wav2Vec2BERTProcessor.from_pretrained(self.tmpdirname)
+        processor = Wav2Vec2BertProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertIsInstance(processor.tokenizer, Wav2Vec2CTCTokenizer)
@@ -82,7 +82,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Wav2Vec2BERTProcessor(
+        processor = Wav2Vec2BertProcessor(
             tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
         )
         processor.save_pretrained(self.tmpdirname)
@@ -90,7 +90,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = Wav2Vec2BERTProcessor.from_pretrained(
+        processor = Wav2Vec2BertProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
@@ -104,7 +104,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Wav2Vec2BERTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         raw_speech = floats_list((3, 1000))
 
@@ -118,7 +118,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Wav2Vec2BERTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
 
@@ -133,7 +133,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Wav2Vec2BERTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -146,7 +146,7 @@ class Wav2Vec2BERTProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Wav2Vec2BERTProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         self.assertListEqual(
             processor.model_input_names,

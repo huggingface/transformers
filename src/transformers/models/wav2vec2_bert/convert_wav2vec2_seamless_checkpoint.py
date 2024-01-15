@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Wav2Vec2BERT BERT checkpoint."""
+"""Convert Wav2Vec2Bert BERT checkpoint."""
 
 
 import argparse
@@ -26,8 +26,8 @@ from seamless_communication.models.conformer_shaw import load_conformer_shaw_mod
 
 from transformers import (
     SeamlessM4TFeatureExtractor,
-    Wav2Vec2BERTConfig,
-    Wav2Vec2BERTModel,
+    Wav2Vec2BertConfig,
+    Wav2Vec2BertModel,
     logging,
 )
 
@@ -133,11 +133,11 @@ def convert_wav2vec2_bert_checkpoint(
     Copy/paste/tweak model's weights to transformers design.
     """
     if config_path is not None:
-        config = Wav2Vec2BERTConfig.from_pretrained(config_path, hidden_act="swish")
+        config = Wav2Vec2BertConfig.from_pretrained(config_path, hidden_act="swish")
     else:
-        config = Wav2Vec2BERTConfig(apply_spec_augment=False)
+        config = Wav2Vec2BertConfig(apply_spec_augment=False)
 
-    hf_wav2vec = Wav2Vec2BERTModel(config)
+    hf_wav2vec = Wav2Vec2BertModel(config)
 
     model = load_conformer_shaw_model(checkpoint_path, dtype=torch.float32)
     model.eval()

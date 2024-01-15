@@ -18,7 +18,7 @@ import unittest
 
 from datasets import load_dataset
 
-from transformers import Wav2Vec2BERTConfig, is_torch_available
+from transformers import Wav2Vec2BertConfig, is_torch_available
 from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_torch,
@@ -44,21 +44,21 @@ if is_torch_available():
 
     from transformers import (
         AutoFeatureExtractor,
-        Wav2Vec2BERTForAudioFrameClassification,
-        Wav2Vec2BERTForCTC,
-        Wav2Vec2BERTForSequenceClassification,
-        Wav2Vec2BERTForXVector,
-        Wav2Vec2BERTModel,
+        Wav2Vec2BertForAudioFrameClassification,
+        Wav2Vec2BertForCTC,
+        Wav2Vec2BertForSequenceClassification,
+        Wav2Vec2BertForXVector,
+        Wav2Vec2BertModel,
     )
     from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import (
-        Wav2Vec2BERTGumbelVectorQuantizer,
+        Wav2Vec2BertGumbelVectorQuantizer,
         _compute_mask_indices,
         _sample_negative_indices,
     )
 
 
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTester with Conformer->BERT, input_values->input_features
-class Wav2Vec2BERTModelTester:
+# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTester with Conformer->Bert, input_values->input_features
+class Wav2Vec2BertModelTester:
     # Ignore copy
     def __init__(
         self,
@@ -139,7 +139,7 @@ class Wav2Vec2BERTModelTester:
 
     # Ignore copy
     def get_config(self, position_embeddings_type="relative"):
-        return Wav2Vec2BERTConfig(
+        return Wav2Vec2BertConfig(
             hidden_size=self.hidden_size,
             feature_projection_input_dim=self.feature_projection_input_dim,
             mask_time_prob=self.mask_time_prob,
@@ -165,7 +165,7 @@ class Wav2Vec2BERTModelTester:
         )
 
     def create_and_check_model(self, config, input_features, attention_mask):
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -175,7 +175,7 @@ class Wav2Vec2BERTModelTester:
 
     def create_and_check_model_with_adapter(self, config, input_features, attention_mask):
         config.add_adapter = True
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -186,7 +186,7 @@ class Wav2Vec2BERTModelTester:
     def create_and_check_model_with_adapter_for_ctc(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 2 * config.hidden_size
-        model = Wav2Vec2BERTForCTC(config=config)
+        model = Wav2Vec2BertForCTC(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -198,7 +198,7 @@ class Wav2Vec2BERTModelTester:
     def create_and_check_model_with_intermediate_ffn_before_adapter(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.use_intermediate_ffn_before_adapter = True
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -209,7 +209,7 @@ class Wav2Vec2BERTModelTester:
 
         # also try with different adapter proj dim
         config.output_hidden_size = 8
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -221,7 +221,7 @@ class Wav2Vec2BERTModelTester:
     def create_and_check_model_with_adapter_proj_dim(self, config, input_features, attention_mask):
         config.add_adapter = True
         config.output_hidden_size = 8
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_features, attention_mask=attention_mask)
@@ -231,11 +231,11 @@ class Wav2Vec2BERTModelTester:
         )
 
     def create_and_check_model_float16(self, config, input_features, attention_mask):
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = Wav2Vec2BERTModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+            model = Wav2Vec2BertModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
 
         model.to(torch_device)
         model.eval()
@@ -250,7 +250,7 @@ class Wav2Vec2BERTModelTester:
     def create_and_check_batch_inference(self, config, input_features, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
-        model = Wav2Vec2BERTModel(config=config)
+        model = Wav2Vec2BertModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -274,7 +274,7 @@ class Wav2Vec2BERTModelTester:
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def check_ctc_loss(self, config, input_features, *args):
-        model = Wav2Vec2BERTForCTC(config=config)
+        model = Wav2Vec2BertForCTC(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -303,7 +303,7 @@ class Wav2Vec2BERTModelTester:
         self.parent.assertTrue(isinstance(mean_loss, float))
 
     def check_seq_classifier_loss(self, config, input_features, *args):
-        model = Wav2Vec2BERTForSequenceClassification(config=config)
+        model = Wav2Vec2BertForSequenceClassification(config=config)
         model.to(torch_device)
 
         # make sure that dropout is disabled
@@ -330,7 +330,7 @@ class Wav2Vec2BERTModelTester:
 
     def check_ctc_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
-        model = Wav2Vec2BERTForCTC(config=config)
+        model = Wav2Vec2BertForCTC(config=config)
         model.to(torch_device)
         model.train()
 
@@ -357,7 +357,7 @@ class Wav2Vec2BERTModelTester:
 
     def check_seq_classifier_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
-        model = Wav2Vec2BERTForSequenceClassification(config=config)
+        model = Wav2Vec2BertForSequenceClassification(config=config)
         model.to(torch_device)
         model.train()
 
@@ -381,7 +381,7 @@ class Wav2Vec2BERTModelTester:
 
     def check_xvector_training(self, config, input_features, *args):
         config.ctc_zero_infinity = True
-        model = Wav2Vec2BERTForXVector(config=config)
+        model = Wav2Vec2BertForXVector(config=config)
         model.to(torch_device)
         model.train()
 
@@ -403,7 +403,7 @@ class Wav2Vec2BERTModelTester:
         loss.backward()
 
     def check_labels_out_of_vocab(self, config, input_features, *args):
-        model = Wav2Vec2BERTForCTC(config)
+        model = Wav2Vec2BertForCTC(config)
         model.to(torch_device)
         model.train()
 
@@ -423,16 +423,16 @@ class Wav2Vec2BERTModelTester:
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->BERT, input_values->input_features
-class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
+class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Ignore copy
     all_model_classes = (
         (
-            Wav2Vec2BERTForCTC,
-            Wav2Vec2BERTModel,
-            Wav2Vec2BERTForSequenceClassification,
-            Wav2Vec2BERTForAudioFrameClassification,
-            Wav2Vec2BERTForXVector,
+            Wav2Vec2BertForCTC,
+            Wav2Vec2BertModel,
+            Wav2Vec2BertForSequenceClassification,
+            Wav2Vec2BertForAudioFrameClassification,
+            Wav2Vec2BertForXVector,
         )
         if is_torch_available()
         else ()
@@ -440,9 +440,9 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     pipeline_model_mapping = (
         {
-            "audio-classification": Wav2Vec2BERTForSequenceClassification,
-            "automatic-speech-recognition": Wav2Vec2BERTForCTC,
-            "feature-extraction": Wav2Vec2BERTModel,
+            "audio-classification": Wav2Vec2BertForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2BertForCTC,
+            "feature-extraction": Wav2Vec2BertModel,
         }
         if is_torch_available()
         else {}
@@ -453,8 +453,8 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = Wav2Vec2BERTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Wav2Vec2BERTConfig, hidden_size=37)
+        self.model_tester = Wav2Vec2BertModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2BertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -540,7 +540,7 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Wav2Vec2BERT has no inputs_embeds
+    # Wav2Vec2Bert has no inputs_embeds
     def test_inputs_embeds(self):
         pass
 
@@ -548,12 +548,12 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_forward_signature(self):
         pass
 
-    # Wav2Vec2BERT cannot resize token embeddings
+    # Wav2Vec2Bert cannot resize token embeddings
     # since it has no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2BERT has no inputs_embeds
+    # Wav2Vec2Bert has no inputs_embeds
     # and thus the `get_input_embeddings` fn
     # is not implemented
     def test_model_common_attributes(self):
@@ -683,13 +683,13 @@ class Wav2Vec2BERTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_model_from_pretrained(self):
         # Ignore copy
-        model = Wav2Vec2BERTModel.from_pretrained("ylacombe/w2v-bert-2.0")
+        model = Wav2Vec2BertModel.from_pretrained("ylacombe/w2v-bert-2.0")
         self.assertIsNotNone(model)
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerUtilsTest with Conformer->BERT, input_values->input_features
-class Wav2Vec2BERTUtilsTest(unittest.TestCase):
+# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerUtilsTest with Conformer->Bert, input_values->input_features
+class Wav2Vec2BertUtilsTest(unittest.TestCase):
     def test_compute_mask_indices(self):
         batch_size = 4
         sequence_length = 60
@@ -783,14 +783,14 @@ class Wav2Vec2BERTUtilsTest(unittest.TestCase):
     def test_compute_perplexity(self):
         probs = torch.arange(100, device=torch_device).reshape(2, 5, 10) / 100
 
-        ppl = Wav2Vec2BERTGumbelVectorQuantizer._compute_perplexity(probs)
+        ppl = Wav2Vec2BertGumbelVectorQuantizer._compute_perplexity(probs)
         self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
 
         # mask half of the input
         mask = torch.ones((2,), device=torch_device, dtype=torch.bool)
         mask[0] = 0
 
-        ppl = Wav2Vec2BERTGumbelVectorQuantizer._compute_perplexity(probs, mask)
+        ppl = Wav2Vec2BertGumbelVectorQuantizer._compute_perplexity(probs, mask)
         self.assertTrue(abs(ppl.item() - 58.6757) < 1e-3)
 
     def test_sample_negatives(self):
@@ -858,7 +858,7 @@ class Wav2Vec2BERTUtilsTest(unittest.TestCase):
 
 @require_torch
 @slow
-class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
+class Wav2Vec2BertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -868,7 +868,7 @@ class Wav2Vec2BERTModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def test_inference_w2v2_bert(self):
-        model = Wav2Vec2BERTModel.from_pretrained("ylacombe/w2v-bert-2.0")
+        model = Wav2Vec2BertModel.from_pretrained("ylacombe/w2v-bert-2.0")
         model.to(torch_device)
         feature_extractor = AutoFeatureExtractor.from_pretrained("ylacombe/w2v-bert-2.0")
 

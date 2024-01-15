@@ -19,9 +19,9 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_wav2vec2_bert": [
         "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Wav2Vec2BERTConfig",
+        "Wav2Vec2BertConfig",
     ],
-    "processing_wav2vec2_bert": ["Wav2Vec2BERTProcessor"],
+    "processing_wav2vec2_bert": ["Wav2Vec2BertProcessor"],
 }
 
 
@@ -33,20 +33,20 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_wav2vec2_bert"] = [
         "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Wav2Vec2BERTForAudioFrameClassification",
-        "Wav2Vec2BERTForCTC",
-        "Wav2Vec2BERTForSequenceClassification",
-        "Wav2Vec2BERTForXVector",
-        "Wav2Vec2BERTModel",
-        "Wav2Vec2BERTPreTrainedModel",
+        "Wav2Vec2BertForAudioFrameClassification",
+        "Wav2Vec2BertForCTC",
+        "Wav2Vec2BertForSequenceClassification",
+        "Wav2Vec2BertForXVector",
+        "Wav2Vec2BertModel",
+        "Wav2Vec2BertPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_wav2vec2_bert import (
         WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Wav2Vec2BERTConfig,
+        Wav2Vec2BertConfig,
     )
-    from .processing_wav2vec2_bert import Wav2Vec2BERTProcessor
+    from .processing_wav2vec2_bert import Wav2Vec2BertProcessor
 
     try:
         if not is_torch_available():
@@ -56,12 +56,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_wav2vec2_bert import (
             WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Wav2Vec2BERTForAudioFrameClassification,
-            Wav2Vec2BERTForCTC,
-            Wav2Vec2BERTForSequenceClassification,
-            Wav2Vec2BERTForXVector,
-            Wav2Vec2BERTModel,
-            Wav2Vec2BERTPreTrainedModel,
+            Wav2Vec2BertForAudioFrameClassification,
+            Wav2Vec2BertForCTC,
+            Wav2Vec2BertForSequenceClassification,
+            Wav2Vec2BertForXVector,
+            Wav2Vec2BertModel,
+            Wav2Vec2BertPreTrainedModel,
         )
 
 else:
