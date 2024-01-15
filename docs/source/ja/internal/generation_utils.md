@@ -45,7 +45,7 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-`generation_output` オブジェクトは、できる限り [`~generation.GreedySearchDecoderOnlyOutput`] です。
+`generation_output` オブジェクトは、できる限り [`~generation.GenerateDecoderOnlyOutput`] です。
 以下のそのクラスのドキュメントを参照してください。これは、次の属性があることを意味します。
 
 - `sequences`: 生成されたトークンのシーケンス
@@ -76,25 +76,13 @@ generation_output[:2]
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.GenerateDecoderOnlyOutput
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateEncoderDecoderOutput
 
-[[autodoc]] generation.SampleEncoderDecoderOutput
+[[autodoc]] generation.GenerateBeamDecoderOnlyOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
 ### TensorFlow
 
