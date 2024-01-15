@@ -3583,7 +3583,7 @@ class Trainer:
 
             # Append existing tags in `tags`
             existing_tags = ModelCard.load(model_card_filepath).data.tags
-            if tags is not None:
+            if tags is not None and existing_tags is not None:
                 if isinstance(tags, str):
                     tags = [tags]
                 for tag in existing_tags:
