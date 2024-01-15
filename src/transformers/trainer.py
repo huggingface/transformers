@@ -64,7 +64,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_less_than_1_11
+from .pytorch_utils import ALL_LAYERNORM_LAYERS
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -1794,7 +1794,7 @@ class Trainer:
                 if version.parse(accelerate_version) > version.parse("0.23.0"):
                     sampler_kinds.append(SeedableRandomSampler)
                 is_random_sampler = isinstance(sampler, tuple(sampler_kinds))
-                if is_torch_less_than_1_11 or not is_random_sampler:
+                if not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
                         break
@@ -2391,17 +2391,23 @@ class Trainer:
         # Place checkpoint in final location after all saving is finished.
         # First wait for everyone to finish writing
         self.args.distributed_state.wait_for_everyone()
-        # Then go through the rewriting process starting on process 0
-        if staging_output_dir != output_dir:
-            with self.args.main_process_first(
-                desc="Renaming model checkpoint folder to true location", local=self.args.save_on_each_node
-            ):
+
+        # Then go through the rewriting process, only renaming and rotating from main process(es)
+        if self.is_local_process_zero() if self.args.save_on_each_node else self.is_world_process_zero():
+            if staging_output_dir != output_dir:
                 if os.path.exists(staging_output_dir):
                     os.rename(staging_output_dir, output_dir)
 
-        # Maybe delete some older checkpoints.
-        if self.args.should_save:
-            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+                    # Ensure rename completed in cases where os.rename is not atomic
+                    fd = os.open(output_dir, os.O_RDONLY)
+                    os.fsync(fd)
+                    os.close(fd)
+
+            # Maybe delete some older checkpoints.
+            if self.args.should_save:
+                self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+
+        self.args.distributed_state.wait_for_everyone()
 
     def _save_rng_state(self, output_dir):
         # Save RNG state in non-distributed training

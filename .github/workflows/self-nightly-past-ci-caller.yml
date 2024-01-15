@@ -56,21 +56,10 @@ jobs:
       sha: ${{ github.sha }}
     secrets: inherit
 
-  run_past_ci_pytorch_1-10:
-    name: PyTorch 1.10
-    if: (cancelled() != true) && ((github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci')))
-    needs: [run_past_ci_pytorch_1-11]
-    uses: ./.github/workflows/self-past.yml
-    with:
-      framework: pytorch
-      version: "1.10"
-      sha: ${{ github.sha }}
-    secrets: inherit
-
   run_past_ci_tensorflow_2-11:
     name: TensorFlow 2.11
     if: (cancelled() != true) && ((github.event_name == 'push') && startsWith(github.ref_name, 'run_past_ci'))
-    needs: [run_past_ci_pytorch_1-10]
+    needs: [run_past_ci_pytorch_1-11]
     uses: ./.github/workflows/self-past.yml
     with:
       framework: tensorflow
