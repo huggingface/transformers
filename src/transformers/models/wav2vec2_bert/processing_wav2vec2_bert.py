@@ -90,7 +90,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
               `None`).
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
         """
-        
+
         sampling_rate = kwargs.pop("sampling_rate", None)
 
         if audio is None and text is None:
@@ -103,16 +103,16 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         if audio is not None:
             inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
             return inputs
-        
+
         encodings = self.tokenizer(text, **kwargs)
         return encodings
 
     def pad(self, input_features=None, labels=None, **kwargs):
         """
-        If `input_features` is not `None`, this method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] to pad the input features. 
+        If `input_features` is not `None`, this method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] to pad the input features.
         If `labels` is not `None`, this method forwards the `labels` and `kwargs` arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`] to pad the label(s).
         Please refer to the doctsring of the above two methods for more information.
-        """        
+        """
         if input_features is None and labels is None:
             raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
         elif input_features is not None and labels is not None:
