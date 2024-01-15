@@ -372,6 +372,7 @@ else:
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("siglip", ("SiglipTokenizer", None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -770,7 +771,13 @@ class AutoTokenizer:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         has_remote_code = tokenizer_auto_map is not None
-        has_local_code = config_tokenizer_class is not None or type(config) in TOKENIZER_MAPPING
+        has_local_code = type(config) in TOKENIZER_MAPPING or (
+            config_tokenizer_class is not None
+            and (
+                tokenizer_class_from_name(config_tokenizer_class) is not None
+                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+            )
+        )
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )

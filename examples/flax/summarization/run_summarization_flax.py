@@ -710,7 +710,7 @@ def main():
         )
 
     # Metric
-    metric = evaluate.load("rouge")
+    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]

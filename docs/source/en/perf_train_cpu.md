@@ -31,14 +31,16 @@ IPEX release is following PyTorch, to install via pip:
 
 | PyTorch Version   | IPEX version   |
 | :---------------: | :----------:   |
+| 2.1.x             |  2.1.100+cpu   |
+| 2.0.x             |  2.0.100+cpu   |
 | 1.13              |  1.13.0+cpu    |
 | 1.12              |  1.12.300+cpu  |
-| 1.11              |  1.11.200+cpu  |
-| 1.10              |  1.10.100+cpu  |
 
+Please run `pip list | grep torch` to get your `pytorch_version`, so you can get the `IPEX version_name`.
 ```
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
+You can check the latest versions in [ipex-whl-stable-cpu](https://developer.intel.com/ipex-whl-stable-cpu) if needed.
 
 Check more approaches for [IPEX installation](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html).
 
@@ -59,8 +61,20 @@ Take an example of the use cases on [Transformers question-answering](https://gi
 --max_seq_length 384 \
 --doc_stride 128 \
 --output_dir /tmp/debug_squad/ \
-<b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
+<b>--use_ipex</b> \
+<b>--bf16</b> \
+<b>--use_cpu</b></pre> 
+
+If you want to enable `use_ipex` and `bf16` in your script, add these parameters to `TrainingArguments` like this:
+```diff
+training_args = TrainingArguments(
+    output_dir=args.output_path,
++   bf16=True,
++   use_ipex=True,
++   use_cpu=True,
+    **kwargs
+)
+```
 
 ### Practice example
 
