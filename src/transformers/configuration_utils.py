@@ -46,6 +46,35 @@ logger = logging.get_logger(__name__)
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
+GENERATION_DEFAULTS = {
+    "max_length": 20,
+    "min_length": 0,
+    "do_sample": False,
+    "early_stopping": False,
+    "num_beams": 1,
+    "num_beam_groups": 1,
+    "diversity_penalty": 0.0,
+    "temperature": 1.0,
+    "top_k": 50,
+    "top_p": 1.0,
+    "typical_p": 1.0,
+    "repetition_penalty": 1.0,
+    "length_penalty": 1.0,
+    "no_repeat_ngram_size": 0,
+    "encoder_no_repeat_ngram_size": 0,
+    "bad_words_ids": None,
+    "num_return_sequences": 1,
+    "output_scores": False,
+    "return_dict_in_generate": False,
+    "forced_bos_token_id": None,
+    "forced_eos_token_id": None,
+    "remove_invalid_values": False,
+    "exponential_decay_length_penalty": None,
+    "suppress_tokens": None,
+    "begin_suppress_tokens": None,
+}
+
+
 class PretrainedConfig(PushToHubMixin):
     # no-format
     r"""
@@ -277,6 +306,7 @@ class PretrainedConfig(PushToHubMixin):
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
@@ -285,33 +315,10 @@ class PretrainedConfig(PushToHubMixin):
         self.add_cross_attention = kwargs.pop("add_cross_attention", False)
         self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
 
-        # Parameters for sequence generation
-        self.max_length = kwargs.pop("max_length", 20)
-        self.min_length = kwargs.pop("min_length", 0)
-        self.do_sample = kwargs.pop("do_sample", False)
-        self.early_stopping = kwargs.pop("early_stopping", False)
-        self.num_beams = kwargs.pop("num_beams", 1)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
-        self.temperature = kwargs.pop("temperature", 1.0)
-        self.top_k = kwargs.pop("top_k", 50)
-        self.top_p = kwargs.pop("top_p", 1.0)
-        self.typical_p = kwargs.pop("typical_p", 1.0)
-        self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.length_penalty = kwargs.pop("length_penalty", 1.0)
-        self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
-        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
-        self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
-        self.output_scores = kwargs.pop("output_scores", False)
-        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
-        self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
-        self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
-        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
-        self.suppress_tokens = kwargs.pop("suppress_tokens", None)
-        self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
+        # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
+        # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
+        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+            setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -462,6 +469,18 @@ class PretrainedConfig(PushToHubMixin):
 
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+            set_generation_parameters = {}
+            if getattr(self, parameter_name) != default_value:
+                set_generation_parameters.update({parameter_name: getattr(self, parameter_name)})
+            if len(set_generation_parameters) > 0:
+                logger.warning(
+                    "Some non-default generation parameters are set in the model config. These should go into a "
+                    "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)"
+                    "instead. This warning will be raised to an exception in v4.39.\n"
+                    f"Set generation parameters: {str(set_generation_parameters)}"
+                )
 
         os.makedirs(save_directory, exist_ok=True)
 
