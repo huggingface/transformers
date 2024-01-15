@@ -299,7 +299,9 @@ class ModelUtilsTest(TestCasePlus):
         logger = logging.get_logger("transformers.configuration_utils")
         with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+        # self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+        if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
+            self.assertEqual("You are using a model of type t5 to instantiate a model of type bert", cl.out)
 
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a
