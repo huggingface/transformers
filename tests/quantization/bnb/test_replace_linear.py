@@ -3,87 +3,62 @@ from dataclasses import dataclass
 from typing import List, Optional, Type
 from unittest.mock import patch
 
-from torch import nn
-from torch.nn import Linear, Module, ReLU
-
 from transformers import BitsAndBytesConfig
 from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 from transformers.testing_utils import require_bitsandbytes
+from transformers.utils import is_torch_available
 
 
-class TwoLayerFCModel(Module):
-    def __init__(self):
-        super().__init__()
-        self.fully_connected_1 = Linear(10, 50)
-        self.relu = ReLU()
-        self.fully_connected_2 = Linear(50, 1)
+if is_torch_available():
+    from torch import nn
+    from torch.nn import Linear, Module, ReLU
 
-    def forward(self, x):
-        x = self.fully_connected_1(x)
-        x = self.relu(x)
-        return self.fully_connected_2(x)
+    class NoLinearToSwapModel(Module):
+        def __init__(self):
+            super().__init__()
+            self.layer1 = ReLU()
+            self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
 
+    class OneLinearToSwapModel(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.linear1 = nn.Linear(10, 5)
+            self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
 
-class ExtendedTwoLayerFCModel(TwoLayerFCModel):
-    def __init__(self):
-        super().__init__()
-        self.skip_me = Linear(50, 50)  # This layer should be skipped, if in `skip_modules`
+    class TwoLinearToSwapModel(OneLinearToSwapModel):
+        def __init__(self):
+            super().__init__()
+            self.linear2 = nn.Linear(10, 5)
 
+    class NestedModel(Module):
+        def __init__(self):
+            super().__init__()
+            self.linear1 = nn.Linear(10, 5)
+            self.linear2 = nn.Linear(10, 5)
+            self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
 
-##
+            self.submodel0 = NoLinearToSwapModel()
+            self.submodel1 = OneLinearToSwapModel()
+            self.submodel2 = TwoLinearToSwapModel()
 
+    class DoubleNestedModel(Module):
+        def __init__(self):
+            super().__init__()
+            self.linear1 = nn.Linear(10, 5)
+            self.linear2 = nn.Linear(10, 5)
+            self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
 
-class NoLinearToSwapModel(Module):
-    def __init__(self):
-        super().__init__()
-        self.layer1 = ReLU()
-        self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
+            self.submodel_nested_1 = NestedModel()
+            self.submodel_nested_2 = NestedModel()
 
+    def count_modules_by_names(model: nn.Module, target_names: Optional[List[str]]) -> int:
+        """
+        Count all submodules within a PyTorch model that have names specified in the target_names list.
+        """
+        if not target_names:
+            return 0
 
-class OneLinearToSwapModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.linear1 = nn.Linear(10, 5)
-        self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
-
-
-class TwoLinearToSwapModel(OneLinearToSwapModel):
-    def __init__(self):
-        super().__init__()
-        self.linear2 = nn.Linear(10, 5)
-
-
-class NestedModel(Module):
-    def __init__(self):
-        super().__init__()
-        self.linear1 = nn.Linear(10, 5)
-        self.linear2 = nn.Linear(10, 5)
-        self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
-
-        self.submodel0 = NoLinearToSwapModel()
-        self.submodel1 = OneLinearToSwapModel()
-        self.submodel2 = TwoLinearToSwapModel()
-
-
-class DoubleNestedModel(Module):
-    def __init__(self):
-        super().__init__()
-        self.linear1 = nn.Linear(10, 5)
-        self.linear2 = nn.Linear(10, 5)
-        self.lm_head = nn.Linear(5, 10)  # This layer has to be ignored by default
-
-        self.submodel_nested_1 = NestedModel()
-        self.submodel_nested_2 = NestedModel()
-
-
-def count_modules_by_names(model: nn.Module, target_names: Optional[List[str]]) -> int:
-    """
-    Count all submodules within a PyTorch model that have names specified in the target_names list.
-    """
-    if not target_names:
-        return 0
-
-    return sum(1 for name, _ in model.named_modules() if name.split(".")[-1] in target_names)
+        return sum(1 for name, _ in model.named_modules() if name.split(".")[-1] in target_names)
 
 
 @dataclass
