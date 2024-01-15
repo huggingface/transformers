@@ -335,7 +335,6 @@ class PagedAttentionCache(Cache):
         self.seen_tokens = (
             0  # Used in `generate` to keep tally of how many tokens the cache has seen
         )
-        self.cache_initialized = False
 
         # cache runtime management information
         self.free_blocks = list(range(num_blocks))  # free blocks
@@ -509,9 +508,6 @@ class PagedAttentionCache(Cache):
                 self.key_cache[layer_idx][block_idx][block_offset] = key[bi][ti]
                 self.value_cache[layer_idx][block_idx][block_offset] = value[bi][ti]
 
-    def is_last_layer(self, layer_idx: int) -> bool:
-        return layer_idx + 1 == len(self.key_cache) and self.cache_initialized
-
     def has_context(self, layer_idx: int, seq_id: int) -> bool:
         return (
             seq_id in self.context_lens
@@ -613,9 +609,7 @@ class PagedAttentionCache(Cache):
                 dtype=value_states.dtype,
                 device=value_states.device,
             )
-            self.cache_initialized = False
-        else:
-            self.cache_initialized = True
+            
         # step 1): allocate slots to store token states for each sequence in the batch, only need run in the first layer
         if layer_idx == 0:
             self.slots_mapping = []
