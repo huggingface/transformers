@@ -27,6 +27,7 @@ from transformers.utils import FEATURE_EXTRACTOR_NAME
 from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
+# Copied from tests.models.wav2vec2.test_processor_wav2vec2.Wav2Vec2ProcessorTest with Wav2Vec2FeatureExtractor->SeamlessM4TFeatureExtractor, Wav2Vec2Processor->Wav2Vec2BertProcessor
 class Wav2Vec2BertProcessorTest(unittest.TestCase):
     def setUp(self):
         vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
