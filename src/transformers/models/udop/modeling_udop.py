@@ -35,7 +35,7 @@ from transformers.modeling_outputs import (
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -301,8 +301,9 @@ def combine_image_text_embeddings(
             torch.arange(len(ocr_points))[:, None].repeat(1, ocr_points.size(-1))[:, :, None].to(ocr_points),
             ocr_points[:, :, None],
         ],
-        -1,
-    ).flatten(0, 1)
+        dim=-1,
+    )
+    ind = ind.flatten(0, 1)
     rows, cols = zip(*ind)
     patch_inds[rows, cols] = False
 
@@ -329,9 +330,6 @@ def combine_image_text_embeddings(
         visual_attention_mask = torch.stack(
             [pad_sequence(item, max_len, torch.zeros_like(attention_mask[0, 0])) for item in visual_attention_mask]
         )
-
-    # if vis_special_token is not None:
-    #     inputs_vision_patches += vis_special_token
 
     inputs_embeds = torch.cat([inputs_embeds, inputs_vision_patches], 1)
     bbox = torch.cat([bbox, visual_bbox], 1)
@@ -488,22 +486,6 @@ class UdopLayerNorm(nn.Module):
             hidden_states = hidden_states.to(self.weight.dtype)
 
         return self.weight * hidden_states
-
-
-try:
-    from apex.normalization import FusedRMSNorm
-
-    UdopLayerNorm = FusedRMSNorm  # noqa
-
-    logger.info("Discovered apex.normalization.FusedRMSNorm - will use it instead of UdopLayerNorm")
-except ImportError:
-    # using the normal UdopLayerNorm
-    pass
-except Exception:
-    logger.warning("discovered apex but it failed to load, falling back to UdopLayerNorm")
-    pass
-
-ALL_LAYERNORM_LAYERS.append(UdopLayerNorm)
 
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->Udop
@@ -1057,18 +1039,24 @@ AUGMENTATION_RANGE = (0.80, 1.25)
 
 class RelativePositionBiasBase(nn.Module, ABC):
     """
-    Base class of relative biases :param num_heads: number of heads in lm model, it will create embeddings of size
-    `num_heads`,
-        which will be added to scores per each token pair
-    :param relative_attention_num_buckets: pair token metric
-        (distance in the sequence, distance in pixels etc.) will be bucketed, parameter is defining number of such
-        buckets
-    :param bidirectional: defining if for pair of tokens distance should be bidirecional,
-        if bidirectional=False, then distance(tok1, tok2) == distance(tok2, tok1)
-    :param scaling_factor: defining factor which will be used to scale relative distance :param max_distance: all
-    distances above this value will end up in the one/same bucket :param augmentation: whether to multiple relative
-    distances by random scalar :param expand: used for re-using pretrained model with subsequent addition of
-    prefix_bucket
+    Base class of relative biases.
+
+    Args:
+        num_heads (`int`):
+            Number of attention heads in the model, it will create embeddings of size `num_heads`, which will be added to the scores of each token pair.
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+            Pair token metric (distance in the sequence, distance in pixels etc.) will be bucketed, parameter is defining number of such
+            buckets.
+        bidirectional (`bool`, *optional*, defaults to `True`):
+            Whether the distance should be bidirectional for a pair of tokens. If `False`, then distance(tok1, tok2) == distance(tok2, tok1).
+        scaling_factor (`int`, *optional*, defaults to 1):
+            Defining factor which will be used to scale relative distance.
+        max_distance (`int`, *optional*, defaults to 128):
+            All distances above this value will end up in the one/same bucket.
+        augmentation (`bool`, *optional*, defaults to `False`):
+            Whether to multiply relative distances by a random scalar.
+        expand (`bool`, *optional*, defaults to `False`):
+            Whether to expand an existing pretrained model with subsequent additions of prefix_bucket.
     """
 
     def __init__(
@@ -1523,8 +1511,6 @@ class UdopModel(UdopPreTrainedModel):
         "encoder.relative_bias.biases.0.relative_attention_bias.weight",
         "decoder.relative_bias.biases.0.relative_attention_bias.weight",
     ]
-
-    """ """
 
     def __init__(self, config):
         super(UdopModel, self).__init__(config)
