@@ -955,10 +955,6 @@ class T5Converter(SpmConverter):
 
 
 class UdopConverter(SpmConverter):
-    def vocab(self, proto):
-        vocab = [(piece.piece, piece.score) for piece in proto.pieces]
-        return vocab
-
     def post_processor(self):
         return processors.TemplateProcessing(
             single=["$A", "</s>"],
