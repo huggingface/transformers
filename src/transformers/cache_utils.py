@@ -528,16 +528,20 @@ class PagedAttentionCache(Cache):
 
     def get_entire_context_states(
         self,
-        context_len: int,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        if context_len != 0:
+        #assume the batch is padded to the same length
+        past_context_len = (
+            self.context_lens[0][layer_idx] if self.has_context(layer_idx, 0) else 0
+        )
+        # concat the past key/value with current key/value
+        if past_context_len != 0:
             batch_size = key_states.shape[0]  # [batch, head, seq, dim]
             kv_head = key_states.shape[1]
             head_size = key_states.shape[-1]
-            new_context_len = context_len + key_states.shape[-2]
+            new_context_len = past_context_len + key_states.shape[-2]
             key = torch.zeros(
                 (batch_size, new_context_len, kv_head, head_size),
                 dtype=key_states.dtype,
@@ -610,7 +614,8 @@ class PagedAttentionCache(Cache):
                 device=value_states.device,
             )
             
-        # step 1): allocate slots to store token states for each sequence in the batch, only need run in the first layer
+        # step 1): allocate slots to store token states for each sequence in the batch. 
+        # The kv_cache strutures are same for all layers, only need run in the first layer
         if layer_idx == 0:
             self.slots_mapping = []
             # only allocate the slots for the first sequence in the batch to enable prompt sharing
@@ -636,13 +641,10 @@ class PagedAttentionCache(Cache):
                 # fork the blocks allocated for the first sequence to other sequences in the batch
                 for seq_id in seq_ids[1:]:
                     self.fork(seq_ids[0], seq_id)
-
-        context_len = (
-            self.context_lens[0][layer_idx] if self.has_context(layer_idx, 0) else 0
-        )
+      
         # step 4): concat the past key/value with current key/value
         key_states, value_states = self.get_entire_context_states(
-            context_len, key_states, value_states, layer_idx
+            key_states, value_states, layer_idx
         )
 
         # update the context length for each sequence in the batch
