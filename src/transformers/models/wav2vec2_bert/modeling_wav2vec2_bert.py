@@ -382,7 +382,7 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
         super().__init__()
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
-        self.layer_norm = nn.LayerNorm(config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
@@ -402,7 +402,7 @@ class Wav2Vec2BertConvolutionModule(nn.Module):
             bias=False,
         )
 
-        self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size)
+        self.depthwise_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
@@ -616,7 +616,6 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         return scores
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer with Wav2Vec2Conformer->Wav2Vec2Bert
 class Wav2Vec2BertEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
@@ -626,11 +625,11 @@ class Wav2Vec2BertEncoderLayer(nn.Module):
         dropout = config.attention_dropout
 
         # Feed-forward 1
-        self.ffn1_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn1_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn1 = Wav2Vec2BertFeedForward(config)
 
         # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.self_attn_dropout = nn.Dropout(dropout)
         self.self_attn = Wav2Vec2BertSelfAttention(config)
 
@@ -638,11 +637,10 @@ class Wav2Vec2BertEncoderLayer(nn.Module):
         self.conv_module = Wav2Vec2BertConvolutionModule(config)
 
         # Feed-forward 2
-        self.ffn2_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn2_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn2 = Wav2Vec2BertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
+        self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    # Ignore copy
     def forward(
         self,
         hidden_states,
@@ -865,7 +863,7 @@ class Wav2Vec2BertAdapter(nn.Module):
         # feature dim might need to be down-projected
         if config.output_hidden_size != config.hidden_size:
             self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size, eps=config.layer_norm_eps)
         else:
             self.proj = self.proj_layer_norm = None
         self.layers = nn.ModuleList(Wav2Vec2BertAdapterLayer(config) for _ in range(config.num_adapter_layers))
@@ -912,7 +910,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         self.stride = config.adapter_stride
 
         # 1. residual convolution
-        self.residual_layer_norm = nn.LayerNorm(embed_dim)
+        self.residual_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.residual_conv = nn.Conv1d(
             embed_dim,
             2 * embed_dim,
@@ -923,7 +921,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         self.activation = nn.GLU(dim=1)
 
         # Self-Attention
-        self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.self_attn_conv = nn.Conv1d(
             embed_dim,
             2 * embed_dim,
@@ -935,7 +933,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
         self.self_attn_dropout = nn.Dropout(dropout)
 
         # Feed-forward
-        self.ffn_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn = Wav2Vec2BertFeedForward(config, act_fn="relu", hidden_size=embed_dim)
 
     def forward(
