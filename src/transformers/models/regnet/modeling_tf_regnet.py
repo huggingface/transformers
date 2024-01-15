@@ -456,11 +456,12 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
 
 
 REGNET_START_DOCSTRING = r"""
-    Parameters:
     This model is a Tensorflow
     [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer) sub-class. Use it as a
     regular Tensorflow Module and refer to the Tensorflow documentation for all matter related to general usage and
     behavior.
+
+    Parameters:
         config ([`RegNetConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
