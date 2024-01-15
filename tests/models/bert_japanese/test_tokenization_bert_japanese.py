@@ -225,7 +225,9 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_sudachi
     def test_sudachi_tokenizer_projection(self):
-        tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="A", sudachi_projection="normalized_nouns")
+        tokenizer = SudachiTokenizer(
+            sudachi_dict_type="core", sudachi_split_mode="A", sudachi_projection="normalized_nouns"
+        )
 
         self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
 
