@@ -1871,6 +1871,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
             "visual_bbox": kwargs.get("visual_bbox", None),
         }
 
+    # Copied from transformers.models.t5.modeling_t5.T5ForConditionalGeneration._reorder_cache
     def _reorder_cache(self, past_key_values, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
@@ -1889,8 +1890,14 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
                     layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
+                raise ValueError(
+                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
+                )
+            if len(reordered_layer_past_states) != len(layer_past_states):
+                raise ValueError(
+                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
+                )
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
