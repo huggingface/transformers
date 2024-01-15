@@ -142,7 +142,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # per https://unicode.org/faq/normalization.html, there are three characters whose normalization forms
         # under NFC, NFD, NFKC, and NFKD are all different
         # using these, we can make sure only NFC is applied
-        input_string = "\u038e\u03ab\u1e61"  # the NFKC form
+        input_string = "\u03d2\u0301\u03d2\u0308\u017f\u0307"  # the NFD form
         output_string = "\u03d3\u03d4\u1e9b"  # the NFC form
 
         if self.test_slow_tokenizer:
@@ -166,8 +166,8 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # special tokens in `spaces_between_special_tokens` means spaces between `legacy_added_tokens`
         # that would be `"<|im_start|>"` and `"<|im_end|>"` in Qwen/Qwen2 Models
         token_ids = [259, 260, 268, 269, 26]
-        sequence = " lower<|endoftext|><im_start>;"
-        sequence_with_space = " lower<|endoftext|> <im_start> ;"
+        sequence = " lower<|endoftext|><|im_start|>;"
+        sequence_with_space = " lower<|endoftext|> <|im_start|> ;"
 
         tokenizer = self.get_tokenizer()
         # let's add a legacy_added_tokens
