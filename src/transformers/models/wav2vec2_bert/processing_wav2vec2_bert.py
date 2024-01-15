@@ -62,64 +62,70 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, audio=None, text=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
         and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audio` is not
         `None` to pre-process the audio. To prepare the target sequences(s), this method forwards the `text` and `kwargs` arguments to
         PreTrainedTokenizer's [`~PreTrainedTokenizer.__call__`] if `text` is not `None`. Please refer to the doctsring of the above two methods for more information.
+
+        Args:
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            audio (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The audio or batch of audios to be prepared. Each audio can be NumPy array or PyTorch tensor. In case
+                of a NumPy array/PyTorch tensor, each audio should be of shape (C, T), where C is a number of channels,
+                and T the sample length of the audio.
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to the feature extractor and/or the
+                tokenizer.
+        Returns:
+            [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
+
+            - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
         """
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        
         sampling_rate = kwargs.pop("sampling_rate", None)
-        text = kwargs.pop("text", None)
-        if len(args) > 0:
-            audio = args[0]
-            args = args[1:]
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
+        elif text is not None and audio is not None:
+            raise ValueError(
+                "`Text` and `audio` are mututally exclusive when passed to `Wav2Vec2BertProcessor`. Specify one or another."
+            )
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
-        if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
-
-        if text is None:
+            inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
             return inputs
-        elif audio is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+        
+        encodings = self.tokenizer(text, **kwargs)
+        return encodings
 
-    def pad(self, *args, **kwargs):
+    def pad(self, input_features=None, labels=None, **kwargs):
         """
-        This method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] if `input_features` is not
-        `None` to pad the input features. To pad the label(s), this method forwards the `labels` and `kwargs` arguments to
-        PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`] if `labels` is not `None`. Please refer to the doctsring of the above two methods for more information.
-        """
-        input_features = kwargs.pop("input_features", None)
-        labels = kwargs.pop("labels", None)
-        if len(args) > 0:
-            input_features = args[0]
-            args = args[1:]
+        If `input_features` is not `None`, this method forwards the `input_features` and `kwargs` arguments to SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.pad`] to pad the input features. 
+        If `labels` is not `None`, this method forwards the `labels` and `kwargs` arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.pad`] to pad the label(s).
+        Please refer to the doctsring of the above two methods for more information.
+        """        
+        if input_features is None and labels is None:
+            raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
+        elif input_features is not None and labels is not None:
+            raise ValueError(
+                "`labels` and `input_features` are mututally exclusive when passed to `Wav2Vec2BertProcessor.pad`. Specify one or another."
+            )
 
         if input_features is not None:
-            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
+            input_features = self.feature_extractor.pad(input_features, **kwargs)
+            return input_features
         if labels is not None:
             labels = self.tokenizer.pad(labels, **kwargs)
-
-        if labels is None:
-            return input_features
-        elif input_features is None:
             return labels
-        else:
-            input_features["labels"] = labels["input_ids"]
-            return input_features
 
     def batch_decode(self, *args, **kwargs):
         """
