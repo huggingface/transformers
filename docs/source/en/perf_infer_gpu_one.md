@@ -51,6 +51,8 @@ FlashAttention-2 is currently supported for the following architectures:
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
+* [MusicGen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
+
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
