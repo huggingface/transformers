@@ -589,7 +589,7 @@ def main():
 
         # region Metric and postprocessing
         if training_args.do_eval:
-            metric = evaluate.load("sacrebleu")
+            metric = evaluate.load("sacrebleu", cache_dir=model_args.cache_dir)
 
             if data_args.val_max_target_length is None:
                 data_args.val_max_target_length = data_args.max_target_length

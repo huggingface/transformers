@@ -328,6 +328,9 @@ class GenerationConfig(PushToHubMixin):
         # Cache implementation 
         self.cache_implementation = kwargs.pop("cache_implementation", "dynamic")
         
+        # Prompt lookup decoding
+        self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
+
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
@@ -559,16 +562,13 @@ class GenerationConfig(PushToHubMixin):
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()
-            for w in caught_warnings:
-                raise ValueError(w.message)
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
         except ValueError as exc:
-            warnings.warn(
+            raise ValueError(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
-                "\n\nThrown during validation:\n" + str(exc),
-                UserWarning,
+                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
             )
-            return
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 

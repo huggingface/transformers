@@ -249,7 +249,7 @@ recommend ZeRO-3 config as starting one. -->
 注意：
 
 - 如果您需要在特定的 GPU 上运行，而不是 GPU 0，则无法使用 `CUDA_VISIBLE_DEVICES` 来限制可用 GPU 的可见范围。相反，您必须使用以下语法：
-  
+
   ```bash
   deepspeed --include localhost:1 examples/pytorch/translation/run_translation.py ...
   ```
@@ -1845,7 +1845,6 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 ### 注意事项
 
-- DeepSpeed 与 PyTorch [`Trainer`] 一起工作，但不与 TF [`TFTrainer`] 一起工作。
 - 尽管 DeepSpeed 有一个可安装的 PyPI 包，但强烈建议从源代码安装它，以最好地匹配您的硬件，如果您需要启用某些功能，如 1-bit Adam，这些功能在 pypi 发行版中不可用。
 - 您不必使用🤗  Transformers的 [`Trainer`] 来使用 DeepSpeed   - 您可以使用任何模型与自己的训练器，您还需要根据 [DeepSpeed 集成说明](https://www.deepspeed.ai/getting-started/#writing-deepspeed-models) 调整后者。
 

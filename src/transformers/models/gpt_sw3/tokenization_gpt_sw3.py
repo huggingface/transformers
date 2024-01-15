@@ -21,20 +21,24 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "AI-Sweden/gpt-sw3-126m": "https://huggingface.co/AI-Sweden/gpt-sw3-126m/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-350m": "https://huggingface.co/AI-Sweden/gpt-sw3-350m/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-1.6b": "https://huggingface.co/AI-Sweden/gpt-sw3-1.6b/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden/gpt-sw3-6.7b/resolve/main/spiece.model",
-        "AI-Sweden/gpt-sw3-20b": "https://huggingface.co/AI-Sweden/gpt-sw3-20b/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-126m": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-126m/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-356m": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-356m/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-1.3b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-1.3b/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-6.7b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-6.7b/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-6.7b-v2": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-6.7b-v2/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-20b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-20b/resolve/main/spiece.model",
+        "AI-Sweden-Models/gpt-sw3-40b": "https://huggingface.co/AI-Sweden-Models/gpt-sw3-20b/resolve/main/spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "AI-Sweden/gpt-sw3-126m": 2048,
-    "AI-Sweden/gpt-sw3-350m": 2048,
-    "AI-Sweden/gpt-sw3-1.6b": 2048,
-    "AI-Sweden/gpt-sw3-6.7b": 2048,
-    "AI-Sweden/gpt-sw3-20b": 2048,
+    "AI-Sweden-Models/gpt-sw3-126m": 2048,
+    "AI-Sweden-Models/gpt-sw3-356m": 2048,
+    "AI-Sweden-Models/gpt-sw3-1.3b": 2048,
+    "AI-Sweden-Models/gpt-sw3-6.7b": 2048,
+    "AI-Sweden-Models/gpt-sw3-6.7b-v2": 2048,
+    "AI-Sweden-Models/gpt-sw3-20b": 2048,
+    "AI-Sweden-Models/gpt-sw3-40b": 2048,
 }
 
 
@@ -49,7 +53,7 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import GPTSw3Tokenizer
 
-    >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden/gpt-sw3-126m")
+    >>> tokenizer = GPTSw3Tokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-126m")
     >>> tokenizer("Svenska är kul!")["input_ids"]
     [1814, 377, 3617, 63504]
     ```
