@@ -309,7 +309,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.adapter_act = adapter_act
-        self.output_hidden_size = output_hidden_size or hidden_size
+        self.output_hidden_size = output_hidden_size if output_hidden_size is not None else hidden_size
         if use_intermediate_ffn_before_adapter and not add_adapter:
             raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
         self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
