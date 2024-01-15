@@ -28,18 +28,17 @@ import logging
 import math
 import os
 import random
-from itertools import chain
 from pathlib import Path
 
 import datasets
 import torch
-from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from datasets import load_dataset
 from huggingface_hub import Repository, create_repo
 from torch.utils.data import DataLoader
+from torchvision.transforms import Resize
 from tqdm.auto import tqdm
 
 import transformers
@@ -49,11 +48,9 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    SchedulerType,
-    default_data_collator,
-    get_scheduler,
-    FuyuImageProcessor,
     FuyuProcessor,
+    SchedulerType,
+    get_scheduler,
 )
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
@@ -74,9 +71,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Finetune a transformers model on a causal language modeling task"
-    )
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -159,9 +154,7 @@ def parse_args():
         default=5e-5,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
-    parser.add_argument(
-        "--weight_decay", type=float, default=0.0, help="Weight decay to use."
-    )
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
     parser.add_argument(
         "--num_train_epochs",
         type=int,
@@ -200,12 +193,8 @@ def parse_args():
         default=0,
         help="Number of steps for the warmup in the lr scheduler.",
     )
-    parser.add_argument(
-        "--output_dir", type=str, default=None, help="Where to store the final model."
-    )
-    parser.add_argument(
-        "--seed", type=int, default=None, help="A seed for reproducible training."
-    )
+    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
+    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
     parser.add_argument(
         "--model_type",
         type=str,
@@ -249,9 +238,7 @@ def parse_args():
         type=str,
         help="The name of the repository to keep in sync with the local `output_dir`.",
     )
-    parser.add_argument(
-        "--hub_token", type=str, help="The token to use to push to the Model Hub."
-    )
+    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
         "--trust_remote_code",
         type=bool,
@@ -300,11 +287,7 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
-    if (
-        args.dataset_name is None
-        and args.train_file is None
-        and args.validation_file is None
-    ):
+    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
         raise ValueError("Need either a dataset name or a training/validation file.")
     else:
         if args.train_file is not None:
@@ -318,9 +301,7 @@ def parse_args():
 
     if args.push_to_hub:
         if args.output_dir is None:
-            raise ValueError(
-                "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
-            )
+            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` is passed.")
 
     return args
 
@@ -372,9 +353,7 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(
-                repo_name, exist_ok=True, token=args.hub_token
-            ).repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
             # Clone repo locally
             repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
 
@@ -399,22 +378,17 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
-        if (
-            args.dataset_name == "facebook/winoground"
-        ):  # specifically for facebook/winoground testing
-            raw_datasets["validation"] = load_dataset(
-                args.dataset_name,
-                args.dataset_config_name,
-                split=f"test[:{args.validation_split_percentage}%]",
-            )
-            raw_datasets["validation"] = raw_datasets["validation"].select(range(10))
+        if args.dataset_name == "facebook/winoground":  # specifically for facebook/winoground testing
             raw_datasets["train"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
                 split=f"test[{args.validation_split_percentage}%:]",
             )
-            raw_datasets["train"] = raw_datasets["train"].select(range(50))
-            raw_datasets["test"] = raw_datasets["validation"]
+            raw_datasets["validation"] = load_dataset(
+                args.dataset_name,
+                args.dataset_config_name,
+                split=f"test[:{args.validation_split_percentage}%]",
+            )
         elif "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 args.dataset_name,
@@ -507,9 +481,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForCausalLM.from_config(
-            config, trust_remote_code=args.trust_remote_code
-        )
+        model = AutoModelForCausalLM.from_config(config, trust_remote_code=args.trust_remote_code)
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     embedding_size = model.get_input_embeddings().weight.shape[0]
@@ -569,17 +541,11 @@ def main():
     def collate_fn(examples):
         texts = [e[text_column_name] for e in examples]
         images = [e[image_column_name] for e in examples]
-        output = processor(
-            text=texts, images=images, padding="max_length", truncation=True
-        )
-        position = (output["input_ids"] == tokenizer.vocab["<s>"]).nonzero(
-            as_tuple=True
-        )[0][
+        output = processor(text=texts, images=images, padding="max_length", truncation=True)
+        position = (output["input_ids"] == tokenizer.vocab["<s>"]).nonzero(as_tuple=True)[0][
             0
         ]  # This gets the index of the first '1' in the tensor by passing the left padding
-        output["labels"] = torch.full_like(
-            output["input_ids"], -100
-        )  # This creates a tensor filled with -100
+        output["labels"] = torch.full_like(output["input_ids"], -100)  # This creates a tensor filled with -100
         output["labels"][position:] = output["input_ids"][position:]
         return output
 
@@ -590,28 +556,18 @@ def main():
         collate_fn=collate_fn,
         batch_size=args.per_device_train_batch_size,
     )
-    eval_dataloader = DataLoader(
-        eval_dataset, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size
-    )
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=collate_fn, batch_size=args.per_device_eval_batch_size)
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     no_decay = ["bias", "layer_norm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [
-                p
-                for n, p in model.named_parameters()
-                if not any(nd in n for nd in no_decay)
-            ],
+            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [
-                p
-                for n, p in model.named_parameters()
-                if any(nd in n for nd in no_decay)
-            ],
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
             "weight_decay": 0.0,
         },
     ]
@@ -619,9 +575,7 @@ def main():
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(
-        len(train_dataloader) / args.gradient_accumulation_steps
-    )
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
@@ -640,18 +594,14 @@ def main():
         train_dataloader,
         eval_dataloader,
         lr_scheduler,
-    ) = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
-    )
+    ) = accelerator.prepare(model, optimizer, train_dataloader, eval_dataloader, lr_scheduler)
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
     if accelerator.distributed_type == DistributedType.TPU:
         model.tie_weights()
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-    num_update_steps_per_epoch = math.ceil(
-        len(train_dataloader) / args.gradient_accumulation_steps
-    )
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
@@ -667,33 +617,21 @@ def main():
     if args.with_tracking:
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config[
-            "lr_scheduler_type"
-        ].value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
         accelerator.init_trackers("clm_no_trainer", experiment_config)
 
     # Train!
-    total_batch_size = (
-        args.per_device_train_batch_size
-        * accelerator.num_processes
-        * args.gradient_accumulation_steps
-    )
+    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(
-        f"  Instantaneous batch size per device = {args.per_device_train_batch_size}"
-    )
-    logger.info(
-        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
-    )
+    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(
-        range(args.max_train_steps), disable=not accelerator.is_local_main_process
-    )
+    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
     starting_epoch = 0
 
@@ -706,9 +644,7 @@ def main():
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
-            path = dirs[
-                -1
-            ]  # Sorts folders by date modified, most recent checkpoint is the last
+            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
             checkpoint_path = path
             path = os.path.basename(checkpoint_path)
 
@@ -723,10 +659,7 @@ def main():
             completed_steps = starting_epoch * num_update_steps_per_epoch
         else:
             # need to multiply `gradient_accumulation_steps` to reflect real steps
-            resume_step = (
-                int(training_difference.replace("step_", ""))
-                * args.gradient_accumulation_steps
-            )
+            resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
             starting_epoch = resume_step // len(train_dataloader)
             completed_steps = resume_step // args.gradient_accumulation_steps
             resume_step -= starting_epoch * len(train_dataloader)
@@ -738,15 +671,9 @@ def main():
         model.train()
         if args.with_tracking:
             total_loss = 0
-        if (
-            args.resume_from_checkpoint
-            and epoch == starting_epoch
-            and resume_step is not None
-        ):
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We skip the first `n` batches in the dataloader when resuming from a checkpoint
-            active_dataloader = accelerator.skip_first_batches(
-                train_dataloader, resume_step
-            )
+            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
         else:
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
@@ -782,11 +709,7 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(
-                accelerator.gather_for_metrics(
-                    loss.repeat(args.per_device_eval_batch_size)
-                )
-            )
+            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
 
         losses = torch.cat(losses)
         try:
