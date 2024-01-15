@@ -217,7 +217,8 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def get_vocab(self) -> Dict[str, int]:
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_vocab
+    def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe
