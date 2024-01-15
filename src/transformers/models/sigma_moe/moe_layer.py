@@ -102,8 +102,14 @@ class SigmaMoELayer(torch.nn.Module):
         self.values = torch.nn.Parameter(
             torch.randn(self.n_experts, self.expert_size, self.v_dim)
         )
-        self.expert_sel = torch.nn.Parameter(
-            torch.randn(self.n_experts, self.k_vec_dim)
+        # self.expert_sel = torch.nn.Parameter(
+        #     torch.randn(self.n_experts, self.k_vec_dim)
+        # )
+
+        self.expert_sel = torch.nn.Linear(
+            in_features=self.k_vec_dim,
+            out_features=self.n_experts,
+            bias=False
         )
 
         if bias:
@@ -213,7 +219,8 @@ class SigmaMoELayer(torch.nn.Module):
                 self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
 
         # Selection score calculation
-        sel = sel_raw = F.linear(input, self.expert_sel, None)
+        # sel = sel_raw = F.linear(input, self.expert_sel, None)
+        sel = sel_raw = self.expert_sel(input)
         reg_loss = self.entropy_reg(sel_raw)
 
         # Selection activation and topk
@@ -262,6 +269,10 @@ class SigmaMoELayer(torch.nn.Module):
         if IS_CUDA and IS_TRITON:
             # "Up-projection" layer for each head
             scores = self.compute_scores(input, sel_indices)
+
+            # NOTE debug: retains the intermediate grad during backward
+            scores.retain_grad()
+
             # Down projection layer for each head
             sel_indices = sel_indices.clone()
             sel_indices.reduction_weight = sel_val
@@ -290,4 +301,4 @@ class SigmaMoELayer(torch.nn.Module):
 
         if self.o_bias is not None:
             res = res + self.o_bias
-        return res, reg_loss
+        return res, reg_loss, scores, sel_index, sel_val
