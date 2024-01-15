@@ -36,19 +36,13 @@ class Cache:
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        raise NotImplementedError(
-            "Make sure to implement `get_seq_length` in a subclass."
-        )
+        raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states, if there is any."""
-        raise NotImplementedError(
-            "Make sure to implement `get_max_length` in a subclass."
-        )
+        raise NotImplementedError("Make sure to implement `get_max_length` in a subclass.")
 
-    def get_usable_length(
-        self, new_seq_length: int, layer_idx: Optional[int] = 0
-    ) -> int:
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
         """Given the sequence length of the new inputs, returns the usable length of the cache."""
         # Cache without size limit -> all cache is usable
         # Cache with size limit -> if the length cache plus the length of the new inputs is larger the maximum cache
@@ -71,9 +65,7 @@ class DynamicCache(Cache):
     def __init__(self) -> None:
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        self.seen_tokens = (
-            0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        )
+        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
@@ -83,9 +75,7 @@ class DynamicCache(Cache):
         if layer_idx < len(self):
             return (self.key_cache[layer_idx], self.value_cache[layer_idx])
         else:
-            raise KeyError(
-                f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}"
-            )
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
 
     def __iter__(self):
         """
@@ -134,12 +124,8 @@ class DynamicCache(Cache):
             self.key_cache.append(key_states)
             self.value_cache.append(value_states)
         else:
-            self.key_cache[layer_idx] = torch.cat(
-                [self.key_cache[layer_idx], key_states], dim=-2
-            )
-            self.value_cache[layer_idx] = torch.cat(
-                [self.value_cache[layer_idx], value_states], dim=-2
-            )
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -157,13 +143,9 @@ class DynamicCache(Cache):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
             device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
             device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
-            )
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         """Converts the `DynamicCache` instance into the its equivalent in the legacy cache format."""
@@ -173,9 +155,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
-    ) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`."""
         cache = cls()
         if past_key_values is not None:
@@ -207,9 +187,7 @@ class SinkCache(Cache):
         self.window_length = window_length
         self.num_sink_tokens = num_sink_tokens
         self.cos_sin_cache = {}
-        self.seen_tokens = (
-            0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        )
+        self.seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
 
     @staticmethod
     def _rotate_half(x):
@@ -300,19 +278,13 @@ class SinkCache(Cache):
 
         elif key_states.shape[-2] + self.get_seq_length(layer_idx) < self.window_length:
             # Growing cache
-            self.key_cache[layer_idx] = torch.cat(
-                [self.key_cache[layer_idx], key_states], dim=-2
-            )
-            self.value_cache[layer_idx] = torch.cat(
-                [self.value_cache[layer_idx], value_states], dim=-2
-            )
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
         else:
             # Shifting cache
             keys_to_keep = self.key_cache[layer_idx][
-                :,
-                :,
-                -self.window_length + self.num_sink_tokens + key_states.shape[-2] :,
+                :, :, -self.window_length + self.num_sink_tokens + key_states.shape[-2] :
             ]
 
             # On RoPE models, we need to recompute the Key rotation as the tokens are shifted
@@ -325,27 +297,19 @@ class SinkCache(Cache):
                         keys_to_keep[..., :partial_rotation_size],
                         keys_to_keep[..., partial_rotation_size:],
                     )
-                keys_to_keep = self._apply_key_rotary_pos_emb(
-                    keys_to_keep, rerotation_cos, rerotation_sin
-                )
+                keys_to_keep = self._apply_key_rotary_pos_emb(keys_to_keep, rerotation_cos, rerotation_sin)
                 if partial_rotation_size is not None:
                     keys_to_keep = torch.cat((keys_to_keep, keys_pass), dim=-1)
 
             # Concatenate sink tokens, shifted & rotated tokens (if needed), and new tokens
             sink_keys = self.key_cache[layer_idx][:, :, : self.num_sink_tokens]
-            self.key_cache[layer_idx] = torch.cat(
-                [sink_keys, keys_to_keep, key_states], dim=-2
-            )
+            self.key_cache[layer_idx] = torch.cat([sink_keys, keys_to_keep, key_states], dim=-2)
 
             sink_values = self.value_cache[layer_idx][:, :, : self.num_sink_tokens]
             values_to_keep = self.value_cache[layer_idx][
-                :,
-                :,
-                -self.window_length + self.num_sink_tokens + value_states.shape[-2] :,
+                :, :, -self.window_length + self.num_sink_tokens + value_states.shape[-2] :
             ]
-            self.value_cache[layer_idx] = torch.cat(
-                [sink_values, values_to_keep, value_states], dim=-2
-            )
+            self.value_cache[layer_idx] = torch.cat([sink_values, values_to_keep, value_states], dim=-2)
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
@@ -353,13 +317,9 @@ class SinkCache(Cache):
         """Reorders the cache for beam search, given the selected beam indices."""
         for layer_idx in range(len(self.key_cache)):
             device = self.key_cache[layer_idx].device
-            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
-            )
+            self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
             device = self.value_cache[layer_idx].device
-            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(
-                0, beam_idx.to(device)
-            )
+            self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
 
 class PagedAttentionCache(Cache):
