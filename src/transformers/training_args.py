@@ -1755,7 +1755,7 @@ class TrainingArguments:
                 " when --dataloader_num_workers > 1."
             )
             self.dataloader_prefetch_factor = None
-        
+
         if self.push_to_hub_token is not None:
             warnings.warn(
                 "`--push_to_hub_token` is deprecated and will be removed in version 5 of 🤗 Transformers. Use "
