@@ -117,7 +117,7 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
         elif input_features is not None and labels is not None:
             raise ValueError(
-                "`labels` and `input_features` are mututally exclusive when passed to `Wav2Vec2BertProcessor.pad`. Specify one or another."
+                "`labels` and `input_features` are mutually exclusive when passed to `Wav2Vec2BertProcessor.pad`. Specify one or the other."
             )
 
         if input_features is not None:

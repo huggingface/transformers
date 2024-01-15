@@ -273,7 +273,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
             raise ValueError(
                 """
                 `position_embeddings_type` is not valid. It must be one of the following values:
-                `["rotary", "relative", "relative_key"]` or left at `None`.
+                `["rotary", "relative", "relative_key"]` or left as `None`.
                 """
             )
         self.position_embeddings_type = position_embeddings_type
