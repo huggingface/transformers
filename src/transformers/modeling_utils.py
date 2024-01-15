@@ -2492,13 +2492,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @wraps(PushToHubMixin.push_to_hub)
     def push_to_hub(self, *args, **kwargs):
-        if "tags" not in kwargs:
-            kwargs["tags"] = self.model_tags
-        elif "tags" in kwargs and self.model_tags is not None:
-            for model_tag in self.model_tags:
-                # merge the tags together
-                if model_tag not in kwargs["tags"]:
-                    kwargs["tags"].append(model_tag)
+        tags = self.model_tags if self.model_tags is not None else []
+        for tag in kwargs.get("tags", []):
+            if tag not in tags:
+                tags.append(tag)
+        if tags:
+            kwargs["tags"] = tags
         return super().push_to_hub(*args, **kwargs)
 
     def get_memory_footprint(self, return_buffers=True):
