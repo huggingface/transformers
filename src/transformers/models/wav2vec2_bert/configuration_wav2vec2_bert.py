@@ -147,6 +147,9 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         num_adapter_layers (`int`, *optional*, defaults to 1):
             Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
             True`.
+        adapter_act (`str` or `function`, *optional*, defaults to `"relu"`):
+            The non-linear activation function (function or string) in the adapter layers. If string, `"gelu"`,
+            `"relu"`, `"selu"`, `"swish"` and `"gelu_new"` are supported.
         use_intermediate_ffn_before_adapter (`bool`, *optional*, defaults to `False`):
             Whether an intermediate feed-forward block should be stacked on top of the Wav2Vec2Bert Encoder and before the adapter network.
              Only relevant if `add_adapter is True`.
@@ -231,6 +234,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         adapter_kernel_size=3,
         adapter_stride=2,
         num_adapter_layers=1,
+        adapter_act="relu",
         use_intermediate_ffn_before_adapter=False,
         output_hidden_size=None,
         position_embeddings_type="relative_key",
@@ -304,6 +308,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         self.adapter_kernel_size = adapter_kernel_size
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
+        self.adapter_act = adapter_act
         self.output_hidden_size = output_hidden_size or hidden_size
         if use_intermediate_ffn_before_adapter and not add_adapter:
             raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")

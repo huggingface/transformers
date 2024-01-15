@@ -556,7 +556,8 @@ class Wav2Vec2BertSelfAttention(nn.Module):
         hidden_states = self.linear_out(hidden_states)
 
         return hidden_states, probs
-
+    
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_rotary_embedding
     def _apply_rotary_embedding(self, hidden_states, relative_position_embeddings):
         batch_size, sequence_length, hidden_size = hidden_states.size()
         hidden_states = hidden_states.view(batch_size, sequence_length, self.num_heads, self.head_size)
@@ -576,6 +577,7 @@ class Wav2Vec2BertSelfAttention(nn.Module):
 
         return hidden_states
 
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention._apply_relative_embeddings
     def _apply_relative_embeddings(self, query, key, relative_position_embeddings):
         # 1. project positional embeddings
         # => (batch, head, 2*time1-1, d_k)
@@ -934,7 +936,7 @@ class Wav2Vec2BertAdapterLayer(nn.Module):
 
         # Feed-forward
         self.ffn_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.ffn = Wav2Vec2BertFeedForward(config, act_fn="relu", hidden_size=embed_dim)
+        self.ffn = Wav2Vec2BertFeedForward(config, act_fn=config.adapter_act, hidden_size=embed_dim)
 
     def forward(
         self,
