@@ -4819,7 +4819,7 @@ def _speculative_sampling(
     p_n_plus_1 = p[:, n_matches, :]
     if n_matches < gamma:
         q_n_plus_1 = q[:, n_matches, :]
-        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), max=0)
+        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
         p_prime.div_(p_prime.sum())
     else:
         p_prime = p_n_plus_1
