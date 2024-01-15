@@ -134,6 +134,7 @@ class TestReplaceWithBnbLinear(unittest.TestCase):
         expected_replaced_count,
         expected_warning_message=None,
     ):
+        @require_bitsandbytes
         def test(self):
             self.common_test_logic(
                 test_cfg,
