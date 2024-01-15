@@ -70,7 +70,7 @@ deps = {
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
     "sigopt": "sigopt",
     "starlette": "starlette",
-    "sudachipy": "sudachipy>=0.6.6",
+    "sudachipy": "sudachipy>=0.6.8",
     "sudachidict_core": "sudachidict_core>=20220729",
     "tensorboard": "tensorboard",
     "tensorflow-cpu": "tensorflow-cpu>=2.6,<2.16",
