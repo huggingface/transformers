@@ -207,7 +207,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         decoder: Optional[Union["BeamSearchDecoderCTC", str]] = None,
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
-        *args,
         **kwargs,
     ):
         # set the model type so we can check we have the right pre- and post-processing parameters
@@ -225,7 +224,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         else:
             self.type = "ctc"
 
-        super().__init__(model, tokenizer, feature_extractor, device, torch_dtype, *args, **kwargs)
+        super().__init__(model, tokenizer, feature_extractor, device=device, torch_dtype=torch_dtype, **kwargs)
 
     def __call__(
         self,
