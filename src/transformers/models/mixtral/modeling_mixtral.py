@@ -103,11 +103,7 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
 
     _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
 
-    # treat `top_k` as tokens (shape is `top_k X [batch_size X sequence_length]`)
-    selected_experts = selected_experts.reshape(-1)
-
     expert_mask = torch.nn.functional.one_hot(selected_experts, num_experts)
-    expert_mask = torch.max(expert_mask, dim=-2).values
 
     # Compute the percentage of tokens routed to each experts
     tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
@@ -115,7 +111,7 @@ def load_balancing_loss_func(gate_logits: torch.Tensor, num_experts: torch.Tenso
     # Compute the average probability of routing to these experts
     router_prob_per_expert = torch.mean(routing_weights, dim=0)
 
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(-1))
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
 
 
@@ -250,8 +246,8 @@ class MixtralAttention(nn.Module):
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
 
@@ -477,11 +473,11 @@ class MixtralFlashAttention2(MixtralAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
-            # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            elif torch.is_autocast_enabled():
+            if torch.is_autocast_enabled():
                 target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
 
@@ -1295,8 +1291,8 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MixtralForCausalLM
 
-        >>> model = MixtralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = MixtralForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1387,7 +1383,7 @@ class MixtralForCausalLM(MixtralPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]

@@ -20,7 +20,6 @@ from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_S
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
-    is_torch_available,
     require_tf,
     require_torch,
     require_vision,
@@ -28,12 +27,6 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
-
-
-if is_torch_available():
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_11
-else:
-    is_torch_greater_or_equal_than_1_11 = False
 
 
 if is_vision_available():
@@ -217,9 +210,6 @@ class ImageToTextPipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             outputs = pipe([image, image], prompt=[prompt, prompt])
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_11, reason="`Pix2StructImageProcessor` requires `torch>=1.11.0`."
-    )
     @slow
     @require_torch
     def test_conditional_generation_pt_pix2struct(self):

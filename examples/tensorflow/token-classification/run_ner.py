@@ -511,7 +511,7 @@ def main():
         # endregion
 
         # Metrics
-        metric = evaluate.load("seqeval")
+        metric = evaluate.load("seqeval", cache_dir=model_args.cache_dir)
 
         def get_labels(y_pred, y_true):
             # Transform predictions and references tensos to numpy arrays
