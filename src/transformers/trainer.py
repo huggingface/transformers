@@ -3584,6 +3584,15 @@ class Trainer:
             library_name = ModelCard.load(model_card_filepath).data.get("library_name")
             is_peft_library = library_name == "peft"
 
+            # Append existing tags in `tags`
+            existing_tags = ModelCard.load(model_card_filepath).data.tags
+            if tags is not None and existing_tags is not None:
+                if isinstance(tags, str):
+                    tags = [tags]
+                for tag in existing_tags:
+                    if tag not in tags:
+                        tags.append(tag)
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -3701,6 +3710,18 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero():
             return
+
+        # Add additional tags in the case the model has already some tags and users pass
+        # "tags" argument to `push_to_hub` so that trainer automatically handles internal tags
+        # from all models since Trainer does not call `model.push_to_hub`.
+        if "tags" in kwargs and getattr(self.model, "model_tags", None) is not None:
+            # If it is a string, convert it to a list
+            if isinstance(kwargs["tags"], str):
+                kwargs["tags"] = [kwargs["tags"]]
+
+            for model_tag in self.model.model_tags:
+                if model_tag not in kwargs["tags"]:
+                    kwargs["tags"].append(model_tag)
 
         self.create_model_card(model_name=model_name, **kwargs)
 
