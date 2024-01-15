@@ -214,7 +214,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         )
 
     @property
-    # copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.vocab_size
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.vocab_size
     def vocab_size(self) -> int:
         return len(self.encoder)
 
