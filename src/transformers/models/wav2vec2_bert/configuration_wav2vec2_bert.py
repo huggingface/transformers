@@ -105,12 +105,6 @@ class Wav2Vec2BertConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-        num_codevectors_per_group (`int`, *optional*, defaults to 320):
-            Number of entries in each quantization codebook (group).
-        num_codevector_groups (`int`, *optional*, defaults to 2):
-            Number of codevector groups for product codevector quantization.
-        codevector_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the quantized feature vectors.
         ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
             Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
             instance of [`Wav2Vec2BertForCTC`].
@@ -216,9 +210,6 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-        num_codevectors_per_group=320,
-        num_codevector_groups=2,
-        codevector_dim=768,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
         use_weighted_layer_sum=False,
@@ -293,11 +284,6 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
-
-        # parameters for pretraining with codevector quantized representations
-        self.num_codevectors_per_group = num_codevectors_per_group
-        self.num_codevector_groups = num_codevector_groups
-        self.codevector_dim = codevector_dim
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction
