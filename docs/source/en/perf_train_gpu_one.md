@@ -418,7 +418,7 @@ The memory requirement for the optimizer state of the plain model would be 12 * 
 
 Adding Lora increases slightly the memory associated to the model weights and substantially decreases memory requirement for the optimizer state to 12 * 0.2 = 2.4GB.
 
-
+Read more about PEFT and its detailed usage in [the PEFT documentation](https://huggingface.co/docs/peft/) or [PEFT repository](https://github.com/huggingface/peft).
 
 ## Using 🤗 Accelerate
 
