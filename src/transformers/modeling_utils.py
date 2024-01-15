@@ -48,6 +48,7 @@ from .pytorch_utils import (  # noqa: F401
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     id_tensor_storage,
+    is_torch_greater_or_equal_than_1_13,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -481,7 +482,13 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", weights_only=True)
+    loader = (
+        safe_load_file
+        if load_safe
+        else partial(
+            torch.load, map_location="cpu", weights_only=True if is_torch_greater_or_equal_than_1_13 else False
+        )
+    )
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -525,7 +532,12 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        return torch.load(checkpoint_file, map_location=map_location, weights_only=True, **extra_args)
+        return torch.load(
+            checkpoint_file,
+            map_location=map_location,
+            weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+            **extra_args,
+        )
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
