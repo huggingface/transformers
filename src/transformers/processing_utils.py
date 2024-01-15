@@ -380,13 +380,9 @@ class ProcessorMixin(PushToHubMixin):
         processor = cls(*args, **processor_dict)
 
         # Update processor with kwargs if needed
-        to_remove = []
-        for key, value in kwargs.items():
+        for key in set(kwargs.keys()):
             if hasattr(processor, key):
-                setattr(processor, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
+                setattr(processor, key, kwargs.pop(key))
 
         logger.info(f"Processor {processor}")
         if return_unused_kwargs:
