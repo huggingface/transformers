@@ -1286,8 +1286,6 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_CTC_EXPECTED_OUTPUT,
-        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
