@@ -94,6 +94,10 @@ else:
         "BeamSampleDecoderOnlyOutput",
         "ContrastiveSearchEncoderDecoderOutput",
         "ContrastiveSearchDecoderOnlyOutput",
+        "GenerateBeamDecoderOnlyOutput",
+        "GenerateBeamEncoderDecoderOutput",
+        "GenerateDecoderOnlyOutput",
+        "GenerateEncoderDecoderOutput",
     ]
 
 try:
@@ -222,6 +226,10 @@ if TYPE_CHECKING:
             BeamSearchEncoderDecoderOutput,
             ContrastiveSearchDecoderOnlyOutput,
             ContrastiveSearchEncoderDecoderOutput,
+            GenerateBeamDecoderOnlyOutput,
+            GenerateBeamEncoderDecoderOutput,
+            GenerateDecoderOnlyOutput,
+            GenerateEncoderDecoderOutput,
             GenerationMixin,
             GreedySearchDecoderOnlyOutput,
             GreedySearchEncoderDecoderOutput,
