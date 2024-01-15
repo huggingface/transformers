@@ -200,9 +200,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         for batch_idx in range(word_embeddings.shape[0]):
             # First, find the positions of all the non-negative values in image_patch_input_indices, those are the
             # positions in word_embeddings that we want to replace with content from continuous_embeddings.
-            dst_indices = torch.nonzero(
-                image_patch_input_indices[batch_idx] >= 0, as_tuple=True
-            )[0]
+            dst_indices = torch.nonzero(image_patch_input_indices[batch_idx] >= 0, as_tuple=True)[0]
             # Next look up those indices in image_patch_input_indices to find the indices in continuous_embeddings that we
             # want to use to replace the values in word_embeddings.
             src_indices = image_patch_input_indices[batch_idx][dst_indices]
@@ -212,15 +210,11 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                     f"Number of continuous embeddings {continuous_embeddings[batch_idx].shape=} does not match "
                     f"number of continuous token ids {src_indices.shape=} in batch element {batch_idx}."
                 )
-            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[
-                batch_idx
-            ][src_indices]
+            output_embeddings[batch_idx, dst_indices] = continuous_embeddings[batch_idx][src_indices]
         return output_embeddings
 
     @add_start_docstrings_to_model_forward(FUYU_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -267,26 +261,16 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
         'A bus parked on the side of a road.'
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -315,9 +299,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
             if image_patches is not None and past_key_values is None:
                 patch_embeddings = [
-                    self.vision_embed_tokens(
-                        patch.to(self.vision_embed_tokens.weight.dtype)
-                    ).squeeze(0)
+                    self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
                     for patch in image_patches
                 ]
                 inputs_embeds = self.gather_continuous_embeddings(
@@ -376,9 +358,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "attention_mask": attention_mask,
-                "image_patches_indices": image_patches_indices
-                if past_key_values is None
-                else None,
+                "image_patches_indices": image_patches_indices if past_key_values is None else None,
                 "image_patches": image_patches if past_key_values is None else None,
             }
         )
