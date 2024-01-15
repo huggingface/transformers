@@ -134,6 +134,12 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_mecab_tokenizer_unidic(self):
         try:
+            import unidic
+
+            self.assertTrue(
+                os.path.isdir(unidic.DICDIR),
+                "The content of unidic was not downloaded. Run `python -m unidic download` before running this test case. Note that this requires 2.1GB on disk.",
+            )
             tokenizer = MecabTokenizer(mecab_dic="unidic")
         except ModuleNotFoundError:
             return
@@ -278,19 +284,19 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = JumanppTokenizer()
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iPhone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"])  # fmt: skip
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iPhone", "8", "\\ ", "が", "\\ \\ ", "\\ ", "発売", "さ", "れた", "\\ ", "。"])  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_lower(self):
         tokenizer = JumanppTokenizer(do_lower_case=True)
 
-        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iphone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iphone", "8", "\\ ", "が", "\\ \\ ", "\\ ", "発売", "さ", "れた", "\\ ", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_no_normalize(self):
         tokenizer = JumanppTokenizer(normalize_text=False)
 
-        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\\ ", "が", "\\ \\ ", "\\ ", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_trim_whitespace(self):
@@ -298,7 +304,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れた", "。"],
+            ["アップル", "ストア", "で", "iPhone", "8", "\\", "が", "\\ \\", "\\", "発売", "さ", "れた", "\\", "。"],
         )
 
     @require_jumanpp
@@ -307,7 +313,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             tokenizer.tokenize("ありがとうございますm(_ _)ｍ見つけるのが大変です。"),
-            ["ありがとう", "ございます", "m(_ _)m", "見つける", "の", "が", "大変です", "。"],
+            ["ありがとう", "ございます", "m", "(", "_", "\\ _", ")", "m", "見つける", "の", "が", "大変です", "。"],
         )
 
     def test_wordpiece_tokenizer(self):
