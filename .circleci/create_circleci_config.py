@@ -470,10 +470,10 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
         "pip install -U --upgrade-strategy eager pytesseract",
-        "pip install -U --upgrade-strategy eager natten",
         # TODO (ydshieh): Remove this line once `https://github.com/facebookresearch/detectron2/issues/5010` is resolved
         'pip install -U --upgrade-strategy eager "Pillow<10.0.0"',
         "pip install --upgrade-strategy eager sentencepiece",
+        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
@@ -518,7 +518,8 @@ doc_test_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager -e .[dev]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
         "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
-        "pip install -U --upgrade-strategy eager natten",
+        "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
+        "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.

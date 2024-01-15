@@ -730,8 +730,8 @@ class OpenLlamaForCausalLM(OpenLlamaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, OpenLlamaForCausalLM
 
-        >>> model = OpenLlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = OpenLlamaForCausalLM.from_pretrained("openlm-research/open_llama_7b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -923,9 +923,10 @@ class OpenLlamaForSequenceClassification(OpenLlamaPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 

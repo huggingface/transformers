@@ -1651,8 +1651,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
@@ -1849,6 +1851,35 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(torch.allclose(generate_outputs.token_timestamps.to("cpu"), EXPECTED_OUTPUT))
+
+    @slow
+    def test_tiny_token_timestamp_batch_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+
+        num_samples = 4
+        num_return_sequences = 2
+
+        input_speech = self._load_datasamples(num_samples)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
+
+        generate_outputs = model.generate(
+            input_features,
+            max_length=448,
+            return_timestamps=True,
+            return_token_timestamps=True,
+            num_beams=3,
+            num_return_sequences=num_return_sequences,
+        )
+
+        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+
+        self.assertEqual(len(generate_outputs.sequences), num_return_sequences * num_samples)
 
     @slow
     def test_tiny_specaugment_librispeech(self):

@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
+    is_g2p_en_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
@@ -423,11 +424,16 @@ _import_structure = {
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.falcon": ["FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP", "FalconConfig"],
-    "models.flaubert": [
-        "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "FlaubertConfig",
-        "FlaubertTokenizer",
+    "models.fastspeech2_conformer": [
+        "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FastSpeech2ConformerConfig",
+        "FastSpeech2ConformerHifiGanConfig",
+        "FastSpeech2ConformerTokenizer",
+        "FastSpeech2ConformerWithHifiGanConfig",
     ],
+    "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FlavaConfig",
@@ -756,6 +762,14 @@ _import_structure = {
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
+    "models.siglip": [
+        "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SiglipConfig",
+        "SiglipProcessor",
+        "SiglipTextConfig",
+        "SiglipTokenizer",
+        "SiglipVisionConfig",
+    ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1291,6 +1305,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
+    _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.tvp"].append("TvpImageProcessor")
@@ -2132,6 +2147,15 @@ else:
             "FalconForTokenClassification",
             "FalconModel",
             "FalconPreTrainedModel",
+        ]
+    )
+    _import_structure["models.fastspeech2_conformer"].extend(
+        [
+            "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastSpeech2ConformerHifiGan",
+            "FastSpeech2ConformerModel",
+            "FastSpeech2ConformerPreTrainedModel",
+            "FastSpeech2ConformerWithHifiGan",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3148,6 +3172,15 @@ else:
             "SEWDPreTrainedModel",
         ]
     )
+    _import_structure["models.siglip"].extend(
+        [
+            "SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SiglipModel",
+            "SiglipPreTrainedModel",
+            "SiglipTextModel",
+            "SiglipVisionModel",
+        ]
+    )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
@@ -3221,6 +3254,7 @@ else:
     _import_structure["models.swinv2"].extend(
         [
             "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swinv2Backbone",
             "Swinv2ForImageClassification",
             "Swinv2ForMaskedImageModeling",
             "Swinv2Model",
@@ -4384,7 +4418,6 @@ else:
         "create_optimizer",
     ]
     _import_structure["tf_utils"] = []
-    _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
 try:
@@ -5097,11 +5130,16 @@ if TYPE_CHECKING:
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.falcon import FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP, FalconConfig
-    from .models.flaubert import (
-        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        FlaubertConfig,
-        FlaubertTokenizer,
+    from .models.fastspeech2_conformer import (
+        FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FastSpeech2ConformerConfig,
+        FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerTokenizer,
+        FastSpeech2ConformerWithHifiGanConfig,
     )
+    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FlavaConfig,
@@ -5437,6 +5475,14 @@ if TYPE_CHECKING:
     )
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
     from .models.sew_d import SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWDConfig
+    from .models.siglip import (
+        SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SiglipConfig,
+        SiglipProcessor,
+        SiglipTextConfig,
+        SiglipTokenizer,
+        SiglipVisionConfig,
+    )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5965,6 +6011,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
+        from .models.siglip import SiglipImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.tvp import TvpImageProcessor
@@ -6671,6 +6718,13 @@ if TYPE_CHECKING:
             FalconForTokenClassification,
             FalconModel,
             FalconPreTrainedModel,
+        )
+        from .models.fastspeech2_conformer import (
+            FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastSpeech2ConformerHifiGan,
+            FastSpeech2ConformerModel,
+            FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerWithHifiGan,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7501,6 +7555,13 @@ if TYPE_CHECKING:
             SEWDModel,
             SEWDPreTrainedModel,
         )
+        from .models.siglip import (
+            SIGLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SiglipModel,
+            SiglipPreTrainedModel,
+            SiglipTextModel,
+            SiglipVisionModel,
+        )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
             SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7562,6 +7623,7 @@ if TYPE_CHECKING:
         )
         from .models.swinv2 import (
             SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2Backbone,
             Swinv2ForImageClassification,
             Swinv2ForMaskedImageModeling,
             Swinv2Model,
@@ -8524,9 +8586,6 @@ if TYPE_CHECKING:
             WarmUp,
             create_optimizer,
         )
-
-        # Trainer
-        from .trainer_tf import TFTrainer
 
     try:
         if not (

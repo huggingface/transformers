@@ -36,6 +36,7 @@ from .trainer_utils import (
     SchedulerType,
 )
 from .utils import (
+    ACCELERATE_MIN_VERSION,
     ExplicitEnum,
     cached_property,
     is_accelerate_available,
@@ -378,8 +379,6 @@ class TrainingArguments:
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
-
-            (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
@@ -1438,15 +1437,6 @@ class TrainingArguments:
                         raise ValueError(
                             "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
                         )
-                    elif is_torch_npu_available():
-                        # npu
-                        from .pytorch_utils import is_torch_greater_or_equal_than_1_11
-
-                        if not is_torch_greater_or_equal_than_1_11:
-                            raise ValueError(
-                                "Your setup doesn't support bf16/npu. You need torch>=1.11, using Ascend NPU with "
-                                "`torch_npu` installed"
-                            )
                     elif not is_torch_xpu_available():
                         # xpu
                         from .pytorch_utils import is_torch_greater_or_equal_than_1_12
@@ -1837,9 +1827,10 @@ class TrainingArguments:
         requires_backends(self, ["torch"])
         logger.info("PyTorch: setting up devices")
         if not is_sagemaker_mp_enabled():
-            if not is_accelerate_available(min_version="0.20.1"):
+            if not is_accelerate_available():
                 raise ImportError(
-                    "Using the `Trainer` with `PyTorch` requires `accelerate>=0.20.1`: Please run `pip install transformers[torch]` or `pip install accelerate -U`"
+                    f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
+                    "Please run `pip install transformers[torch]` or `pip install accelerate -U`"
                 )
             AcceleratorState._reset_state(reset_partial_state=True)
         self.distributed_state = None

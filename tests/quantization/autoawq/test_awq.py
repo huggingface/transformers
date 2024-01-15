@@ -88,6 +88,7 @@ class AwqConfigTest(unittest.TestCase):
 class AwqTest(unittest.TestCase):
     model_name = "TheBloke/Mistral-7B-v0.1-AWQ"
     dummy_transformers_model_name = "bigscience/bloom-560m"
+    model_with_no_k_proj_quantized = "hf-internal-testing/opt-125m-awq-no-k-proj"
 
     input_text = "Hello my name is"
 
@@ -223,6 +224,24 @@ class AwqTest(unittest.TestCase):
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_quantized_model_no_k_proj_quantized(self):
+        """
+        Simple test that checks if the quantized model is working properly with multiple GPUs
+        """
+        dummy_input = torch.LongTensor([[0, 1, 0]]).to(torch_device)
+
+        quantized_model = AutoModelForCausalLM.from_pretrained(self.model_with_no_k_proj_quantized).to(torch_device)
+
+        self.assertTrue(isinstance(quantized_model.model.decoder.layers[0].self_attn.k_proj, torch.nn.Linear))
+        self.assertFalse(isinstance(quantized_model.model.decoder.layers[0].self_attn.v_proj, torch.nn.Linear))
+
+        EXPECTED_OUTPUT = torch.LongTensor([[0, 1, 0, 50118, 50118, 133, 248, 12, 134, 16, 10, 372, 2031]]).to(
+            torch_device
+        )
+
+        output = quantized_model.generate(dummy_input, max_new_tokens=10)
+        self.assertTrue((EXPECTED_OUTPUT == output).all())
+
 
 @slow
 @require_torch_gpu
@@ -235,6 +254,12 @@ class AwqFusedTest(unittest.TestCase):
     custom_mapping_model_id = "TheBloke/Yi-34B-AWQ"
     custom_model_revision = "f1b2cd1b7459ceecfdc1fac5bb8725f13707c589"
 
+    mixtral_model_name = "casperhansen/mixtral-instruct-awq"
+    mixtral_model_revision = "87dd4ec502dde74fb3a624835c776b000d190c3b"
+
+    multi_modal_model_name = "ybelkada/llava-1.5-7b-hf-awq"
+    multi_modal_model_code_revision = "ad108a50f5b9e681bdd7378409f57b7fa59a7442"
+
     prompt = (
         "You're standing on the surface of the Earth. "
         "You walk one mile south, one mile west and one mile north. "
@@ -243,6 +268,7 @@ class AwqFusedTest(unittest.TestCase):
 
     EXPECTED_GENERATION = prompt + "\n\nThis is a classic puzzle that has been around for"
     EXPECTED_GENERATION_CUSTOM_MODEL = "HelloWorld.java:11)\r\n\tat org"
+    EXPECTED_GENERATION_MIXTRAL = prompt + " You're on the North Pole.\n\nThe"
 
     def tearDown(self):
         gc.collect()
@@ -277,6 +303,24 @@ class AwqFusedTest(unittest.TestCase):
 
         with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
+
+    def test_fused_modules_to_not_convert(self):
+        """
+        Test if fused + modules to_not_covnert work as expected
+        """
+        model_id = "hf-internal-testing/Mixtral-tiny-AWQ"
+
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=128, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            quantization_config=quantization_config,
+            low_cpu_mem_usage=True,
+        ).to(torch_device)
+
+        # Check if model has been correctly fused
+        self._check_fused_modules(model)
+        # Checks if the modules_to_not_convert (here gate layer) is a Linear
+        self.assertTrue(isinstance(model.model.layers[0].block_sparse_moe.gate, torch.nn.Linear))
 
     def test_generation_fused(self):
         """
@@ -325,6 +369,29 @@ class AwqFusedTest(unittest.TestCase):
 
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION)
 
+    def test_generation_llava_fused(self):
+        from transformers import pipeline
+
+        quantization_config = AwqConfig(do_fuse=True, fuse_max_seq_len=2048)
+
+        pipe = pipeline(
+            "image-to-text",
+            model=self.multi_modal_model_name,
+            device=0,
+            model_kwargs={
+                "quantization_config": quantization_config,
+            },
+            revision=self.multi_modal_model_code_revision,
+        )
+        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
+
+        prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
+
+        outputs = pipe(url, prompt=prompt, generate_kwargs={"max_new_tokens": 100})
+        EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on a green surface, possibly a carpet or a grassy area. The cat is holding a red ball in its paws, seemingly playing with it. The cat appears to be focused on the ball, possibly preparing to play or just enjoying the toy."
+
+        self.assertEqual(outputs[0]["generated_text"], EXPECTED_OUTPUT)
+
     @require_torch_multi_gpu
     def test_generation_custom_model(self):
         """
@@ -363,3 +430,24 @@ class AwqFusedTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=12)
         self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_CUSTOM_MODEL)
+
+    @require_torch_multi_gpu
+    def test_generation_mixtral_fused(self):
+        """
+        Text generation test for Mixtral + AWQ + fused
+        """
+        quantization_config = AwqConfig(bits=4, fuse_max_seq_len=1024, do_fuse=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.mixtral_model_name,
+            quantization_config=quantization_config,
+            device_map="auto",
+            revision=self.mixtral_model_revision,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.mixtral_model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+
+        inputs = tokenizer([self.prompt, self.prompt], return_tensors="pt", padding=True).to(torch_device)
+
+        outputs = model.generate(**inputs, max_new_tokens=12)
+        self.assertEqual(tokenizer.decode(outputs[0], skip_special_tokens=True), self.EXPECTED_GENERATION_MIXTRAL)

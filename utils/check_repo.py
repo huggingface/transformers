@@ -91,6 +91,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
+    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -160,6 +162,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
+    "FastSpeech2ConformerHifiGan",
+    "FastSpeech2ConformerWithHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
@@ -211,7 +215,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ChineseCLIPVisionModel",
     "CLIPTextModel",
     "CLIPTextModelWithProjection",
-    "CLIPVisionModel",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
     "ClvpModel",
@@ -307,6 +310,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2ForSpeechToSpeech",  # no auto class for speech-to-speech
+    "SiglipVisionModel",
+    "SiglipTextModel",
 ]
 
 # DO NOT edit this list!
@@ -941,7 +946,6 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainer",
     "TFTrainingArguments",
 ]
 
@@ -990,6 +994,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "Swinv2Backbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
