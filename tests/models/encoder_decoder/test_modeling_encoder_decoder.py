@@ -801,9 +801,11 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         logger.warning_once.cache_clear()
 
         # Assert that the warning does not show up since a default decoder_attention_mask should have been created.
-        with self.assertNoLogs(logger):
-            torch.manual_seed(0)
-            output = model(input_ids, attention_mask, labels=labels)
+        with self.assertRaises(AssertionError):
+            # After py3.10 we can use `assertNoLogs`
+            with self.assertLogs(logger):
+                torch.manual_seed(0)
+                output = model(input_ids, attention_mask, labels=labels)
 
         # Create a new attention mask that ignores padding, and test that the loss differs for this new attention mask
         # and the default attention mask.

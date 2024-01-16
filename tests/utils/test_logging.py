@@ -63,8 +63,10 @@ class HfArgumentParserTest(unittest.TestCase):
 
         root_logger = logging._get_library_root_logger()
         # should not be able to log warnings
-        with self.assertNoLogs(logger, level=root_logger.level) as logs:
-            logger.warning(msg)
+        with self.assertRaises(AssertionError):
+            # After py3.10 we can use `assertNoLogs`
+            with self.assertLogs(logger, level=root_logger.level) as logs:
+                logger.warning(msg)
 
         # should be able to log warnings again
         logging.set_verbosity_warning()
