@@ -161,12 +161,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         )
         self.legacy_behaviour = legacy_behaviour
 
-        # Add the mask token at the end of the vocab
-        if additional_special_tokens is not None:
-            additional_special_tokens += [mask_token]
-        else:
-            additional_special_tokens = mask_token
-
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -178,13 +172,12 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
+            mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
 
-        # make sur we set the mask token accordingly
-        self.mask_token = mask_token
 
         self._lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES

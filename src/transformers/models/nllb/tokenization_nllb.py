@@ -181,12 +181,6 @@ class NllbTokenizer(PreTrainedTokenizer):
         self._fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self._fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-        # Add the mask token at the end of the vocab
-        if additional_special_tokens is not None:
-            additional_special_tokens += [mask_token]
-        else:
-            additional_special_tokens = mask_token
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -194,6 +188,7 @@ class NllbTokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             cls_token=cls_token,
             pad_token=pad_token,
+            mask_token=mask_token,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -202,9 +197,6 @@ class NllbTokenizer(PreTrainedTokenizer):
             legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
-
-        # make sur we set the mask token accordingly
-        self.mask_token = mask_token
 
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code_id = self.convert_tokens_to_ids(self._src_lang)
