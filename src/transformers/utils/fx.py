@@ -1200,10 +1200,7 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
 
 
 def is_model_supported(model: PreTrainedModel):
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
-        return False
-    else:
-        return True
+    return model.__class__.__name__ in _SUPPORTED_MODELS
 
 
 def check_if_model_is_supported(model: PreTrainedModel):
