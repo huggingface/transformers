@@ -18,10 +18,15 @@ from typing import List, Optional, Union
 
 import numpy as np
 
+from ... import is_torch_available
+from ...audio_utils import spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -43,43 +48,81 @@ class HtdemucsFeatureExtractor(SequenceFeatureExtractor):
             The sampling rate at which the audio waveform should be digitalized expressed in hertz (Hz).
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
-        chunk_length_s (`float`, *optional*):
-            If defined the audio is pre-processed into chunks of lengths `chunk_length_s` and then encoded.
-        overlap (`float`, *optional*):
-            Defines the overlap between each chunk. It is used to compute the `chunk_stride` using the following
-            formulae : `int((1.0 - self.overlap) * self.chunk_length)`.
+        segment (`float`, *optional*, defaults to 7.8):
+            Duration of the chunks of audio to ideally evaluate the model on.
     """
 
     model_input_names = ["input_values", "padding_mask"]
 
     def __init__(
         self,
-        feature_size: int = 1,
-        sampling_rate: int = 24000,
+        feature_size: int = 2,
+        sampling_rate: int = 44100,
         padding_value: float = 0.0,
-        chunk_length_s: float = None,
-        overlap: float = None,
+        segment: float = 7.8,
+        overlap: float = 0.25,
+        n_fft: int = 4096,
+        hop_length: int = 1024,
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.chunk_length_s = chunk_length_s
+        self.segment = segment
         self.overlap = overlap
+        self.n_fft = n_fft
+        self.hop_length = hop_length
 
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_length(self) -> Optional[int]:
-        if self.chunk_length_s is None:
-            return None
-        else:
-            return int(self.chunk_length_s * self.sampling_rate)
+    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+        """
+        Compute the log-mel spectrogram of the provided audio using a numpy-based implementation.
+        """
+        *other, length = waveform.shape
+        waveform = waveform.reshape(-1, length)
 
-    # This is a property because you might want to change the chunk_length_s on the fly
-    @property
-    def chunk_stride(self) -> Optional[int]:
-        if self.chunk_length_s is None or self.overlap is None:
-            return None
-        else:
-            return max(1, int((1.0 - self.overlap) * self.chunk_length))
+        stft = spectrogram(
+            waveform,
+            window_function(self.n_fft, "hann"),
+            frame_length=self.n_fft,
+            hop_length=self.hop_length,
+            power=None,
+            log_mel="log10",
+        )
+        _, freqs, frame = stft.shape
+
+        stft = stft.view(*other, freqs, frame)
+        B, C, Fr, T = stft.shape
+        stft = np.view_as_real(stft).permute(0, 1, 4, 2, 3)
+
+        stft = stft.reshape(B, C * 2, Fr, T)
+        return stft
+
+    def _torch_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+        """
+        Compute the log-mel spectrogram of the provided audio using the PyTorch STFT implementation.
+        """
+        waveform = torch.from_numpy(waveform).type(torch.float32)
+
+        *other, length = waveform.shape
+        waveform = waveform.reshape(-1, length)
+
+        window = torch.hann_window(self.n_fft)
+        stft = torch.stft(
+            waveform,
+            self.n_fft,
+            self.hop_length,
+            window=window,
+            win_length=self.n_fft,
+            normalized=True,
+            return_complex=True,
+        )
+
+        _, freqs, frame = stft.shape
+
+        stft = stft.view(*other, freqs, frame)
+        B, C, Fr, T = stft.shape
+        stft = torch.view_as_real(stft).permute(0, 1, 4, 2, 3)
+
+        stft = stft.reshape(B, C * 2, Fr, T)
+        return stft.numpy()
 
     def __call__(
         self,
@@ -166,40 +209,50 @@ class HtdemucsFeatureExtractor(SequenceFeatureExtractor):
             if self.feature_size == 2 and example.shape[-1] != 2:
                 raise ValueError(f"Expected stereo audio but example has {example.shape[-1]} channels")
 
-        padded_inputs = None
-        input_values = BatchFeature({"input_values": raw_audio})
-        if self.chunk_stride is not None and self.chunk_length is not None and max_length is None:
-            if truncation:
-                max_length = min(array.shape[0] for array in raw_audio)
-                nb_step = int(np.floor(max_length / self.chunk_stride))
-                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-            elif padding:
-                max_length = max(array.shape[0] for array in raw_audio)
-                nb_step = int(np.ceil(max_length / self.chunk_stride))
-                max_length = (nb_step - 1) * self.chunk_stride + self.chunk_length
-                padding = "max_length"
-            else:
-                padded_inputs = input_values
+        seq_length = max(array.shape[0] for array in raw_audio)
+        max_shift = int(0.5 * self.sampling_rate)
+        offset = np.random.randint(0, max_shift)
+        offset = 12623
+        valid_length = int(self.segment * self.sampling_rate)
 
-        # normal padding on batch
-        if padded_inputs is None:
-            padded_inputs = self.pad(
-                input_values,
-                max_length=max_length,
-                truncation=truncation,
-                padding=padding,
-                return_attention_mask=padding,
-            )
-            if padding:
-                padded_inputs["padding_mask"] = padded_inputs.pop("attention_mask")
+        # TODO(SG): how to handle max length
+        max_length = seq_length + 2 * max_shift if max_length is None else max_length
 
-        input_values = []
-        for example in padded_inputs.pop("input_values"):
-            if self.feature_size == 1:
-                example = example[..., None]
-            input_values.append(example.T)
+        encoded_inputs = BatchFeature({"input_values": raw_audio})
+        padded_inputs = self.pad(
+            encoded_inputs,
+            max_length=max_length,
+            truncation=truncation,
+            padding="max_length",
+            return_attention_mask=True,
+        )
+        input_values = padded_inputs["input_values"].transpose(0, 2, 1)
 
-        padded_inputs["input_values"] = input_values
+        segment_length = int(self.sampling_rate * self.segment)
+        stride = int((1 - self.overlap) * segment_length)
+        offset_length = seq_length + max_shift - offset
+        offsets = range(0, offset_length, stride)
+        extract_fbank_features = (
+            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
+        )
+
+        for arr_offset in offsets:
+            length = min(offset_length - arr_offset, segment_length)
+            delta = valid_length - length
+
+            arr_offset = arr_offset + offset
+            start = arr_offset - delta // 2
+            end = start + valid_length
+
+            correct_start = max(0, start)
+            correct_end = min(max_length, end)
+
+            pad_left = correct_start - start
+            pad_right = end - correct_end
+
+            out = np.pad(input_values[..., correct_start:correct_end], (pad_left, pad_right))
+            input_features = [extract_fbank_features(waveform) for waveform in out]
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 

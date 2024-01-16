@@ -578,6 +578,7 @@ class HtdemucsSinusoidalPositionalEmbedding(nn.Module):
 class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
+        # TODO(SG): remove debugging statement
         # self.max_len = config.max_position_embeddings
         self.max_len = 336
         self.d_model = config.hidden_size
@@ -915,7 +916,6 @@ class HtdemucsModel(HtdemucsPreTrainedModel):
         temp_hidden_states = transformer_outputs[1]
 
         if output_hidden_states:
-            # TODO(SG): correct
             all_freq_hidden_states += (freq_hidden_states,)
             all_temp_hidden_states += (temp_hidden_states,)
 
