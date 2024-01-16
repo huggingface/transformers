@@ -4949,7 +4949,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
 
 def _split_model_inputs(
     model_input: Union[ModelOutput, Dict], split_size: int, full_batch_size: int
-) -> list[Union[ModelOutput, Dict]]:
+) -> List[Union[ModelOutput, Dict]]:
     """
     Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
     size. The input object is dict when it was prepared for forward pass and ModelOutput when it was returned from
