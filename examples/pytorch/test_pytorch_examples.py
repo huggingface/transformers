@@ -398,6 +398,7 @@ class ExamplesTests(TestCasePlus):
             --max_steps 10
             --train_val_split 0.1
             --seed 42
+            --label_column_name labels
         """.split()
 
         if is_torch_fp16_available_on_device(torch_device):

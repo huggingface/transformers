@@ -976,7 +976,7 @@ class XLNetModel(XLNetPreTrainedModel):
                v [0 0 0 0 0 0 0 0 0] [1 1 1 1 0 0 0 0 0]
 
         """
-        mask = torch.ones(qlen, qlen + mlen, self.device)
+        mask = torch.ones((qlen, qlen + mlen), device=self.device)
         if self.same_length:
             mask_lo = mask[:, :qlen].tril(-1)
             mask.triu_(mlen + 1)
