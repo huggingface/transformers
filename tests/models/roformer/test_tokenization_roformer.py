@@ -71,7 +71,6 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 
-    # # can't serialise custom PreTokenizer
     def test_save_slow_from_fast_and_reload_fast(self):
         for cls in [RoFormerTokenizer, RoFormerTokenizerFast]:
             original = cls.from_pretrained('alchemab/antiberta2')
