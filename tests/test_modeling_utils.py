@@ -300,7 +300,9 @@ class ModelUtilsTest(TestCasePlus):
         logger = logging.get_logger("transformers.configuration_utils")
         with tempfile.TemporaryDirectory() as tmpdirname:
             with CaptureLogger(logger, tmpdir=tmpdirname) as cl:
+                self.assertEqual(logger.level, 0)
                 BertModel.from_pretrained(TINY_T5)
+                self.assertEqual(logger.level, 0)
             # self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
             if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
                 self.assertEqual(logger.level, 0)
