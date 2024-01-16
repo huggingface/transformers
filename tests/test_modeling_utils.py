@@ -43,7 +43,6 @@ from transformers.testing_utils import (
     TOKEN,
     USER,
     TestCasePlus,
-    is_flaky,
     is_staging_test,
     require_accelerate,
     require_flax,
