@@ -154,7 +154,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = self.get_rust_tokenizer()
             # we can check the class of the normalizer, but it would be okay if Sequence([NFKC, NFC]) is used
             # let's check the output instead
-            tokenizer_output_string = tokenizer.backend_tokenizer.normalizer.normalize_str()
+            tokenizer_output_string = tokenizer.backend_tokenizer.normalizer.normalize_str(input_string)
             self.assertEqual(tokenizer_output_string, output_string)
 
     def test_slow_tokenizer_decode_spaces_between_special_tokens_default(self):
