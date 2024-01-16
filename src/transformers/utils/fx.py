@@ -1199,11 +1199,19 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
 
-def check_if_model_is_supported(model: PreTrainedModel):
+def is_model_supported(model: PreTrainedModel):
     if model.__class__.__name__ not in _SUPPORTED_MODELS:
         return False
     else:
         return True
+
+
+def check_if_model_is_supported(model: PreTrainedModel):
+    if not is_model_supported(model):
+        supported_model_names = ", ".join(_SUPPORTED_MODELS)
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
 
 
 def symbolic_trace(
@@ -1243,11 +1251,7 @@ def symbolic_trace(
     concrete_args = get_concrete_args(model, input_names)
 
     if not disable_check:
-        if not check_if_model_is_supported(model):
-            supported_model_names = ", ".join(_SUPPORTED_MODELS)
-            raise NotImplementedError(
-                f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-            )
+        check_if_model_is_supported(model)
 
     # Tracing.
     tracer = tracer_cls()
