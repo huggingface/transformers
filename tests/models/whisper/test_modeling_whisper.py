@@ -18,6 +18,7 @@ import copy
 import inspect
 import os
 import random
+import re
 import tempfile
 import time
 import unittest
@@ -2129,6 +2130,20 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded = processor.batch_decode(result, skip_special_tokens=True)
 
         assert decoded == EXPECTED_TEXT
+
+        decoded_with_timestamps = processor.batch_decode(result, skip_special_tokens=True, decode_with_timestamps=True)
+
+        no_timestamp_matches = re.split(r"<\|[\d\.]+\|>", decoded_with_timestamps[0])
+
+        assert ["".join(no_timestamp_matches)] == EXPECTED_TEXT
+
+        timestamp_matches = re.findall(r"<\|[\d\.]+\|>", decoded_with_timestamps[0])
+
+        timestamp_floats = [float(t[2:-2]) for t in timestamp_matches]
+
+        is_increasing = all(timestamp_floats[i] <= timestamp_floats[i + 1] for i in range(len(timestamp_floats) - 1))
+
+        assert is_increasing
 
     @slow
     def test_whisper_longform_single_batch_prev_cond(self):

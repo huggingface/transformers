@@ -530,10 +530,21 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         timestamp_begin = self.all_special_ids[-1] + 1
         outputs = [[]]
+
+        cur_max_timestamp = 0.0
+        prev_segments_len = 0.0
+
         for token in token_ids:
             if token >= timestamp_begin:
-                timestamp = f"<|{(token - timestamp_begin) * time_precision:.2f}|>"
-                outputs.append(timestamp)
+                timestamp = float(f"{(token - timestamp_begin) * time_precision:.2f}")
+                if timestamp < cur_max_timestamp:
+                    # next segment has started
+                    prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = timestamp
+                timestamp = round(timestamp + prev_segments_len, 2)
+
+                outputs.append(f"<|{timestamp}|>")
                 outputs.append([])
             else:
                 outputs[-1].append(token)
@@ -628,7 +639,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
-        time_precision=0.02,
+        time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
         normalize: bool = False,
         basic_normalize: bool = False,
