@@ -14,7 +14,9 @@
 # limitations under the License.
 """Tokenization classes for ESM."""
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
+
+from transformers import AddedToken
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
@@ -64,8 +66,6 @@ class EsmTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         self.all_tokens = load_vocab_file(vocab_file)
-        self._id_to_token = dict(enumerate(self.all_tokens))
-        self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
         super().__init__(
             unk_token=unk_token,
             cls_token=cls_token,
@@ -80,6 +80,14 @@ class EsmTokenizer(PreTrainedTokenizer):
 
         self.unique_no_split_tokens = self.all_tokens
         self._update_trie(self.unique_no_split_tokens)
+
+    @property
+    def _id_to_token(self):
+        return dict(enumerate(self.all_tokens))
+
+    @property
+    def _token_to_id(self):
+        return {token: i for i, token in enumerate(self.all_tokens)}
 
     def _convert_id_to_token(self, index: int) -> str:
         return self._id_to_token.get(index, self.unk_token)
@@ -156,3 +164,10 @@ class EsmTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return self.get_vocab_size(with_added_tokens=False)
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        result = super()._add_tokens(new_tokens, special_tokens=special_tokens)
+        for token in new_tokens:
+            if token and token not in self.all_tokens:
+                self.all_tokens.append(token)
+        return result
