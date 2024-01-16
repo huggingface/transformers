@@ -56,21 +56,21 @@ class HfArgumentParserTest(unittest.TestCase):
         if level_origin <= logging.WARNING:
             with self.assertLogs(logger) as logs:
                 logger.warning(msg)
-            self.assertEqual(logs.output[0], msg + "\n")
+            self.assertIn(msg, logs.output[0])
 
         # this is setting the level for all of `transformers.*` loggers
         logging.set_verbosity_error()
 
+        root_logger = logging._get_library_root_logger()
         # should not be able to log warnings
-        with self.assertLogs(logger) as logs:
+        with self.assertNoLogs(logger, level=root_logger.level) as logs:
             logger.warning(msg)
-        self.assertEqual(logs.output[0], "")
 
         # should be able to log warnings again
         logging.set_verbosity_warning()
         with self.assertLogs(logger) as logs:
             logger.warning(msg)
-        self.assertEqual(logs.output[0], msg + "\n")
+        self.assertIn(msg, logs.output[0])
 
         # restore to the original level
         logging.set_verbosity(level_origin)

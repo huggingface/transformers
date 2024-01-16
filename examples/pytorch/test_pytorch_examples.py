@@ -173,8 +173,9 @@ class ExamplesTests(TestCasePlus):
             with self.assertLogs(logger) as logs:
                 run_clm.main()
 
-        self.assertIn('"n_embd": 10', logs.output[0])
-        self.assertIn('"n_head": 2', logs.output[0])
+        full_logs = "\n".join(logs.output)
+        self.assertIn('"n_embd": 10', full_logs)
+        self.assertIn('"n_head": 2', full_logs)
 
     def test_run_mlm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

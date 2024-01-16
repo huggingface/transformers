@@ -373,10 +373,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
         self.assertIn(logger_msg, logs.output[0])
 
         # The user only sets one -> no warning
-        with self.assertLogs(logger) as logs:
+        with self.assertNoLogs(logger) as logs:
             _ = text_generator(prompt, max_new_tokens=1)
-        self.assertNotIn(logger_msg, logs.output[0])
 
-        with self.assertLogs(logger) as logs:
+        with self.assertNoLogs(logger) as logs:
             _ = text_generator(prompt, max_length=10)
-        self.assertNotIn(logger_msg, logs.output[0])

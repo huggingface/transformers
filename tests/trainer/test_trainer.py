@@ -1293,13 +1293,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with self.assertLogs(logger) as logs:
             trainer = get_regression_trainer(log_level="debug")
             trainer.train()
-        self.assertIn(log_info_string, logs.output[0])
+        full_logs = "\n".join(logs.output)
+        self.assertIn(log_info_string, full_logs)
 
         # test with high log_level - should be quiet
         with self.assertLogs(logger) as logs:
             trainer = get_regression_trainer(log_level="error")
             trainer.train()
-        self.assertNotIn(log_info_string, logs.output[0])
+        full_logs = "\n".join(logs.output)
+        self.assertNotIn(log_info_string, full_logs)
 
     def test_save_checkpoints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
