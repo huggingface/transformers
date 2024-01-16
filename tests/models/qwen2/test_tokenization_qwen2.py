@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The Qwen Team and the HuggingFace Team. All rights reserved.
+# Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -152,7 +152,7 @@ class Qwen2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         if self.test_rust_tokenizer:
             tokenizer = self.get_rust_tokenizer()
-            # we can check the class of the normalizer, but it would be okay if Sequence([NFKC, NFC]) is used
+            # we can check the class of the normalizer, but it would be okay if Sequence([NFD, NFC]) is used
             # let's check the output instead
             tokenizer_output_string = tokenizer.backend_tokenizer.normalizer.normalize_str(input_string)
             self.assertEqual(tokenizer_output_string, output_string)
