@@ -303,6 +303,7 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(TINY_T5)
             # self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
             if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
+                self.assertEqual(logger.level, 0)
                 self.assertEqual("You are using a model of type t5 to instantiate a model of type bert", cl.out)
 
     def test_model_from_config_torch_dtype(self):
