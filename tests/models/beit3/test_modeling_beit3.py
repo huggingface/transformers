@@ -26,7 +26,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from transformers.testing_utils import require_torch, require_vision, torch_device
+from transformers.testing_utils import require_torch, require_vision, torch_device, slow
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -568,7 +568,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         return image
 
-    # @slow
+    @slow
     def test_inference_beit3_image_classification(self):
         model = Beit3ForImageClassification.from_pretrained("Raghavan/beit3_base_patch16_224_in1k").to(torch_device)
 
@@ -583,7 +583,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[-0.260473, -0.420061, -0.492118]])
         self.assertTrue(torch.allclose(output.logits.detach()[:, :3], expected_slice))
 
-    # @slow
+    @slow
     def test_inference_beit3_vqa(self):
         model = Beit3ForQuestionAnswering.from_pretrained("Raghavan/beit3_base_patch16_480_vqa").to(torch_device)
 
@@ -601,7 +601,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         self.assertTrue(output.logits.shape == torch.Size([1, 3129]))
         torch.testing.assert_allclose(output.logits.detach()[:, :3], torch.tensor([[-16.2096, -15.0801, -11.8275]]))
 
-    # @slow
+    @slow
     def test_inference_beit3_visual_reasoning(self):
         model = Beit3ForImagesAndTextClassification.from_pretrained("Raghavan/beit3_base_patch16_224_nlvr2").to(
             torch_device
@@ -621,7 +621,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
         self.assertTrue(output.logits.shape == torch.Size([1, 2]))
         torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[3.3999, -3.3991]]))
 
-    # @slow
+    @slow
     def test_inference_beit3_for_image_captioning(self):
         model = Beit3ForCaptioning.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning").to(torch_device)
         processor = Beit3Processor.from_pretrained("Raghavan/beit3_base_patch16_480_coco_captioning")
@@ -646,7 +646,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             torch.allclose(output.logits.detach()[0, :3], torch.tensor([-2.5711, -2.5711, -1.2555]), rtol=1e-4)
         )
 
-    # @slow
+    @slow
     def test_inference_beit3_for_image_text_retrieval(self):
         model = Beit3ForImageTextRetrieval.from_pretrained("Raghavan/beit3_base_patch16_384_coco_retrieval").to(
             torch_device
