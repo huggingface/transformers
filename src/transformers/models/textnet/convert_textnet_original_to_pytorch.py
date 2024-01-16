@@ -27,7 +27,6 @@ from PIL import Image
 
 from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
 
-
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
@@ -162,12 +161,16 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     original_pixel_values = torch.from_numpy(np.load(original_pixel_values_filepath))
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 
-    assert torch.allclose(original_pixel_values, pixel_values)
+    assert torch.allclose(original_pixel_values,
+                          pixel_values)
 
     with torch.no_grad():
         output = model(pixel_values)
 
-    assert np.allclose(output["feature_maps"][-1][0][0][0][-2:].detach().numpy(), np.array([4.0259, 17.4911]))
+    model_output_featuremap_sample = [0, 0, 0, 0, 0, 0, 0, 0, 4.0259247, 17.4911]
+    assert np.allclose(output["feature_maps"][-1][0][0][0][-10:].detach().numpy(),
+                       np.array(
+                           model_output_featuremap_sample)), "Converted model outputs does not match original model outputs"
 
     model.save_pretrained(pytorch_dump_folder_path)
     textnet_image_processor.save_pretrained(pytorch_dump_folder_path)

@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch TextNet model. """
-import inspect
 import unittest
 
 import requests
 from PIL import Image
 
-from transformers import TextNetConfig
+from transformers import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST, TextNetConfig
 from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 from transformers.testing_utils import (
     require_torch,
@@ -37,6 +36,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from torch import nn
 
     from transformers import (
         TextNetBackbone,
@@ -44,7 +44,6 @@ if is_torch_available():
         TextNetModel,
         is_torch_available,
     )
-    from transformers.models.textnet.modeling_textnet import TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TextNetModelTester:
@@ -198,7 +197,7 @@ class TextNetModelTester:
 
 
 @require_torch
-# Copied from tests.models.bit.test_modeling_bit.BitModelTest with Bit->TextNet
+# Copied from tests.models.bit.test_modeling_bit.BitModelTest with Bit->TextNet, BIT->TEXTNET
 class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as TextNet does not use input_ids, inputs_embeds,
@@ -314,7 +313,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in BIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TextNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

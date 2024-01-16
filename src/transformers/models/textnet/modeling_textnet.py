@@ -262,9 +262,7 @@ class TextNetModel(TextNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.stem = TextNetConvLayer(config)
-
         self.encoder = TextNetEncoder(config)
-
         self.pooler = nn.AdaptiveAvgPool2d((2, 2))
         self.post_init()
 
@@ -338,6 +336,11 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
         Returns:
 
         Examples:

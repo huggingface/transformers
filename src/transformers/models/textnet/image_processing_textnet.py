@@ -164,17 +164,16 @@ class TextNetImageProcessor(BaseImageProcessor):
         if weight % 32 != 0:
             weight = weight + (32 - weight % 32)
 
-        output_size = (height, weight)
-
         return resize(
             image,
-            size=output_size,
+            size=(height, weight),
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
         )
 
+    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.preprocess
     def preprocess(
         self,
         images: ImageInput,
@@ -298,12 +297,7 @@ class TextNetImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(
-                    image=image,
-                    size=size,
-                    resample=resample,
-                    input_data_format=input_data_format,
-                )
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
                 for image in images
             ]
 
