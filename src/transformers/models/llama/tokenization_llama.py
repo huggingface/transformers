@@ -245,7 +245,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        if kwargs.get("add_dummy_prefix_space", True):
+        if kwargs.get("add_dummy_prefix_space", self.add_dummy_prefix_space):
             text = SPIECE_UNDERLINE + text
 
         tokens = super().tokenize(text.replace(SPIECE_UNDERLINE, " "), add_special_tokens=add_special_tokens, **kwargs)
