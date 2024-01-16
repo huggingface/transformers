@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -443,7 +443,7 @@ class Beit3MultiheadAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add layer norm (as explained in the Beit3 paper).
+    Here, we add layer norm after performing self-attention (as explained in the Beit3 paper).
     """
 
     def __init__(self, config):
@@ -495,11 +495,10 @@ class Beit3MultiheadAttention(nn.Module):
         value = value.reshape(batch_size * self.num_heads, src_len, self.head_dim)
 
         if past_key_value is not None:
-            if "prev_key" in past_key_value:
-                prev_key = past_key_value[0].view(batch_size * self.num_heads, -1, self.head_dim)
-                prev_value = past_key_value[1].view(batch_size * self.num_heads, -1, self.head_dim)
-                key = torch.cat([prev_key, key], dim=1)
-                value = torch.cat([prev_value, value], dim=1)
+            prev_key = past_key_value[0].view(batch_size * self.num_heads, -1, self.head_dim)
+            prev_value = past_key_value[1].view(batch_size * self.num_heads, -1, self.head_dim)
+            key = torch.cat([prev_key, key], dim=1)
+            value = torch.cat([prev_value, value], dim=1)
             past_key_value[0] = key.view(batch_size, self.num_heads, -1, self.head_dim)
             past_key_value[1] = value.view(batch_size, self.num_heads, -1, self.head_dim)
             src_len = key.size(1)
@@ -531,53 +530,10 @@ class Beit3MultiheadAttention(nn.Module):
             attn = self.inner_attn_ln(attn, split_position=multiway_split_position)
 
         attn = self.out_proj(attn, split_position=multiway_split_position)
-        attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len).transpose(1, 0)
 
         outputs = (attn, attn_probs) if output_attentions else (attn,)
 
         return outputs
-
-
-class Beit3PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = Beit3Config
-    base_model_prefix = "beit3"
-    main_input_name = "input_ids"
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(
-            module,
-            (
-                Beit3ForImagesAndTextClassification,
-                Beit3ForImageTextRetrieval,
-                Beit3ForQuestionAnswering,
-                Beit3ForImageClassification,
-                Beit3ForCaptioning,
-            ),
-        ):
-            module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Beit3Encoder):
-            module.gradient_checkpointing = value
 
 
 class Beit3FeedForwardNetwork(nn.Module):
@@ -755,6 +711,48 @@ class Beit3Encoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+
+class Beit3PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = Beit3Config
+    base_model_prefix = "beit3"
+    main_input_name = "input_ids"
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(
+            module,
+            (
+                Beit3ForImagesAndTextClassification,
+                Beit3ForImageTextRetrieval,
+                Beit3ForQuestionAnswering,
+                Beit3ForImageClassification,
+                Beit3ForCaptioning,
+            ),
+        ):
+            module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, Beit3Encoder):
+            module.gradient_checkpointing = value
 
 
 @add_start_docstrings(
