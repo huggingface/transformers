@@ -1109,8 +1109,8 @@ class WhisperGenerationMixin:
     def _retrieve_logit_processors(
         self, generation_config, logits_processor, no_speech_threshold, is_shortform, num_beams
     ):
+        forced_decoder_ids = generation_config.forced_decoder_ids
         if generation_config.return_timestamps is True:
-            forced_decoder_ids = generation_config.forced_decoder_ids
             last_forced_decoder_ids = forced_decoder_ids[-1][-1] if forced_decoder_ids is not None else None
             if last_forced_decoder_ids == generation_config.no_timestamps_token_id:
                 # remove no_timestamp to be forcefully generated if we want to return timestamps
