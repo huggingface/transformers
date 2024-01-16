@@ -151,29 +151,16 @@ def rename_key_and_reshape_tensor(
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # convert pytorch tensor to numpy
-    # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
+    from_bin = is_torch_available() and isinstance(next(iter(pt_state_dict.values())), torch.Tensor)
+    bfloat16 = torch.bfloat16 if from_bin else "bfloat16"
 
-    def is_bfloat16(value):
-        from_bin = is_torch_available() and isinstance(value, torch.Tensor)
-        if from_bin:
-            bfloat16 = torch.bfloat16
-        else:
-            bfloat16 = "bfloat16"
+    if from_bin:
+        for k, v in pt_state_dict.items():
+            # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
+            if v.dtype == bfloat16:
+                v = v.float()
+            pt_state_dict[k] = v.numpy()
 
-        return value.dtype == bfloat16
-
-    def numpify_state_dict(_pt_state_dict):
-        from_bin = is_torch_available() and isinstance(next(iter(_pt_state_dict.values())), torch.Tensor)
-        _state_dict = {}
-        for k, v in _pt_state_dict.items():
-            if is_bfloat16(v):
-                _state_dict[k] = v.float().numpy() if from_bin else v
-            else:
-                _state_dict[k] = v.numpy() if from_bin else v
-
-        return _state_dict
-
-    state_dict = numpify_state_dict(pt_state_dict)
     model_prefix = flax_model.base_model_prefix
 
     # use params dict if the model contains batch norm layers
@@ -191,16 +178,16 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     flax_state_dict = {}
 
     load_model_with_head_into_base_model = (model_prefix not in flax_model_params) and (
-        model_prefix in {k.split(".")[0] for k in state_dict.keys()}
+        model_prefix in {k.split(".")[0] for k in pt_state_dict.keys()}
     )
     load_base_model_into_model_with_head = (model_prefix in flax_model_params) and (
-        model_prefix not in {k.split(".")[0] for k in state_dict.keys()}
+        model_prefix not in {k.split(".")[0] for k in pt_state_dict.keys()}
     )
 
     # Need to change some parameters name to match Flax names
-    for pt_key, pt_tensor in state_dict.items():
+    for pt_key, pt_tensor in pt_state_dict.items():
         pt_tuple_key = tuple(pt_key.split("."))
-        is_bfloat_16 = is_bfloat16(pt_state_dict[pt_key])
+        is_bfloat_16 = pt_state_dict[pt_key].dtype == bfloat16
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
