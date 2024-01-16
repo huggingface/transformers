@@ -24,7 +24,7 @@ import numpy as np
 import transformers
 from transformers import is_flax_available, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, is_pt_flax_cross_test, require_flax, torch_device
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax, torch_device
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, logging
 from transformers.utils.generic import ModelOutput
 
@@ -762,20 +762,20 @@ class FlaxModelTesterMixin:
                         new_model_without_prefix = FlaxAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_flax_utils")
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger, level="WARNING") as logs:
                         new_model = FlaxAutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
 
                     logits = new_model(**inputs_dict)["logits"]
                     self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs("transformers.modeling_flax_utils", level="WARNING") as logs:
                         new_model_without_prefix = FlaxAutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
                     input_ids = ids_tensor((2, 8), 10)
                     if self.is_encoder_decoder:
                         new_model_without_prefix(input_ids, decoder_input_ids=input_ids)

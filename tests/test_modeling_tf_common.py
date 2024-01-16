@@ -32,7 +32,6 @@ from datasets import Dataset
 from transformers import is_tf_available, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (  # noqa: F401
-    CaptureLogger,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     require_tf,
@@ -1625,20 +1624,20 @@ class TFModelTesterMixin:
                         new_model_without_prefix = TFAutoModel.from_pretrained(tmp_dir, vocab_size=10)
 
                     logger = logging.get_logger("transformers.modeling_tf_utils")
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger) as logs:
                         new_model = TFAutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
 
                     logits = new_model(**inputs).logits
                     self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger) as logs:
                         new_model_without_prefix = TFAutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
 
                     # Although Tf models always have a prefix pointing to `MainLayer`,
                     # we still add this "without prefix" test to keep a consistency between tf and pt tests.

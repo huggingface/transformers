@@ -28,7 +28,6 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
-    CaptureLogger,
     backend_empty_cache,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
@@ -116,18 +115,20 @@ def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
             logits = model(input_values.to(torch_device)).logits
 
         # use a spawn pool, which should trigger a warning if different than fork
-        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
+        with unittest.TestCase().assertLogs(pyctcdecode.decoder.logger) as logs, multiprocessing.get_context(
+            "spawn"
+        ).Pool(1) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
 
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
+        unittest.TestCase().assertIn("Falling back to sequential decoding.", logs.output[0])
         unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
         multiprocessing.set_start_method("spawn", force=True)
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
+        with unittest.TestCase().assertLogs(processing_wav2vec2_with_lm.logger) as logs:
             transcription = processor.batch_decode(logits.cpu().numpy()).text
 
-        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
+        unittest.TestCase().assertIn("Falling back to sequential decoding.", logs.output[0])
         unittest.TestCase().assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
     except Exception:
         error = f"{traceback.format_exc()}"
@@ -1888,13 +1889,13 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 
         # user-managed pool + num_processes should trigger a warning
-        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
+        with self.assertLogs(processing_wav2vec2_with_lm.logger) as logs, multiprocessing.get_context("fork").Pool(
             2
         ) as pool:
             transcription = processor.batch_decode(logits.cpu().numpy(), pool, num_processes=2).text
 
-        self.assertIn("num_process", cl.out)
-        self.assertIn("it will be ignored", cl.out)
+        self.assertIn("num_process", logs.output[0])
+        self.assertIn("it will be ignored", logs.output[0])
 
         self.assertEqual(transcription[0], "habitan aguas poco profundas y rocosas")
 

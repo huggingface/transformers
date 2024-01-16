@@ -33,7 +33,6 @@ from transformers.integrations.deepspeed import (
     unset_hf_deepspeed_config,
 )
 from transformers.testing_utils import (
-    CaptureLogger,
     CaptureStd,
     CaptureStderr,
     LoggingLevel,
@@ -207,9 +206,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
+                with self.assertLogs(logger) as logs:
                     AutoModel.from_pretrained(T5_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertIn("Detected DeepSpeed ZeRO-3", logs.output[0])
 
         # now remove zero optimization
         del ds_config["zero_optimization"]
@@ -221,9 +220,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
+                with self.assertLogs(logger) as logs:
                     AutoModel.from_pretrained(T5_TINY)
-        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", logs.output[0])
 
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
@@ -264,10 +263,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
+                with self.assertLogs(logger) as logs:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertIn("Detected DeepSpeed ZeRO-3", logs.output[0])
+        self.assertRegex(logs.output[0], r"newly initialized.*new_head\.bias.*new_head\.weight")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -286,10 +285,10 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with LoggingLevel(logging.INFO):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
+                with self.assertLogs(logger) as logs:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
-        self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertNotIn("Detected DeepSpeed ZeRO-3", logs.output[0])
+        self.assertRegex(logs.output[0], r"newly initialized.*new_head\.bias.*new_head\.weight")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
@@ -474,9 +473,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             ds_config_zero3_dict["zero_optimization"]["offload_optimizer"] = nvme_config
             ds_config_zero3_dict["zero_optimization"]["offload_param"] = nvme_config
             trainer = get_regression_trainer(local_rank=0, fp16=True, deepspeed=ds_config_zero3_dict)
-            with CaptureLogger(deepspeed_logger) as cl:
+            with self.assertLogs(deepspeed_logger) as logs:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", logs.output[0], "expected DeepSpeed logger output but got none")
 
     @require_optuna
     def test_hyperparameter_search(self):
@@ -497,10 +496,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             )
 
             n_trials = 3
-            with CaptureLogger(deepspeed_logger) as cl:
+            with self.assertLogs(deepspeed_logger) as logs:
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
-            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", logs.output[0], "expected DeepSpeed logger output but got none")
             self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
@@ -518,9 +517,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             kwargs = {"local_rank": 0, "deepspeed": ds_config_dict}
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
-            with CaptureLogger(deepspeed_logger) as cl:
+            with self.assertLogs(deepspeed_logger) as logs:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", logs.output[0], "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_fake_notebook_no_launcher(self, stage, dtype):
@@ -535,9 +534,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
 
-            with CaptureLogger(deepspeed_logger) as cl:
+            with self.assertLogs(deepspeed_logger) as logs:
                 trainer.train()
-            self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
+            self.assertIn("DeepSpeed info", logs.output[0], "expected DeepSpeed logger output but got none")
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)
     def test_early_get_last_lr(self, stage, dtype):

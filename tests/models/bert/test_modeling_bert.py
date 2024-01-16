@@ -18,7 +18,7 @@ import unittest
 
 from transformers import BertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import CaptureLogger, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -587,12 +587,12 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         # clear cache so we can test the warning is emitted (from `warning_once`).
         logger.warning_once.cache_clear()
 
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             model = BertModel(config=config)
             model.to(torch_device)
             model.eval()
             model(input_ids, attention_mask=None, token_type_ids=token_type_ids)
-        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+        self.assertIn("We strongly recommend passing in an `attention_mask`", logs.output[0])
 
     @slow
     def test_model_from_pretrained(self):

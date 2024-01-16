@@ -63,7 +63,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
-    CaptureLogger,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
@@ -2915,21 +2914,21 @@ class ModelTesterMixin:
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger) as logs:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
                     new_model.to(torch_device)
                     inputs = self._prepare_for_class(inputs_dict, model_class)
                     logits = new_model(**inputs).logits
                     self.assertEqual(logits.shape[1], 42)
 
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger) as logs:
                         new_model_without_prefix = AutoModel.from_pretrained(
                             tmp_dir, vocab_size=10, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
                     input_ids = ids_tensor((2, 8), 10)
                     new_model_without_prefix.to(torch_device)
                     if self.is_encoder_decoder:
@@ -2959,11 +2958,11 @@ class ModelTesterMixin:
 
                     logger = logging.get_logger("transformers.modeling_utils")
 
-                    with CaptureLogger(logger) as cl:
+                    with self.assertLogs(logger) as logs:
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, ignore_mismatched_sizes=True
                         )
-                    self.assertIn("the shapes did not match", cl.out)
+                    self.assertIn("the shapes did not match", logs.output[0])
 
                     for name, param in new_model.named_parameters():
                         if param.requires_grad:

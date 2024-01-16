@@ -184,16 +184,16 @@ pytest -k "test and ada" tests/test_optimization.py
 Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
 
 ```bash
-RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
+RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ```
 
 
-### Run documentation tests 
+### Run documentation tests
 
-In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
+In order to test whether the documentation examples are correct, you should check that the `doctests` are passing.
+As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035):
 
-```python 
+```python
 r"""
 Returns:
 
@@ -216,8 +216,8 @@ Example:
 
 ```
 
-Just run the following line to automatically test every docstring example in the desired file: 
-```bash 
+Just run the following line to automatically test every docstring example in the desired file:
+```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
 If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
@@ -1147,22 +1147,6 @@ print(cs.err, cs.out)
 Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
 from the context.
 
-
-### Capturing logger stream
-
-If you need to validate the output of a logger, you can use `CaptureLogger`:
-
-```python
-from transformers import logging
-from transformers.testing_utils import CaptureLogger
-
-msg = "Testing 1, 2, 3"
-logging.set_verbosity_info()
-logger = logging.get_logger("transformers.models.bart.tokenization_bart")
-with CaptureLogger(logger) as cl:
-    logger.info(msg)
-assert cl.out, msg + "\n"
-```
 
 ### Testing with environment variables
 

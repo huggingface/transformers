@@ -15,11 +15,12 @@
 import os
 import unittest
 
+import pytest
 from huggingface_hub.utils import are_progress_bars_disabled
 
 import transformers.models.bart.tokenization_bart
 from transformers import logging
-from transformers.testing_utils import CaptureLogger, mockenv, mockenv_context
+from transformers.testing_utils import mockenv, mockenv_context
 from transformers.utils.logging import disable_progress_bar, enable_progress_bar
 
 
@@ -53,23 +54,23 @@ class HfArgumentParserTest(unittest.TestCase):
 
         # should be able to log warnings (if default settings weren't overridden by `pytest --log-level-all`)
         if level_origin <= logging.WARNING:
-            with CaptureLogger(logger) as cl:
+            with self.assertLogs(logger) as logs:
                 logger.warning(msg)
-            self.assertEqual(cl.out, msg + "\n")
+            self.assertEqual(logs.output[0], msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
         logging.set_verbosity_error()
 
         # should not be able to log warnings
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             logger.warning(msg)
-        self.assertEqual(cl.out, "")
+        self.assertEqual(logs.output[0], "")
 
         # should be able to log warnings again
         logging.set_verbosity_warning()
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             logger.warning(msg)
-        self.assertEqual(cl.out, msg + "\n")
+        self.assertEqual(logs.output[0], msg + "\n")
 
         # restore to the original level
         logging.set_verbosity(level_origin)
@@ -100,10 +101,10 @@ class HfArgumentParserTest(unittest.TestCase):
         # reset for the env var to take effect, next time some logger call is made
         transformers.utils.logging._reset_library_root_logger()
         logger = logging.logging.getLogger()
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             # this action activates the env var
             logging.get_logger("transformers.models.bart.tokenization_bart")
-        self.assertIn("Unknown option TRANSFORMERS_VERBOSITY=super-error", cl.out)
+        self.assertIn("Unknown option TRANSFORMERS_VERBOSITY=super-error", logs.output[0])
 
         # no need to restore as nothing was changed
 
@@ -116,15 +117,16 @@ class HfArgumentParserTest(unittest.TestCase):
 
         with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS="1"):
             # nothing should be logged as env var disables this method
-            with CaptureLogger(logger) as cl:
-                logger.warning_advice(msg)
-            self.assertEqual(cl.out, "")
+            with pytest.raises(AssertionError):
+                with self.assertLogs(logger) as logs:
+                    logger.warning_advice(msg)
 
         with mockenv_context(TRANSFORMERS_NO_ADVISORY_WARNINGS=""):
             # should log normally as TRANSFORMERS_NO_ADVISORY_WARNINGS is unset
-            with CaptureLogger(logger) as cl:
+            with self.assertLogs(logger) as logs:
                 logger.warning_advice(msg)
-            self.assertEqual(cl.out, msg + "\n")
+                self.assertTrue(len(logs.output) == 1)
+                self.assertIn(msg, logs.output[0])
 
 
 def test_set_progress_bar_enabled():

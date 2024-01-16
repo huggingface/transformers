@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available, logging
-from transformers.testing_utils import CaptureLogger, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_modeling_common import ids_tensor
 from ..bart.test_modeling_bart import BartStandaloneDecoderModelTester
@@ -800,12 +800,12 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         logger = logging.get_logger("transformers.modeling_utils")
         logger.warning_once.cache_clear()
 
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             torch.manual_seed(0)
             output = model(input_ids, attention_mask, labels=labels)
 
         # Assert that the warning does not show up since a default decoder_attention_mask should have been created.
-        self.assertNotIn("We strongly recommend passing in an `attention_mask`", cl.out)
+        self.assertNotIn("We strongly recommend passing in an `attention_mask`", logs.output[0])
 
         # Create a new attention mask that ignores padding, and test that the loss differs for this new attention mask
         # and the default attention mask.

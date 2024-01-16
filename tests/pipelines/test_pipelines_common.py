@@ -38,7 +38,6 @@ from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
     TOKEN,
     USER,
-    CaptureLogger,
     RequestCounter,
     backend_empty_cache,
     is_pipeline_test,
@@ -677,9 +676,9 @@ class CustomPipelineTest(unittest.TestCase):
         _, original_task, _ = PIPELINE_REGISTRY.check_task(alias)
 
         try:
-            with CaptureLogger(logger_) as cm:
+            with self.assertLogs(logger_) as logs:
                 PIPELINE_REGISTRY.register_pipeline(alias, PairClassificationPipeline)
-            self.assertIn(f"{alias} is already registered", cm.out)
+            self.assertIn(f"{alias} is already registered", logs.output[0])
         finally:
             # restore
             PIPELINE_REGISTRY.supported_tasks[alias] = original_task

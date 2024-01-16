@@ -22,7 +22,6 @@ from unittest.mock import patch
 
 from transformers import ViTMAEForPreTraining, Wav2Vec2ForPreTraining
 from transformers.testing_utils import (
-    CaptureLogger,
     TestCasePlus,
     backend_device_count,
     is_torch_fp16_available_on_device,
@@ -171,11 +170,11 @@ class ExamplesTests(TestCasePlus):
 
         logger = run_clm.logger
         with patch.object(sys, "argv", testargs):
-            with CaptureLogger(logger) as cl:
+            with self.assertLogs(logger) as logs:
                 run_clm.main()
 
-        self.assertIn('"n_embd": 10', cl.out)
-        self.assertIn('"n_head": 2', cl.out)
+        self.assertIn('"n_embd": 10', logs.output[0])
+        self.assertIn('"n_head": 2', logs.output[0])
 
     def test_run_mlm(self):
         tmp_dir = self.get_auto_remove_tmp_dir()

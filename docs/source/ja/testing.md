@@ -171,16 +171,16 @@ pytest -k "test and ada" tests/test_optimization.py
 時々、モデルに対して `accelerate` テストを実行する必要があります。たとえば、`OPT` 実行に対してこれらのテストを実行したい場合、コマンドに `-m accelerate_tests` を追加するだけで済みます：
 
 ```bash
-RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
+RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py
 ```
 
-### Run documentation tests 
+### Run documentation tests
 
 ドキュメンテーションの例が正しいかどうかをテストするには、`doctests` が合格しているかを確認する必要があります。
 例として、[`WhisperModel.forward` のドックストリング](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035)を使用しましょう。
 
 
-```python 
+```python
 r"""
 Returns:
 
@@ -205,7 +205,7 @@ Example:
 
 指定したファイル内のすべてのドックストリング例を自動的にテストするために、以下の行を実行してください：
 
-```bash 
+```bash
 pytest --doctest-modules <path_to_file_or_dir>
 ```
 
@@ -1058,21 +1058,6 @@ print(cs.err, cs.out)
 また、テストの問題のデバッグを支援するために、デフォルトで、これらのコンテキスト マネージャーは終了時にキャプチャされたストリームを自動的に再生します。
 文脈から。
 
-### Capturing logger stream
-
-ロガーの出力を検証する必要がある場合は、`CaptureLogger`を使用できます。
-
-```python
-from transformers import logging
-from transformers.testing_utils import CaptureLogger
-
-msg = "Testing 1, 2, 3"
-logging.set_verbosity_info()
-logger = logging.get_logger("transformers.models.bart.tokenization_bart")
-with CaptureLogger(logger) as cl:
-    logger.info(msg)
-assert cl.out, msg + "\n"
-```
 
 ### Testing with environment variables
 
@@ -1211,4 +1196,3 @@ cmd_that_may_fail || true
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
-

@@ -22,7 +22,6 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
-    CaptureLogger,
     is_pipeline_test,
     require_accelerate,
     require_tf,
@@ -369,15 +368,15 @@ class TextGenerationPipelineTests(unittest.TestCase):
         logger_msg = "Both `max_new_tokens`"  # The beggining of the message to be checked in this test
 
         # Both are set by the user -> log warning
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             _ = text_generator(prompt, max_length=10, max_new_tokens=1)
-        self.assertIn(logger_msg, cl.out)
+        self.assertIn(logger_msg, logs.output[0])
 
         # The user only sets one -> no warning
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             _ = text_generator(prompt, max_new_tokens=1)
-        self.assertNotIn(logger_msg, cl.out)
+        self.assertNotIn(logger_msg, logs.output[0])
 
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             _ = text_generator(prompt, max_length=10)
-        self.assertNotIn(logger_msg, cl.out)
+        self.assertNotIn(logger_msg, logs.output[0])

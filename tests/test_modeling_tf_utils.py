@@ -33,7 +33,6 @@ from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import (  # noqa: F401
     TOKEN,
     USER,
-    CaptureLogger,
     _tf_gpu_memory_limit,
     is_pt_tf_cross_test,
     is_staging_test,
@@ -636,11 +635,11 @@ class TFModelPushToHubTester(unittest.TestCase):
 
         logging.set_verbosity_info()
         logger = logging.get_logger("transformers.utils.hub")
-        with CaptureLogger(logger) as cl:
+        with self.assertLogs(logger) as logs:
             model.push_to_hub("test-model-tf", token=self._token)
         logging.set_verbosity_warning()
         # Check the model card was created and uploaded.
-        self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", cl.out)
+        self.assertIn("Uploading the following files to __DUMMY_TRANSFORMERS_USER__/test-model-tf", logs.output[0])
 
         new_model = TFBertModel.from_pretrained(f"{USER}/test-model-tf")
         models_equal = True
