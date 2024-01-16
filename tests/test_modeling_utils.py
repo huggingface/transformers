@@ -1046,7 +1046,7 @@ class ModelUtilsTest(TestCasePlus):
             safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
             with self.assertLogs(logger) as logs:
                 _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("were not used when initializing ModelWithHead: ['added_key']", logs.output[0])
+            self.assertIn("were not used when initializing ModelWithHead: ['added_key']", logs.output[1])
             self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
     def test_warn_if_padding_and_no_attention_mask(self):
@@ -1054,34 +1054,31 @@ class ModelUtilsTest(TestCasePlus):
 
         with self.subTest("Ensure no warnings when pad_token_id is None."):
             logger.warning_once.cache_clear()
-            with self.assertLogs(logger) as logs:
+            with self.assertNoLogs(logger) as logs:
                 config_no_pad_token = PretrainedConfig()
                 config_no_pad_token.pad_token_id = None
                 model = ModelWithHead(config_no_pad_token)
                 input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
-            self.assertNotIn("We strongly recommend passing in an `attention_mask`", logs.output[0])
 
         with self.subTest("Ensure no warnings when there is an attention_mask."):
             logger.warning_once.cache_clear()
-            with self.assertLogs(logger) as logs:
+            with self.assertNoLogs(logger) as logs:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
                 model = ModelWithHead(config)
                 input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                 attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            self.assertNotIn("We strongly recommend passing in an `attention_mask`", logs.output[0])
 
         with self.subTest("Ensure no warnings when there are no pad_token_ids in the input_ids."):
             logger.warning_once.cache_clear()
-            with self.assertLogs(logger) as logs:
+            with self.assertNoLogs(logger) as logs:
                 config = PretrainedConfig()
                 config.pad_token_id = 0
                 model = ModelWithHead(config)
                 input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
                 model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
-            self.assertNotIn("We strongly recommend passing in an `attention_mask`", logs.output[0])
 
         with self.subTest("Ensure a warning is shown when the input_ids start with a pad_token_id."):
             logger.warning_once.cache_clear()
