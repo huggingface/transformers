@@ -220,7 +220,9 @@ class SigmaMoELayer(torch.nn.Module):
 
         # Selection score calculation
         # sel = sel_raw = F.linear(input, self.expert_sel, None)
-        sel = sel_raw = self.expert_sel(input)
+        into_input = input.clone()
+        into_input.retain_grad()
+        sel = sel_raw = self.expert_sel(into_input)
         reg_loss = self.entropy_reg(sel_raw)
 
         # Selection activation and topk
@@ -240,6 +242,7 @@ class SigmaMoELayer(torch.nn.Module):
         #     [2,1] are the indices
 
         sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
+        sel_val.retain_grad()
 
         if self.activation_after_topk or (self.selection_mode == "sinkmoid"):
             sel_val = torch.gather(sel_raw, -1, sel_index)
@@ -268,7 +271,11 @@ class SigmaMoELayer(torch.nn.Module):
 
         if IS_CUDA and IS_TRITON:
             # "Up-projection" layer for each head
-            scores = self.compute_scores(input, sel_indices)
+            input_into_up_proj = input.clone()
+            input_into_up_proj.retain_grad()
+            scores = self.compute_scores(input_into_up_proj, sel_indices)
+            # NOTE change back to 
+            # scores = self.compute_scores(input, sel_indices) and remove clones
 
             # NOTE debug: retains the intermediate grad during backward
             scores.retain_grad()
@@ -301,4 +308,4 @@ class SigmaMoELayer(torch.nn.Module):
 
         if self.o_bias is not None:
             res = res + self.o_bias
-        return res, reg_loss, scores, sel_index, sel_val
+        return res, reg_loss, scores, sel_index, sel_val, into_input, input_into_up_proj
