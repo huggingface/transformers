@@ -449,7 +449,10 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        if kwargs.get("add_dummy_prefix_space", True):
+            text = SPIECE_UNDERLINE + text
+
+        tokens = super().tokenize(text.replace(SPIECE_UNDERLINE, " "), add_special_tokens=add_special_tokens, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
