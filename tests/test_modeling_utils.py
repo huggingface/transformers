@@ -1046,7 +1046,8 @@ class ModelUtilsTest(TestCasePlus):
             safe_save_file(state_dict, os.path.join(tmp_dir, SAFE_WEIGHTS_NAME), metadata={"format": "pt"})
             with self.assertLogs(logger) as logs:
                 _, loading_info = ModelWithHead.from_pretrained(tmp_dir, output_loading_info=True)
-            self.assertIn("were not used when initializing ModelWithHead: ['added_key']", logs.output[1])
+            full_logs = "\n".join(logs.output)
+            self.assertIn("were not used when initializing ModelWithHead: ['added_key']", full_logs)
             self.assertEqual(loading_info["unexpected_keys"], ["added_key"])
 
     def test_warn_if_padding_and_no_attention_mask(self):
