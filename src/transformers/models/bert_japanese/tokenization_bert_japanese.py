@@ -558,11 +558,11 @@ class SudachiTokenizer:
             **trim_whitespace**: (*optional*) boolean (default False)
                 Whether to trim all whitespace, tab, newline from tokens.
             **sudachi_split_mode**: (*optional*) string
-                Split mode of sudachi, choose from "A", "B", "C".
+                Split mode of sudachi, choose from `["A", "B", "C"]`.
             **sudachi_config_path**: (*optional*) string
             **sudachi_resource_dir**: (*optional*) string
             **sudachi_dict_type**: (*optional*) string
-                dict type of sudachi, choose from "small", "core", "full".
+                dict type of sudachi, choose from `["small", "core", "full"]`.
             **sudachi_projection**: (*optional*) string
                 Word projection mode of sudachi, choose from `["surface", "normalized", "reading", "dictionary", "dictionary_and_surface", "normalized_and_surface", "normalized_nouns"]`.
         """
