@@ -402,8 +402,8 @@ class TFModelUtilsTest(unittest.TestCase):
                 # Finally, check the model can be reloaded
                 new_model = TFBertModel.from_pretrained(tmp_dir)
 
-                model.build()
-                new_model.build()
+                model.build_in_name_scope()
+                new_model.build_in_name_scope()
 
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
@@ -632,7 +632,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        model.build()
+        model.build_in_name_scope()
 
         logging.set_verbosity_info()
         logger = logging.get_logger("transformers.utils.hub")
@@ -701,7 +701,7 @@ class TFModelPushToHubTester(unittest.TestCase):
         )
         model = TFBertModel(config)
         # Make sure model is properly initialized
-        model.build()
+        model.build_in_name_scope()
 
         model.push_to_hub("valid_org/test-model-tf-org", token=self._token)
 

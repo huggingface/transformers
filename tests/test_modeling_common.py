@@ -101,7 +101,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.modeling_utils import no_init_weights
+    from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -535,6 +535,54 @@ class ModelTesterMixin:
                             torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
                         ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_torch_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.__class__ not in MODEL_MAPPING:
+            return
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            base_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class_copy._init_weights = _mock_init_weights
+            base_class_copy.init_weights = _mock_all_init_weights
+
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            def check_equal(loaded):
+                for key in state_dict.keys():
+                    max_diff = torch.max(
+                        state_dict()[key] ^ loaded[key]
+                        if isinstance(state_dict[key], torch.BoolTensor)
+                        else torch.abs(state_dict[key] - loaded[key])
+                    ).item()
+                    self.assertLessEqual(max_diff, 1e-6, msg=f"{key} not identical")
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pytorch_model.bin")
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=True)
+                check_equal(load_state_dict(pt_checkpoint_path))
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
+                check_equal(load_state_dict(pt_checkpoint_path))
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -2888,6 +2936,110 @@ class ModelTesterMixin:
                         new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
                     else:
                         new_model_without_prefix(input_ids)
+
+    def test_mismatched_shapes_have_properly_initialized_weights(self):
+        if not self.test_mismatched_shapes:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(configs_no_init)
+                    model.save_pretrained(tmp_dir)
+
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    with self.assertRaises(RuntimeError):
+                        new_model = AutoModelForSequenceClassification.from_pretrained(tmp_dir, num_labels=42)
+
+                    logger = logging.get_logger("transformers.modeling_utils")
+
+                    with CaptureLogger(logger) as cl:
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True
+                        )
+                    self.assertIn("the shapes did not match", cl.out)
+
+                    for name, param in new_model.named_parameters():
+                        if param.requires_grad:
+                            self.assertIn(
+                                ((param.data.mean() * 1e9).round() / 1e9).item(),
+                                [0.0, 1.0],
+                                msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                            )
+
+    def test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist(self):
+        # 1. Create a dummy class. Should have buffers as well? To make sure we test __init__
+        class MyClass(PreTrainedModel):
+            config_class = PretrainedConfig
+
+            def __init__(self, config=None):
+                super().__init__(config if config is not None else PretrainedConfig())
+                self.linear = nn.Linear(10, config.num_labels, bias=True)
+                self.embedding = nn.Embedding(10, 10)
+                self.std = 1
+
+            def _init_weights(self, module):
+                if isinstance(module, nn.Linear):
+                    module.weight.data = nn.init.kaiming_uniform_(module.weight.data, np.sqrt(5))
+                    if module.bias is not None:
+                        module.bias.data = module.bias.data.normal_(mean=0.0, std=self.std)
+
+        # Used to make sure the weights with matched shape are loaded correctly
+        config = PretrainedConfig()
+        config.num_labels = 3
+        model = MyClass(config=config)
+
+        # Used to make sure the weights with mismatched shape are properly initialized
+        set_seed(0)
+        config = PretrainedConfig()
+        config.num_labels = 4
+        # not to init. the weights during the creation: to match the logic in `from_pretrained`, so we can keep the
+        # same sequence of random ops in the execution path to allow us to compare `target_model` and `new_model` below
+        # for `linear` part.
+        with ContextManagers([no_init_weights(True)]):
+            target_model = MyClass(config=config)
+        target_model.apply(target_model._initialize_weights)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            state_dict = model.state_dict()
+            del state_dict["linear.weight"]
+
+            model.config.save_pretrained(tmpdirname)
+            torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
+
+            set_seed(0)
+            new_model = MyClass.from_pretrained(tmpdirname, num_labels=4, ignore_mismatched_sizes=True)
+
+            for key in new_model.state_dict().keys():
+                # check weight values for weights with matched shapes are identical
+                # (i.e. correctly loaded from the checkpoint)
+                if key not in ["linear.weight", "linear.bias"]:
+                    max_diff = torch.max(torch.abs(model.state_dict()[key] - new_model.state_dict()[key]))
+                    self.assertLessEqual(
+                        max_diff.item(),
+                        1e-6,
+                        msg=f"the weight values for `{key}` in `new_model` and `model` are  not identical",
+                    )
+                else:
+                    # check we have some mismatched shapes
+                    self.assertNotEqual(
+                        model.state_dict()[key].shape,
+                        new_model.state_dict()[key].shape,
+                        msg=f"the weight shapes for {key} in `model` and `new_model` should differ",
+                    )
+                    # check the weights with mismatched shape are properly initialized
+                    max_diff = torch.max(torch.abs(new_model.state_dict()[key] - target_model.state_dict()[key]))
+                    self.assertLessEqual(
+                        max_diff.item(),
+                        1e-6,
+                        msg=f"the weight values for `{key}` in `new_model` and `target_model` are not identical",
+                    )
 
     def test_model_is_small(self):
         # Just a consistency check to make sure we are not running tests on 80M parameter models.

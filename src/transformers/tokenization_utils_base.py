@@ -943,14 +943,15 @@ class SpecialTokensMixin:
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
 
-                to_add = set()
+                to_add = []
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
-                    if str(token) not in self.additional_special_tokens:
-                        to_add.add(token)
-                if replace_additional_special_tokens:
+                    if not replace_additional_special_tokens and str(token) in self.additional_special_tokens:
+                        continue
+                    to_add.append(token)
+                if replace_additional_special_tokens and len(to_add) > 0:
                     setattr(self, key, list(to_add))
                 else:
                     self._additional_special_tokens.extend(to_add)
@@ -2515,7 +2516,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
-        Converts a string in a sequence of tokens, replacing unknown tokens with the `unk_token`.
+        Converts a string into a sequence of tokens, replacing unknown tokens with the `unk_token`.
 
         Args:
             text (`str`):
@@ -3557,21 +3558,26 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "truncation strategy. So the returned list will always be empty even if some "
                 "tokens have been removed."
             )
-            for _ in range(num_tokens_to_remove):
-                if pair_ids is None or len(ids) > len(pair_ids):
-                    if self.truncation_side == "right":
-                        ids = ids[:-1]
-                    elif self.truncation_side == "left":
-                        ids = ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
-                else:
-                    if self.truncation_side == "right":
-                        pair_ids = pair_ids[:-1]
-                    elif self.truncation_side == "left":
-                        pair_ids = pair_ids[1:]
-                    else:
-                        raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+            len_pair_ids = len(pair_ids) if pair_ids is not None else 0
+            len_ids = len(ids)
+            first_remove = min(abs(len_pair_ids - len_ids), num_tokens_to_remove)
+            second_remove = num_tokens_to_remove - first_remove
+            if len_ids > len_pair_ids:
+                ids_to_move = first_remove + second_remove // 2
+                pair_ids_to_move = second_remove - second_remove // 2
+            else:
+                ids_to_move = second_remove // 2
+                pair_ids_to_move = first_remove + second_remove - (second_remove // 2)
+
+            if self.truncation_side == "right":
+                ids = ids[:-ids_to_move] if ids_to_move > 0 else ids
+                pair_ids = pair_ids[:-pair_ids_to_move] if pair_ids is not None and pair_ids_to_move > 0 else pair_ids
+            elif self.truncation_side == "left":
+                ids = ids[ids_to_move:]
+                pair_ids = pair_ids[pair_ids_to_move:] if pair_ids is not None else None
+            else:
+                raise ValueError("invalid truncation strategy:" + str(self.truncation_side))
+
         elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)

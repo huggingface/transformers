@@ -21,13 +21,14 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available
+from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -524,6 +525,68 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @slow
+    @require_torch_sdpa
+    def test_model_7b_long_prompt_sdpa(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
+            attn_implementation="sdpa",
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
+
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    def test_speculative_generation(self):
+        EXPECTED_TEXT_COMPLETION = (
+            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
+        )
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        set_seed(0)
+        generated_ids = model.generate(
+            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()

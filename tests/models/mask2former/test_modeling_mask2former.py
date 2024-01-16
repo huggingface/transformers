@@ -190,7 +190,7 @@ class Mask2FormerModelTester:
         comm_check_on_output(result)
 
         self.parent.assertTrue(result.loss is not None)
-        self.parent.assertEqual(result.loss.shape, torch.Size([1]))
+        self.parent.assertEqual(result.loss.shape, torch.Size([]))
 
 
 @require_torch

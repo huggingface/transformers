@@ -149,10 +149,13 @@ class TFEsmContactPredictionHead(Layer):
         self.in_features = in_features
         self.regression = Dense(1, use_bias=bias, activation="sigmoid", name="regression")
 
-    def build(self, input_shape):
-        super().build(input_shape)
-        with tf.name_scope("regression"):
-            self.regression.build((None, self.in_features))
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "regression", None) is not None:
+            with tf.name_scope(self.regression.name):
+                self.regression.build((None, self.in_features))
 
     def call(self, tokens, attentions):
         # remove eos token attentions
@@ -268,6 +271,20 @@ class TFEsmEmbeddings(Layer):
         )
         return tf.broadcast_to(tf.expand_dims(position_ids, 0), input_shape)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "word_embeddings", None) is not None:
+            with tf.name_scope(self.word_embeddings.name):
+                self.word_embeddings.build(None)
+        if getattr(self, "position_embeddings", None) is not None:
+            with tf.name_scope(self.position_embeddings.name):
+                self.position_embeddings.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+
 
 class TFEsmSelfAttention(Layer):
     def __init__(self, config, position_embedding_type=None, name=None):
@@ -306,6 +323,7 @@ class TFEsmSelfAttention(Layer):
             self.rotary_embeddings = TFRotaryEmbedding(dim=self.attention_head_size, name="rotary_embeddings")
 
         self.is_decoder = config.is_decoder
+        self.config = config
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
         new_x_shape = shape_list(x)[:-1] + [self.num_attention_heads, self.attention_head_size]
@@ -415,6 +433,23 @@ class TFEsmSelfAttention(Layer):
             outputs = outputs + (past_key_value,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+        if getattr(self, "rotary_embeddings", None) is not None:
+            with tf.name_scope(self.rotary_embeddings.name):
+                self.rotary_embeddings.build(None)
+
 
 class TFEsmSelfOutput(Layer):
     def __init__(self, config, name=None):
@@ -423,12 +458,21 @@ class TFEsmSelfOutput(Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states += input_tensor
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmAttention(Layer):
@@ -438,6 +482,7 @@ class TFEsmAttention(Layer):
         self.output_layer = TFEsmSelfOutput(config, name="output")
         self.pruned_heads = set()
         self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -468,6 +513,20 @@ class TFEsmAttention(Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self", None) is not None:
+            with tf.name_scope(self.self.name):
+                self.self.build(None)
+        if getattr(self, "output_layer", None) is not None:
+            with tf.name_scope(self.output_layer.name):
+                self.output_layer.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 class TFEsmIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: EsmConfig, **kwargs):
@@ -478,11 +537,20 @@ class TFEsmIntermediate(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = tf.nn.gelu(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmOutput(Layer):
@@ -492,12 +560,21 @@ class TFEsmOutput(Layer):
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = Dropout(config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states += input_tensor
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
 
 
 class TFEsmLayer(Layer):
@@ -515,6 +592,7 @@ class TFEsmLayer(Layer):
         self.intermediate = TFEsmIntermediate(config, name="intermediate")
         self.output_layer = TFEsmOutput(config, name="output")
         self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(
         self,
@@ -585,6 +663,23 @@ class TFEsmLayer(Layer):
             outputs = outputs + (present_key_value,)
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "output_layer", None) is not None:
+            with tf.name_scope(self.output_layer.name):
+                self.output_layer.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFEsmEncoder(Layer):
@@ -665,6 +760,18 @@ class TFEsmEncoder(Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "emb_layer_norm_after", None) is not None:
+            with tf.name_scope(self.emb_layer_norm_after.name):
+                self.emb_layer_norm_after.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
 class TFEsmPooler(tf.keras.layers.Layer):
@@ -677,6 +784,7 @@ class TFEsmPooler(tf.keras.layers.Layer):
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -685,6 +793,14 @@ class TFEsmPooler(tf.keras.layers.Layer):
         pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 class TFEsmPreTrainedModel(TFPreTrainedModel):
@@ -787,10 +903,22 @@ class TFEsmMainLayer(Layer):
             in_features=self.config.num_hidden_layers * self.config.num_attention_heads, bias=True, name="contact_head"
         )
 
-    def build(self, input_shape):
-        super().build(input_shape)
-        with tf.name_scope("contact_head"):
-            self.contact_head.build(input_shape)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+        if getattr(self, "contact_head", None) is not None:
+            with tf.name_scope(self.contact_head.name):
+                self.contact_head.build(None)
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -1041,6 +1169,14 @@ class TFEsmModel(TFEsmPreTrainedModel):
     def predict_contacts(self, tokens, attention_mask):
         return self.esm.predict_contacts(tokens, attention_mask)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "esm", None) is not None:
+            with tf.name_scope(self.esm.name):
+                self.esm.build(None)
+
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
 class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -1140,6 +1276,17 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     def predict_contacts(self, tokens, attention_mask):
         return self.esm.predict_contacts(tokens, attention_mask)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "esm", None) is not None:
+            with tf.name_scope(self.esm.name):
+                self.esm.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
+
 
 class TFEsmLMHead(Layer):
     """ESM Head for masked language modeling."""
@@ -1162,11 +1309,22 @@ class TFEsmLMHead(Layer):
             )
         self.config = config
 
-    def build(self, input_shape):
-        super().build(input_shape)
+    def build(self, input_shape=None):
         # Separate bias to match the PT model and allow weight cross-loading to work
         # Put it in the build so it gets the right name when adding it as a weight
+        if self.built:
+            return
+        self.built = True
         self.bias = self.add_weight("bias", shape=(self.config.vocab_size,), initializer="zeros", trainable=True)
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
+        if getattr(self, "decoder", None) is not None and not self.config.tie_word_embeddings:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build([None, None, self.config.hidden_size])
 
     def get_bias(self):
         return {"bias": self.bias}
@@ -1257,6 +1415,17 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "esm", None) is not None:
+            with tf.name_scope(self.esm.name):
+                self.esm.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1276,6 +1445,7 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         self.esm = TFEsmMainLayer(config, add_pooling_layer=False, name="esm")
         self.dropout = Dropout(config.hidden_dropout_prob)
         self.classifier = Dense(config.num_labels, name="classifier")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1333,6 +1503,17 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "esm", None) is not None:
+            with tf.name_scope(self.esm.name):
+                self.esm.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 class TFEsmClassificationHead(Layer):
     """Head for sentence-level classification tasks."""
@@ -1352,6 +1533,7 @@ class TFEsmClassificationHead(Layer):
             activation="linear",
             name="out_proj",
         )
+        self.config = config
 
     def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -1360,6 +1542,17 @@ class TFEsmClassificationHead(Layer):
         x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):

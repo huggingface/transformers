@@ -276,8 +276,7 @@ You could also create and use your own dataset if you prefer to train with the [
                                      "label": sorted(label_paths)})
          dataset = dataset.cast_column("image", Image())
          dataset = dataset.cast_column("label", Image())
-
-     return dataset
+         return dataset
 
      # step 1: create Dataset objects
      train_dataset = create_dataset(image_paths_train, label_paths_train)

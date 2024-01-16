@@ -207,8 +207,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
+    # We set `keep_aspect_ratio=False` as our current BEiT does not support arbitrary window sizes
     processor = DPTImageProcessor(
-        size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
+        size={"height": image_size, "width": image_size}, keep_aspect_ratio=False, ensure_multiple_of=32
     )
 
     image = prepare_img()

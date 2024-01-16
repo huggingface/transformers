@@ -85,8 +85,9 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.config = config
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         initializer = get_initializer(self.initializer_range)
         self.q = self.add_weight(
             shape=(self.d_model, self.n_head, self.d_head), initializer=initializer, trainable=True, name="q"
@@ -115,7 +116,13 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.seg_embed = self.add_weight(
             shape=(2, self.n_head, self.d_head), initializer=initializer, trainable=True, name="seg_embed"
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -344,6 +351,7 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
             self.activation_function = get_tf_activation(config.ff_activation)
         else:
             self.activation_function = config.ff_activation
+        self.config = config
 
     def call(self, inp, training=False):
         output = inp
@@ -354,6 +362,20 @@ class TFXLNetFeedForward(tf.keras.layers.Layer):
         output = self.dropout(output, training=training)
         output = self.layer_norm(output + inp)
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
+        if getattr(self, "layer_1", None) is not None:
+            with tf.name_scope(self.layer_1.name):
+                self.layer_1.build([None, None, self.config.d_model])
+        if getattr(self, "layer_2", None) is not None:
+            with tf.name_scope(self.layer_2.name):
+                self.layer_2.build([None, None, self.config.d_inner])
 
 
 class TFXLNetLayer(tf.keras.layers.Layer):
@@ -398,6 +420,17 @@ class TFXLNetLayer(tf.keras.layers.Layer):
 
         outputs = (output_h, output_g) + outputs[2:]  # Add again attentions if there are there
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rel_attn", None) is not None:
+            with tf.name_scope(self.rel_attn.name):
+                self.rel_attn.build(None)
+        if getattr(self, "ff", None) is not None:
+            with tf.name_scope(self.ff.name):
+                self.ff.build(None)
 
 
 class TFXLNetLMHead(tf.keras.layers.Layer):
@@ -471,12 +504,22 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.word_embedding.weight = value
         self.word_embedding.vocab_size = shape_list(value)[0]
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         initializer = get_initializer(self.initializer_range)
         self.mask_emb = self.add_weight(
             shape=(1, 1, self.d_model), initializer=initializer, trainable=True, name="mask_emb"
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "word_embedding", None) is not None:
+            with tf.name_scope(self.word_embedding.name):
+                self.word_embedding.build(None)
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -1177,6 +1220,14 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1336,6 +1387,17 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "lm_loss", None) is not None:
+            with tf.name_scope(self.lm_loss.name):
+                self.lm_loss.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1356,6 +1418,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         self.logits_proj = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1423,6 +1486,20 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "logits_proj", None) is not None:
+            with tf.name_scope(self.logits_proj.name):
+                self.logits_proj.build([None, None, self.config.d_model])
+
 
 @add_start_docstrings(
     """
@@ -1442,6 +1519,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         self.logits_proj = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
@@ -1524,6 +1602,20 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "logits_proj", None) is not None:
+            with tf.name_scope(self.logits_proj.name):
+                self.logits_proj.build([None, None, self.config.d_model])
+
 
 @add_start_docstrings(
     """
@@ -1541,6 +1633,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1604,6 +1697,17 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             attentions=transformer_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
+
 
 @add_start_docstrings(
     """
@@ -1619,6 +1723,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1697,3 +1802,14 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])

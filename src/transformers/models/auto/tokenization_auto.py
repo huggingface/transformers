@@ -25,7 +25,14 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
-from ...utils import cached_file, extract_commit_hash, is_sentencepiece_available, is_tokenizers_available, logging
+from ...utils import (
+    cached_file,
+    extract_commit_hash,
+    is_g2p_en_available,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    logging,
+)
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -163,6 +170,10 @@ else:
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
             ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "fastspeech2_conformer",
+                ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
+            ),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
@@ -361,6 +372,7 @@ else:
                     "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("siglip", ("SiglipTokenizer", None)),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
             ("speech_to_text_2", ("Speech2Text2Tokenizer", None)),
             ("speecht5", ("SpeechT5Tokenizer" if is_sentencepiece_available() else None, None)),
@@ -758,7 +770,13 @@ class AutoTokenizer:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
         has_remote_code = tokenizer_auto_map is not None
-        has_local_code = config_tokenizer_class is not None or type(config) in TOKENIZER_MAPPING
+        has_local_code = type(config) in TOKENIZER_MAPPING or (
+            config_tokenizer_class is not None
+            and (
+                tokenizer_class_from_name(config_tokenizer_class) is not None
+                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+            )
+        )
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
         )

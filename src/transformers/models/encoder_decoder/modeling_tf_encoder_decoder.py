@@ -650,3 +650,17 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     def _reorder_cache(self, past, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past, beam_idx)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "enc_to_dec_proj", None) is not None:
+            with tf.name_scope(self.enc_to_dec_proj.name):
+                self.enc_to_dec_proj.build([None, None, self.encoder.config.hidden_size])
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
