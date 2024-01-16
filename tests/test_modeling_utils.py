@@ -837,10 +837,10 @@ class ModelUtilsTest(TestCasePlus):
     def test_from_pretrained_non_contiguous_checkpoint(self):
         # See: https://github.com/huggingface/transformers/pull/28414
         # Tiny models on the Hub have contiguous weights, contrarily to google/owlvit
-        model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
-        model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16", device_map="auto")
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto")
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
         with tempfile.TemporaryDirectory() as tmp_dir:
