@@ -806,7 +806,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         elif attention_mask is not None:
             if input_shape[0] <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype, tgt_len=past_length)
+            attention_mask = _prepare_4d_attention_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1] + past_length
+            )
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
