@@ -594,10 +594,7 @@ class SudachiTokenizer:
         sudachi_dictionary = dictionary.Dictionary(
             config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
         )
-        if self.projection:
-            self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
-        else:
-            self.sudachi = sudachi_dictionary.create(self.split_mode)  # backward compatibility for sudachipy<0.6.8
+        self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
