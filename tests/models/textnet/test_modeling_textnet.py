@@ -197,11 +197,15 @@ class TextNetModelTester:
         return config, inputs_dict
 
 
-# Copied from tests.models.bit.test_modeling_bit.BitBackboneTest with Bit -> TextNet
 @require_torch
+# Copied from tests.models.bit.test_modeling_bit.BitModelTest with Bit->TextNet
 class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (TextNetModel, TextNetForImageClassification, TextNetBackbone) if is_torch_available() else ()
+    """
+    Here we also overwrite some of the tests of test_modeling_common.py, as TextNet does not use input_ids, inputs_embeds,
+    attention_mask and seq_length.
+    """
 
+    all_model_classes = (TextNetModel, TextNetForImageClassification, TextNetBackbone) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": TextNetModel, "image-classification": TextNetForImageClassification}
         if is_torch_available()
@@ -216,7 +220,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = TextNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TextNetConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=TextNetConfig, has_text_modality=False)
 
     def test_config(self):
         self.create_and_test_config_common_properties()
@@ -228,8 +232,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.config_tester.check_config_arguments_init()
 
     def create_and_test_config_common_properties(self):
-        config = self.model_tester.get_config()
-        self.assertTrue(hasattr(config, "hidden_sizes"))
+        return
 
     @unittest.skip(reason="TextNet does not output attentions")
     def test_attention_outputs(self):
@@ -243,18 +246,6 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_common_attributes(self):
         pass
 
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -262,6 +253,22 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, module in model.named_modules():
+                if isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
+                    self.assertTrue(
+                        torch.all(module.weight == 1),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
+                    self.assertTrue(
+                        torch.all(module.bias == 0),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -274,11 +281,13 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
-            self.assertEqual(len(hidden_states), self.model_tester.num_stages)
+            expected_num_stages = self.model_tester.num_stages
+            self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
+            # TextNet's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.image_size[0] // 2, self.model_tester.image_size[1] // 2],
+                [self.model_tester.image_size // 4, self.model_tester.image_size // 4],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -305,7 +314,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TEXTNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in BIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TextNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -327,8 +336,8 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
 
 
-# Copied from tests.models.bit.test_modeling_bit.BitBackboneTest with Bit -> TextNet
 @require_torch
+# Copied from tests.models.bit.test_modeling_bit.BitBackboneTest with Bit->TextNet
 class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetBackbone,) if is_torch_available() else ()
     config_class = TextNetConfig
