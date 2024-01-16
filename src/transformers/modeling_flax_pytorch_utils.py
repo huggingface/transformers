@@ -70,9 +70,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
                 for k in f.keys():
                     pt_state_dict[k] = f.get_tensor(k)
         else:
-            pt_state_dict = torch.load(
-                pt_path, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13
-            )
+            pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
         logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)

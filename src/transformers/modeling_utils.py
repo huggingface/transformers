@@ -485,9 +485,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     loader = (
         safe_load_file
         if load_safe
-        else partial(
-            torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13
-        )
+        else partial(torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
     )
 
     for shard_file in shard_files:
