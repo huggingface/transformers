@@ -495,3 +495,232 @@ You can choose the communication data type by setting the `communication_data_ty
 ```
 
 ## Deployment
+
+DeepSpeed can be deployed by different launchers such as [torchrun](https://pytorch.org/docs/stable/elastic/run.html), the `deepspeed` launcher, or [Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch#using-accelerate-launch). To deploy, add `--deepspeed ds_config.json` to the [`Trainer`] command line. It’s recommended to use DeepSpeed’s [`add_config_arguments`](https://deepspeed.readthedocs.io/en/latest/initialize.html#argument-parsing) utility to add any necessary command line arguments to your code.
+
+This guide will show you how to deploy DeepSpeed with the `deepspeed` launcher for different training setups. You can check out this [post](https://github.com/huggingface/transformers/issues/8771#issuecomment-759248400) for more practical usage examples.
+
+
+<hfoptions id="deploy">
+<hfoption id="multi-GPU">
+
+To deploy DeepSpeed on multiple GPUs, add the `--num_gpus` parameter. If you want to use all available GPUs, you don't need to add `--num_gpus`. The example below uses 2 GPUs.
+
+```bash
+deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
+--deepspeed tests/deepspeed/ds_config_zero3.json \
+--model_name_or_path t5-small --per_device_train_batch_size 1 \
+--output_dir output_dir --overwrite_output_dir --fp16 \
+--do_train --max_train_samples 500 --num_train_epochs 1 \
+--dataset_name wmt16 --dataset_config "ro-en" \
+--source_lang en --target_lang ro
+```
+
+</hfoption>
+<hfoption id="single-GPU">
+
+To deploy DeepSpeed on a single GPU, add the `--num_gpus` parameter. It isn't necessary to explicitly set this value if you only have 1 GPU because DeepSpeed deploys all GPUs it can see on a given node.
+
+```bash
+deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
+--deepspeed tests/deepspeed/ds_config_zero2.json \
+--model_name_or_path t5-small --per_device_train_batch_size 1 \
+--output_dir output_dir --overwrite_output_dir --fp16 \
+--do_train --max_train_samples 500 --num_train_epochs 1 \
+--dataset_name wmt16 --dataset_config "ro-en" \
+--source_lang en --target_lang ro
+```
+
+DeepSpeed is still useful with just 1 GPU because you can:
+
+1. Offload some computations and memory to the CPU to make more GPU resources available to your model to use a larger batch size or fit a very large model that normally won't fit.
+2. Minimze memory fragmentation with it's smart GPU memory management system which also allows you to fit bigger models and data batches.
+
+<Tip>
+
+Set the `allgather_bucket_size` and `reduce_bucket_size` values to 2e8 in the [ZeRO-2](#zero-configuration) configuration file to get better performance on a single GPU.
+
+</Tip>
+
+</hfoption>
+</hfoptions>
+
+### Multi-node deployment
+
+A node is one or more GPUs for running a workload. A more powerful setup is a multi-node setup which can be launched with the `deepspeed` launcher. For this guide, let's assume there are two nodes with 8 GPUs each. The first node can be accessed `ssh hostname1` and the second node with `ssh hostname2`. Both nodes must be able to communicate with each other locally over ssh without a password.
+
+By default, DeepSpeed expects your multi-node environment to use a shared storage. If this is not the case and each node can only see the local filesystem, you need to adjust the config file to include a [`checkpoint`](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to allow loading without access to a shared filesystem:
+
+```yaml
+{
+  "checkpoint": {
+    "use_node_local_storage": true
+  }
+}
+```
+
+You could also use the [`Trainer`]'s `--save_on_each_node` argument to automatically add the above `checkpoint` to your config.
+
+<hfoptions id="multinode">
+<hfoption id="torchrun">
+
+For [torchrun](https://pytorch.org/docs/stable/elastic/run.html), you have to ssh to each node and run the following command on both of them. The launcher waits until both nodes are synchronized before launching the training.
+
+```bash
+python -m torch.run --nproc_per_node=8 --nnode=2 --node_rank=0 --master_addr=hostname1 \
+--master_port=9901 your_program.py <normal cl args> --deepspeed ds_config.json
+```
+
+</hfoption>
+<hfoption id="deepspeed">
+
+For the `deepspeed` launcher, start by creating a `hostfile`.
+
+```bash
+hostname1 slots=8
+hostname2 slots=8
+```
+
+Then you can launch the training with the following command. The `deepspeed` launcher automatically launches the command on both nodes at once.
+
+```bash
+deepspeed --num_gpus 8 --num_nodes 2 --hostfile hostfile --master_addr hostname1 --master_port=9901 \
+your_program.py <normal cl args> --deepspeed ds_config.json
+```
+
+Check out the [Resource Configuration (multi-node)](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node) guide for more details about configuring multi-node compute resources.
+
+</hfoption>
+</hfoptions>
+
+### SLURM
+
+In a SLURM environment, you'll need to adapt your SLURM script to your specific SLURM environment. An example SLURM script may look like:
+
+```bash
+#SBATCH --job-name=test-nodes        # name
+#SBATCH --nodes=2                    # nodes
+#SBATCH --ntasks-per-node=1          # crucial - only 1 task per dist per node!
+#SBATCH --cpus-per-task=10           # number of cores per tasks
+#SBATCH --gres=gpu:8                 # number of gpus
+#SBATCH --time 20:00:00              # maximum execution time (HH:MM:SS)
+#SBATCH --output=%x-%j.out           # output file name
+
+export GPUS_PER_NODE=8
+export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+export MASTER_PORT=9901
+
+srun --jobid $SLURM_JOBID bash -c 'python -m torch.distributed.run \
+ --nproc_per_node $GPUS_PER_NODE --nnodes $SLURM_NNODES --node_rank $SLURM_PROCID \
+ --master_addr $MASTER_ADDR --master_port $MASTER_PORT \
+your_program.py <normal cl args> --deepspeed ds_config.json'
+```
+
+Then you can schedule your multi-node deployment with the following command which launches training simultaneously on all nodes.
+
+```bash
+sbatch launch.slurm
+```
+
+### Notebook
+
+The `deepspeed` launcher doesn't support deployment from a notebook so you'll need to emulate the distributed environment. However, this only works for 1 GPU. If you want to use more than 1 GPU, you must use a multi-process environment for DeepSpeed to work. This means you have to use the `deepspeed` launcher which can't be emulated as shown here.
+
+```py
+# DeepSpeed requires a distributed environment even when only one process is used.
+# This emulates a launcher in the notebook
+import os
+
+os.environ["MASTER_ADDR"] = "localhost"
+os.environ["MASTER_PORT"] = "9994"  # modify if RuntimeError: Address already in use
+os.environ["RANK"] = "0"
+os.environ["LOCAL_RANK"] = "0"
+os.environ["WORLD_SIZE"] = "1"
+
+# Now proceed as normal, plus pass the DeepSpeed config file
+training_args = TrainingArguments(..., deepspeed="ds_config_zero3.json")
+trainer = Trainer(...)
+trainer.train()
+```
+
+If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated cell.
+
+```py
+%%bash
+cat <<'EOT' > ds_config_zero3.json
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    },
+
+    "optimizer": {
+        "type": "AdamW",
+        "params": {
+            "lr": "auto",
+            "betas": "auto",
+            "eps": "auto",
+            "weight_decay": "auto"
+        }
+    },
+
+    "scheduler": {
+        "type": "WarmupLR",
+        "params": {
+            "warmup_min_lr": "auto",
+            "warmup_max_lr": "auto",
+            "warmup_num_steps": "auto"
+        }
+    },
+
+    "zero_optimization": {
+        "stage": 3,
+        "offload_optimizer": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": true
+        },
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "reduce_bucket_size": "auto",
+        "stage3_prefetch_bucket_size": "auto",
+        "stage3_param_persistence_threshold": "auto",
+        "stage3_max_live_parameters": 1e9,
+        "stage3_max_reuse_distance": 1e9,
+        "stage3_gather_16bit_weights_on_model_save": true
+    },
+
+    "gradient_accumulation_steps": "auto",
+    "gradient_clipping": "auto",
+    "steps_per_print": 2000,
+    "train_batch_size": "auto",
+    "train_micro_batch_size_per_gpu": "auto",
+    "wall_clock_breakdown": false
+}
+EOT
+```
+
+If the training script is in a file and not in a notebook cell, you can launch `deepspeed` normally from the shell in a notebook cell. For example, to launch `run_translation.py`:
+
+```py
+!git clone https://github.com/huggingface/transformers
+!cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
+```
+
+You could also use `%%bash` magic and write multi-line code to run the shell program, but you won't be able to view the logs until training is complete. With `%%bash` magic, you don't need to emulate a distributed environment.
+
+```py
+%%bash
+
+git clone https://github.com/huggingface/transformers
+cd transformers
+deepspeed examples/pytorch/translation/run_translation.py ...
+```
