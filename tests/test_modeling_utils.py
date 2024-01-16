@@ -840,7 +840,9 @@ class ModelUtilsTest(TestCasePlus):
         model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
-        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto")
+        model = OwlViTForObjectDetection.from_pretrained(
+            "fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto"
+        )
         self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
 
         with tempfile.TemporaryDirectory() as tmp_dir:
