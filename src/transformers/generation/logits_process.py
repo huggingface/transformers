@@ -1893,12 +1893,12 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
 class WhisperNoSpeechDetection(LogitsProcessor):
     r"""This processor can be used to detect silence when using Whisper."""
 
-    def __init__(
-        self, no_speech_token: int, begin_index: int, begin_index_offset: int, scores_is_logprobs: bool = False
-    ):
+    def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
+        self.orig_begin_index = begin_index
+
+        # `self.begin_index` is a running value that is changed on the fly
         self.begin_index = begin_index
-        self.begin_index_offset = begin_index_offset
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
@@ -1926,11 +1926,11 @@ class WhisperNoSpeechDetection(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[1] == self.begin_index:
-            if self.begin_index_offset > 1:
+            if self.orig_begin_index > 1:
                 with torch.no_grad():
                     logits = self.model(**self.inputs).logits
 
-                no_speech_index = self.begin_index - self.begin_index_offset
+                no_speech_index = self.begin_index - self.orig_begin_index
                 no_speech_scores = logits[:, no_speech_index]
             else:
                 no_speech_scores = scores
