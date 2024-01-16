@@ -470,17 +470,17 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
+        set_generation_parameters = {}
         for parameter_name, default_value in GENERATION_DEFAULTS.items():
-            set_generation_parameters = {}
-            if getattr(self, parameter_name) != default_value:
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
                 set_generation_parameters.update({parameter_name: getattr(self, parameter_name)})
-            if len(set_generation_parameters) > 0:
-                logger.warning(
-                    "Some non-default generation parameters are set in the model config. These should go into a "
-                    "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)"
-                    "instead. This warning will be raised to an exception in v4.39.\n"
-                    f"Set generation parameters: {str(set_generation_parameters)}"
-                )
+        if len(set_generation_parameters) > 0:
+            logger.warning(
+                "Some non-default generation parameters are set in the model config. These should go into a "
+                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)"
+                "instead. This warning will be raised to an exception in v4.39.\n"
+                f"Set generation parameters: {str(set_generation_parameters)}"
+            )
 
         os.makedirs(save_directory, exist_ok=True)
 
