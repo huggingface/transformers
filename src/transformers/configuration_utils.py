@@ -609,6 +609,8 @@ class PretrainedConfig(PushToHubMixin):
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
         kwargs["revision"] = revision
+        cl = kwargs.pop("cl", None)
+
 
         cls._set_token_in_kwargs(kwargs, token)
 
@@ -618,6 +620,12 @@ class PretrainedConfig(PushToHubMixin):
                 f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
+            if cl is not None:
+                cl.io.flush()
+                cl.out = cl.io.getvalue()
+                if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
+                    assert logger.level == 0
+                    assert "You are using a model of type t5 to instantiate a model of type bert" == cl.out
 
         return cls.from_dict(config_dict, **kwargs)
 
