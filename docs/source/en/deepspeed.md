@@ -304,28 +304,194 @@ Activation and gradient checkpointing trades speed for more GPU memory which all
 
 DeepSpeed and Transformers optimizer and scheduler can be mixed and matched as long as you don't enable `offload_optimizer`. When `offload_optimizer` is enabled, you could use a non-DeepSpeede optimizer (except for LAMB) as long as it has both a CPU and GPU implementation.
 
+<Tip warning={true}>
+
+The optimizer and scheduler parameters for the config file can be set from the command line to avoid hard to find errors. For example, if the learning rate is set to a different value in another place you can override it from the command line. Aside from the optimizer and scheduler parameters, you'll need to ensure your [`Trainer`] command line arguments match the DeepSpeed configuration.
+
+</Tip>
+
 <hfoptions id="opt-sched">
 <hfoption id="optimizer">
 
-DeepSpeed offers several [optimizers](https://www.deepspeed.ai/docs/config-json/#optimizer-parameters) (Adam, AdamW, OneBitAdam, and LAMB) but you can also import other optimizers from PyTorch.
+DeepSpeed offers several [optimizers](https://www.deepspeed.ai/docs/config-json/#optimizer-parameters) (Adam, AdamW, OneBitAdam, and LAMB) but you can also import other optimizers from PyTorch. If you don't configure the optimizer in the config, the [`Trainer`] automatically selects AdamW and either uses the supplied values or the default values for the following parameters from the command line: `lr`, `adam_beta1`, `adam_beta2`, `adam_epsilon`, `weight_decay`.
+
+You can set the parameters to `"auto"` or manually input your own desired values.
+
+```yaml
+{
+   "optimizer": {
+       "type": "AdamW",
+       "params": {
+         "lr": "auto",
+         "betas": "auto",
+         "eps": "auto",
+         "weight_decay": "auto"
+       }
+   }
+}
+```
+
+You can also use an unsupported optimizer by adding the following to the top level configuration.
+
+```yaml
+{
+   "zero_allow_untested_optimizer": true
+}
+```
+
+From DeepSpeed==0.8.3 on, if you want to use offload, you'll also need to the following to the top level configuration because offload works best with DeepSpeed's CPU Adam optimizer.
+
+```yaml
+{
+   "zero_force_ds_cpu_optimizer": false
+}
+```
 
 </hfoption>
 <hfoption id="scheduler">
 
+DeepSpeed supports the LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR learning rate [schedulers](https://www.deepspeed.ai/docs/config-json/#scheduler-parameters).
+
+Transformers and DeepSpeed provide two of the same schedulers:
+
+* WarmupLR is the same as `--lr_scheduler_type constant_with_warmup` in Transformers
+* WarmupDecayLR is the same as  `--lr_scheduler_type linear` in Transformers (this is the default scheduler used in Transformers)
+
+If you don't configure the scheduler in the config, the [`Trainer`] automatically selects WarmupDecayLR and either uses the supplied values or the default values for the following parameters from the command line: `warmup_min_lr`, `warmup_max_lr`, `warmup_num_steps`, `total_num_steps` (automatically calculated during run time if `max_steps` is not provided).
+
+You can set the parameters to `"auto"` or manually input your own desired values.
+
+```yaml
+{
+   "scheduler": {
+         "type": "WarmupDecayLR",
+         "params": {
+             "total_num_steps": "auto",
+             "warmup_min_lr": "auto",
+             "warmup_max_lr": "auto",
+             "warmup_num_steps": "auto"
+         }
+     }
+}
+```
 
 </hfoption>
-<hfoptions>
+</hfoptions>
 
 ### Precision
 
+Deepspeed supports fp32, fp16, and bf16 mixed precision.
+
+<hfoptions id="precision">
+<hfoption id="fp32">
+
+If your model doesn't work well with mixed precision, for example if it wasn't pretrained in mixed precision, you may encounter overflow or underflow issues which can cause NaN loss. For these cases, you should use full fp32 precision by explicitly disabling the default fp16 mode.
+
+```yaml
+{
+    "fp16": {
+        "enabled": false
+    }
+}
+```
+
+For Ampere GPUs and PyTorch > 1.7, it automatically switches to the more efficient [tf32](https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices) format for some operations but the results are still in fp32. You can control it from the [`Trainer`] by setting `--tf32` to enable it, and `--tf32 0` or `--no_tf32` to disable it.
+
+</hfoption>
+<hfoption id="fp16">
+
+To configure PyTorch AMP-like fp16 mixed precision reduces memory usage and accelerates training speed. [`Trainer`] automatically enables or disables fp16 based on the value of `args.fp16_backend`, and the rest of the config can be set by you. fp16 is enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend amp` or `--fp16_full_eval`.
+
+```yaml
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    }
+}
+```
+
+For additional DeepSpeed fp16 training options, take a look at the [FP16 Training Options](https://www.deepspeed.ai/docs/config-json/#fp16-training-options) reference.
+
+To configure Apex-like fp16 mixed precision, setup the config as shown below with `"auto"` or your own values. [`Trainer`] automatically configure `amp` based on the values of `args.fp16_backend` and `args.fp16_opt_level`. It can also be enabled from the command line when the following arguments are passed: `--fp16`, `--fp16_backend apex` or `--fp16_opt_level 01`.
+
+```yaml
+{
+    "amp": {
+        "enabled": "auto",
+        "opt_level": "auto"
+    }
+}
+```
+
+</hfoption>
+<hfoption id="bf16">
+
+To use bf16, you'll need at least DeepSpeed==0.6.0. bf16 has the same dynamic range as fp32 and doesn’t require loss scaling. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desired because this format's low precision can lead to lossy accumulation.
+
+bf16 can be setup in the config file or enabled from the command line when the following arguments are passed: `--bf16` or `--bf16_full_eval`.
+
+```yaml
+{
+    "bf16": {
+        "enabled": "auto"
+    }
+}
+```
+
+</hfoption>
+</hfoptions>
+
 ### Batch size
+
+The batch size can be auto-configured or explicitly set. If you choose to use the `"auto"` option, [`Trainer`] sets `train_micro_batch_size_per_gpu` to the value of args.`per_device_train_batch_size` and `train_batch_size` to `args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps`.
+
+```yaml
+{
+    "train_micro_batch_size_per_gpu": "auto",
+    "train_batch_size": "auto"
+}
+```
 
 ### Gradient accumulation
 
+Gradient accumulation can be auto-configured or explicitly set. If you choose to use the `"auto"` option, [`Trainer`] sets it to the value of `args.gradient_accumulation_steps`.
+
+```yaml
+{
+    "gradient_accumulation_steps": "auto"
+}
+
+```
+
 ### Gradient clipping
 
-### NCCL collectives
+Gradient clipping can be auto-configured or explicitly set. If you choose to use the `"auto"` option, [`Trainer`] sets it to the value of `args.max_grad_norm`.
 
-### Apex
+```yaml
+{
+    "gradient_clipping": "auto"
+}
+```
+
+### Communication data type
+
+For communication collectives like reduction, gathering and scattering operations, a separate data type is used.
+
+All gather and scatter operations are performed in the same data type the data is in. For example, if you're training with bf16, the data is also gathered in bf16 because gathering is a non-lossy operation.
+
+Reduce operations are lossy, for example when gradients are averaged across multiple GPUs. When the communication is done in fp16 or bf16, it is more likely to be lossy because adding multiple numbers in low precision isn't exact. This is especially the case with bf16 which has a lower precision than fp16. For this reason, fp16 is the default for reduction operations because the loss is minimal when averaging gradients.
+
+You can choose the communication data type by setting the `communication_data_type` parameter in the config file. For example, choosing fp32 adds a small amount of overhead but ensures the reduction operation is accumulated in fp32 and when it is ready, it is downcasted to whichever half-precision dtype you're training in.
+
+```yaml
+{
+    "communication_data_type": "fp32"
+}
+```
 
 ## Deployment
