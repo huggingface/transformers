@@ -1186,10 +1186,11 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             "he tells us that at this festive season of the year with christmas and rosebeaf looming before us",
         ]
         inputs = processor(text=input_text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
-        speaker_embeddings = torch.zeros((len(input_text), 512), device=torch_device)
+        set_seed(555)  # Ensure deterministic behavior
+        speaker_embeddings = torch.randn((len(input_text), 512), device=torch_device)
 
         # Generate spectrograms
-        set_seed(555)  # Ensure deterministic behavior
+        set_seed(555)  # Reset seed for consistent results
         spectrograms, spectrogram_lengths = model.generate_speech(
             input_ids=inputs["input_ids"],
             speaker_embeddings=speaker_embeddings,
@@ -1201,9 +1202,15 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         expected_batch_size = len(input_text)
         num_mel_bins = model.config.num_mel_bins
         actual_batch_size, _, actual_num_mel_bins = spectrograms.shape
-        self.assertEqual(actual_batch_size, expected_batch_size, "Batch size of generated spectrograms is incorrect.")
         self.assertEqual(
-            actual_num_mel_bins, num_mel_bins, "Number of mel bins in batch generated spectrograms is incorrect."
+            actual_batch_size,
+            expected_batch_size,
+            "Batch size of generated spectrograms is incorrect.",
+        )
+        self.assertEqual(
+            actual_num_mel_bins,
+            num_mel_bins,
+            "Number of mel bins in batch generated spectrograms is incorrect.",
         )
 
         # Generate waveforms using the vocoder
@@ -1248,13 +1255,13 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         )
 
         # Validate batch vs. single instance generation consistency
-        single_speaker_embeddings = torch.zeros((1, 512), device=torch_device)
         for i, text in enumerate(input_text):
             inputs = processor(text=text, padding="max_length", max_length=128, return_tensors="pt").to(torch_device)
+            current_speaker_embedding = speaker_embeddings[i].unsqueeze(0)
             set_seed(555)  # Reset seed for consistent results
             spectrogram = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=single_speaker_embeddings,
+                speaker_embeddings=current_speaker_embedding,
             )
 
             # Check spectrogram shape consistency
@@ -1276,7 +1283,7 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
             set_seed(555)  # Reset seed for consistent results
             waveform_with_integrated_vocoder = model.generate_speech(
                 input_ids=inputs["input_ids"],
-                speaker_embeddings=single_speaker_embeddings,
+                speaker_embeddings=current_speaker_embedding,
                 vocoder=vocoder,
             )
             self.assertTrue(
