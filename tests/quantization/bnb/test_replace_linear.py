@@ -6,7 +6,7 @@ from unittest.mock import patch
 from transformers import BitsAndBytesConfig
 from transformers.integrations.bitsandbytes import replace_with_bnb_linear
 from transformers.testing_utils import require_bitsandbytes
-from transformers.utils import is_torch_available, is_bitsandbytes_available
+from transformers.utils import is_bitsandbytes_available, is_torch_available
 
 
 if is_torch_available():
@@ -148,6 +148,12 @@ class TestReplaceWithBnbLinear(unittest.TestCase):
 
     @staticmethod
     def quantization_test_configs():
+        """
+        Supporting new BNB module types to these tests will be as simple as adding a new
+        config below in a separate yield. This simplicity of adding new configs is the reason
+        for the complexity of the automatically generated tests, given that unit test
+        doesn't support any other mechanism for parametrization.
+        """
         import bitsandbytes as bnb
 
         yield TestConfig(
@@ -213,8 +219,6 @@ class TestReplaceWithBnbLinear(unittest.TestCase):
                     expected_warning_message=warning_message,
                 )
 
+
 if is_bitsandbytes_available():
     TestReplaceWithBnbLinear.generate_tests()
-
-if __name__ == "__main__":
-    unittest.main()
