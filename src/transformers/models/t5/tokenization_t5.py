@@ -151,7 +151,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         legacy=None,
-        add_dummy_prefix_space=True,
+        add_prefix_space=True,
         **kwargs,
     ) -> None:
         pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
@@ -198,7 +198,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy = True
 
         self.legacy = legacy
-        self.add_dummy_prefix_space = add_dummy_prefix_space
+        self.add_prefix_space = add_prefix_space
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
@@ -211,7 +211,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
-            add_dummy_prefix_space=add_dummy_prefix_space,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
@@ -382,7 +382,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        if kwargs.pop("add_dummy_prefix_space", self.add_dummy_prefix_space):
+        if kwargs.pop("add_prefix_space", self.add_prefix_space):
             text = SPIECE_UNDERLINE + text
 
         tokens = super().tokenize(text.replace(SPIECE_UNDERLINE, " "), add_special_tokens=add_special_tokens, **kwargs)
