@@ -197,7 +197,7 @@ class TextNetModelTester:
         return config, inputs_dict
 
 
-# Copied from tests.test_modeling_bit.BitBackboneTest with Bit -> TextNet
+# Copied from tests.models.bit.test_modeling_bit.BitBackboneTest with Bit -> TextNet
 @require_torch
 class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetModel, TextNetForImageClassification, TextNetBackbone) if is_torch_available() else ()
@@ -327,7 +327,7 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
 
 
-# Copied from tests.test_modeling_bit.BitBackboneTest with Bit -> TextNet
+# Copied from tests.models.bit.test_modeling_bit.BitBackboneTest with Bit -> TextNet
 @require_torch
 class TextNetBackboneTest(BackboneTesterMixin, unittest.TestCase):
     all_model_classes = (TextNetBackbone,) if is_torch_available() else ()

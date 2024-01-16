@@ -822,10 +822,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
-    "models.textnet": [
-        "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TextNetConfig"
-    ],
+    "models.textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
