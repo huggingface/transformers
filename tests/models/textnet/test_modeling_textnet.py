@@ -33,6 +33,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
     from torch import nn
@@ -47,37 +48,37 @@ if is_torch_available():
 
 class TextNetModelTester:
     def __init__(
-            self,
-            parent,
-            stem_kernel_size=3,
-            stem_stride=2,
-            stem_in_channels=3,
-            stem_out_channels=32,
-            stem_act_func="relu",
-            dropout_rate=0,
-            ops_order="weight_bn_act",
-            conv_layer_kernel_sizes=[
-                [[3, 3]],
-                [[3, 3]],
-                [[3, 3]],
-                [[3, 3]],
-            ],
-            conv_layer_strides=[
-                [2],
-                [2],
-                [2],
-                [2],
-            ],
-            out_features=["stage1", "stage2", "stage3", "stage4"],
-            out_indices=[1, 2, 3, 4],
-            batch_size=3,
-            num_channels=3,
-            image_size=[32, 32],
-            is_training=True,
-            use_labels=True,
-            hidden_act="relu",
-            num_labels=3,
-            hidden_sizes=[32, 32, 32, 32, 32],
+        self,
+        parent,
+        stem_kernel_size=3,
+        stem_stride=2,
+        stem_in_channels=3,
+        stem_out_channels=32,
+        stem_act_func="relu",
+        dropout_rate=0,
+        ops_order="weight_bn_act",
+        conv_layer_kernel_sizes=[
+            [[3, 3]],
+            [[3, 3]],
+            [[3, 3]],
+            [[3, 3]],
+        ],
+        conv_layer_strides=[
+            [2],
+            [2],
+            [2],
+            [2],
+        ],
+        out_features=["stage1", "stage2", "stage3", "stage4"],
+        out_indices=[1, 2, 3, 4],
+        batch_size=3,
+        num_channels=3,
+        image_size=[32, 32],
+        is_training=True,
+        use_labels=True,
+        hidden_act="relu",
+        num_labels=3,
+        hidden_sizes=[32, 32, 32, 32, 32],
     ):
         self.parent = parent
         self.stem_kernel_size = stem_kernel_size
