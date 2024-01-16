@@ -39,8 +39,8 @@ References:
 from typing import Optional, Tuple
 
 import tensorflow as tf
-from ...modeling_tf_utils import shape_list
 
+from ...modeling_tf_utils import shape_list
 from .configuration_idefics import IdeficsConfig
 
 

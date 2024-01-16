@@ -15,7 +15,6 @@
 """ PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 
-import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -23,7 +22,7 @@ import tensorflow as tf
 
 from ...activations import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import shape_list, TFPreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list
 from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 

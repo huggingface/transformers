@@ -26,8 +26,8 @@ import tensorflow as tf
 from ... import TFPreTrainedModel
 from ...activations_tf import ACT2FN
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PretrainedConfig
 from ...modeling_tf_utils import shape_list
+from ...modeling_utils import PretrainedConfig
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,

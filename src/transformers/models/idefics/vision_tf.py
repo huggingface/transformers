@@ -23,9 +23,9 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import shape_list, TFPreTrainedModel
-from ...utils import ModelOutput, logging
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list
 from ...tf_utils import flatten
+from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 
 
@@ -157,6 +157,16 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embedding", None) is not None:
+            with tf.name_scope(self.patch_embedding.name):
+                self.patch_embedding.build(None)
+        if getattr(self, "position_embedding", None) is not None:
+            with tf.name_scope(self.position_embedding.name):
+                self.position_embedding.build(None)
 
 
 class TFIdeficsVisionAttention(tf.keras.layers.Layer):
@@ -261,6 +271,22 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build(None)
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build(None)
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build(None)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build(None)
 
 
 class TFIdeficsVisionMLP(tf.keras.layers.Layer):
@@ -276,6 +302,16 @@ class TFIdeficsVisionMLP(tf.keras.layers.Layer):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build(None)
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build(None)
 
 
 class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
@@ -326,6 +362,16 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build(None)
 
 
 class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
@@ -432,13 +478,21 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 class TFIdeficsVisionTransformer(TFPreTrainedModel):
     def __init__(self, config: IdeficsVisionConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
-        embed_dim = config.hidden_size
+        self.embed_dim = config.hidden_size
 
         self.embeddings = TFIdeficsVisionEmbeddings(config, name="embeddings")
         self.pre_layrnorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
@@ -492,3 +546,19 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "pre_layrnorm", None) is not None:
+            with tf.name_scope(self.pre_layrnorm.name):
+                self.pre_layrnorm.build((None, None, self.embed_dim))
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "post_layernorm", None) is not None:
+            with tf.name_scope(self.post_layernorm.name):
+                self.post_layernorm.build((None, None, self.embed_dim))
