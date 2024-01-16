@@ -4949,12 +4949,16 @@ def _split(data, full_batch_size: int, split_size: int = None):
 
 def _split_model_inputs(
     model_input: Union[ModelOutput, Dict], split_size: int, full_batch_size: int
-) -> List[Union[ModelOutput, Dict]]:
+) -> list[ModelOutput | dict | None ]:
     """
     Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
     size. The input object is dict when it was prepared for forward pass and ModelOutput when it was returned from
     previous forward pass.
     """
+    # Edge case: if model_input is None, return a list of Nones
+    # this happens with Whisper where encoder_outputs is None
+    if model_input is None:
+        return [model_input] * (full_batch_size // split_size)
     # Infer the class from the object
     model_output_cls = type(model_input)
     if (full_batch_size % split_size) != 0:
@@ -4967,7 +4971,9 @@ def _split_model_inputs(
 
     # Find all the dataclass fields (e.g., last_hidden_state, pooler_output etc.) and split them
     keys = (
-        model_input.__dataclass_fields__.keys() if hasattr(model_input, "__dataclass_fields__") else model_input.keys()
+        model_input.__dataclass_fields__.keys()
+        if hasattr(model_input, "__dataclass_fields__")
+        else model_input.keys()
     )
     # We only keep keys that are in the model_input
     keys = [k for k in keys if k in model_input]
