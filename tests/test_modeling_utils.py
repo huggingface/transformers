@@ -34,6 +34,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
     logging,
@@ -835,6 +836,23 @@ class ModelUtilsTest(TestCasePlus):
             outputs2 = new_model_with_offload(inputs)
             self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
 
+    @slow
+    @require_torch
+    def test_from_pretrained_non_contiguous_checkpoint(self):
+        # See: https://github.com/huggingface/transformers/pull/28414
+        # Tiny models on the Hub have contiguous weights, contrarily to google/owlvit
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        model = OwlViTForObjectDetection.from_pretrained(
+            "fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto"
+        )
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -1435,6 +1453,11 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
+        except HTTPError:
+            pass
+
     @unittest.skip("This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
@@ -1521,6 +1544,28 @@ The commit description supports markdown synthax see:
         config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         new_model = AutoModel.from_config(config, trust_remote_code=True)
         self.assertEqual(new_model.__class__.__name__, "CustomModel")
+
+    def test_push_to_hub_with_tags(self):
+        from huggingface_hub import ModelCard
+
+        new_tags = ["tag-1", "tag-2"]
+
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
+
+        self.assertTrue(model.model_tags is None)
+
+        model.add_model_tags(new_tags)
+
+        self.assertTrue(model.model_tags == new_tags)
+
+        model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
+
+        loaded_model_card = ModelCard.load(f"{USER}/test-dynamic-model-with-tags")
+        self.assertEqual(loaded_model_card.data.tags, new_tags)
 
 
 @require_torch
