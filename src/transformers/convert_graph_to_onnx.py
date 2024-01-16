@@ -415,13 +415,12 @@ def quantize(onnx_model_path: Path) -> Path:
 
     Returns: The Path generated for the quantized
     """
+    import onnx
     import onnxruntime
+    from onnx.onnx_pb import ModelProto
     from onnxruntime.quantization import QuantizationMode
     from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
     from onnxruntime.quantization.registry import IntegerOpsRegistry
-
-    import onnx
-    from onnx.onnx_pb import ModelProto
 
     # Load the ONNX model
     onnx_model = onnx.load(onnx_model_path.as_posix())
