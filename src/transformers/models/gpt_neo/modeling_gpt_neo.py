@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_attention_mask
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -54,13 +54,12 @@ if is_flash_attn_2_available():
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
 
-# This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
+# This makes `_prepare_4d_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
 if is_torch_fx_available():
     if not is_torch_greater_or_equal_than_1_13:
         import torch.fx
 
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
     _prepare_4d_attention_mask = torch.fx.wrap(_prepare_4d_attention_mask)
 
 
@@ -803,16 +802,11 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         # Attention mask.
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
-            attention_mask = (
-                attention_mask
-                if (attention_mask is not None and 0 in attention_mask)
-                else None
-            )
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif attention_mask is not None:
             if input_shape[0] <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
             attention_mask = _prepare_4d_attention_mask(attention_mask, attention_mask.dtype)
-
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
