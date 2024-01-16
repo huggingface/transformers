@@ -564,7 +564,7 @@ class SudachiTokenizer:
             **sudachi_dict_type**: (*optional*) string
                 dict type of sudachi, choose from "small", "core", "full".
             **sudachi_projection**: (*optional*) string
-                Word projection mode of sudachi, choose from "surface", "normalized", "reading", "dictionary", "dictionary_and_surface", "normalized_and_surface", "normalized_nouns".
+                Word projection mode of sudachi, choose from `["surface", "normalized", "reading", "dictionary", "dictionary_and_surface", "normalized_and_surface", "normalized_nouns"]`.
         """
 
         self.do_lower_case = do_lower_case
