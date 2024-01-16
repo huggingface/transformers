@@ -2345,7 +2345,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             "To avoid this behavior and this warning, we recommend you to overwrite the generation "
                             "config model attribute before calling the model's `save_pretrained`, preferably also "
                             "removing any generation kwargs from the model config. This warning will be raised to an "
-                            "exception in v4.39."
+                            "exception in v4.41."
                         )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
