@@ -621,6 +621,13 @@ class PretrainedConfig(PushToHubMixin):
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
             if cl is not None:
+                import threading
+                id1 = kwargs.pop("id1")
+                id2 = kwargs.pop("id2")
+                id3 = kwargs.pop("id3")
+                id4 = kwargs.pop("id4")
+                s = f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
+                breakpoint()
                 cl.io.flush()
                 cl.out = cl.io.getvalue()
                 if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
@@ -628,13 +635,12 @@ class PretrainedConfig(PushToHubMixin):
                     try:
                         assert "You are using a model of type t5 to instantiate a model of type bert" in cl.out
                     except:
-                        import threading
                         id1 = kwargs.pop("id1")
                         id2 = kwargs.pop("id2")
                         id3 = kwargs.pop("id3")
                         id4 = kwargs.pop("id4")
                         raise ValueError(
-                            f"ci.out == `{ci.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
+                            f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
                         )
 
 
