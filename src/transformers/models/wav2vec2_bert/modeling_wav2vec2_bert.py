@@ -55,11 +55,11 @@ _CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
 # Base docstring
 _BASE_CHECKPOINT_FOR_DOC = "facebook/w2v-bert-2.0"
 _PRETRAINED_CHECKPOINT_FOR_DOC = "hf-audio/wav2vec2-bert-CV16-en"
-_EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
+_EXPECTED_OUTPUT_SHAPE = [1, 146, 1024]
 
 # CTC docstring
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 64.21
+_CTC_EXPECTED_OUTPUT = "'mr quilter is the apostle of the middle classes and we are glad to welcome his gospel'"
+_CTC_EXPECTED_LOSS = 17.04
 
 
 WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -1204,6 +1204,8 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_CTC_EXPECTED_OUTPUT,
+        expected_loss=_CTC_EXPECTED_LOSS,
     )
     def forward(
         self,
