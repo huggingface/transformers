@@ -26,7 +26,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_BACKBONE_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from transformers.testing_utils import require_torch, require_vision, torch_device, slow
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
