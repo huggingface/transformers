@@ -204,6 +204,6 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_encode_decode(self):
-        tokenizer = SpeechT5Tokenizer.from_pretrained('microsoft/speecht5_tts')
+        tokenizer = SpeechT5Tokenizer.from_pretrained("microsoft/speecht5_tts")
         ids = tokenizer.encode("a = b")
         self.assertEqual(tokenizer.decode(ids), "a <unk> b</s>")
