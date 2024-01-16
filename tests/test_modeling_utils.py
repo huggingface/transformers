@@ -290,6 +290,10 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNotNone(model)
 
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
+        for i in range(200):
+            self._test_model_from_pretrained_with_different_pretrained_model_name()
+
+    def _test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
