@@ -22,7 +22,8 @@ from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ContextManager, Dict, Iterable, List, Tuple, Type
+from functools import partial
+from typing import Any, ContextManager, Iterable, List, Tuple
 
 import numpy as np
 from packaging import version
@@ -311,16 +312,14 @@ class ModelOutput(OrderedDict):
                 _torch_pytree.register_pytree_node(
                     cls,
                     _model_output_flatten,
-                    _model_output_unflatten,
+                    partial(_model_output_unflatten, output_type=cls),
                     serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-                    from_dumpable_context=_model_output_from_dumpable_context,
-                    to_dumpable_context=_model_output_to_dumpable_context,
                 )
             else:
                 _torch_pytree._register_pytree_node(
                     cls,
                     _model_output_flatten,
-                    _model_output_unflatten,
+                    partial(_model_output_unflatten, output_type=cls),
                 )
 
     def __init__(self, *args, **kwargs):
@@ -443,41 +442,27 @@ if is_torch_available():
     import torch.utils._pytree as _torch_pytree
 
     def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
-        return list(output.values()), (type(output), list(output.keys()))
+        return list(output.values()), list(output.keys())
 
-    def _model_output_unflatten(values: Iterable[Any], context: "_torch_pytree.Context") -> ModelOutput:
-        output_type, keys = context
-        return output_type(**dict(zip(keys, values)))
+    def _model_output_unflatten(
+        values: Iterable[Any],
+        context: "_torch_pytree.Context",
+        output_type=None,
+    ) -> ModelOutput:
+        return output_type(**dict(zip(context, values)))
 
     if version.parse(get_torch_version()) >= version.parse("2.2"):
-        SERIALIZED_CLASS_TO_PYTHON_CLASS: Dict[str, Type[Any]] = {}
-
-        def _model_output_to_dumpable_context(context: "_torch_pytree.Context") -> "_torch_pytree.DumpableContext":
-            python_class, keys = context
-            serialized_class = f"{python_class.__module__}.{python_class.__name__}"
-            SERIALIZED_CLASS_TO_PYTHON_CLASS[serialized_class] = python_class
-            return (serialized_class, keys)
-
-        def _model_output_from_dumpable_context(
-            dumpable_context: "_torch_pytree.DumpableContext"
-        ) -> "_torch_pytree.Context":
-            serialized_class, keys = dumpable_context
-            python_class = SERIALIZED_CLASS_TO_PYTHON_CLASS[serialized_class]
-            return (python_class, keys)
-
         _torch_pytree.register_pytree_node(
             ModelOutput,
             _model_output_flatten,
-            _model_output_unflatten,
+            partial(_model_output_unflatten, output_type=ModelOutput),
             serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-            from_dumpable_context=_model_output_from_dumpable_context,
-            to_dumpable_context=_model_output_to_dumpable_context,
         )
     else:
         _torch_pytree._register_pytree_node(
             ModelOutput,
             _model_output_flatten,
-            _model_output_unflatten,
+            partial(_model_output_unflatten, output_type=ModelOutput),
         )
 
 

@@ -135,9 +135,7 @@ class ModelOutputTester(unittest.TestCase):
         self.assertFalse(pytree._is_leaf(x))
 
         expected_flat_outs = [1.0, 2.0]
-        expected_tree_spec = pytree.TreeSpec(
-            ModelOutputTest, (ModelOutputTest, ["a", "c"]), [pytree.LeafSpec(), pytree.LeafSpec()]
-        )
+        expected_tree_spec = pytree.TreeSpec(ModelOutputTest, ["a", "c"], [pytree.LeafSpec(), pytree.LeafSpec()])
 
         actual_flat_outs, actual_tree_spec = pytree.tree_flatten(x)
         self.assertEqual(expected_flat_outs, actual_flat_outs)
@@ -151,7 +149,7 @@ class ModelOutputTester(unittest.TestCase):
         if is_torch_greater_or_equal_than_2_2:
             self.assertEqual(
                 pytree.treespec_dumps(actual_tree_spec),
-                '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": ["tests.utils.test_model_output.ModelOutputTest", ["a", "c"]], "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
+                '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": ["a", "c"], "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
             )
 
 
