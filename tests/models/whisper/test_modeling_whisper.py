@@ -2149,12 +2149,12 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = input_features.to(device="cuda")
 
         gen_kwargs = {
-        "return_timestamps": True,
-        "no_speech_threshold": 0.6,
-        "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        "compression_ratio_threshold": 1.35,
-        "condition_on_prev_tokens": True,
-        "logprob_threshold": -1.0,
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,
+            "logprob_threshold": -1.0,
         }
 
         torch.manual_seed(0)
@@ -2234,23 +2234,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         audios.append(one_audio[:])
 
         gen_kwargs = {
-        "return_timestamps": True,
-        "no_speech_threshold": 0.6,
-        "temperature": 0.0,
-        "compression_ratio_threshold": 1.35,
-        "condition_on_prev_tokens": True,
-        "logprob_threshold": -1.0,
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": 0.0,
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,
+            "logprob_threshold": -1.0,
         }
 
-        with open("/home/patrick/expected.txt", "w") as f:
-            decoded_single = []
-            for audio in audios:
-                inputs = processor(audio, return_tensors="pt", truncation=False)
-                inputs = inputs.to(device="cuda")
+        decoded_single = []
+        for audio in audios:
+            inputs = processor(audio, return_tensors="pt", truncation=False)
+            inputs = inputs.to(device="cuda")
 
-                result = model.generate(**inputs, **gen_kwargs)
-                decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
-
+            result = model.generate(**inputs, **gen_kwargs)
+            decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
 
         # exact match
         assert decoded_single[0] == EXPECTED_TEXT_1
@@ -2338,13 +2336,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = inputs.to(device="cuda")
 
         gen_kwargs = {
-        "return_timestamps": True,
-        "no_speech_threshold": 0.6,
-        "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
-        "compression_ratio_threshold": 1.35,
-        "condition_on_prev_tokens": True,
-        "logprob_threshold": -1.0,
-        "num_beams": 5,
+            "return_timestamps": True,
+            "no_speech_threshold": 0.6,
+            "temperature": (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+            "compression_ratio_threshold": 1.35,
+            "condition_on_prev_tokens": True,
+            "logprob_threshold": -1.0,
+            "num_beams": 5,
         }
 
         torch.manual_seed(0)
