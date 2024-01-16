@@ -154,6 +154,8 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     from_bin = is_torch_available() and isinstance(next(iter(pt_state_dict.values())), torch.Tensor)
     bfloat16 = torch.bfloat16 if from_bin else "bfloat16"
 
+    weight_dtypes = {k: v.dtype for k, v in pt_state_dict.items()}
+
     if from_bin:
         for k, v in pt_state_dict.items():
             # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
@@ -187,7 +189,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
         pt_tuple_key = tuple(pt_key.split("."))
-        is_bfloat_16 = pt_state_dict[pt_key].dtype == bfloat16
+        is_bfloat_16 = weight_dtypes[pt_key] == bfloat16
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
