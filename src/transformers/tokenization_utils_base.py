@@ -943,13 +943,14 @@ class SpecialTokensMixin:
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
 
-                to_add = set()
+                to_add = []
                 for token in value:
                     if isinstance(token, str):
                         # for legacy purpose we default to stripping. `test_add_tokens_tokenizer` depends on this
                         token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
-                    if str(token) not in self.additional_special_tokens:
-                        to_add.add(token)
+                    if not replace_additional_special_tokens and str(token) in self.additional_special_tokens:
+                        continue
+                    to_add.append(token)
                 if replace_additional_special_tokens and len(to_add) > 0:
                     setattr(self, key, list(to_add))
                 else:
