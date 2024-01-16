@@ -138,6 +138,16 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_tokenizer"].pre_tokenizer = BertPreTokenizer()
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        vocab = self.__dict__["_tokenizer"].get_vocab()
+        self.__dict__["_tokenizer"].pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
