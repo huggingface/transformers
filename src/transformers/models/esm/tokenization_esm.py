@@ -14,10 +14,9 @@
 # limitations under the License.
 """Tokenization classes for ESM."""
 import os
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import AddedToken
 from ...utils import logging
 
 
@@ -157,6 +156,3 @@ class EsmTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return self.get_vocab_size(with_added_tokens=False)
-
-    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
-        return super()._add_tokens(new_tokens, special_tokens=True)
