@@ -625,7 +625,12 @@ class PretrainedConfig(PushToHubMixin):
                 cl.out = cl.io.getvalue()
                 if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
                     assert logger.level == 0
-                    assert "You are using a model of type t5 to instantiate a model of type bert" == cl.out
+                    try:
+                        assert "You are using a model of type t5 to instantiate a model of type bert" in cl.out
+                    except:
+                        import threading
+                        raise ValueError(f"ci.out == `{ci.out}` | logger id == `{id(logger)}` | threading id == `{threading.get_ident()}` | thread native id == `{threading.get_native_id}` | PID == `{os.getpid()}`")
+
 
         return cls.from_dict(config_dict, **kwargs)
 
