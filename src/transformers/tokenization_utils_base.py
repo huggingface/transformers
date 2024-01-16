@@ -950,7 +950,7 @@ class SpecialTokensMixin:
                         token = AddedToken(token, rstrip=False, lstrip=False, normalized=False, special=True)
                     if str(token) not in self.additional_special_tokens:
                         to_add.add(token)
-                if replace_additional_special_tokens:
+                if replace_additional_special_tokens and len(to_add) > 0:
                     setattr(self, key, list(to_add))
                 else:
                     self._additional_special_tokens.extend(to_add)
