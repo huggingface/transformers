@@ -1361,6 +1361,7 @@ class WhisperGenerationMixin:
 
         return kwargs
 
+    @staticmethod
     def _retrieve_compression_ratio(tokens, vocab_size):
         """Compute byte length of zlib compressed token bytes vs. byte length of raw token bytes"""
         length = int(math.log2(vocab_size) / 8) + 1
