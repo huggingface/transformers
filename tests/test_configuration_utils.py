@@ -305,10 +305,10 @@ class ConfigTestUtils(unittest.TestCase):
             self.assertEqual(len(logs.output), 1)
             self.assertIn("min_length", logs.output[0])
 
-    def test_has_set_generation_parameters(self):
+    def test_has_non_default_generation_parameters(self):
         config = BertConfig()
-        self.assertFalse(config.has_set_generation_parameters())
+        self.assertFalse(config._has_non_default_generation_parameters())
         config = BertConfig(min_length=3)
-        self.assertTrue(config.has_set_generation_parameters())
+        self.assertTrue(config._has_non_default_generation_parameters())
         config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
-        self.assertFalse(config.has_set_generation_parameters())
+        self.assertFalse(config._has_non_default_generation_parameters())

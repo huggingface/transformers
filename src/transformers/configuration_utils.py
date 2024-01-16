@@ -46,35 +46,6 @@ logger = logging.get_logger(__name__)
 _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
-GENERATION_DEFAULTS = {
-    "max_length": 20,
-    "min_length": 0,
-    "do_sample": False,
-    "early_stopping": False,
-    "num_beams": 1,
-    "num_beam_groups": 1,
-    "diversity_penalty": 0.0,
-    "temperature": 1.0,
-    "top_k": 50,
-    "top_p": 1.0,
-    "typical_p": 1.0,
-    "repetition_penalty": 1.0,
-    "length_penalty": 1.0,
-    "no_repeat_ngram_size": 0,
-    "encoder_no_repeat_ngram_size": 0,
-    "bad_words_ids": None,
-    "num_return_sequences": 1,
-    "output_scores": False,
-    "return_dict_in_generate": False,
-    "forced_bos_token_id": None,
-    "forced_eos_token_id": None,
-    "remove_invalid_values": False,
-    "exponential_decay_length_penalty": None,
-    "suppress_tokens": None,
-    "begin_suppress_tokens": None,
-}
-
-
 class PretrainedConfig(PushToHubMixin):
     # no-format
     r"""
@@ -317,7 +288,7 @@ class PretrainedConfig(PushToHubMixin):
 
         # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
         # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
-        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+        for parameter_name, default_value in self._get_generation_defaults().items():
             setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
 
         # Fine-tuning task arguments
@@ -470,16 +441,16 @@ class PretrainedConfig(PushToHubMixin):
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
-        set_generation_parameters = {}
-        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+        non_default_generation_parameters = {}
+        for parameter_name, default_value in self._get_generation_defaults().items():
             if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
-                set_generation_parameters.update({parameter_name: getattr(self, parameter_name)})
-        if len(set_generation_parameters) > 0:
+                non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+        if len(non_default_generation_parameters) > 0:
             logger.warning(
                 "Some non-default generation parameters are set in the model config. These should go into a "
                 "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
                 "instead. This warning will be raised to an exception in v4.39.\n"
-                f"Set generation parameters: {str(set_generation_parameters)}"
+                f"Non-default generation parameters: {str(non_default_generation_parameters)}"
             )
 
         os.makedirs(save_directory, exist_ok=True)
@@ -1069,11 +1040,41 @@ class PretrainedConfig(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def has_set_generation_parameters(self) -> bool:
+    @staticmethod
+    def _get_generation_defaults() -> Dict[str, Any]:
+        return {
+            "max_length": 20,
+            "min_length": 0,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "typical_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "encoder_no_repeat_ngram_size": 0,
+            "bad_words_ids": None,
+            "num_return_sequences": 1,
+            "output_scores": False,
+            "return_dict_in_generate": False,
+            "forced_bos_token_id": None,
+            "forced_eos_token_id": None,
+            "remove_invalid_values": False,
+            "exponential_decay_length_penalty": None,
+            "suppress_tokens": None,
+            "begin_suppress_tokens": None,
+        }
+
+    def _has_non_default_generation_parameters(self) -> bool:
         """
         Whether or not this instance holds non-default generation parameters.
         """
-        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+        for parameter_name, default_value in self._get_generation_defaults().items():
             if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
                 return True
         return False
