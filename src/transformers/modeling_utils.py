@@ -2329,8 +2329,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
-                # generation config build from the model config + the model config holds generation kwargs -> generate
-                # may revert to legacy behavior
+                # generation config built from the model config + the model config holds generation kwargs -> generate
+                # may revert to legacy behavior if the two don't match
                 if (
                     model_to_save.generation_config._from_model_config
                     and model_to_save.config.has_set_generation_parameters()
