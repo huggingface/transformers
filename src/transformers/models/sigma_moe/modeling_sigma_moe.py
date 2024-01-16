@@ -875,8 +875,9 @@ class SigmaMoEPreTrainedModel(PreTrainedModel):
             std_expert_sel = 2.0 / math.sqrt(self.config.d_model * self.config.num_hidden_layers)
             std_keys = 2.0 / math.sqrt(self.config.d_model * self.config.num_hidden_layers)
             std_values = 2.0 / math.sqrt(self.config.d_ff * self.config.num_hidden_layers)
-            module.expert_sel.data.normal_(mean=0.0, std=std_expert_sel)
-            module.renorm_keep_std(module.expert_sel, dim=1)
+            module.expert_sel: torch.nn.Linear
+            module.expert_sel.weight.data.normal_(mean=0.0, std=std_expert_sel)
+            # module.renorm_keep_std(module.expert_sel.weight, dim=1)
             module.keys.data.normal_(mean=0.0, std=std_keys)
             module.values.data.normal_(mean=0.0, std=std_values)
             if module.bias is not None:
@@ -994,6 +995,11 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
+        # Make sure to normalize the rows of the routers
+        for layer in self.layers:
+            layer: SigmaMoEDecoderLayer
+            if isinstance(layer.mlp.ff, SigmaMoELayer):
+                layer.mlp.ff.renorm_keep_std(layer.mlp.ff.expert_sel.weight, dim=1)
 
     def get_input_embeddings(self):
         return self.embed_tokens

@@ -477,17 +477,32 @@ class CVMM(torch.autograd.Function):
         out_index: Optional[torch.Tensor] = None,
         reduction_weight: Optional[torch.Tensor] = None
     ):
-        ctx.save_for_backward(x, keys, sel, sel_index, out_index, reduction_weight)
         out_type = torch.float16 if torch.is_autocast_enabled() else x.dtype
+        out_index_is_none = False
         if out_index is None:
+            out_index_is_none = True
             out_index = torch.tensor(-1).cuda()
 
-        res = torch.ops.mylib.cvmm_triton(x, sel_index, sel, keys, out_type, out_index)
-        # res = cvmm_triton(x, sel_index, sel, keys, out_type, out_index)
+        res = torch.ops.mylib.cvmm_triton(
+            x, sel_index, sel, keys, out_type, out_index
+        )
         if reduction_weight is not None:
-            res = res.view(*reduction_weight.shape, res.shape[-1])
-            res = (reduction_weight.unsqueeze(-2).type_as(res) @ res).squeeze(-2)
+            res_into_reduction = res.view(*reduction_weight.shape, res.shape[-1])
+            res = (
+                reduction_weight.unsqueeze(-2).type_as(res) @ res_into_reduction
+            ).squeeze(-2)
+        else:
+            res_into_reduction = None
 
+        ctx.save_for_backward(
+            x,
+            keys,
+            sel,
+            sel_index,
+            None if out_index_is_none else out_index,
+            reduction_weight,
+            res_into_reduction,
+        )
         ctx.op_type = out_type
         ctx.keys_type = keys.dtype
         ctx.is_autocast = torch.is_autocast_enabled()
@@ -495,7 +510,7 @@ class CVMM(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        x, keys, sel, sel_index, out_index, reduction_weight = ctx.saved_tensors
+        x, keys, sel, sel_index, out_index, reduction_weight, res_into_reduction = ctx.saved_tensors
         keys_dt = keys
 
         # Backward for weight
@@ -558,7 +573,14 @@ class CVMM(torch.autograd.Function):
             # grad_x_full is the unscaled grad. For the input, we have to scale it, for the reduction wegiht,
             # we have to compute dot products with the input.
             grad_x = (reduction_weight.view(*grad_x_full.shape[:-1]).unsqueeze(-2).type_as(grad_x_full) @ grad_x_full).squeeze(-2)
-            grad_w_off = (grad_x_full.type_as(reduction_weight) @ x.unsqueeze(-1).type_as(reduction_weight)).squeeze(-1).view_as(reduction_weight)
+            grad_w_off = (
+                (
+                    res_into_reduction.type_as(reduction_weight)
+                    @ grad_output.unsqueeze(-1).type_as(reduction_weight)
+                )
+                .squeeze(-1)
+                .view_as(reduction_weight)
+            )
         elif grad_x_full.shape[-2] != 1:
             grad_x = grad_x_full.sum(-2)
         else:
