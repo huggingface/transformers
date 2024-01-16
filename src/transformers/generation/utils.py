@@ -4949,7 +4949,7 @@ def _split(data, full_batch_size: int, split_size: int = None):
 
 def _split_model_inputs(
     model_input: Union[ModelOutput, Dict], split_size: int, full_batch_size: int
-) -> list[ModelOutput | dict | None ]:
+) -> list[Union[ModelOutput, Dict]]:
     """
     Split a ModelOutput object (or its subclasses) or Dict into a list of same-class objects based on a specified split
     size. The input object is dict when it was prepared for forward pass and ModelOutput when it was returned from
@@ -4971,9 +4971,7 @@ def _split_model_inputs(
 
     # Find all the dataclass fields (e.g., last_hidden_state, pooler_output etc.) and split them
     keys = (
-        model_input.__dataclass_fields__.keys()
-        if hasattr(model_input, "__dataclass_fields__")
-        else model_input.keys()
+        model_input.__dataclass_fields__.keys() if hasattr(model_input, "__dataclass_fields__") else model_input.keys()
     )
     # We only keep keys that are in the model_input
     keys = [k for k in keys if k in model_input]
