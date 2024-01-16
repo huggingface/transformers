@@ -94,7 +94,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import QuantizationMethod
+from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 from .utils.quantizers import QuantizationConfigParser
 
 
@@ -2811,6 +2811,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         max_memory = kwargs.pop("max_memory", None)
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
+        load_in_8bit = kwargs.pop("load_in_8bit", False)
+        load_in_4bit = kwargs.pop("load_in_4bit", False)
         quantization_config = kwargs.pop("quantization_config", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
@@ -2921,9 +2923,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        # processing quantization args before model_kwargs instantiated
-        quantization_config_parser = QuantizationConfigParser()
-        kwargs = quantization_config_parser.parse_config_from_args(quantization_config, **kwargs)
+        # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
+        if load_in_4bit or load_in_8bit:
+            if quantization_config is not None:
+                raise ValueError(
+                    "You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when passing "
+                    "`quantization_config` argument at the same time."
+                )
+
+            # preparing BitsAndBytesConfig from kwargs
+            config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
+            config_dict = {**config_dict, "load_in_4bit": load_in_4bit, "load_in_8bit": load_in_8bit}
+            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
+                config_dict=config_dict, return_unused_kwargs=True, **kwargs
+            )
+            logger.warning(
+                "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
+                "Please, use `quantization_config` argument instead.",
+                FutureWarning,
+            )
 
         from_pt = not (from_tf | from_flax)
 
@@ -2969,7 +2987,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_kwargs = kwargs
 
         # parse model config and init quantizer
-        quantizer = quantization_config_parser.get_quantizer(config=config)
+        quantizer = QuantizationConfigParser.get_quantizer(
+            config=config,
+            quantization_config_from_args=quantization_config,
+        )
 
         if quantizer is not None:
             quantizer.validate_environment(torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax)

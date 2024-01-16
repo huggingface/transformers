@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 import torch
 from packaging import version
 
-from ..configuration_utils import PretrainedConfig
 from . import (
     is_accelerate_available,
     is_auto_awq_available,
@@ -44,63 +43,54 @@ class QuantizationConfigParser:
     """
     Parser for quantization configuration during model loading.
     Resolves conflicts between quantization config passed via `from_pretrained` and the one present in the model.
-    Works in 2 stages: from args, and then from model.config, possibly overriding values from args.
     Returns a quantizer instance to be used for model loading or None for not-quantized model.
     """
 
-    def __init__(self):
-        pass
+    @classmethod
+    def get_quantizer(
+        self,
+        config,
+        quantization_config_from_args,
+    ):
+        if hasattr(
+            config, "quantization_config"
+        ):  # the model is considered PREQUANTIZED and config from the model prevails
+            quantization_config = self.validate_quantization_config(config.quantization_config)
 
-    def parse_config_from_args(self, quantization_config_from_args=None, **kwargs) -> Dict[str, Any]:
-        """
-        Parses the quantization configuration from arguments provided to `from_pretrained`.
-        This method sets the `quantization_config` and `quantization_method` based on the provided arguments.
+            if quantization_config_from_args is not None:
+                quantization_config_from_args = self.validate_quantization_config(quantization_config_from_args)
+                quantization_config = self.handle_configs_collision(quantization_config, quantization_config_from_args)
 
-        Args:
-            quantization_config_from_args: A dict or instance of `quantization_config` passed to `from_pretrained`.
-            **kwargs: Additional keyword arguments passed to `from_pretrained`, such as `load_in_8bit`.
-        Sets:
-            self.quantization_config: parsed quantization config from args
-            self.quantization_method: QuantizationMethod enum, detected quantization method.
-        Returns:
-            A dictionary of remaining keyword arguments with quantization-related kwargs removed.
-        Raises:
-            ValueError: If conflicting arguments are provided or unsupported quantization methods are specified.
-        """
+            quantization_status = QuantizationStatus.PREQUANTIZED
 
-        self.quantization_method = None
+        elif (
+            quantization_config_from_args is not None
+        ):  # only Q-config from args is present, assuming fresh quantization
+            quantization_config = self.validate_quantization_config(quantization_config_from_args)
 
-        if quantization_config_from_args is not None:
-            self.quantization_config = self.validate_quantization_config(quantization_config_from_args)
-            self.quantization_method = getattr(self.quantization_config, "quant_method")
-
-        elif (kwargs.get("load_in_8bit", False)) or (kwargs.get("load_in_4bit", False)):
-            config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
-            self.quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                config_dict=config_dict, return_unused_kwargs=True, **kwargs
-            )
-            self.quantization_method = QuantizationMethod.BITS_AND_BYTES
-        else:
-            self.quantization_config = None  # no quantization from args
-
-        if self.quantization_method == QuantizationMethod.BITS_AND_BYTES:
-            bnb_quantization_config_kwargs = {
-                k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
-            }
-            if bnb_quantization_config_kwargs:
+            if isinstance(quantization_config, AwqConfig):
                 raise ValueError(
-                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
-                    "`quantization_config` argument at the same time."
+                    "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
+                    " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
                 )
-        # if self.quantization_method == QuantizationMethod.AWQ:
-        #     raise ValueError(
-        #         "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
-        #         " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
-        #     )
 
-        return kwargs
+            quantization_status = QuantizationStatus.FRESH
 
-    def validate_quantization_config(self, quantization_config):
+        else:  # Normal loading without quantization. No quant arguments present in args or model config.
+            return
+
+        config.quantization_config = quantization_config  # updating model's congig.quantization_config
+
+        quantizer_class = self.get_quantizer_class(quantization_config)
+
+        quantizer = quantizer_class(
+            quantization_config=quantization_config,
+            quantization_status=quantization_status,
+        )
+        return quantizer
+
+    @staticmethod
+    def validate_quantization_config(quantization_config):
         """
         checks quantization_config class
         converts dict format into QuantizationConfigMixin
@@ -141,11 +131,12 @@ class QuantizationConfigParser:
 
         else:
             raise ValueError(
-                f"Invalid type for `quantization_config`: {type(self.quantization_config)}. Should be a `dict` or a"
+                f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
                 " `QuantizationConfigMixin` subclass instance."
             )
 
-    def handle_configs_collision(self, config_quantization_config):
+    @staticmethod
+    def handle_configs_collision(quantization_config, quantization_config_from_args):
         """
         handles situations where both quantization_config from args and quantization_config from model config are present
         args: config_quantization_config
@@ -156,77 +147,34 @@ class QuantizationConfigParser:
             " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
         )
 
-        if isinstance(config_quantization_config, (GPTQConfig, AwqConfig)):
+        if isinstance(quantization_config, (GPTQConfig, AwqConfig)):
             # special case for GPTQ / AWQ config collision
-            loading_attr_dict = self.quantization_config.get_loading_attributes()
+            loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
-                setattr(config_quantization_config, attr, val)
+                setattr(quantization_config, attr, val)
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         logger.warning(warning_msg)
-        return config_quantization_config
+        return quantization_config
 
-    def get_quantizer_class(self):
+    @staticmethod
+    def get_quantizer_class(quantization_config):
         """selects HFQuantizer subclass based on quantization_config type and attrs"""
-        if self.quantization_method == QuantizationMethod.BITS_AND_BYTES:
-            if self.quantization_config.load_in_4bit:
+        if isinstance(quantization_config, BitsAndBytesConfig):
+            if quantization_config.load_in_4bit:
                 return Bnb4BitHFQuantizer
-            elif self.quantization_config.load_in_8bit:
+            elif quantization_config.load_in_8bit:
                 return Bnb8BitHFQuantizer
             else:
                 raise ValueError("BnB config should specify either `load_in_4bit` or `load_in_8bit`")
-
-        elif self.quantization_method == QuantizationMethod.GPTQ:
+        elif isinstance(quantization_config, GPTQConfig):
             return GPTQHFQuantizer
-
-        elif self.quantization_method == QuantizationMethod.AWQ:
+        elif isinstance(quantization_config, AwqConfig):
             return AWQHFQuantizer
-
-    def get_quantizer(self, config: PretrainedConfig) -> HFQuantizer:
-        """
-        Process model config if any.
-        # Assumes that config.quantization_config is None or subclass of QuantizationConfigMixin
-
-        Returns:
-            Quantizer instance to use for model loading.
-        """
-        if not hasattr(self, "quantization_method"):
-            raise AttributeError("quantization_config from args must be parsed before parsing model config")
-
-        if hasattr(config, "quantization_config"):
-            # the model is considered PREQUANTIZED and config from the model prevails
-            config_quantization_config = self.validate_quantization_config(config.quantization_config)
-            quantization_method_from_config = getattr(config_quantization_config, "quant_method")
-
-            if self.quantization_config is not None:
-                self.quantization_config = self.handle_configs_collision(config_quantization_config)
-            else:
-                self.quantization_config = config_quantization_config
-
-            self.quantization_method = quantization_method_from_config
-            self.quantization_status = QuantizationStatus.PREQUANTIZED
-
-        elif self.quantization_method == QuantizationMethod.AWQ:
-            raise ValueError(
-                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
-                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
-            )
-
-        elif self.quantization_config is not None:
-            # using quantization_config from args for fresh quantization
-            self.quantization_status = QuantizationStatus.FRESH
-
         else:
-            # Normal loading without quantization. No quant arguments present in args or model config.
-            return
-
-        config.quantization_config = self.quantization_config
-        quantizer_class = self.get_quantizer_class()
-        quantizer = quantizer_class(
-            quantization_config=self.quantization_config,
-            quantization_status=self.quantization_status,
-        )
-        return quantizer
+            raise ValueError(
+                f"Unsupported quantization_config type {type(quantization_config)}; consider updating transformers version."
+            )
 
 
 def get_module_from_name(module, tensor_name: str) -> Tuple[Any, str]:
