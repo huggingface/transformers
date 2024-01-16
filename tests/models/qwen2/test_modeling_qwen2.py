@@ -297,6 +297,7 @@ class Qwen2ModelTester:
 
 
 @require_torch
+# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->Qwen2
 class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Qwen2Model, Qwen2ForCausalLM, Qwen2ForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (Qwen2ForCausalLM,) if is_torch_available() else ()
@@ -313,8 +314,9 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_headmasking = False
     test_pruning = False
 
+    # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_case_name, config_class, model_architecture, tokenizer_name, processor_name
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
         return True
 
@@ -380,7 +382,7 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip("Qwen2 uses both MHA and GQA. The KV cache might be a non standard format")
+    @unittest.skip("Qwen2 uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
