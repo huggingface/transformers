@@ -2334,12 +2334,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if new_generation_config != model_to_save.generation_config:
                         logger.warning(
                             "Your generation config was originally created from the model config, but the model "
-                            "config has changed since then. Unless you parameterize this model's `generate` calls, "
-                            "they will revert to a legacy behavior, loading the parameterization from the model "
-                            "config. To avoid this behavior and this warning, make sure you correctly update OR "
-                            "redefine your generation config before saving it, preferably also removing the "
-                            "generation kwargs from the model config. This warning will be raised to an exception in "
-                            "v4.39."
+                            "config has changed since then. Unless you pass the `generation_config` argument to this "
+                            "model's `generate` calls, they will revert to the legacy behavior where the base "
+                            "`generate` parameterization is loaded from the model config instead. "
+                            "To avoid this behavior and this warning, we recommend you to overwrite the generation "
+                            "config model attribute before calling the model's `save_pretrained`, preferably also "
+                            "removing any generation kwargs from the model config. This warning will be raised to an "
+                            "exception in v4.39."
                         )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
