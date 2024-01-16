@@ -162,16 +162,15 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     original_pixel_values = torch.from_numpy(np.load(original_pixel_values_filepath))
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 
-    assert torch.allclose(original_pixel_values,
-                          pixel_values)
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     with torch.no_grad():
         output = model(pixel_values)
 
     model_output_featuremap_sample = [0, 0, 0, 0, 0, 0, 0, 0, 4.0259247, 17.4911]
-    assert np.allclose(output["feature_maps"][-1][0][0][0][-10:].detach().numpy(),
-                       np.array(
-                           model_output_featuremap_sample)), "Converted model outputs does not match original model outputs"
+    assert np.allclose(
+        output["feature_maps"][-1][0][0][0][-10:].detach().numpy(), np.array(model_output_featuremap_sample)
+    ), "Converted model outputs does not match original model outputs"
 
     model.save_pretrained(pytorch_dump_folder_path)
     textnet_image_processor.save_pretrained(pytorch_dump_folder_path)
