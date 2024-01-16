@@ -198,6 +198,7 @@ def fuse_awq_modules(model, quantization_config):
     backend = quantization_config.backend
 
     modules_to_fuse = get_modules_to_fuse(model, quantization_config)
+    modules_to_not_convert = getattr(quantization_config, "modules_to_not_convert", None)
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
         from awq.modules.fused.attn import QuantAttentionFused

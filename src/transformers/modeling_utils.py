@@ -96,7 +96,6 @@ from .utils.import_utils import (
 )
 from .utils.quantization_config import QuantizationMethod
 from .utils.quantizers import QuantizationConfigParser
-from .utils.versions import require_version_core
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
