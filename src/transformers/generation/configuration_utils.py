@@ -200,8 +200,8 @@ class GenerationConfig(PushToHubMixin):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
         low_memory (`bool`, *optional*):
-            Switch to sequential topk for contrastive search to reduce peak memory. Used with beam search
-            and contrastive search.
+            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
+            Used with beam search and contrastive search.
 
 
         > Parameters that define the output variables of `generate`
