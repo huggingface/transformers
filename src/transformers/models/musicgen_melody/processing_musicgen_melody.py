@@ -22,6 +22,7 @@ import numpy as np
 from ...processing_utils import ProcessorMixin
 from ...utils import to_numpy
 
+
 class MusicgenMelodyProcessor(ProcessorMixin):
     r"""
     Constructs a MusicGen Melody processor which wraps a Wav2Vec2 feature extractor - for raw audio waveform processing - and a T5 tokenizer into a single processor
@@ -50,7 +51,6 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
 
-    # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.__call__ with Encodec -> Wav2Vec2
     def __call__(self, *args, **kwargs):
         """
         Forwards the `audio` argument to Wav2Vec2FeatureExtractor's [`~Wav2Vec2FeatureExtractor.__call__`] and the `text`

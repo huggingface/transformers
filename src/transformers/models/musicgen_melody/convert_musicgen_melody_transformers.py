@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,8 +26,11 @@ from transformers import (
     EncodecModel,
     T5EncoderModel,
 )
-from transformers.models.musicgen_melody.modeling_musicgen_melody import MusicgenMelodyForCausalLM, MusicgenMelodyForConditionalGeneration
 from transformers.models.musicgen_melody.configuration_musicgen_melody import MusicgenMelodyDecoderConfig
+from transformers.models.musicgen_melody.modeling_musicgen_melody import (
+    MusicgenMelodyForCausalLM,
+    MusicgenMelodyForConditionalGeneration,
+)
 from transformers.models.musicgen_melody.processing_musicgen_melody import MusicgenMelodyProcessor
 from transformers.utils import logging
 
@@ -37,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 EXPECTED_MISSING_KEYS = ["model.decoder.embed_positions.weights"]
+EXPECTED_ADDITIONAL_KEYS = ["condition_provider.conditioners.self_wav.chroma.spec.window"]
 
 
 def rename_keys(name):
@@ -62,15 +66,18 @@ def rename_keys(name):
         name = name.replace("linears", "lm_heads")
     if "condition_provider.conditioners.description.output_proj" in name:
         name = name.replace("condition_provider.conditioners.description.output_proj", "enc_to_dec_proj")
+    if "condition_provider.conditioners.self_wav.output_proj" in name:
+        name = name.replace("condition_provider.conditioners.self_wav.output_proj", "audio_enc_to_dec_proj")
     return name
 
 
 def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, Dict]:
     """Function that takes the fairseq MusicgenMelody state dict and renames it according to the HF
     module names. It further partitions the state dict into the decoder (LM) state dict, and that for the
-    encoder-decoder projection."""
+    text encoder projection and for the audio encoder projection."""
     keys = list(state_dict.keys())
     enc_dec_proj_state_dict = {}
+    audio_enc_to_dec_proj_state_dict = {}
     for key in keys:
         val = state_dict.pop(key)
         key = rename_keys(key)
@@ -79,11 +86,13 @@ def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, 
             state_dict[key.replace("in_proj_weight", "q_proj.weight")] = val[:hidden_size, :]
             state_dict[key.replace("in_proj_weight", "k_proj.weight")] = val[hidden_size : 2 * hidden_size, :]
             state_dict[key.replace("in_proj_weight", "v_proj.weight")] = val[-hidden_size:, :]
+        elif "audio_enc_to_dec_proj" in key:
+            audio_enc_to_dec_proj_state_dict[key[len("audio_enc_to_dec_proj.") :]] = val
         elif "enc_to_dec_proj" in key:
             enc_dec_proj_state_dict[key[len("enc_to_dec_proj.") :]] = val
         else:
             state_dict[key] = val
-    return state_dict, enc_dec_proj_state_dict
+    return state_dict, enc_dec_proj_state_dict, audio_enc_to_dec_proj_state_dict
 
 
 def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenMelodyDecoderConfig:
@@ -128,7 +137,7 @@ def convert_musicgen_melody_checkpoint(
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
     decoder_state_dict = fairseq_model.lm.state_dict()
-    decoder_state_dict, enc_dec_proj_state_dict = rename_state_dict(
+    decoder_state_dict, enc_dec_proj_state_dict, audio_enc_to_dec_proj_state_dict = rename_state_dict(
         decoder_state_dict, hidden_size=decoder_config.hidden_size
     )
 
@@ -142,6 +151,10 @@ def convert_musicgen_melody_checkpoint(
     for key in missing_keys.copy():
         if key.startswith(("text_encoder", "audio_encoder")) or key in EXPECTED_MISSING_KEYS:
             missing_keys.remove(key)
+      
+    for key in unexpected_keys.copy():
+        if key in EXPECTED_ADDITIONAL_KEYS:
+            unexpected_keys.remove(key)      
 
     if len(missing_keys) > 0:
         raise ValueError(f"Missing key(s) in state_dict: {missing_keys}")
@@ -157,7 +170,11 @@ def convert_musicgen_melody_checkpoint(
     # load the pre-trained enc-dec projection (from the decoder state dict)
     model.enc_to_dec_proj.load_state_dict(enc_dec_proj_state_dict)
 
+    # load the pre-trained audio encoder projection (from the decoder state dict)
+    model.audio_enc_to_dec_proj.load_state_dict(audio_enc_to_dec_proj_state_dict)
+
     # check we can do a forward pass
+    # TODO: change that
     input_ids = torch.arange(0, 2 * decoder_config.num_codebooks, dtype=torch.long).reshape(2, -1)
     decoder_input_ids = input_ids.reshape(2 * decoder_config.num_codebooks, -1)
 
@@ -171,7 +188,7 @@ def convert_musicgen_melody_checkpoint(
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         "facebook/encodec_32khz", padding_side="left", feature_size=decoder_config.audio_channels
-    )
+    ) # TODO: 
 
     processor = MusicgenMelodyProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -210,13 +227,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        required=False, # TODO: True
+        required=False,  # TODO: True
         default="/home/yoach/tmp/musicgen_melody",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default="musicgen-melody", type=str, help="Where to upload the converted model on the 🤗 hub."
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
@@ -228,4 +245,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_musicgen_melody_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device, args.safe_serialization)
+    convert_musicgen_melody_checkpoint(
+        args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device, args.safe_serialization
+    )

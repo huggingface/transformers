@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available,is_librosa_available, is_torchaudio_available
 
 
 _import_structure = {
@@ -22,10 +22,11 @@ _import_structure = {
         "MusicgenMelodyConfig",
         "MusicgenMelodyDecoderConfig",
     ],
+    "processing_musicgen_melody": ["MusicgenMelodyProcessor"],
 }
 
 try:
-    if not is_torch_available():
+    if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -44,9 +45,10 @@ if TYPE_CHECKING:
         MusicgenMelodyConfig,
         MusicgenMelodyDecoderConfig,
     )
+    from .processing_musicgen_melody import MusicgenMelodyProcessor
 
     try:
-        if not is_torch_available():
+        if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass

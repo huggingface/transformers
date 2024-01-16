@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,42 +41,45 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 2048):
             Vocabulary size of the MusicgenMelodyDecoder model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`MusicgenMelodyDecoder`].
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the layers and the pooler layer.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically, set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer block.
         ffn_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer block.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer block.
+        layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether the model should return the last key/values attentions (not used by all models)
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the decoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the layers and the pooler layer.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, text_encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically, set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         initializer_factor (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layerdrop (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(hidden_size).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether the model should return the last key/values attentions (not used by all models)
         num_codebooks (`int`, *optional*, defaults to 4):
             The number of parallel codebooks forwarded to the model.
-        tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether input and output word embeddings should be tied.
-        audio_channels (`int`, *optional*, defaults to 1
             Number of channels in the audio data. Either 1 for mono or 2 for stereo. Stereo models generate a separate
             audio stream for the left/right output channels. Mono models generate a single audio stream output.
+        audio_channels (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        pad_token_id (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        bos_token_id (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
+        eos_token_id (`<fill_type>`, *optional*): <fill_docstring>
+        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
     """
 
     model_type = "musicgen_melody_decoder"
@@ -138,7 +141,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
 class MusicgenMelodyConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
-    Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
+    Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder, audio decoder and Musicgen Melody decoder
     configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -152,6 +155,8 @@ class MusicgenMelodyConfig(PretrainedConfig):
                   defines the text encoder config.
                 - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio encoder config.
+                - **audio_decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                  defines the audio decoder config.
                 - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
@@ -162,17 +167,18 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     MusicgenMelodyConfig,
     ...     MusicgenMelodyDecoderConfig,
     ...     T5Config,
-    ...     EncodecConfig,
+    ...     EncodecConfig, # TODO: add  Demucs
     ...     MusicgenMelodyForConditionalGeneration,
     ... )
 
     >>> # Initializing text encoder, audio encoder, and decoder model configurations
     >>> text_encoder_config = T5Config()
-    >>> audio_encoder_config = EncodecConfig()
+    >>> audio_encoder_config = EncodecConfig() # TODO: demucs
+    >>> audio_decoder_config = EncodecConfig()
     >>> decoder_config = MusicgenMelodyDecoderConfig()
 
     >>> configuration = MusicgenMelodyConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_encoder_config, decoder_config
+    ...     text_encoder_config, audio_encoder_config, audio_decoder_config, decoder_config
     ... )
 
     >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the facebook/musicgen-melody style configuration
@@ -182,6 +188,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     >>> configuration = model.config
     >>> config_text_encoder = model.config.text_encoder
     >>> config_audio_encoder = model.config.audio_encoder
+    >>> config_audio_decoder = model.config.audio_decoder
     >>> config_decoder = model.config.decoder
 
     >>> # Saving the model, including its configuration
@@ -195,10 +202,16 @@ class MusicgenMelodyConfig(PretrainedConfig):
     model_type = "musicgen_melody"
     is_composition = True
 
-    def __init__(self, **kwargs):
+    def __init__(self,
+                 num_chroma=12, # TODO: add to
+                 num_mel_bins=16384, # TODO: add to
+                 frame_length=16384, # TODO
+                 hop_length=4096, # TODO
+                 chroma_length=235, # TODO: chroma duration used during training. This is later used for correct padding in case we are using chroma as prefix.
+                 **kwargs):
         super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
+        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "audio_decoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError("Config has to be initialized with text_encoder, audio_encoder, audio_decoder and decoder config")
 
         text_encoder_config = kwargs.pop("text_encoder")
         text_encoder_model_type = text_encoder_config.pop("model_type")
@@ -206,23 +219,34 @@ class MusicgenMelodyConfig(PretrainedConfig):
         audio_encoder_config = kwargs.pop("audio_encoder")
         audio_encoder_model_type = audio_encoder_config.pop("model_type")
 
+        audio_decoder_config = kwargs.pop("audio_decoder")
+        audio_decoder_model_type = audio_decoder_config.pop("model_type")
+
         decoder_config = kwargs.pop("decoder")
 
         self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
         self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
+        self.audio_decoder = AutoConfig.for_model(audio_decoder_model_type, **audio_decoder_config)
         self.decoder = MusicgenMelodyDecoderConfig(**decoder_config)
-        self.is_encoder_decoder = True
+        self.is_encoder_decoder = False
+        
+        self.num_chroma = num_chroma
+        self.num_mel_bins = num_mel_bins
+        self.frame_length = frame_length
+        self.hop_length = hop_length
+        self.chroma_length = chroma_length
 
     @classmethod
     def from_sub_models_config(
         cls,
         text_encoder_config: PretrainedConfig,
         audio_encoder_config: PretrainedConfig,
+        audio_decoder_config: PretrainedConfig,
         decoder_config: MusicgenMelodyDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio encoder and decoder
+        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio encoder, audio decoder and decoder
         configurations.
 
         Returns:
@@ -232,6 +256,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
         return cls(
             text_encoder=text_encoder_config.to_dict(),
             audio_encoder=audio_encoder_config.to_dict(),
+            audio_decoder=audio_decoder_config.to_dict(),
             decoder=decoder_config.to_dict(),
             **kwargs,
         )
@@ -239,4 +264,4 @@ class MusicgenMelodyConfig(PretrainedConfig):
     @property
     # This is a property because you might want to change the codec model on the fly
     def sampling_rate(self):
-        return self.audio_encoder.sampling_rate
+        return self.audio_decoder.sampling_rate
