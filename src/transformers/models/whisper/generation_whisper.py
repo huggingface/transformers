@@ -310,7 +310,7 @@ class WhisperGenerationMixin:
             temperature (`float` or list of `float`, *optional*):
                 The temperature to be used for generation. Passing a single `float` value and `do_sample=True` activates
                 generation using sampling. For long-form transcription, temperature fallback can be activated by passing
-                a list of float values such as (0.0, 0.2, 0.4, 0.6, 0.8). As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                a list of float values such as (0.0, 0.2, 0.4, 0.6, 0.8, 1.0). As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
                 performance.
             compression_ratio_threshold (`float`, *optional*):
                 Only relevant for long-form transcription. If defined, the zlib compression rate of each segment will be computed. If the compression rate of
@@ -323,7 +323,7 @@ class WhisperGenerationMixin:
             logprob_threshold (`float`, *optional*):
                 Only relevant for long-form transcription. If defined, the average log-probability of each segment will be computed. If the log-probability of
                 a given segment is lower than `logprob_threshold`, temperature fallback is activated: the generated segment is discarded and the generation is
-                repeated using a higher temperature. The intuition behind this feature is that segments of low logprobability
+                repeated using a higher temperature. The intuition behind this feature is that segments of low log-probability
                 can be improved by injecting more randomness by increasing the temperature. If `logprob_threshold` is defined
                 make sure that `temperature` is a list of values. A common value for `logprob_threshold` is -1.0.
                 As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
@@ -555,9 +555,7 @@ class WhisperGenerationMixin:
 
             # 6.5 prepare decoder input ids
             # TODO(Patrick) - clean up prev_start_of_text
-            suppress_tokens = self._get_attr_from_logit_processors(
-                logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
-            )
+            suppress_tokens = generation_config.suppress_tokens
             prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
@@ -1228,7 +1226,6 @@ class WhisperGenerationMixin:
         one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
         decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
 
-        # if condition_on_prev_tokens and len(current_segments[0]) > 0 and temperature < 0.5:
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
             active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
