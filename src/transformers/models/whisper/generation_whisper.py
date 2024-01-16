@@ -238,7 +238,7 @@ class WhisperGenerationMixin:
         **kwargs,
     ):
         """
-        Transcribes or translates passed mel input features to a sequence of token ids.
+        Transcribes or translates log-mel input features to a sequence of auto-regressively generated token ids.
 
         <Tip warning={true}>
 
@@ -252,11 +252,12 @@ class WhisperGenerationMixin:
         </Tip>
 
         Parameters:
-            input_features (`torch.Tensor` of varying shape depending on the modality, *optional*):
-                The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
-                method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
-                should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
-                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+            input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
+                Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
+                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
             generation_config (`~generation.GenerationConfig`, *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
