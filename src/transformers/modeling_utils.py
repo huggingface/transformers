@@ -2331,7 +2331,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if self.can_generate():
                 # generation config build from the model config + the model config holds generation kwargs -> generate
                 # may revert to legacy behavior
-                if model_to_save.generation_config._from_model_config and model_to_save.config.has_set_generation_parameters():
+                if (
+                    model_to_save.generation_config._from_model_config
+                    and model_to_save.config.has_set_generation_parameters()
+                ):
                     new_generation_config = GenerationConfig.from_model_config(model_to_save.config)
                     if new_generation_config != model_to_save.generation_config:
                         logger.warning(
