@@ -629,7 +629,13 @@ class PretrainedConfig(PushToHubMixin):
                         assert "You are using a model of type t5 to instantiate a model of type bert" in cl.out
                     except:
                         import threading
-                        raise ValueError(f"ci.out == `{ci.out}` | logger id == `{id(logger)}` | threading id == `{threading.get_ident()}` | thread native id == `{threading.get_native_id}` | PID == `{os.getpid()}`")
+                        id1 = kwargs.pop("id1")
+                        id2 = kwargs.pop("id2")
+                        id3 = kwargs.pop("id3")
+                        id4 = kwargs.pop("id4")
+                        raise ValueError(
+                            f"ci.out == `{ci.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
+                        )
 
 
         return cls.from_dict(config_dict, **kwargs)

@@ -297,11 +297,18 @@ class ModelUtilsTest(TestCasePlus):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
+        import threading
         logger = logging.get_logger("transformers.configuration_utils")
+
+        id1 = id(logger)
+        id2 = threading.get_ident()
+        id3 = threading.get_native_id()
+        id4 = os.getpid()
+
         with tempfile.TemporaryDirectory() as tmpdirname:
             with CaptureLogger(logger, tmpdir=None) as cl:
                 self.assertEqual(logger.level, 0)
-                BertModel.from_pretrained(TINY_T5, cl=cl)
+                BertModel.from_pretrained(TINY_T5, cl=cl, id1=id1, id2=id2, id3=id3, id4=id4)
                 self.assertEqual(logger.level, 0)
             # self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
             if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
