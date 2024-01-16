@@ -4156,9 +4156,11 @@ class TokenizerTesterMixin:
 
                     tokenizer_2.add_special_tokens({"additional_special_tokens": ["<tok>", "<other>"]})
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<tok>", "<other>"])
+                    tokenizer_2.add_special_tokens({"additional_special_tokens": ["<other>", "<another>"]})
+                    self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>"])
 
                     tokenizer_2.add_special_tokens(
-                        {"additional_special_tokens": ["<another>", "<other>"]},
+                        {"additional_special_tokens": ["<tok>"]},
                         replace_additional_special_tokens=False,
                     )
-                    self.assertEqual(tokenizer_2.additional_special_tokens, ["<tok>", "<other>", "<another>"])
+                    self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
