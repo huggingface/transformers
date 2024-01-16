@@ -20,8 +20,8 @@ from transformers import BitsAndBytesConfig, IdeficsConfig, is_tf_available, is_
 from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
-    require_vision,
     require_tf,
+    require_vision,
     slow,
 )
 from transformers.utils import cached_property
@@ -34,7 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFIdeficsForVisionText2Text, TFIdeficsModel, IdeficsProcessor
+    from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -264,7 +264,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         if return_labels:
             inputs_dict["labels"] = tf.zeros(
                 (self.model_tester.batch_size,
-                 self.model_tester.seq_length), dtype=tf.int64) 
+                 self.model_tester.seq_length), dtype=tf.int64)
         return inputs_dict
 
     def test_model_outputs_equivalence(self):

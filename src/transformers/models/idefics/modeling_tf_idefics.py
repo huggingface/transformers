@@ -26,13 +26,8 @@ import tensorflow as tf
 from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import ModelOutput
+from ...modeling_tf_utils import TFModelInputType, keras_serializable, shape_list, unpack_inputs
 from ...modeling_utils import PretrainedConfig
-from ...modeling_tf_utils import (
-     shape_list,
-     unpack_inputs,
-     keras_serializable,
-     TFModelInputType
-)
 from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
@@ -400,12 +395,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
 
         self.in_features = in_features
         self.out_features = out_features
-
-        self.weight = self.add_weight(shape=(in_features, out_features), trainable=not partially_freeze, name="weight")
-        if bias:
-            self.bias = self.add_weight(shape=(out_features,), trainable=not partially_freeze, name="bias")
-        else:
-            self.bias = None
+        self.use_bias = bias
 
         if out_additional_features > 0:
             self.additional_fc = tf.keras.layers.Dense(
@@ -439,6 +429,19 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
     @classmethod
     def from_config(cls, config):
         return cls(**config)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "additional_fc", None) is not None:
+            with tf.name_scope(self.additional_fc.name):
+                self.additional_fc.build(self.in_features)
+        self.weight = self.add_weight(shape=(self.in_features, self.out_features), trainable=not self.partially_freeze, name="weight")
+        if self.use_bias:
+            self.bias = self.add_weight(shape=(self.out_features,), trainable=not self.partially_freeze, name="bias")
+        else:
+            self.bias = None
 
 
 def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
@@ -565,9 +568,24 @@ class TFIdeficsMLP(tf.keras.layers.Layer):
         self.down_proj = tf.keras.layers.Dense(hidden_size, use_bias=False, name="down_proj")
         self.up_proj = tf.keras.layers.Dense(intermediate_size, use_bias=False, name="up_proj")
         self.act_fn = get_tf_activation(hidden_act)
+        self.intermediate_size = intermediate_size
+        self.hidden_size = hidden_size
 
     def call(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "gate_proj", None) is not None:
+            with tf.name_scope(self.gate_proj.name):
+                self.gate_proj.build(self.hidden_size)
+        if getattr(self, "down_proj", None) is not None:
+            with tf.name_scope(self.down_proj.name):
+                self.down_proj.build(self.intermediate_size)
+        if getattr(self, "up_proj", None) is not None:
+            with tf.name_scope(self.up_proj.name):
+                self.up_proj.build(self.hidden_size)
 
 
 class TFIdeficsAttention(tf.keras.layers.Layer):
@@ -597,41 +615,21 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
 
         self.is_cross_attention = is_cross_attention
 
-        if self.is_cross_attention:
-            kv_input_dim = (
-                self.hidden_size if not hasattr(config.vision_config, "embed_dim") else config.vision_config.embed_dim
-            )
-            self.q_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="q_proj",
-            )
-            self.k_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="k_proj",
-            )
-            self.v_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="v_proj",
-            )
-        else:
-            self.q_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="q_proj",
-            )
-            self.k_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="k_proj",
-            )
-            self.v_proj = tf.keras.layers.Dense(
-                num_heads * self.head_dim,
-                use_bias=False,
-                name="v_proj",
-            )
+        self.q_proj = tf.keras.layers.Dense(
+            num_heads * self.head_dim,
+            use_bias=False,
+            name="q_proj",
+        )
+        self.k_proj = tf.keras.layers.Dense(
+            num_heads * self.head_dim,
+            use_bias=False,
+            name="k_proj",
+        )
+        self.v_proj = tf.keras.layers.Dense(
+            num_heads * self.head_dim,
+            use_bias=False,
+            name="v_proj",
+        )
         self.o_proj = tf.keras.layers.Dense(
             hidden_size,
             use_bias=False,
@@ -643,6 +641,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         if self.qk_layer_norms:
             self.q_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.config = config
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
@@ -718,6 +717,29 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
             )
 
         return attn_output, attn_weights, past_key_value
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if self.is_cross_attention:
+            kv_input_dim = (
+                self.hidden_size if not hasattr(self.config.vision_config, "embed_dim") else self.config.vision_config.embed_dim
+            )
+        else:
+            kv_input_dim = self.hidden_size
+        if getattr(self, "o_proj", None) is not None:
+            with tf.name_scope(self.o_proj.name):
+                self.o_proj.build(
+            self.num_heads * self.head_dim)
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build(self.hidden_size)
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build(kv_input_dim)
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build(kv_input_dim)
 
 
 class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
@@ -799,6 +821,22 @@ class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
             outputs += (present_key_value,)
 
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "input_layernorm", None) is not None:
+            with tf.name_scope(self.input_layernorm.name):
+                self.input_layernorm.build(None)
+        if getattr(self, "post_attention_layernorm", None) is not None:
+            with tf.name_scope(self.post_attention_layernorm.name):
+                self.post_attention_layernorm.build(None)
 
 
 class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
@@ -1416,6 +1454,30 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
             attentions=all_self_attns,
             image_hidden_states=image_hidden_states,
         )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build(None)
+        if getattr(self, "perceiver_resampler", None) is not None:
+            with tf.name_scope(self.perceiver_resampler.name):
+                self.perceiver_resampler.build(None)
+        if getattr(self, "decoder_layers", None) is not None:
+            for layer in self.decoder_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if getattr(self, "gated_cross_attn_layers", None) is not None:
+            for layer in self.gated_cross_attn_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 class TFIdeficsModel(TFIdeficsPreTrainedModel):
     def __init__(self, config: IdeficsConfig, *inputs, **kwargs):
@@ -1459,6 +1521,13 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
             training=training,
         )
         return outputs
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
 
 
 class TFIdeficsForVisionText2Text(TFPreTrainedModel):
