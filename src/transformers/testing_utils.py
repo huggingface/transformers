@@ -1278,6 +1278,7 @@ class CaptureLogger:
         self.out = ""
 
     def __enter__(self):
+        self.sh.flush()
         self.logger.addHandler(self.sh)
         return self
 
