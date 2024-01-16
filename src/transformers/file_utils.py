@@ -84,6 +84,7 @@ from .utils import (
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_in_notebook,
     is_ipex_available,
     is_librosa_available,

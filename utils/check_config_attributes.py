@@ -123,6 +123,7 @@ SPECIAL_CASES_TO_ALLOW.update(
         "DinatConfig": True,
         "DonutSwinConfig": True,
         "EfficientFormerConfig": True,
+        "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
         "JukeboxConfig": True,
         "LayoutLMv2Config": True,

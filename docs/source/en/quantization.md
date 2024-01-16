@@ -345,7 +345,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-Once a model is quantized to 4-bit, you can't push the quantized weights to the Hub.
+If you have `bitsandbytes>=0.41.3`, you can serialize 4-bit models and push them on Hugging Face Hub. Simply call `model.push_to_hub()` after loading it in 4-bit precision. You can also save the serialized 4-bit models locally with `model.save_pretrained()` command.  
 
 </hfoption>
 </hfoptions>
@@ -467,6 +467,7 @@ Try 4-bit quantization in this [notebook](https://colab.research.google.com/driv
 </Tip>
 
 This section explores some of the specific features of 4-bit models, such as changing the compute data type, using the Normal Float 4 (NF4) data type, and using nested quantization.
+
 
 #### Compute data type
 

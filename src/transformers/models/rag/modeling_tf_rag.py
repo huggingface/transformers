@@ -720,6 +720,15 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        with tf.name_scope(self.generator.name):
+            self.generator.build(None)
+        with tf.name_scope(self.question_encoder.name):
+            self.question_encoder.build(None)
+
 
 @add_start_docstrings_to_model_forward(
     """

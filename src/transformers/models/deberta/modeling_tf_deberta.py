@@ -638,10 +638,10 @@ class TFDebertaDisentangledSelfAttention(tf.keras.layers.Layer):
                 self.pos_dropout.build(None)
         if getattr(self, "pos_proj", None) is not None:
             with tf.name_scope(self.pos_proj.name):
-                self.pos_proj.build(None)
+                self.pos_proj.build([self.config.hidden_size])
         if getattr(self, "pos_q_proj", None) is not None:
             with tf.name_scope(self.pos_q_proj.name):
-                self.pos_q_proj.build(None)
+                self.pos_q_proj.build([self.config.hidden_size])
 
     def transpose_for_scores(self, tensor: tf.Tensor) -> tf.Tensor:
         shape = shape_list(tensor)[:-1] + [self.num_attention_heads, -1]

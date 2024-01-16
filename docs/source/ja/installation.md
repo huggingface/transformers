@@ -135,10 +135,10 @@ Python環境は次回の実行時に🤗 Transformersの`main`バージョンを
 
 ## condaでのインストール
 
-`huggingface`のcondaチャンネルからインストールします:
+`conda-forge`のcondaチャンネルからインストールします:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## キャッシュの設定

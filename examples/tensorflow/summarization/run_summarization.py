@@ -627,7 +627,7 @@ def main():
 
         # region Metric and KerasMetricCallback
         if training_args.do_eval:
-            metric = evaluate.load("rouge")
+            metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
             if data_args.val_max_target_length is None:
                 data_args.val_max_target_length = data_args.max_target_length

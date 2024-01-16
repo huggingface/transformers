@@ -57,7 +57,7 @@ def convert_tf_weight_name_to_pt_weight_name(
           transposed with regards to each other
     """
     if name_scope is not None:
-        if not tf_name.startswith(name_scope):
+        if not tf_name.startswith(name_scope) and "final_logits_bias" not in tf_name:
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
