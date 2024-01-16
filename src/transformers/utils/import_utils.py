@@ -64,6 +64,7 @@ USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
+# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 

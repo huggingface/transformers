@@ -358,12 +358,12 @@ def check_missing_backends():
         missing = ", ".join(missing_backends)
         if os.getenv("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
             raise Exception(
-                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                "Full repo consistency checks require all backends to be installed (with `pip install -e '.[dev]'` in the "
                 f"Transformers repo, the following are missing: {missing}."
             )
         else:
             warnings.warn(
-                "Full repo consistency checks require all backends to be installed (with `pip install -e .[dev]` in the "
+                "Full repo consistency checks require all backends to be installed (with `pip install -e '.[dev]'` in the "
                 f"Transformers repo, the following are missing: {missing}. While it's probably fine as long as you "
                 "didn't make any change in one of those backends modeling files, you should probably execute the "
                 "command above to be on the safe side."
@@ -944,7 +944,6 @@ DEPRECATED_OBJECTS = [
     "xnli_output_modes",
     "xnli_processors",
     "xnli_tasks_num_labels",
-    "TFTrainer",
     "TFTrainingArguments",
 ]
 

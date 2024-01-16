@@ -577,7 +577,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = evaluate.load("wer")
+    metric = evaluate.load("wer", cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, labels):
         # replace padded labels by the padding token

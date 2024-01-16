@@ -11,7 +11,7 @@ SHELL ["sh", "-lc"]
 
 ARG PYTORCH='2.1.1'
 # (not always a valid torch version)
-ARG INTEL_TORCH_EXT='2.1.1'
+ARG INTEL_TORCH_EXT='2.1.100'
 # Example: `cu102`, `cu113`, etc.
 ARG CUDA='cu118'
 
@@ -65,7 +65,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/opt
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0
 
 # For `dinat` model
-RUN python3 -m pip install --no-cache-dir natten<0.15.0 -f https://shi-labs.com/natten/wheels/$CUDA/
+RUN python3 -m pip install --no-cache-dir 'natten<0.15.0' -f https://shi-labs.com/natten/wheels/$CUDA/
 
 # For `nougat` tokenizer
 RUN python3 -m pip install --no-cache-dir python-Levenshtein
