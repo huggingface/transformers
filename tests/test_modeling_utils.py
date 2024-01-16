@@ -299,7 +299,7 @@ class ModelUtilsTest(TestCasePlus):
 
         logger = logging.get_logger("transformers.configuration_utils")
         with tempfile.TemporaryDirectory() as tmpdirname:
-            with CaptureLogger(logger, tmpdir=tmpdirname) as cl:
+            with CaptureLogger(logger, tmpdir=None) as cl:
                 self.assertEqual(logger.level, 0)
                 BertModel.from_pretrained(TINY_T5, cl=cl)
                 self.assertEqual(logger.level, 0)
