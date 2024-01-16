@@ -1274,11 +1274,14 @@ class GenerationMixin:
         # priority: `generation_config` argument > `model.generation_config` (the default generation config)
         if generation_config is None:
             # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
-            # two conditions must be met
+            # three conditions must be met
             # 1) the generation config must have been created from the model config (`_from_model_config` field);
-            # 2) the generation config must have seen no modification since its creation (the hash is the same).
-            if self.generation_config._from_model_config and self.generation_config._original_object_hash == hash(
-                self.generation_config
+            # 2) the generation config must have seen no modification since its creation (the hash is the same);
+            # 3) the user must have set generation parameters in the model config.
+            if (
+                self.generation_config._from_model_config
+                and self.generation_config._original_object_hash == hash(self.generation_config)
+                and self.config.has_set_generation_parameters()
             ):
                 new_generation_config = GenerationConfig.from_model_config(self.config)
                 if new_generation_config != self.generation_config:

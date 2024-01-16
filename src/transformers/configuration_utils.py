@@ -1069,6 +1069,15 @@ class PretrainedConfig(PushToHubMixin):
 
         cls._auto_class = auto_class
 
+    def has_set_generation_parameters(self) -> bool:
+        """
+        Whether or not this instance holds non-default generation parameters.
+        """
+        for parameter_name, default_value in GENERATION_DEFAULTS.items():
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
+                return True
+        return False
+
 
 def get_configuration_file(configuration_files: List[str]) -> str:
     """
