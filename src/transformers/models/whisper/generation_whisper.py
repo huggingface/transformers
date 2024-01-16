@@ -1108,7 +1108,7 @@ class WhisperGenerationMixin:
         return init_tokens
 
     def _retrieve_logit_processors(
-        self, generation_config, logits_processor, no_speech_threshold, num_start_tokens, is_shortform, num_beams
+        self, generation_config, logits_processor, no_speech_threshold, is_shortform, num_beams
     ):
         if generation_config.return_timestamps is True:
             forced_decoder_ids = generation_config.forced_decoder_ids

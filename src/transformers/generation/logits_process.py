@@ -1895,7 +1895,9 @@ class WhisperNoSpeechDetection(LogitsProcessor):
 
     def __init__(self, no_speech_token: int, begin_index: int, scores_is_logprobs: bool = False):
         self.no_speech_token = no_speech_token
-        self.orig_begin_index = begin_index
+        # offset between <start-of-transcription> token, <SOT>, in paper and first generated token
+        # is equal to the position of the first generated token index
+        self.start_of_trans_offset = begin_index
 
         # `self.begin_index` is a running value that is changed on the fly
         self.begin_index = begin_index
@@ -1926,11 +1928,11 @@ class WhisperNoSpeechDetection(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[1] == self.begin_index:
-            if self.orig_begin_index > 1:
+            if self.start_of_trans_offset > 1:
                 with torch.no_grad():
                     logits = self.model(**self.inputs).logits
 
-                no_speech_index = self.begin_index - self.orig_begin_index
+                no_speech_index = self.begin_index - self.start_of_trans_offset
                 no_speech_scores = logits[:, no_speech_index]
             else:
                 no_speech_scores = scores
