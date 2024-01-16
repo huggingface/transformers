@@ -33,6 +33,8 @@ import requests
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
+    ModelCard,
+    ModelCardData,
     constants,
     create_branch,
     create_commit,
@@ -762,6 +764,7 @@ class PushToHubMixin:
         safe_serialization: bool = True,
         revision: str = None,
         commit_description: str = None,
+        tags: Optional[List[str]] = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -795,6 +798,8 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             commit_description (`str`, *optional*):
                 The description of the commit that will be created
+            tags (`List[str]`, *optional*):
+                List of tags to push on the Hub.
 
         Examples:
 
@@ -811,6 +816,7 @@ class PushToHubMixin:
         ```
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
@@ -855,6 +861,11 @@ class PushToHubMixin:
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
+        # Create a new empty model card and eventually tag it
+        model_card = create_and_tag_model_card(
+            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
+        )
+
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
 
@@ -863,6 +874,9 @@ class PushToHubMixin:
 
             # Save all files.
             self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+
+            # Update model card if needed:
+            model_card.save(os.path.join(work_dir, "README.md"))
 
             return self._upload_modified_files(
                 work_dir,
@@ -1079,6 +1093,43 @@ def extract_info_from_url(url):
     repo, revision, filename = search.groups()
     cache_repo = "--".join(["models"] + repo.split("/"))
     return {"repo": cache_repo, "revision": revision, "filename": filename}
+
+
+def create_and_tag_model_card(
+    repo_id: str,
+    tags: Optional[List[str]] = None,
+    token: Optional[str] = None,
+    ignore_metadata_errors: bool = False,
+):
+    """
+    Creates or loads an existing model card and tags it.
+
+    Args:
+        repo_id (`str`):
+            The repo_id where to look for the model card.
+        tags (`List[str]`, *optional*):
+            The list of tags to add in the model card
+        token (`str`, *optional*):
+            Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
+        ignore_metadata_errors (`str`):
+            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
+            the process. Use it at your own risk.
+    """
+    try:
+        # Check if the model card is present on the remote repo
+        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
+    except EntryNotFoundError:
+        # Otherwise create a simple model card from template
+        model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
+        card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
+        model_card = ModelCard.from_template(card_data, model_description=model_description)
+
+    if tags is not None:
+        for model_tag in tags:
+            if model_tag not in model_card.data.tags:
+                model_card.data.tags.append(model_tag)
+
+    return model_card
 
 
 def clean_files_for(file):

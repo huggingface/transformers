@@ -2205,6 +2205,7 @@ class BarkEosPrioritizerLogitsProcessor(LogitsProcessor):
             early_stop_scores[:, self.eos_token_id] = scores[:, self.eos_token_id]
 
             do_early_stop = probs[:, self.eos_token_id] > self.min_eos_p
+            do_early_stop = torch.any(do_early_stop, dim=1, keepdim=True)
             scores = torch.where(do_early_stop, early_stop_scores, scores)
 
         return scores

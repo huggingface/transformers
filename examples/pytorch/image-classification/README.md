@@ -41,6 +41,7 @@ python run_image_classification.py \
     --dataset_name beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
+    --label_column_name labels \
     --do_train \
     --do_eval \
     --push_to_hub \
@@ -197,7 +198,7 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch run_image_classification_trainer.py
+accelerate launch run_image_classification_no_trainer.py --image_column_name img
 ```
 
 This command is the same and will work for:
