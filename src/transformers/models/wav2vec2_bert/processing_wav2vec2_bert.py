@@ -85,27 +85,29 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
             - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which timestamps should be attended to by the model when `audio` is not `None`.
+            When only `text` is specified, returns the token attention mask.
+            - **labels** -- List of token ids to be fed to a model. Returned when both `text` and `audio` are not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None` and `audio` is `None`.
         """
 
         sampling_rate = kwargs.pop("sampling_rate", None)
 
         if audio is None and text is None:
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
-        elif text is not None and audio is not None:
-            raise ValueError(
-                "`Text` and `audio` are mutually exclusive when passed to `Wav2Vec2BertProcessor`. Specify one or the other."
-            )
 
         if audio is not None:
             inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
-            return inputs
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
 
-        encodings = self.tokenizer(text, **kwargs)
-        return encodings
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
     def pad(self, input_features=None, labels=None, **kwargs):
         """
@@ -115,17 +117,19 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
         """
         if input_features is None and labels is None:
             raise ValueError("You need to specify either an `input_features` or `labels` input to pad.")
-        elif input_features is not None and labels is not None:
-            raise ValueError(
-                "`labels` and `input_features` are mutually exclusive when passed to `Wav2Vec2BertProcessor.pad`. Specify one or the other."
-            )
 
         if input_features is not None:
             input_features = self.feature_extractor.pad(input_features, **kwargs)
-            return input_features
         if labels is not None:
             labels = self.tokenizer.pad(labels, **kwargs)
+
+        if labels is None:
+            return input_features
+        elif input_features is None:
             return labels
+        else:
+            input_features["labels"] = labels["input_ids"]
+            return input_features
 
     def batch_decode(self, *args, **kwargs):
         """
