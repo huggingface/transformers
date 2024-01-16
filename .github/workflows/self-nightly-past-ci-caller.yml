@@ -8,6 +8,5 @@ on:
 jobs:
   build_nightly_ci_images:
     name: Build Nightly CI Docker Images
-    if: (github.event_name == 'schedule') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_nightly_ci'))
     uses: ./.github/workflows/build-nightly-ci-docker-images.yml
     secrets: inherit
