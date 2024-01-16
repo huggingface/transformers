@@ -4,7 +4,11 @@ import importlib
 import inspect
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ..modelling_utils import PreTrainedModel
 
 import torch
 from packaging import version
@@ -29,12 +33,6 @@ from .quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig, Quan
 
 
 logger = logging.get_logger(__name__)
-
-DeviceMap = TypeVar("DeviceMap", str, Dict[str, int])
-QuantizationConfig = TypeVar("QuantizationConfig", QuantizationConfigMixin, Dict)
-StateDict = TypeVar("StateDict", bound=Dict[str, Any])
-MaxMemory = TypeVar("MaxMemory", bound=Dict[Union[int, str], Union[int, str]])
-PreTrainedModel = TypeVar("PreTrainedModel", bound=Any)
 
 
 class QuantizationStatus(str, Enum):
@@ -247,7 +245,9 @@ class HFQuantizer(ABC):
     requires_parameters_quantization = False
     aux_keys_suffixes = ()
 
-    def __init__(self, quantization_config: QuantizationConfig, quantization_status: QuantizationStatus, **kwargs):
+    def __init__(
+        self, quantization_config: QuantizationConfigMixin, quantization_status: QuantizationStatus, **kwargs
+    ):
         self.quantization_config = quantization_config
         self.quantization_status = quantization_status
         self.modules_to_not_convert = []
@@ -294,7 +294,7 @@ class HFQuantizer(ABC):
     def set_torch_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
         return torch_dtype
 
-    def update_device_map(self, device_map: DeviceMap) -> DeviceMap:
+    def update_device_map(self, device_map):
         return device_map
 
     def get_special_dtypes_update(self, model, torch_dtype: torch.dtype) -> Dict[str, torch.dtype]:
@@ -308,11 +308,11 @@ class HFQuantizer(ABC):
     def adjust_target_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
         return torch_dtype
 
-    def adjust_max_memory(self, max_memory: MaxMemory) -> MaxMemory:
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         """adjust max_memory argument for infer_auto_device_map() if extra memory is needed for quantization"""
         return max_memory
 
-    def validate_device_map(self, device_map: DeviceMap):
+    def validate_device_map(self, device_map):
         """validates device map after process_model_before_weight_loading() and infer_auto_device_map()"""
         ...
 
@@ -323,7 +323,7 @@ class HFQuantizer(ABC):
             missing_keys[:] = [elem for elem in missing_keys if not elem.endswith(suffix)]
 
     def check_quantized_param(
-        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: StateDict
+        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
     ) -> bool:
         """
         checks if a loaded state_dict component is part of quantized param + some validation; only defined if
@@ -354,7 +354,7 @@ class GPTQHFQuantizer(HFQuantizer):
 
     method = QuantizationMethod.GPTQ
 
-    def __init__(self, quantization_config: QuantizationConfig, **kwargs):
+    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
         from optimum.gptq import GPTQQuantizer
 
@@ -418,7 +418,7 @@ class BnbHFQuantizer(HFQuantizer):
     method = QuantizationMethod.BITS_AND_BYTES
     requires_parameters_quantization = True
 
-    def __init__(self, quantization_config: QuantizationConfig, **kwargs):
+    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
     def validate_environment(self, *args, **kwargs):
@@ -452,7 +452,7 @@ class BnbHFQuantizer(HFQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    def update_device_map(self, device_map: DeviceMap) -> DeviceMap:
+    def update_device_map(self, device_map):
         """called right after quantizer init to fig initial device map"""
         if device_map is None:
             device_map = {"": torch.cuda.current_device()}
@@ -464,12 +464,12 @@ class BnbHFQuantizer(HFQuantizer):
             )
         return device_map
 
-    def adjust_max_memory(self, max_memory: MaxMemory) -> MaxMemory:
+    def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def validate_device_map(self, device_map: DeviceMap):
+    def validate_device_map(self, device_map):
         """called after infer_auto_device_map()"""
         device_map_without_lm_head = {
             key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
@@ -489,7 +489,7 @@ class BnbHFQuantizer(HFQuantizer):
     def process_model_before_weight_loading(
         self,
         model: PreTrainedModel,
-        device_map: DeviceMap,
+        device_map,
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
     ):
@@ -564,7 +564,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         return version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
 
     def check_quantized_param(
-        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: StateDict
+        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
     ):
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
@@ -584,7 +584,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         param_value: torch.Tensor,
         param_name: str,
         target_device: torch.device,
-        state_dict: StateDict,
+        state_dict: Dict[str, Any],
     ):
         """
         combines logic from _load_state_dict_into_meta_model and
@@ -692,7 +692,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
 
     def check_quantized_param(
-        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: StateDict
+        self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
     ) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
@@ -711,7 +711,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         param_value: torch.Tensor,
         param_name: str,
         target_device: torch.device,
-        state_dict: StateDict,
+        state_dict: Dict[str, Any],
     ):
         """
         combines logic from _load_state_dict_into_meta_model and
