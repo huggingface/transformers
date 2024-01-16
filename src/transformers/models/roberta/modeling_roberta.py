@@ -1232,7 +1232,8 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+                one_hot_labels = torch.functional.F.one_hot(labels, num_classes=self.config.num_labels).double()
+                loss = loss_fct(logits, one_hot_labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
