@@ -685,7 +685,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_model_from_pretrained(self):
         # Ignore copy
-        model = Wav2Vec2BertModel.from_pretrained("ylacombe/w2v-bert-2.0")
+        model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0")
         self.assertIsNotNone(model)
 
 
@@ -862,9 +862,9 @@ class Wav2Vec2BertModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def test_inference_w2v2_bert(self):
-        model = Wav2Vec2BertModel.from_pretrained("ylacombe/w2v-bert-2.0")
+        model = Wav2Vec2BertModel.from_pretrained("facebook/w2v-bert-2.0")
         model.to(torch_device)
-        feature_extractor = AutoFeatureExtractor.from_pretrained("ylacombe/w2v-bert-2.0")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
 
         input_speech = self._load_datasamples(2)
 

@@ -53,7 +53,8 @@ _HIDDEN_STATES_START_POSITION = 2
 _CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "facebook/w2v-bert-2.0"
+_BASE_CHECKPOINT_FOR_DOC = "facebook/w2v-bert-2.0"
+_PRETRAINED_CHECKPOINT_FOR_DOC = "hf-audio/wav2vec2-bert-CV16-en"
 _EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
 
 # CTC docstring
@@ -1115,7 +1116,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1200,7 +1201,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1314,7 +1315,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1417,7 +1418,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
@@ -1582,7 +1583,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_BASE_CHECKPOINT_FOR_DOC,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
