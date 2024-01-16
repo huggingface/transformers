@@ -117,6 +117,43 @@ def _dynamic_time_warping(matrix: np.ndarray):
     return text_indices, time_indices
 
 
+def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
+    logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
+    if logit_processor:
+        return getattr(logit_processor, attribute_name, None)
+    return None
+
+
+def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None):
+    max_total_length = 0
+    sequences = []
+    if padding not in ["right", "left"]:
+        raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
+
+    for current_segment_list in current_segments:
+        if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
+            sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
+
+            if cut_off_length is not None:
+                sequence = sequence[-cut_off_length:]
+
+            if bos_token_tensor is not None:
+                sequence = torch.cat([bos_token_tensor, sequence])
+
+            sequences.append(sequence)
+            max_total_length = max(max_total_length, len(sequences[-1]))
+        else:
+            sequences.append(bos_token_tensor)
+
+    for i in range(len(current_segments)):
+        pad_length = max_total_length - len(sequences[i])
+        pad = (0, pad_length) if padding == "right" else (pad_length, 0)
+        sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
+
+    sequences = torch.stack(sequences, dim=0)
+    return sequences
+
+
 class WhisperGenerationMixin:
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
@@ -225,10 +262,10 @@ class WhisperGenerationMixin:
         is_multilingual: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
         condition_on_prev_tokens: Optional[bool] = None,
-        no_speech_threshold: Optional[float] = None,
         temperature: Optional[Union[float, Tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
         logprob_threshold: Optional[float] = None,
+        no_speech_threshold: Optional[float] = None,
         num_segment_frames: Optional[int] = None,
         attention_mask: Optional[torch.Tensor] = None,
         time_precision: float = 0.02,
@@ -301,12 +338,6 @@ class WhisperGenerationMixin:
                 Only relevant for long-form transcription. Whether to condition each segment on the previous segment.
                 As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
                 performance.
-            no_speech_threshold (`float`, *optional*):
-                Only relevant for long-form transcription. If defined, the "no-speech" token combined with the `logprob_threshold`
-                is used to determine whether a segment contains only silence. In this case, the transcription for this segment
-                is skipped.
-                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
-                performance.
             temperature (`float` or list of `float`, *optional*):
                 The temperature to be used for generation. Passing a single `float` value and `do_sample=True` activates
                 generation using sampling. For long-form transcription, temperature fallback can be activated by passing
@@ -326,6 +357,12 @@ class WhisperGenerationMixin:
                 repeated using a higher temperature. The intuition behind this feature is that segments of low log-probability
                 can be improved by injecting more randomness by increasing the temperature. If `logprob_threshold` is defined
                 make sure that `temperature` is a list of values. A common value for `logprob_threshold` is -1.0.
+                As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
+                performance.
+            no_speech_threshold (`float`, *optional*):
+                Only relevant for long-form transcription. If defined, the "no-speech" token combined with the `logprob_threshold`
+                is used to determine whether a segment contains only silence. In this case, the transcription for this segment
+                is skipped.
                 As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
                 performance.
             num_segment_frames (`int`, *optional*):
@@ -442,6 +479,17 @@ class WhisperGenerationMixin:
             input_features=input_features, input_stride=input_stride, kwargs=kwargs
         )
         is_shortform = total_input_frames <= num_segment_frames
+
+        if is_shortform:
+            # warn user of ignored inputs
+            self._maybe_warn_unused_inputs(
+                condition_on_prev_tokens=condition_on_prev_tokens,
+                temperature=temperature,
+                compression_ratio_threshold=compression_ratio_threshold,
+                logprob_threshold=logprob_threshold,
+                no_speech_threshold=no_speech_threshold,
+                total_input_frames=total_input_frames,
+            )
 
         # 3. Make sure generation config is correctly set
         # Make sure the generation config is correctly set depending on whether timestamps are to be returned or not
@@ -632,7 +680,7 @@ class WhisperGenerationMixin:
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
-        sequences = self._pad_to_max_length(current_segments, generation_config.pad_token_id, padding="right")
+        sequences = _pad_to_max_length(current_segments, generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
@@ -788,8 +836,8 @@ class WhisperGenerationMixin:
 
         return sequence_tokens, seek_outputs
 
-    @staticmethod
     def _need_fallback(
+        self,
         seek_sequence,
         seek_outputs,
         index,
@@ -804,7 +852,7 @@ class WhisperGenerationMixin:
         needs_fallback = False
         should_skip = False
         if compression_ratio_threshold is not None:
-            compression_ratio = WhisperGenerationMixin._retrieve_compression_ratio(seek_sequence, vocab_size)
+            compression_ratio = self._retrieve_compression_ratio(seek_sequence, vocab_size)
 
             if compression_ratio > compression_ratio_threshold:
                 needs_fallback = True
@@ -814,15 +862,13 @@ class WhisperGenerationMixin:
                 logprobs = [s["sequences_scores"] for s in seek_outputs][index]
             else:
                 scores = seek_outputs[index]["scores"]
-                logprobs = WhisperGenerationMixin._retrieve_avg_logprobs(
-                    scores, seek_sequence, eos_token_id, temperature
-                )
+                logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, eos_token_id, temperature)
 
             if logprobs < logprob_threshold:
                 needs_fallback = True
 
         if no_speech_threshold is not None:
-            no_speech_prob = WhisperGenerationMixin._get_attr_from_logit_processors(
+            no_speech_prob = _get_attr_from_logit_processors(
                 logits_processor, WhisperNoSpeechDetection, "no_speech_prob"
             )
 
@@ -834,18 +880,9 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
-        set_inputs = WhisperGenerationMixin._get_attr_from_logit_processors(
-            logits_processor, WhisperNoSpeechDetection, "set_inputs"
-        )
+        set_inputs = _get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
         extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
         set_inputs({"inputs": segment_input, "decoder_input_ids": decoder_input_ids, **extra_kwargs})
-
-    @staticmethod
-    def _get_attr_from_logit_processors(logits_processor, logit_processor_class, attribute_name):
-        logit_processor = next((cls for cls in logits_processor if isinstance(cls, logit_processor_class)), None)
-        if logit_processor:
-            return getattr(logit_processor, attribute_name, None)
-        return None
 
     @staticmethod
     def _retrieve_total_input_frames(input_features, input_stride, kwargs):
@@ -861,6 +898,39 @@ class WhisperGenerationMixin:
             return encoder_outputs_shape[1] * input_stride
 
         raise ValueError("Make sure to provide either `input_features` or `encoder_outputs` to `generate`.")
+
+    @staticmethod
+    def _maybe_warn_unused_inputs(
+        condition_on_prev_tokens,
+        temperature,
+        compression_ratio_threshold,
+        logprob_threshold,
+        no_speech_threshold,
+        total_input_frames,
+    ):
+        warning_prefix = (
+            f"Audio input consists of only {total_input_frames}. "
+            "Short-form transcription is activated."
+            "{}, but will be ignored."
+        )
+        if condition_on_prev_tokens is not None:
+            logger.warn(warning_prefix.format(f"condition_on_prev_tokens is set to {condition_on_prev_tokens}"))
+
+        if compression_ratio_threshold is not None:
+            logger.warn(warning_prefix.format(f"compression_ratio_threshold is set to {compression_ratio_threshold}"))
+
+        if logprob_threshold is not None:
+            logger.warn(warning_prefix.format(f"logprob_threshold is set to {logprob_threshold}"))
+
+        if no_speech_threshold is not None:
+            logger.warn(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
+
+        # when passing temperature as a list it cannot just be ignored => throw error in this case
+        if isinstance(temperature, (list, tuple)):
+            raise ValueError(
+                f"Audio input consists of only {total_input_frames}. Short-form transcription is activated."
+                f"temperature cannot be set to {temperature} which can only be used for temperature fallback for long-form generation. Make sure to set `temperature` to a float value or `None` for short-form generation."
+            )
 
     @staticmethod
     def _set_return_outputs(
@@ -1232,7 +1302,7 @@ class WhisperGenerationMixin:
             prev_start_of_text = getattr(generation_config, "prev_bos_token_id", None) or prev_start_of_text
 
             bos_token_tensor = prev_start_of_text * one_tensor[0]
-            prev_tokens = WhisperGenerationMixin._pad_to_max_length(
+            prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
                 padding="left",
@@ -1291,39 +1361,6 @@ class WhisperGenerationMixin:
 
         return kwargs
 
-    @staticmethod
-    def _pad_to_max_length(
-        current_segments, pad_token_id, padding="right", bos_token_tensor=None, cut_off_length=None
-    ):
-        max_total_length = 0
-        sequences = []
-        if padding not in ["right", "left"]:
-            raise ValueError(f"`padding` must be either 'right' or 'left', not {padding}")
-
-        for current_segment_list in current_segments:
-            if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
-                sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
-
-                if cut_off_length is not None:
-                    sequence = sequence[-cut_off_length:]
-
-                if bos_token_tensor is not None:
-                    sequence = torch.cat([bos_token_tensor, sequence])
-
-                sequences.append(sequence)
-                max_total_length = max(max_total_length, len(sequences[-1]))
-            else:
-                sequences.append(bos_token_tensor)
-
-        for i in range(len(current_segments)):
-            pad_length = max_total_length - len(sequences[i])
-            pad = (0, pad_length) if padding == "right" else (pad_length, 0)
-            sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
-
-        sequences = torch.stack(sequences, dim=0)
-        return sequences
-
-    @staticmethod
     def _retrieve_compression_ratio(tokens, vocab_size):
         """Compute byte length of zlib compressed token bytes vs. byte length of raw token bytes"""
         length = int(math.log2(vocab_size) / 8) + 1
