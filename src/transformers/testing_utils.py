@@ -1271,10 +1271,16 @@ class CaptureLogger:
     ```
     """
 
-    def __init__(self, logger):
+    def __init__(self, logger, tmpdir=None):
         self.logger = logger
-        self.io = StringIO()
-        self.sh = logging.StreamHandler(self.io)
+        self.tmpdir = tmpdir
+
+        if tmpdir is not None:
+            self.fpath = os.path.join(tmpdir, "captured.log")
+            self.sh = logging.FileHandler(self.fpath)
+        else:
+            self.io = StringIO()
+            self.sh = logging.StreamHandler(self.io)
         self.out = ""
 
     def __enter__(self):
@@ -1282,10 +1288,14 @@ class CaptureLogger:
         return self
 
     def __exit__(self, *exc):
-        # self.logger.flush()
         self.logger.removeHandler(self.sh)
-        self.io.flush()
-        self.out = self.io.getvalue()
+        if self.tmpdir is None:
+            self.io.flush()
+            self.out = self.io.getvalue()
+        else:
+            self.sh.close()
+            with open(self.fpath) as fp:
+                self.out = fp.read()
 
     def __repr__(self):
         return f"captured: {self.out}\n"
