@@ -477,7 +477,7 @@ class PretrainedConfig(PushToHubMixin):
         if len(set_generation_parameters) > 0:
             logger.warning(
                 "Some non-default generation parameters are set in the model config. These should go into a "
-                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model)"
+                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
                 "instead. This warning will be raised to an exception in v4.39.\n"
                 f"Set generation parameters: {str(set_generation_parameters)}"
             )

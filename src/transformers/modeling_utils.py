@@ -2329,6 +2329,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
+                if model_to_save.generation_config._from_model_config:
+                    new_generation_config = GenerationConfig.from_model_config(model_to_save.config)
+                    if new_generation_config != model_to_save.generation_config:
+                        logger.warning(
+                            "Your generation config was originally created from the model config, but the model "
+                            "config has changed since then. Unless you parameterize this model's `generate` calls, "
+                            "they will revert to a legacy behavior, loading the parameterization from the model "
+                            "config. To avoid this behavior and this warning, make sure you correctly update OR "
+                            "redefine your generation config before saving it, preferably also removing the "
+                            "generation kwargs from the model config. This warning will be raised to an exception in "
+                            "v4.39."
+                        )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
             if _hf_peft_config_loaded:

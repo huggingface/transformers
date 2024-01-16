@@ -301,6 +301,6 @@ class ConfigTestUtils(unittest.TestCase):
         config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertLogs("transformers.configuration_utils", level="WARNING") as logs:
-                config.save_pretrained(tmp_dir, generation_kwargs=config_common_kwargs)
+                config.save_pretrained(tmp_dir)
             self.assertEqual(len(logs.output), 1)
             self.assertIn("min_length", logs.output[0])
