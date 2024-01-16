@@ -486,7 +486,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         safe_load_file
         if load_safe
         else partial(
-            torch.load, map_location="cpu", weights_only=True if is_torch_greater_or_equal_than_1_13 else False
+            torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13
         )
     )
 
@@ -535,7 +535,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
         return torch.load(
             checkpoint_file,
             map_location=map_location,
-            weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+            weights_only=is_torch_greater_or_equal_than_1_13,
             **extra_args,
         )
     except Exception as e:

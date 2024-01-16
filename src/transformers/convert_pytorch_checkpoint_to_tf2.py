@@ -333,7 +333,7 @@ def convert_pt_checkpoint_to_tf(
         state_dict = torch.load(
             pytorch_checkpoint_path,
             map_location="cpu",
-            weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+            weights_only=is_torch_greater_or_equal_than_1_13,
         )
         pt_model = pt_model_class.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict

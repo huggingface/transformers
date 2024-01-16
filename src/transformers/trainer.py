@@ -2106,7 +2106,7 @@ class Trainer:
                     state_dict = torch.load(
                         weights_file,
                         map_location="cpu",
-                        weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+                        weights_only=is_torch_greater_or_equal_than_1_13,
                     )
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
@@ -2123,7 +2123,7 @@ class Trainer:
                     state_dict = torch.load(
                         weights_file,
                         map_location="cpu",
-                        weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+                        weights_only=is_torch_greater_or_equal_than_1_13,
                     )
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2195,7 +2195,7 @@ class Trainer:
                         state_dict = torch.load(
                             best_model_path,
                             map_location="cpu",
-                            weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+                            weights_only=is_torch_greater_or_equal_than_1_13,
                         )
 
                     state_dict["_smp_is_partial"] = False
@@ -2228,7 +2228,7 @@ class Trainer:
                         state_dict = torch.load(
                             best_model_path,
                             map_location="cpu",
-                            weights_only=True if is_torch_greater_or_equal_than_1_13 else False,
+                            weights_only=is_torch_greater_or_equal_than_1_13,
                         )
 
                     # If the model is on the GPU, it still works!

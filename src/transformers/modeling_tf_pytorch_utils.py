@@ -189,7 +189,7 @@ def load_pytorch_checkpoint_in_tf2_model(
             state_dict = safe_load_file(pt_path)
         else:
             state_dict = torch.load(
-                pt_path, map_location="cpu", weights_only=True if is_torch_greater_or_equal_than_1_13 else False
+                pt_path, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13
             )
 
         pt_state_dict.update(state_dict)
