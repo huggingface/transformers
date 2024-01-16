@@ -194,7 +194,7 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFSwiftFormerModel.from_pretrained(model_name, from_pt=True)
+            model = TFSwiftFormerModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     @unittest.skip(reason="TFSwiftFormer does not output attentions")
@@ -252,12 +252,12 @@ class TFSwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True) if is_vision_available() else None
+            ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs", from_pt=True)
+        model = TFSwiftFormerForImageClassification.from_pretrained("MBZUAI/swiftformer-xs")
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
