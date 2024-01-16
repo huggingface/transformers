@@ -1282,6 +1282,7 @@ class CaptureLogger:
         return self
 
     def __exit__(self, *exc):
+        self.sh.flush()
         self.logger.removeHandler(self.sh)
         self.out = self.io.getvalue()
 
