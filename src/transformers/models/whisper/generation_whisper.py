@@ -602,8 +602,9 @@ class WhisperGenerationMixin:
             )
 
             # 6.5 prepare decoder input ids
-            # TODO(Patrick) - clean up prev_start_of_text
-            suppress_tokens = generation_config.suppress_tokens
+            suppress_tokens = _get_attr_from_logit_processors(
+                logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
+            )
             prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
