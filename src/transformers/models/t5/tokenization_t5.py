@@ -130,6 +130,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):

@@ -120,6 +120,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be
             supported by the tokenizer.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -144,6 +147,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         tgt_lang="fra",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
+        add_prefix_space=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -186,6 +190,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

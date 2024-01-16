@@ -130,6 +130,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
 
     """
 
@@ -152,6 +155,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         use_default_system_prompt=False,
         spaces_between_special_tokens=False,
         legacy=None,
+        add_prefix_space=True,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -189,6 +193,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
