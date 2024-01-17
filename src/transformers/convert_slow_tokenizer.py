@@ -385,7 +385,7 @@ class Qwen2Converter(Converter):
                     invert=False,
                 ),
                 pre_tokenizers.ByteLevel(
-                    add_prefix_space=False,  # The slow tokenizer does not support add_prefix_space
+                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
                     use_regex=False,
                 ),
             ]

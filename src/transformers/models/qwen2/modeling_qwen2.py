@@ -729,6 +729,11 @@ class Qwen2DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
+        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
+            logger.warning_once(
+                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
+                "unexpected results may be encountered."
+            )
         self.self_attn = QWEN2_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
 
         self.mlp = Qwen2MLP(config)

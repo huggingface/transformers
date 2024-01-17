@@ -71,6 +71,13 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file (`str`, *optional*):
             Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
+        unk_token (`str`, *optional*):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead. Not applicable to this tokenizer.
+        bos_token (`str`, *optional*):
+            The beginning of sequence token. Not applicable for this tokenizer.
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The end of sequence token.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -84,15 +91,22 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         vocab_file=None,
         merges_file=None,
         tokenizer_file=None,
+        unk_token=None,
+        bos_token=None,
+        eos_token="<|endoftext|>",
         **kwargs,
     ):
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be
-        # configured through files
+        # configured through files.
+        # following GPT2TokenizerFast, also adding unk_token, bos_token, and eos_token
         super().__init__(
             vocab_file,
             merges_file,
             tokenizer_file=tokenizer_file,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
             **kwargs,
         )
 
