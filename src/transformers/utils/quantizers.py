@@ -50,7 +50,7 @@ class QuantizationConfigParser:
     def get_quantizer(
         self,
         config,
-        quantization_config_from_args,
+        quantization_config_from_args=None,
     ):
         if hasattr(
             config, "quantization_config"
@@ -281,6 +281,10 @@ class HFQuantizer(ABC):
             raise AttributeError(
                 "`.create_quantized_param()` method is not supported by quantizer class {self.__cls__}."
             )
+
+    def validate_saving(self, model):
+        """checks if the quantized model can be successfully saved"""
+        ...
 
 
 class GPTQHFQuantizer(HFQuantizer):
@@ -578,6 +582,13 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         model.is_8bit_serializable = self.is_model_serializeable()
         model.is_loaded_in_8bit = True
 
+    def validate_saving(self, model):
+        if not self.is_model_serializeable() and not getattr(model, "_hf_peft_config_loaded", False):
+            raise NotImplementedError(
+                "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
+                "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
+            )
+
 
 class Bnb4BitHFQuantizer(BnbHFQuantizer):
     """
@@ -717,8 +728,14 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
 
     def process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
         super().process_model_after_weight_loading(model, **kwargs)
-        model.is_4bit_serializable = self.is_model_serializeable()
         model.is_loaded_in_4bit = True
+
+    def validate_saving(self, model):
+        if not self.is_model_serializeable() and not getattr(model, "_hf_peft_config_loaded", False):
+            raise NotImplementedError(
+                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
+                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
+            )
 
 
 class AWQHFQuantizer(HFQuantizer):
@@ -791,7 +808,11 @@ class AWQHFQuantizer(HFQuantizer):
             from ..integrations import fuse_awq_modules
 
             model = fuse_awq_modules(model, self.quantization_config)
-            model._awq_is_fused = True
+            model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
 
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return False
+
+    def validate_saving(self, model):
+        if getattr(model, "_awq_is_fused", False):
+            raise ValueError("You cannot save an AWQ model that uses fused modules!")

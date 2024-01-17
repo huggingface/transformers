@@ -2233,29 +2233,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
 
-        # Checks if the model has been loaded in 8-bit
-        if (
-            getattr(self, "is_loaded_in_8bit", False)
-            and not getattr(self, "is_8bit_serializable", False)
-            and not _hf_peft_config_loaded
-        ):
-            raise NotImplementedError(
-                "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
-            )
-
-        if (
-            getattr(self, "is_loaded_in_4bit", False)
-            and not getattr(self, "is_4bit_serializable", False)
-            and not _hf_peft_config_loaded
-        ):
-            raise NotImplementedError(
-                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
-            )
-
-        if getattr(self, "_awq_is_fused", False):
-            raise ValueError("You cannot save an AWQ model that uses fused modules!")
+        # initializing quantizer to validate saving
+        quantizer = QuantizationConfigParser.get_quantizer(self.config, None)
+        if quantizer is not None:
+            quantizer.validate_saving(model=self)
 
         if "save_config" in kwargs:
             warnings.warn(
