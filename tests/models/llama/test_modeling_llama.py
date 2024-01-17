@@ -488,7 +488,11 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if not has_sdpa:
             raise ValueError("The SDPA model should have SDPA attention layers")
 
-        texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
+        texts = [
+            "hi here's a longer context, getting longer and",
+            "Hello this is a very long sentence my friend, very long for real",
+            "Today I am in Paris and",
+        ]
 
         for padding_side in ["left", "right"]:
             tokenizer.padding_side = padding_side
