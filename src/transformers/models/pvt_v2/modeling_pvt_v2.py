@@ -102,11 +102,11 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
 
     def __init__(self, config: PvtV2Config, layer_idx: int):
         super().__init__()
-        patch_size: Union[int, Iterable[int]] = config.patch_sizes[layer_idx]
+        patch_size = config.patch_sizes[layer_idx]
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
-        stride: int = config.strides[layer_idx]
-        num_channels: int = config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1]
-        hidden_size: int = config.hidden_sizes[layer_idx]
+        stride = config.strides[layer_idx]
+        num_channels = config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1]
+        hidden_size = config.hidden_sizes[layer_idx]
         self.patch_size = patch_size
         self.proj = nn.Conv2d(
             num_channels,
