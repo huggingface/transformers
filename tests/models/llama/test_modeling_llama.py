@@ -457,10 +457,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         """
         max_new_tokens = 30
 
-        tokenizer = LlamaTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("saibo/llama-1B")
 
         model_sdpa = LlamaForCausalLM.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -468,7 +468,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = LlamaForCausalLM.from_pretrained(
-            "NousResearch/Llama-2-7b-chat-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
