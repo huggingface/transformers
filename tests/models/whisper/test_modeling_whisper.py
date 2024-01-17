@@ -2293,7 +2293,8 @@ class WhisperEncoderModelTester:
         return self.get_subsampled_output_lengths(self.seq_length)
 
     def create_and_check_model_forward(self, config, inputs_dict, use_weighted_layer_sum=False):
-        model = WhisperForAudioClassification(config=config, use_weighted_layer_sum=use_weighted_layer_sum)
+        config.use_weighted_layer_sum = use_weighted_layer_sum
+        model = WhisperForAudioClassification(config=config)
         model.to(torch_device).eval()
 
         input_features = inputs_dict["input_features"]
