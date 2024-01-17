@@ -1613,6 +1613,14 @@ class Trainer:
                 f" {args.max_steps}"
             )
 
+        # Ensure save_steps < max_steps
+        if self.args.save_strategy == "steps":
+            if max_steps < self.args.save_steps:
+                raise ValueError(
+                    'args.save_steps must be less than max_steps. Either set args.save_strategy to "no" or "epoch", '
+                    'or increase number of training steps.'
+                )
+
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
