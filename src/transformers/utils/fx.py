@@ -520,9 +520,9 @@ def torch_nn_functional_one_hot(tensor, num_classes=-1):
 def torch_nn_functional_scaled_dot_product_attention(
     query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None
 ):
-    L = query.shape[-2]
-    Ev = value.shape[-1]
-    return torch.empty((*query.shape[:-2], L, Ev), device="meta")
+    target_length = query.shape[-2]
+    head_dim = value.shape[-1]
+    return torch.empty((*query.shape[:-2], target_length, head_dim), device="meta")
 
 
 def torch_nn_mseloss(self, input, target):
