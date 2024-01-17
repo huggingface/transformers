@@ -1510,16 +1510,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
         # or the model may be initialized under the context manager `with torch.device("cuda"):`.
         if check_device_map and device_map is None and torch.empty(0).device.type != "cuda":
-            if not torch.cuda.is_available():
+            if torch.cuda.is_available():
+                logger.warning_once(
+                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
+                    " after initializing it on CPU with `model.to('cuda')`."
+                )
+            else:
                 raise ValueError(
                     "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU and with no GPU available. "
                     "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
-                )
-            else:
-                logger.warning_once(
-                    "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
-                    " after initializing it on CPU with `model.to('cuda')`."
                 )
         elif (
             check_device_map
