@@ -1199,8 +1199,12 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
 
+def is_model_supported(model: PreTrainedModel):
+    return model.__class__.__name__ in _SUPPORTED_MODELS
+
+
 def check_if_model_is_supported(model: PreTrainedModel):
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+    if not is_model_supported(model):
         supported_model_names = ", ".join(_SUPPORTED_MODELS)
         raise NotImplementedError(
             f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
