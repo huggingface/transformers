@@ -322,6 +322,7 @@ class ExamplesTestsNoTrainer(TestCasePlus):
             --output_dir {tmp_dir}
             --with_tracking
             --checkpointing_steps 1
+            --label_column_name labels
         """.split()
 
         run_command(self._launch_args + testargs)

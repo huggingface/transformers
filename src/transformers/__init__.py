@@ -711,6 +711,11 @@ _import_structure = {
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
+    "models.qwen2": [
+        "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Qwen2Config",
+        "Qwen2Tokenizer",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
         "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1185,6 +1190,7 @@ else:
     _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
@@ -2971,6 +2977,14 @@ else:
             "load_tf_weights_in_qdqbert",
         ]
     )
+    _import_structure["models.qwen2"].extend(
+        [
+            "Qwen2ForCausalLM",
+            "Qwen2ForSequenceClassification",
+            "Qwen2Model",
+            "Qwen2PreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "RagModel",
@@ -4401,7 +4415,6 @@ else:
         "create_optimizer",
     ]
     _import_structure["tf_utils"] = []
-    _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
 try:
@@ -5405,6 +5418,7 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
+    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5872,6 +5886,7 @@ if TYPE_CHECKING:
         from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
+        from .models.qwen2 import Qwen2TokenizerFast
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
@@ -7374,6 +7389,12 @@ if TYPE_CHECKING:
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,
         )
+        from .models.qwen2 import (
+            Qwen2ForCausalLM,
+            Qwen2ForSequenceClassification,
+            Qwen2Model,
+            Qwen2PreTrainedModel,
+        )
         from .models.rag import (
             RagModel,
             RagPreTrainedModel,
@@ -8559,9 +8580,6 @@ if TYPE_CHECKING:
             WarmUp,
             create_optimizer,
         )
-
-        # Trainer
-        from .trainer_tf import TFTrainer
 
     try:
         if not (

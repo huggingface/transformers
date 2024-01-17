@@ -1492,8 +1492,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, IdeficsForVisionText2Text
 
-        >>> model = IdeficsForVisionText2Text.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = IdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/idefics-9b")
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

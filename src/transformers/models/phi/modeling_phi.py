@@ -237,8 +237,8 @@ class PhiAttention(nn.Module):
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
 
@@ -506,7 +506,7 @@ class PhiFlashAttention2(PhiAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=1.0
+            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=None
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
