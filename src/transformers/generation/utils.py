@@ -4813,24 +4813,26 @@ def _speculative_sampling(
     # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
     if last_assistant_token_is_eos and n_matches == candidate_length:
         n_matches -= 1
-    n_matches = min(n_matches, max_matches)
-
-    # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
-    gamma = candidate_logits.shape[1]
-    p_n_plus_1 = p[:, n_matches, :]
-    if n_matches < gamma:
-        q_n_plus_1 = q[:, n_matches, :]
-        p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
-        p_prime.div_(p_prime.sum())
+        valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
     else:
-        p_prime = p_n_plus_1
-    t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+        n_matches = min(n_matches, max_matches)
 
-    # The selected tokens include the matches (if any) plus the next sampled tokens
-    if n_matches > 0:
-        valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
-    else:
-        valid_tokens = t
+        # Next token selection: if there is a rejection, adjust the distribution from the main model before sampling.
+        gamma = min(candidate_logits.shape[1], max_matches)
+        p_n_plus_1 = p[:, n_matches, :]
+        if n_matches < gamma:
+            q_n_plus_1 = q[:, n_matches, :]
+            p_prime = torch.clamp((p_n_plus_1 - q_n_plus_1), min=0)
+            p_prime.div_(p_prime.sum())
+        else:
+            p_prime = p_n_plus_1
+        t = torch.multinomial(p_prime, num_samples=1).squeeze(1)[None, :]
+
+        # The selected tokens include the matches (if any) plus the next sampled tokens
+        if n_matches > 0:
+            valid_tokens = torch.cat((new_candidate_input_ids[:, :n_matches], t), dim=-1)
+        else:
+            valid_tokens = t
 
     return valid_tokens, n_matches
 
