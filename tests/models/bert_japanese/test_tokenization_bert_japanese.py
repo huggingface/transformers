@@ -29,7 +29,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -197,7 +197,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れ", "た", "　", "。"],
         )
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_pickle_sudachi_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
         self.assertIsNotNone(tokenizer)
@@ -218,7 +218,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_loaded)
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_core(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core")
 
@@ -229,33 +229,33 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         # fmt: on
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_A(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="A")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国", "人", "参政", "権"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_B(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="B")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人", "参政権"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_C(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="C")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人参政権"])
 
-    @require_sudachi
-    def test_sudachi_full_tokenizer_with_sudachi_wargs_split_mode_B(self):
+    @require_sudachi_projection
+    def test_sudachi_full_tokenizer_with_sudachi_kwargs_split_mode_B(self):
         tokenizer = self.tokenizer_class(
             self.vocab_file, word_tokenizer_type="sudachi", sudachi_kwargs={"sudachi_split_mode": "B"}
         )
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国", "##人", "参政", "##権"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_projection(self):
         tokenizer = SudachiTokenizer(
             sudachi_dict_type="core", sudachi_split_mode="A", sudachi_projection="normalized_nouns"
@@ -263,27 +263,27 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
 
-    @require_sudachi
-    def test_sudachi_full_tokenizer_with_sudachi_wargs_sudachi_projection(self):
+    @require_sudachi_projection
+    def test_sudachi_full_tokenizer_with_sudachi_kwargs_sudachi_projection(self):
         tokenizer = self.tokenizer_class(
             self.vocab_file, word_tokenizer_type="sudachi", sudachi_kwargs={"sudachi_projection": "normalized_nouns"}
         )
 
         self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_lower(self):
         tokenizer = SudachiTokenizer(do_lower_case=True, sudachi_dict_type="core")
 
         self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "アップル", "ストア", "で", "iphone", "8", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", " ", "。", " ", " "])  # fmt: skip
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_no_normalize(self):
         tokenizer = SudachiTokenizer(normalize_text=False, sudachi_dict_type="core")
 
         self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "ｱｯﾌﾟﾙ", "ストア", "で", "iPhone", "８", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", "\u3000", "。", " ", " "])  # fmt: skip
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_trim_whitespace(self):
         tokenizer = SudachiTokenizer(trim_whitespace=True, sudachi_dict_type="core")
 
