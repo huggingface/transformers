@@ -178,7 +178,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-
         self._lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
