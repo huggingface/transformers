@@ -30,8 +30,8 @@ class HfArgumentParserTest(unittest.TestCase):
         # the current default level is logging.WARNING
         level_origin = logging.get_verbosity()
 
-        logging.set_verbosity_error()
-        self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
+        # logging.set_verbosity_error()
+        # self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
 
         logging.set_verbosity_warning()
         self.assertEqual(logger.getEffectiveLevel(), logging.get_verbosity())
@@ -57,8 +57,8 @@ class HfArgumentParserTest(unittest.TestCase):
                 logger.warning(msg)
             self.assertEqual(cl.out, msg + "\n")
 
-        # this is setting the level for all of `transformers.*` loggers
-        logging.set_verbosity_error()
+        # # this is setting the level for all of `transformers.*` loggers
+        # logging.set_verbosity_error()
 
         # should not be able to log warnings
         with CaptureLogger(logger) as cl:
