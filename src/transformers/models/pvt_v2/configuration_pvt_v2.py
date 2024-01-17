@@ -57,7 +57,7 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         depths (`List[int]`, *optional*, defaults to `[2, 2, 2, 2]`):
             The number of layers in each encoder block.
         sr_ratios (`List[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
-            Sequence reduction ratios in each encoder block.
+            Spatial reduction ratios in each encoder block.
         hidden_sizes (`List[int]`, *optional*, defaults to `[32, 64, 160, 256]`):
             Dimension of each of the encoder blocks.
         patch_sizes (`List[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
