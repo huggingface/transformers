@@ -278,12 +278,7 @@ class PvtV2ConvFeedForwardNetwork(nn.Module):
 
 
 class PvtV2BlockLayer(nn.Module):
-    def __init__(
-        self,
-        config: PvtV2Config,
-        layer_idx: int,
-        drop_path: float = 0.0,
-    ):
+    def __init__(self, config: PvtV2Config, layer_idx: int, drop_path: float = 0.0):
         super().__init__()
         hidden_size: int = config.hidden_sizes[layer_idx]
         num_attention_heads: int = config.num_attention_heads[layer_idx]
