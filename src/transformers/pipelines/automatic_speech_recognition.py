@@ -18,11 +18,11 @@ import numpy as np
 import requests
 
 from ..modelcard import ModelCard
+from ..models.auto.processing_auto import AutoProcessor
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ArgumentHandler, ChunkPipeline, infer_framework_load_model
-from ..models.auto.processing_auto import AutoProcessor
 
 
 if TYPE_CHECKING:
