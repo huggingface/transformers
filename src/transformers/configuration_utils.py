@@ -622,14 +622,14 @@ class PretrainedConfig(PushToHubMixin):
             )
             if cl is not None:
                 import threading
-                id1 = kwargs.pop("id1")
-                id2 = kwargs.pop("id2")
-                id3 = kwargs.pop("id3")
-                id4 = kwargs.pop("id4")
-                s = f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
+                # id1 = kwargs.pop("id1")
+                # id2 = kwargs.pop("id2")
+                # id3 = kwargs.pop("id3")
+                # id4 = kwargs.pop("id4")
+                # s = f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
                 cl.io.flush()
                 cl.out = cl.io.getvalue()
-                breakpoint()
+                # breakpoint()
                 if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
                     assert logger.level == 0
                     try:
