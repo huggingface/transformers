@@ -403,9 +403,9 @@ class PvtV2Encoder(nn.Module):
             else:
                 layer_output = layer(hidden_states, output_attentions)
             outputs, height, width = layer_output
-            hidden_states = outputs[0]
+            hidden_states, attentions = outputs[0], outputs[1]
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[1],)
+                all_self_attentions = all_self_attentions + (attentions,)
             # optionally reshape back to (batch_size, num_channels, height, width)
             if idx != len(self.layers) - 1 or (idx == len(self.layers) - 1 and self.config.reshape_last_stage):
                 hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
