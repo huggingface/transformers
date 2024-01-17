@@ -537,7 +537,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         for token in token_ids:
             if token >= timestamp_begin:
                 timestamp = float((token - timestamp_begin) * time_precision)
-                
+
                 if timestamp < cur_max_timestamp:
                     # next segment has started
                     prev_segments_len += cur_max_timestamp
