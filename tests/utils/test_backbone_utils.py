@@ -14,6 +14,8 @@
 
 import unittest
 
+import pytest
+
 from transformers.utils.backbone_utils import (
     BackboneMixin,
     get_aligned_output_features_output_indices,
@@ -47,36 +49,60 @@ class BackboneUtilsTester(unittest.TestCase):
 
     def test_verify_out_features_out_indices(self):
         # Stage names must be set
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError, match="Stage_names must be set for transformers backbones"):
             verify_out_features_out_indices(["a", "b"], (0, 1), None)
 
         # Out features must be a list
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError, match="out_features must be a list got <class 'tuple'>"):
             verify_out_features_out_indices(("a", "b"), (0, 1), ["a", "b"])
 
         # Out features must be a subset of stage names
-        with self.assertRaises(ValueError):
+        with pytest.raises(
+            ValueError, match=r"out_features must be a subset of stage_names: \['a'\] got \['a', 'b'\]"
+        ):
             verify_out_features_out_indices(["a", "b"], (0, 1), ["a"])
 
+        # Out features must contain no duplicates
+        with pytest.raises(ValueError, match=r"out_features must not contain any duplicates, got \['a', 'a'\]"):
+            verify_out_features_out_indices(["a", "a"], None, ["a"])
+
         # Out indices must be a list or tuple
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError, match="out_indices must be a list or tuple, got <class 'int'>"):
             verify_out_features_out_indices(None, 0, ["a", "b"])
 
         # Out indices must be a subset of stage names
-        with self.assertRaises(ValueError):
+        with pytest.raises(
+            ValueError, match=r"out_indices must be valid indices for stage_names \['a'\], got \(0, 1\)"
+        ):
             verify_out_features_out_indices(None, (0, 1), ["a"])
 
+        # Out indices must contain no duplicates
+        with pytest.raises(ValueError, match=r"out_indices must not contain any duplicates, got \(0, 0\)"):
+            verify_out_features_out_indices(None, (0, 0), ["a"])
+
         # Out features and out indices must be the same length
-        with self.assertRaises(ValueError):
+        with pytest.raises(
+            ValueError, match="out_features and out_indices should have the same length if both are set"
+        ):
             verify_out_features_out_indices(["a", "b"], (0,), ["a", "b", "c"])
 
         # Out features should match out indices
-        with self.assertRaises(ValueError):
+        with pytest.raises(
+            ValueError, match="out_features and out_indices should correspond to the same stages if both are set"
+        ):
             verify_out_features_out_indices(["a", "b"], (0, 2), ["a", "b", "c"])
 
         # Out features and out indices should be in order
-        with self.assertRaises(ValueError):
+        with pytest.raises(
+            ValueError,
+            match=r"out_features must be in the same order as stage_names, expected \['a', 'b'\] got \['b', 'a'\]",
+        ):
             verify_out_features_out_indices(["b", "a"], (0, 1), ["a", "b"])
+
+        with pytest.raises(
+            ValueError, match=r"out_indices must be in the same order as stage_names, expected \(-2, 1\) got \(1, -2\)"
+        ):
+            verify_out_features_out_indices(["a", "b"], (1, -2), ["a", "b"])
 
         # Check passes with valid inputs
         verify_out_features_out_indices(["a", "b", "d"], (0, 1, -1), ["a", "b", "c", "d"])

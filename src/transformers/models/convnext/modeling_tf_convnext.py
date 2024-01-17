@@ -81,6 +81,7 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
+        self.config = config
 
     def call(self, pixel_values):
         if isinstance(pixel_values, dict):
@@ -100,6 +101,17 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build([None, None, None, self.config.num_channels])
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
 
 
 class TFConvNextLayer(tf.keras.layers.Layer):
@@ -167,7 +179,25 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             if self.config.layer_scale_init_value > 0
             else None
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dwconv", None) is not None:
+            with tf.name_scope(self.dwconv.name):
+                self.dwconv.build([None, None, None, self.dim])
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, None, self.dim])
+        if getattr(self, "pwconv1", None) is not None:
+            with tf.name_scope(self.pwconv1.name):
+                self.pwconv1.build([None, None, self.dim])
+        if getattr(self, "pwconv2", None) is not None:
+            with tf.name_scope(self.pwconv2.name):
+                self.pwconv2.build([None, None, 4 * self.dim])
+        if getattr(self, "drop_path", None) is not None:
+            with tf.name_scope(self.drop_path.name):
+                self.drop_path.build(None)
 
     def call(self, hidden_states, training=False):
         input = hidden_states
@@ -245,6 +275,9 @@ class TFConvNextStage(tf.keras.layers.Layer):
             )
             for j in range(depth)
         ]
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
 
     def call(self, hidden_states):
         for layer in self.downsampling_layer:
@@ -252,6 +285,20 @@ class TFConvNextStage(tf.keras.layers.Layer):
         for layer in self.layers:
             hidden_states = layer(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if self.in_channels != self.out_channels or self.stride > 1:
+            with tf.name_scope(self.downsampling_layer[0].name):
+                self.downsampling_layer[0].build([None, None, None, self.in_channels])
+            with tf.name_scope(self.downsampling_layer[1].name):
+                self.downsampling_layer[1].build([None, None, None, self.in_channels])
 
 
 class TFConvNextEncoder(tf.keras.layers.Layer):
@@ -292,6 +339,11 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
         return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+
+    def build(self, input_shape=None):
+        for stage in self.stages:
+            with tf.name_scope(stage.name):
+                stage.build(None)
 
 
 @keras_serializable
@@ -352,6 +404,20 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
             pooler_output=pooled_output,
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, self.config.hidden_sizes[-1]])
 
 
 class TFConvNextPreTrainedModel(TFPreTrainedModel):
@@ -485,6 +551,14 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convnext", None) is not None:
+            with tf.name_scope(self.convnext.name):
+                self.convnext.build(None)
+
 
 @add_start_docstrings(
     """
@@ -507,6 +581,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             bias_initializer="zeros",
             name="classifier",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
@@ -577,3 +652,15 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convnext", None) is not None:
+            with tf.name_scope(self.convnext.name):
+                self.convnext.build(None)
+        if getattr(self, "classifier", None) is not None:
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build([None, None, self.config.hidden_sizes[-1]])

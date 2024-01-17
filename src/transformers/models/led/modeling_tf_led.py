@@ -37,7 +37,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    ContextManagers,
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -200,7 +199,28 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 self.key_global.build((self.config.hidden_size,))
             with tf.name_scope("value_global"):
                 self.value_global.build((self.config.hidden_size,))
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+        if getattr(self, "query_global", None) is not None:
+            with tf.name_scope(self.query_global.name):
+                self.query_global.build([None, None, self.config.hidden_size])
+        if getattr(self, "key_global", None) is not None:
+            with tf.name_scope(self.key_global.name):
+                self.key_global.build([None, None, self.config.hidden_size])
+        if getattr(self, "value_global", None) is not None:
+            with tf.name_scope(self.value_global.name):
+                self.value_global.build([None, None, self.config.hidden_size])
 
     def call(
         self,
@@ -983,6 +1003,7 @@ class TFLEDEncoderAttention(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.longformer_self_attn = TFLEDEncoderSelfAttention(config, layer_id=layer_id, name="longformer_self_attn")
         self.output_dense = tf.keras.layers.Dense(config.d_model, use_bias=True, name="output")
+        self.config = config
 
     def call(self, inputs, training=False):
         (
@@ -1003,6 +1024,17 @@ class TFLEDEncoderAttention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "longformer_self_attn", None) is not None:
+            with tf.name_scope(self.longformer_self_attn.name):
+                self.longformer_self_attn.build(None)
+        if getattr(self, "output_dense", None) is not None:
+            with tf.name_scope(self.output_dense.name):
+                self.output_dense.build([None, None, self.config.d_model])
 
 
 class TFLEDDecoderAttention(tf.keras.layers.Layer):
@@ -1155,6 +1187,23 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 class TFLEDEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: LEDConfig, layer_id: int, **kwargs):
@@ -1168,6 +1217,7 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -1214,6 +1264,26 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
 
         return (hidden_states,) + layer_outputs[1:]
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.encoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 class TFLEDDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: LEDConfig, **kwargs):
@@ -1242,6 +1312,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
@@ -1322,6 +1393,32 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
             cross_attn_weights,
             present_key_value,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "encoder_attn", None) is not None:
+            with tf.name_scope(self.encoder_attn.name):
+                self.encoder_attn.build(None)
+        if getattr(self, "encoder_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.encoder_attn_layer_norm.name):
+                self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.decoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
 
 
 class TFLEDPreTrainedModel(TFPreTrainedModel):
@@ -1662,6 +1759,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         )
         self.layers = [TFLEDEncoderLayer(config, i, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        self.embed_dim = config.d_model
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -1723,16 +1821,8 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids)
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids)
         elif inputs_embeds is not None:
             input_shape = shape_list(inputs_embeds)[:-1]
         else:
@@ -1884,6 +1974,21 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             inputs_embeds,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layernorm_embedding", None) is not None:
+            with tf.name_scope(self.layernorm_embedding.name):
+                self.layernorm_embedding.build([None, None, self.embed_dim])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFLEDDecoder(tf.keras.layers.Layer):
@@ -2003,16 +2108,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
-            context = []
-            if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
-            with ContextManagers(context):
-                check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
-                inputs_embeds = self.embed_tokens(input_ids)
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
 
@@ -2103,6 +2200,21 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 attentions=all_self_attns,
                 cross_attentions=all_cross_attentions,
             )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layernorm_embedding", None) is not None:
+            with tf.name_scope(self.layernorm_embedding.name):
+                self.layernorm_embedding.build([None, None, self.config.d_model])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
 
 @keras_serializable
@@ -2210,6 +2322,22 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
             encoder_global_attentions=encoder_outputs.global_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        # The shared/tied weights expect to be in the model base namespace
+        # Adding "/" to the end (not the start!) of a tf.name_scope puts it in the root namespace rather than
+        # the current one.
+        with tf.name_scope(self.shared.load_weight_prefix + "/" + self.shared.name + "/"):
+            self.shared.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings(
     "The bare LED Model outputting raw hidden-states without any specific head on top.",
@@ -2295,6 +2423,14 @@ class TFLEDModel(TFLEDPreTrainedModel):
             encoder_attentions=enc_attns,
             encoder_global_attentions=enc_g_attns,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "led", None) is not None:
+            with tf.name_scope(self.led.name):
+                self.led.build(None)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
@@ -2516,3 +2652,14 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         masked_loss = unmasked_loss * loss_mask
         reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
         return tf.reshape(reduced_masked_loss, (1,))
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "led", None) is not None:
+            with tf.name_scope(self.led.name):
+                self.led.build(None)
+        if getattr(self, "bias_layer", None) is not None:
+            with tf.name_scope(self.bias_layer.name):
+                self.bias_layer.build(None)

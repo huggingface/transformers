@@ -347,7 +347,7 @@ class CLIPConfig(PretrainedConfig):
                             f"`text_config_dict` is provided which will be used to initialize `CLIPTextConfig`. The "
                             f'value `text_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `text_config` with the ones in `_text_config_dict`.
             text_config.update(_text_config_dict)
@@ -379,7 +379,7 @@ class CLIPConfig(PretrainedConfig):
                             f"`vision_config_dict` is provided which will be used to initialize `CLIPVisionConfig`. "
                             f'The value `vision_config["{key}"]` will be overriden.'
                         )
-                    logger.warning(message)
+                    logger.info(message)
 
             # Update all values in `vision_config` with the ones in `_vision_config_dict`.
             vision_config.update(_vision_config_dict)
