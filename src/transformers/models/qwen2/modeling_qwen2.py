@@ -241,9 +241,6 @@ class Qwen2Attention(nn.Module):
             base=self.rope_theta,
         )
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralAttention._shape
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
