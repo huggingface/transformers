@@ -1342,7 +1342,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         torch_dtype: Optional[torch.dtype] = None,
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
-        warn: bool = True,
     ):
         """
         Automatically checks and dispatches to a default attention implementation. In order of priority:
@@ -1386,7 +1385,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map=device_map,
                 hard_check_only=False,
                 check_device_map=check_device_map,
-                warn=warn,
             )
         elif requested_attn_implementation in [None, "sdpa"]:
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
@@ -1455,7 +1453,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         device_map: Optional[Union[str, Dict[str, int]]] = None,
         check_device_map: bool = True,
         hard_check_only: bool = False,
-        warn: bool = True,
     ) -> PretrainedConfig:
         """
         Checks the availability of Flash Attention 2 and compatibility with the current model.
@@ -1499,12 +1496,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing model.reverse_bettertransformer()"
             )
 
-        if warn and torch_dtype is None:
-            logger.warning(
+        if torch_dtype is None:
+            logger.warning_once(
                 "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
-        elif warn and torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
-            logger.warning(
+        elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
+            logger.warning_once(
                 "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes, but"
                 f" the current dype in {cls.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
                 ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
@@ -1519,8 +1516,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "This is not supported yet. Please make sure to have access to a GPU and either initialise the model on a GPU by passing a device_map "
                     "or initialising the model on CPU and then moving it to GPU."
                 )
-            elif warn:
-                logger.warning(
+            else:
+                logger.warning_once(
                     "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
@@ -3586,11 +3583,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         config = cls._autoset_attn_implementation(
-            config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            warn=False,
+            config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
         )
 
         with ContextManagers(init_contexts):
