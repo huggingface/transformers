@@ -214,6 +214,9 @@ class CircleCIJob:
                 test_command = f"timeout {self.timeout} "
             test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
+
+        test_command = "python -m pytest --junitxml=test-results/junit.xml -n 6 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/utils"
+
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
