@@ -327,7 +327,6 @@ class PvtV2BlockLayer(nn.Module):
 class PvtV2EncoderLayer(nn.Module):
     def __init__(self, config: PvtV2Config, layer_idx: int):
         super().__init__()
-        # Patch embedding
         self.patch_embedding = PvtV2OverlapPatchEmbeddings(
             config=config,
             layer_idx=layer_idx,
