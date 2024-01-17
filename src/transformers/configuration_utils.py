@@ -627,7 +627,6 @@ class PretrainedConfig(PushToHubMixin):
                 id3 = kwargs.pop("id3")
                 id4 = kwargs.pop("id4")
                 s = f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}`"
-                breakpoint()
                 cl.io.flush()
                 cl.out = cl.io.getvalue()
                 if "You are using a model of type t5 to instantiate a model of type bert" not in cl.out:
