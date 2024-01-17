@@ -1449,8 +1449,8 @@ class GenerationTesterMixin:
     def test_contrastive_generate(self):
         # check `generate()` and `contrastive_search()` are equal
         for model_class in self.all_generative_model_classes:
-            # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            # won't fix: FSMT, Reformer, and NucleusX have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
 
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
@@ -1470,8 +1470,8 @@ class GenerationTesterMixin:
 
     def test_contrastive_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
-            # won't fix: FSMT and Reformer have a different cache variable type (and format).
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            # won't fix: FSMT, Reformer, and NucleusX have a different cache variable type (and format).
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
 
             # enable cache
@@ -1503,7 +1503,10 @@ class GenerationTesterMixin:
     def test_contrastive_generate_low_memory(self):
         # Check that choosing 'low_memory' does not change the model output
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "speech2text"]):
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["fsmt", "reformer", "speech2text", "nucleusx"]
+            ):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(model_name in model_class.__name__.lower() for model_name in ["gptbigcode"]):
                 self.skipTest("TODO: fix me")
@@ -1553,7 +1556,7 @@ class GenerationTesterMixin:
         # - assisted_decoding does not support `batch_size > 1`
 
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
@@ -1674,7 +1677,7 @@ class GenerationTesterMixin:
         # match sample for the same seed, as the forward pass does not return the exact same logits (due to matmul with
         # different shapes, see https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535).
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer", "nucleusx"]):
                 self.skipTest("Won't fix: old model with different cache format")
             if any(
                 model_name in model_class.__name__.lower()
@@ -2077,30 +2080,33 @@ class GenerationTesterMixin:
         self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
 
         # Attentions
-        if config.is_encoder_decoder:
-            # encoder
-            self._check_encoder_attention_for_generate(output.encoder_attentions, batch_size, config, seq_length)
-            # decoder
-            self._check_attentions_for_generate(
-                num_sequences_in_output,
-                output.decoder_attentions,
-                min_length=1,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
-        else:
-            # if use_cache first input is equal to no use_cache, so skip here
-            attentions = output.attentions if not use_cache else output.attentions[1:]
-            min_length = seq_length if not use_cache else seq_length + 1
-            self._check_attentions_for_generate(
-                num_sequences_in_output,
-                attentions=attentions,
-                min_length=min_length,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
+        # since NucleusX model uses an RNN style cache during generation, attention weight can't be computed after
+        # the first step. Skip attention check for NucleusX model.
+        if config.model_type not in ("nucleus_x",):
+            if config.is_encoder_decoder:
+                # encoder
+                self._check_encoder_attention_for_generate(output.encoder_attentions, batch_size, config, seq_length)
+                # decoder
+                self._check_attentions_for_generate(
+                    num_sequences_in_output,
+                    output.decoder_attentions,
+                    min_length=1,
+                    max_length=output.sequences.shape[-1],
+                    config=config,
+                    use_cache=use_cache,
+                )
+            else:
+                # if use_cache first input is equal to no use_cache, so skip here
+                attentions = output.attentions if not use_cache else output.attentions[1:]
+                min_length = seq_length if not use_cache else seq_length + 1
+                self._check_attentions_for_generate(
+                    num_sequences_in_output,
+                    attentions=attentions,
+                    min_length=min_length,
+                    max_length=output.sequences.shape[-1],
+                    config=config,
+                    use_cache=use_cache,
+                )
 
         # Hidden States
         if config.is_encoder_decoder:
@@ -2221,18 +2227,30 @@ class GenerationTesterMixin:
             [True] * len(past_key_values),
         )
 
-        # (batch, head, seq_length, head_features)
-        expected_shape = (
-            batch_size * num_beam_groups,
-            config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            seq_length,
-            config.hidden_size // config.num_attention_heads,
-        )
+        # for NucleusX, the shape of past_key_values is (batch, head, value_dim / head, head_features)
+        if config.model_type in ("nucleus_x",):
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                config.decoder_value_embed_dim // config.num_attention_heads,
+                config.hidden_size // config.num_attention_heads,
+            )
+        else:
+            # (batch, head, seq_length, head_features)
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
+                seq_length,
+                config.hidden_size // config.num_attention_heads,
+            )
         # check shape key, value
         self.assertListEqual(
             [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
             [expected_shape] * len(past_key_values),
         )
+        if config.model_type in ("nucleus_x",):
+            # for NucleusX, the 2nd element of past_key_values is `scale`, with shape=(batch, head, 1, 1)
+            expected_shape = (batch_size * num_beam_groups, config.num_attention_heads, 1, 1)
         self.assertListEqual(
             [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
             [expected_shape] * len(past_key_values),

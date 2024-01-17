@@ -640,6 +640,7 @@ _import_structure = {
     "models.nllb": [],
     "models.nllb_moe": ["NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP", "NllbMoeConfig"],
     "models.nougat": ["NougatProcessor"],
+    "models.nucleus_x": ["NUCLEUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "NucleusXConfig"],
     "models.nystromformer": [
         "NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "NystromformerConfig",
@@ -2767,6 +2768,15 @@ else:
             "NllbMoePreTrainedModel",
             "NllbMoeSparseMLP",
             "NllbMoeTop2Router",
+        ]
+    )
+    _import_structure["models.nucleus_x"].extend(
+        [
+            "NUCLEUS_X_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "NucleusXForCausalLM",
+            "NucleusXForSequenceClassification",
+            "NucleusXModel",
+            "NucleusXPreTrainedModel",
         ]
     )
     _import_structure["models.nystromformer"].extend(
@@ -5327,6 +5337,10 @@ if TYPE_CHECKING:
     from .models.nezha import NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP, NezhaConfig
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nougat import NougatProcessor
+    from .models.nucleus_x import (
+        NUCLEUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        NucleusXConfig,
+    )
     from .models.nystromformer import (
         NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         NystromformerConfig,
@@ -7211,6 +7225,15 @@ if TYPE_CHECKING:
             NllbMoeSparseMLP,
             NllbMoeTop2Router,
         )
+
+        # PyTorch model imports
+        from .models.nucleus_x import (
+            NUCLEUS_X_PRETRAINED_MODEL_ARCHIVE_LIST,
+            NucleusXForCausalLM,
+            NucleusXForSequenceClassification,
+            NucleusXModel,
+            NucleusXPreTrainedModel,
+        )
         from .models.nystromformer import (
             NYSTROMFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             NystromformerForMaskedLM,
@@ -7487,8 +7510,6 @@ if TYPE_CHECKING:
             SamModel,
             SamPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,

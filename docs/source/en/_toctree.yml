@@ -424,6 +424,8 @@
         title: NLLB
       - local: model_doc/nllb-moe
         title: NLLB-MoE
+      - local: model_doc/nucleus_x
+        title: NucleusX
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/open-llama
