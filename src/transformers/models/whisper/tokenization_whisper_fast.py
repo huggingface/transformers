@@ -230,15 +230,15 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         for token in token_ids:
             if token >= timestamp_begin:
-                timestamp = float(f"{(token - timestamp_begin) * time_precision:.2f}")
+                timestamp = float((token - timestamp_begin) * time_precision)
+
                 if timestamp < cur_max_timestamp:
                     # next segment has started
                     prev_segments_len += cur_max_timestamp
 
                 cur_max_timestamp = timestamp
-                timestamp = round(timestamp + prev_segments_len, 2)
 
-                outputs.append(f"<|{timestamp}|>")
+                outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
                 outputs.append([])
             else:
                 outputs[-1].append(token)
