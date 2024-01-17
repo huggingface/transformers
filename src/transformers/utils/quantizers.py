@@ -191,7 +191,6 @@ def get_module_from_name(module, tensor_name: str) -> Tuple[Any, str]:
 
 class HFQuantizer(ABC):
     requires_parameters_quantization = False
-    aux_keys_suffixes = ()
 
     def __init__(
         self, quantization_config: QuantizationConfigMixin, quantization_status: QuantizationStatus, **kwargs
@@ -263,12 +262,6 @@ class HFQuantizer(ABC):
     def validate_device_map(self, device_map):
         """validates device map after process_model_before_weight_loading() and infer_auto_device_map()"""
         ...
-
-    def update_mismatched_keys(self, unexpected_keys: List[str], missing_keys: List[str]):
-        """removes auxiliary quantization components from unexpected_keys, missing_keys. In place."""
-        for suffix in self.aux_keys_suffixes:
-            unexpected_keys[:] = [elem for elem in unexpected_keys if not elem.endswith(suffix)]
-            missing_keys[:] = [elem for elem in missing_keys if not elem.endswith(suffix)]
 
     def check_quantized_param(
         self, model: PreTrainedModel, param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
@@ -492,8 +485,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         need to locate SCB component and pass to the Linear8bitLt object
     """
 
-    aux_keys_suffixes = ("SCB",)
-
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
 
@@ -533,17 +524,15 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         param_name: str,
         target_device: torch.device,
         state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
     ):
         """
-        combines logic from _load_state_dict_into_meta_model and
-        .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
+        combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
+        needs aux items from state dicts, if found - removes them from unexpected_keys
         """
-        for suffix in self.aux_keys_suffixes:
-            if param_name.endswith(suffix):
-                # Such auxiliary param components are to be loaded with main weights only
-                return
 
-        fp16_statistics = state_dict.get(param_name.replace("weight", "SCB"), None)
+        fp16_statistics_key = param_name.replace("weight", "SCB")
+        fp16_statistics = state_dict.get(fp16_statistics_key, None)
 
         module, tensor_name = get_module_from_name(model, param_name)
         if tensor_name not in module._parameters:
@@ -579,6 +568,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizer):
         module._parameters[tensor_name] = new_value
         if fp16_statistics is not None:
             setattr(module.weight, "SCB", fp16_statistics.to(target_device))
+            unexpected_keys.remove(fp16_statistics_key)
 
     def is_model_trainable(self, model: Optional[PreTrainedModel] = None) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
@@ -599,15 +589,6 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         loading:
             need to locate `quant_state` components and pass to Param4bit constructor
     """
-
-    aux_keys_suffixes = (
-        "bitsandbytes__nf4",
-        "bitsandbytes__fp4",
-        "quant_map",
-        "nested_absmax",
-        "absmax",
-        "nested_quant_map",
-    )
 
     def validate_environment(self, *args, **kwargs):
         super().validate_environment(*args, **kwargs)
@@ -660,10 +641,10 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
         param_name: str,
         target_device: torch.device,
         state_dict: Dict[str, Any],
+        unexpected_keys: List[str],
     ):
         """
-        combines logic from _load_state_dict_into_meta_model and
-        .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
+        combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
         """
         module, tensor_name = get_module_from_name(model, param_name)
 
@@ -713,8 +694,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizer):
             for k, v in state_dict.items():
                 if param_name + "." in k:
                     quantized_stats[k] = v
-                    # unexpected_keys.remove(k)  # addressed by .update_mismatched_keys() elsewhere
-                    # TODO: consider that approach vs state_dict cleanup
+                    unexpected_keys.remove(k)
 
             new_value = bnb.nn.Params4bit.from_prequantized(
                 data=param_value,

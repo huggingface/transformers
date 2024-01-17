@@ -791,7 +791,7 @@ def _load_state_dict_into_meta_model(
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            quantizer.create_quantized_param(model, param, param_name, param_device, state_dict)
+            quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
@@ -3933,9 +3933,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "\n\tYou may consider adding `ignore_mismatched_sizes=True` in the model `from_pretrained` method."
                 )
             raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
-
-        if quantizer is not None:
-            quantizer.update_mismatched_keys(unexpected_keys, missing_keys)
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
