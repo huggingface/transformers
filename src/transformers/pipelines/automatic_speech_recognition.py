@@ -594,7 +594,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 out = {"tokens": tokens["sequences"], "token_timestamps": tokens["token_timestamps"]}
             else:
                 out = {"tokens": tokens}
-                
+
             if "prompt_ids" in generate_kwargs:
                 if isinstance(out["tokens"], torch.Tensor):
                     prompt_tensor = torch.tensor(generate_kwargs["prompt_ids"], dtype=out["tokens"].dtype)
@@ -602,7 +602,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     tmp_tokens = out["tokens"][0]
                     if (tmp_tokens[0:nprompt_token] == prompt_tensor).sum() == nprompt_token:
                         out["tokens"][0, 0:nprompt_token] = torch.tensor([self.tokenizer.unk_token_id]*nprompt_token, dtype = out["tokens"].dtype)
-                    
+
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
