@@ -1,7 +1,7 @@
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
+# you may not use this file excenp in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
@@ -166,19 +166,19 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
         input_str = ["This is a test string", "This is another test string"]
 
         # test without attention mask
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
-        input_tok = tokenizer(input_str, return_tensors="pt", padding=True)
-        input_processor = processor(audio=raw_speech, text=input_str, return_tensors="pt", padding=True)
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_tok = tokenizer(input_str, return_tensors="np", padding=True)
+        input_processor = processor(audio=raw_speech, text=input_str, return_tensors="np", padding=True)
 
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
         self.assertTrue((input_tok["input_ids"] == input_processor["labels"]).all())
 
         # test with attention mask
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt", return_attention_mask=True)
-        input_tok = tokenizer(input_str, return_tensors="pt", return_attention_mask=True, padding=True)
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="np", return_attention_mask=True)
+        input_tok = tokenizer(input_str, return_tensors="np", return_attention_mask=True, padding=True)
         input_processor = processor(
-            audio=raw_speech, text=input_str, return_tensors="pt", return_attention_mask=True, padding=True
+            audio=raw_speech, text=input_str, return_tensors="np", return_attention_mask=True, padding=True
         )
 
         for key in input_feat_extract.keys():
