@@ -411,9 +411,8 @@ class PvtV2Encoder(nn.Module):
             hidden_states = outputs[0]
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[1],)
-            # optionally reshape back to (batch_size, num_channels, height, width)
-            if idx != len(self.layers) - 1 or (idx == len(self.layers) - 1 and self.config.reshape_last_stage):
-                hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+            # reshape back to (batch_size, num_channels, height, width)
+            hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
@@ -600,9 +599,8 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
 
         # convert last hidden states to (batch_size, height*width, hidden_size)
         batch_size = sequence_output.shape[0]
-        if self.config.reshape_last_stage:
-            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-            sequence_output = sequence_output.permute(0, 2, 3, 1)
+        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+        sequence_output = sequence_output.permute(0, 2, 3, 1)
         sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
 
         # global average pooling

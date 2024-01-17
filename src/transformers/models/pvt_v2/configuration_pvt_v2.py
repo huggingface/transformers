@@ -138,13 +138,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
     ):
         super().__init__(**kwargs)
 
-        if "reshape_last_stage" in kwargs and kwargs["reshape_last_stage"] is False:
-            warnings.warn(
-                "Reshape_last_stage is set to False in this config. This argument is deprecated and will soon be"
-                " removed, as the behaviour will default to that of reshape_last_stage = True.",
-                FutureWarning,
-            )
-
         if kwargs.get("_out_indices", None) is not None:
             out_indices = kwargs["_out_indices"]
             out_features = None
@@ -170,7 +163,6 @@ class PvtV2Config(PretrainedConfig, BackboneConfigMixin):
         self.qkv_bias = qkv_bias
         self.linear_attention = linear_attention
         self.stage_names = [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self.reshape_last_stage = kwargs.get("reshape_last_stage", True)
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
