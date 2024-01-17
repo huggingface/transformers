@@ -1540,8 +1540,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hard_check_only:
             if not cls._supports_sdpa:
                 raise ValueError(
-                    f"{cls.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet. Please open an issue on GitHub to "
-                    "request support for this architecture: https://github.com/huggingface/transformers/issues/new"
+                    f"{cls.__name__} does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
+                    " Please request the support for this architecture: https://github.com/huggingface/transformers/issues/28005. If you believe"
+                    ' this error is a bug, please open an issue in Transformers GitHub repository and load your model with the argument `attn_implementation="eager"` meanwhile. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="eager")`'
                 )
             if not is_torch_sdpa_available():
                 raise ImportError(
@@ -2334,6 +2335,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
+                # generation config built from the model config + the model config holds generation kwargs -> generate
+                # may revert to legacy behavior if the two don't match
+                if (
+                    model_to_save.generation_config._from_model_config
+                    and model_to_save.config._has_non_default_generation_parameters()
+                ):
+                    new_generation_config = GenerationConfig.from_model_config(model_to_save.config)
+                    if new_generation_config != model_to_save.generation_config:
+                        logger.warning(
+                            "Your generation config was originally created from the model config, but the model "
+                            "config has changed since then. Unless you pass the `generation_config` argument to this "
+                            "model's `generate` calls, they will revert to the legacy behavior where the base "
+                            "`generate` parameterization is loaded from the model config instead. "
+                            "To avoid this behavior and this warning, we recommend you to overwrite the generation "
+                            "config model attribute before calling the model's `save_pretrained`, preferably also "
+                            "removing any generation kwargs from the model config. This warning will be raised to an "
+                            "exception in v4.41."
+                        )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
             if _hf_peft_config_loaded:
