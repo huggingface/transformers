@@ -47,7 +47,7 @@ from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-roberta-xlarge"
+_CHECKPOINT_FOR_DOC = "facebook/xlm-roberta-xl"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
 
 XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
