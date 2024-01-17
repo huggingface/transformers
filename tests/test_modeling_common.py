@@ -84,6 +84,7 @@ from transformers.utils import (
     is_accelerate_available,
     is_flax_available,
     is_tf_available,
+    is_torch_bf16_available_on_device,
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
@@ -3385,7 +3386,7 @@ class ModelTesterMixin:
         if torch_device == "cpu" and torch_dtype == "float16":
             self.skipTest("float16 not supported on cpu")
 
-        if torch_device == "cuda" and torch_dtype == "bfloat16" and not torch.cuda.is_bf16_supported():
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
             self.skipTest("the gpu used does not support bfloat16 data type")
 
         # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
