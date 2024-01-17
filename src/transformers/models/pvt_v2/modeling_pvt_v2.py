@@ -100,11 +100,7 @@ class PvtV2DropPath(nn.Module):
 class PvtV2OverlapPatchEmbeddings(nn.Module):
     """Image to Patch Embedding"""
 
-    def __init__(
-        self,
-        config: PvtV2Config,
-        layer_idx: int,
-    ):
+    def __init__(self, config: PvtV2Config, layer_idx: int):
         super().__init__()
         patch_size: Union[int, Iterable[int]] = config.patch_sizes[layer_idx]
         patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
