@@ -241,7 +241,6 @@ class Qwen2Attention(nn.Module):
             base=self.rope_theta,
         )
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,

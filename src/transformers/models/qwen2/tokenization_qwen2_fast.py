@@ -16,6 +16,7 @@
 
 from typing import Optional, Tuple
 
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_qwen2 import Qwen2Tokenizer
@@ -71,13 +72,15 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file (`str`, *optional*):
             Path to [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-        unk_token (`str`, *optional*):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead. Not applicable to this tokenizer.
         bos_token (`str`, *optional*):
             The beginning of sequence token. Not applicable for this tokenizer.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The token used for padding, for example when batching sequences of different lengths.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -91,15 +94,38 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
         vocab_file=None,
         merges_file=None,
         tokenizer_file=None,
-        unk_token=None,
+        unk_token="<|endoftext|>",
         bos_token=None,
         eos_token="<|endoftext|>",
+        pad_token="<|endoftext|>",
         **kwargs,
     ):
         # We need to at least pass vocab_file and merges_file to base class
         # in case a slow tokenizer needs to be initialized; other can be
         # configured through files.
         # following GPT2TokenizerFast, also adding unk_token, bos_token, and eos_token
+
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False, special=True, normalized=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+
         super().__init__(
             vocab_file,
             merges_file,
@@ -107,6 +133,7 @@ class Qwen2TokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            pad_token=pad_token,
             **kwargs,
         )
 

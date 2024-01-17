@@ -116,9 +116,9 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead. Not applicable to this tokenizer.
+            token instead.
         bos_token (`str`, *optional*):
             The beginning of sequence token. Not applicable for this tokenizer.
         eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
@@ -145,7 +145,7 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         vocab_file,
         merges_file,
         errors="replace",
-        unk_token=None,
+        unk_token="<|endoftext|>",
         bos_token=None,
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",
