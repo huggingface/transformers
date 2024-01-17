@@ -228,6 +228,7 @@ class Tool:
             TOOL_CONFIG_FILE,
             token=token,
             **hub_kwargs,
+            _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
@@ -238,6 +239,7 @@ class Tool:
                 CONFIG_NAME,
                 token=token,
                 **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
             )

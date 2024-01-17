@@ -747,6 +747,7 @@ def pipeline(
             resolved_config_file = cached_file(
                 pretrained_model_name_or_path,
                 CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
                 **hub_kwargs,
