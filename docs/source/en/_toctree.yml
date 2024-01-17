@@ -255,7 +255,7 @@
     - local: main_classes/trainer
       title: Trainer
     - local: main_classes/deepspeed
-      title: DeepSpeed Integration
+      title: DeepSpeed
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor

@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 In GPU-limited environments, ZeRO also enables offloading optimizer memory and computation from the GPU to the CPU to fit and train really large models on a single GPU. DeepSpeed is integrated with the Transformers [`Trainer`] class for all ZeRO stages and offloading. All you need to do is provide a config file or you can use a provided template. For inference, Transformers support ZeRO-3 and offloading since it allows loading huge models.
 
-This guide will walk you through how to deploy DeepSpeed training, the features you can enable, how to setup the config files for different ZeRO stages, offloading, and using DeepSpeed without the [`Trainer`].
+This guide will walk you through how to deploy DeepSpeed training, the features you can enable, how to setup the config files for different ZeRO stages, offloading, inference, and using DeepSpeed without the [`Trainer`].
 
 ## Installation
 
@@ -78,6 +78,35 @@ SW: Model with 2783M total params, 65M largest layer params.
 This means you either need a single 80GB GPU without CPU offload or a 8GB GPU and a ~60GB CPU to offload to (these are just the memory requirements for the parameters, optimizer states and gradients, and you'll need a bit more for the CUDA kernels and activations). You should also consider the tradeoff between cost and speed because it'll be cheaper to rent or buy a smaller GPU but it'll take longer to train your model.
 
 If you have enough GPU memory make sure you disable CPU/NVMe offload to make everything faster.
+
+## Select a ZeRO stage
+
+After you've installed DeepSpeed and have a better idea of your memory requirements, the next step is selecting a ZeRO stage to use. In order of fastest and most memory-efficient:
+
+| Fastest          | Memory efficient |
+|------------------|------------------|
+| ZeRO-1           | ZeRO-3 + offload |
+| ZeRO-2           | ZeRO-3           |
+| ZeRO-2 + offload | ZeRO-2 + offload |
+| ZeRO-3           | ZeRO-2           |
+| ZeRO-3 + offload | ZeRO-1           |
+
+To find what works best for you, start with the fastest approach and if you run out of memory, try the next stage which is slower but more memory efficient. Feel free to work in whichever direction you prefer (starting with the most memory efficient or fastest) to discover the appropriate balance between speed and memory usage.
+
+A general process you can use is (start with batch size of 1):
+
+1. enable gradient checkpointing
+2. try ZeRO-2
+3. try ZeRO-2 and offload the optimizer
+4. try ZeRO-3
+5. try ZeRO-3 and offload parameters to the CPU
+6. try ZeRO-3 and offload parameters and the optimizer to the CPU
+7. try lowering various default values like a narrower search beam if you're using the [`~GenerationMixin.generate`] method
+8. try mixed half-precision (fp16 on older GPU architectures and bf16 on Ampere) over full-precision weights
+9. add more hardware if possible or enable Infinity to offload parameters and the optimizer to a NVMe
+10. once you're not running out of memory, measure effective throughput and then try to increase the batch size as large as you can to maximize GPU efficiency
+11. lastly, try to optimize your training setup by disabling some offload features or use a faster ZeRO stage and increasing/decreasing the batch size to find the best tradeoff between speed and memory usage
+
 
 ## DeepSpeed configuration file
 
@@ -229,6 +258,43 @@ ZeRO-3 shards the optimizer, gradient, and parameters across GPUs. Unlike ZeRO-2
     }
 }
 ```
+
+You can use the [`deepspeed.zero.Init`](https://deepspeed.readthedocs.io/en/latest/zero3.html#deepspeed.zero.Init) context manager to initialize a model faster:
+
+```py
+from transformers import T5ForConditionalGeneration, T5Config
+import deepspeed
+
+with deepspeed.zero.Init():
+    config = T5Config.from_pretrained("t5-small")
+    model = T5ForConditionalGeneration(config)
+```
+
+For pretrained models, the DeepSped config file needs to have `is_deepspeed_zero3_enabled: true` setup in [`TrainingArguments`] and it needs a ZeRO configuration enabled. The [`TrainingArguments`] object must be created **before** calling the model [`~PreTrainedModel.from_pretrained`].
+
+```py
+from transformers import AutoModel, Trainer, TrainingArguments
+
+training_args = TrainingArguments(..., deepspeed=ds_config)
+model = AutoModel.from_pretrained("t5-small")
+trainer = Trainer(model=model, args=training_args, ...)
+```
+
+You'll need ZeRO-3 if the fp16 weights don't fit on a single GPU. If you're able to load fp16 weights, then make sure you specify `torch_dtype=torch.float16` in [`~PreTrainedModel.from_pretrained`].
+
+Another consideration for ZeRO-3 is if you have multiple GPUs, no single GPU has all the parameters unless it's the parameters for the currently executing layer. To access all parameters from all the layers at once, such as loading pretrained model weights in [`~PreTrainedModel.from_pretrained`], one layer is loaded at a time and immediately partitioned to all GPUs. This is because for very large models, it isn't possible to load the weights on one GPU and then distribute them across the other GPUs due to memory limitations.
+
+If you encounter a model parameter weight that looks like the following, where `tensor([1.])` or the parameter size is 1 instead of a larger multi-dimensional shape, this means the parameter is partitioned and this is a ZeRO-3 placeholder.
+
+```py
+tensor([1.0], device="cuda:0", dtype=torch.float16, requires_grad=True)
+```
+
+<Tip>
+
+For more information about initializing large models with ZeRO-3 and accessing the parameters, take a look at the [Constructing Massive Models](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) and [Gathering Parameters](https://deepspeed.readthedocs.io/en/latest/zero3.html#gathering-parameters) guides.
+
+</Tip>
 
 </hfoption>
 </hfoptions>
@@ -860,76 +926,6 @@ To run ZeRO Inference, pass your usual training arguments to the [`TrainingArgum
 deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds_config.json
 ```
 
-## Troubleshoot
-
-When you encounter an issue, you should consider whether DeepSpeed is the cause of the problem because often it isn't (unless it's super obviously and you can see DeepSpeed modules in the exception)! The first step should be to retry your setup without DeepSpeed, and if the problem persists, then you can report the issue. If the issue is a core DeepSpeed problem and unrelated to the Transformers integration, open an Issue on the [DeepSpeed repository](https://github.com/microsoft/DeepSpeed).
-
-For issues related to the Transformers integration, please provide the following information:
-
-* the full DeepSpeed config file
-
-* the command line arguments of the [`Trainer`], or [`TrainingArguments`] arguments if you're scripting the [`Trainer`] setup yourself (don't dump the [`TrainingArguments`] which has dozens of irrelevant entries)
-
-* the outputs of:
-
-```bash
-python -c 'import torch; print(f"torch: {torch.__version__}")'
-python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
-python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
-```
-
-* a link to a Google Colab notebook to reproduce the issue
-
-* if impossible, a standard and non-custom dataset we can use and also try to use an existing example to reproduce the issue with
-
-The following sections provide a guide for resolving two of the most common issues.
-
-### DeepSpeed process killed at startup
-
-When the DeepSpeeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than your system has or your process tried to allocate more CPU memory than allowed leading the OS kernel to terminate the process. In this case, check whether your configuration file has either `offload_optimizer`, `offload_param` or both configured to offload to the CPU. 
-
-If you have NVMe and ZeRO-3 setup, experiment with offloading to the NVMe ([estimate](https://deepspeed.readthedocs.io/en/latest/memory.html) the memory requirements for your model).
-
-### NaN loss
-
-NaN loss often occurs when a model is pretrained in bf16 and then you try to use it with fp16 (especially relevant for TPU trained models). To resolve this, use fp32 or bf16 if your hardware supports it (TPU, Ampere GPUs or newer).
-
-The other issue may be related to using fp16. For example, if this is your fp16 configuration:
-
-```yaml
-{
-    "fp16": {
-        "enabled": "auto",
-        "loss_scale": 0,
-        "loss_scale_window": 1000,
-        "initial_scale_power": 16,
-        "hysteresis": 2,
-        "min_loss_scale": 1
-    }
-}
-```
-
-You might see the following `OVERFLOW!` messages in the logs:
-
-```bash
-0%|                                                                                                                             | 0/189 [00:00<?, ?it/s]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 262144
-  1%|▌                                                                                                                    | 1/189 [00:00<01:26,  2.17it/s]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 131072.0
-  1%|█▏
- [...]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
- 14%|████████████████▌                                                                                                   | 27/189 [00:14<01:13,  2.21it/s]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
- 15%|█████████████████▏                                                                                                  | 28/189 [00:14<01:13,  2.18it/s]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
- 15%|█████████████████▊                                                                                                  | 29/189 [00:15<01:13,  2.18it/s]
- [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
-[...]
-```
-
-This means the DeepSpeed loss scaler is unable to find a scaling coefficient to overcome loss overflow. To fix it, try a higher `initial_scale_power` value (32 usually works).
-
 ## Non-Trainer DeepSpeed integration
 
 DeepSpeed also works with Transformers without the [`Trainer`] class. This is handled by the [`HfDeepSpeedConfig`] which only takes care of gathering ZeRO-3 parameters and splitting a model across multiple GPUs when you call [`~PreTrainedModel.from_pretrained`].
@@ -1141,3 +1137,83 @@ This is a very basic example and you'll want to adapt it to your use case.
 Using multiple GPUs with ZeRO-3 for generation requires sychronizing the GPUs by setting `synced_gpus=True` in the [`~GenerationMixin.generate`] method. Otherwise, if one GPU is finished generating before another one, the whole system hangs because the remaining GPUs haven't received the weight shard from the GPU that finished first.
 
 For Transformers>=4.28, if `synced_gpus` is automatically set to `True` if multiple GPUs are detected during generation.
+
+## Troubleshoot
+
+When you encounter an issue, you should consider whether DeepSpeed is the cause of the problem because often it isn't (unless it's super obviously and you can see DeepSpeed modules in the exception)! The first step should be to retry your setup without DeepSpeed, and if the problem persists, then you can report the issue. If the issue is a core DeepSpeed problem and unrelated to the Transformers integration, open an Issue on the [DeepSpeed repository](https://github.com/microsoft/DeepSpeed).
+
+For issues related to the Transformers integration, please provide the following information:
+
+* the full DeepSpeed config file
+
+* the command line arguments of the [`Trainer`], or [`TrainingArguments`] arguments if you're scripting the [`Trainer`] setup yourself (don't dump the [`TrainingArguments`] which has dozens of irrelevant entries)
+
+* the outputs of:
+
+```bash
+python -c 'import torch; print(f"torch: {torch.__version__}")'
+python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+```
+
+* a link to a Google Colab notebook to reproduce the issue
+
+* if impossible, a standard and non-custom dataset we can use and also try to use an existing example to reproduce the issue with
+
+The following sections provide a guide for resolving two of the most common issues.
+
+### DeepSpeed process killed at startup
+
+When the DeepSpeeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than your system has or your process tried to allocate more CPU memory than allowed leading the OS kernel to terminate the process. In this case, check whether your configuration file has either `offload_optimizer`, `offload_param` or both configured to offload to the CPU. 
+
+If you have NVMe and ZeRO-3 setup, experiment with offloading to the NVMe ([estimate](https://deepspeed.readthedocs.io/en/latest/memory.html) the memory requirements for your model).
+
+### NaN loss
+
+NaN loss often occurs when a model is pretrained in bf16 and then you try to use it with fp16 (especially relevant for TPU trained models). To resolve this, use fp32 or bf16 if your hardware supports it (TPU, Ampere GPUs or newer).
+
+The other issue may be related to using fp16. For example, if this is your fp16 configuration:
+
+```yaml
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    }
+}
+```
+
+You might see the following `OVERFLOW!` messages in the logs:
+
+```bash
+0%|                                                                                                                             | 0/189 [00:00<?, ?it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 262144
+  1%|▌                                                                                                                    | 1/189 [00:00<01:26,  2.17it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 131072.0
+  1%|█▏
+ [...]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 14%|████████████████▌                                                                                                   | 27/189 [00:14<01:13,  2.21it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▏                                                                                                  | 28/189 [00:14<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▊                                                                                                  | 29/189 [00:15<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+[...]
+```
+
+This means the DeepSpeed loss scaler is unable to find a scaling coefficient to overcome loss overflow. To fix it, try a higher `initial_scale_power` value (32 usually works).
+
+## Resources
+
+DeepSpeed ZeRO is a powerful technology for training and loading very large models for inference with limited GPU resources, making it more accessible to everyone. To learn more about DeepSpeed, feel free to read the [blog posts](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [documentation](https://www.deepspeed.ai/getting-started/), and [GitHub repository](https://github.com/microsoft/deepspeed). 
+
+The following papers are also a great resource for learning more about ZeRO:
+
+* [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models](https://hf.co/papers/1910.02054)
+* [ZeRO-Offload: Democratizing Billion-Scale Model Training](https://hf.co/papers/2101.06840)
+* [ZeRO-Infinity: Breaking the GPU Memory Wall for Extreme Scale Deep Learning](https://hf.co/papers/2104.07857)
