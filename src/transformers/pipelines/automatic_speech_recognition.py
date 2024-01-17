@@ -22,6 +22,7 @@ from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import is_torch_available, is_torchaudio_available, logging
 from .audio_utils import ffmpeg_read
 from .base import ArgumentHandler, ChunkPipeline, infer_framework_load_model
+from ..models.auto.processing_auto import AutoProcessor
 
 
 if TYPE_CHECKING:
@@ -160,6 +161,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             [`PreTrainedTokenizer`].
         feature_extractor ([`SequenceFeatureExtractor`]):
             The feature extractor that will be used by the pipeline to encode waveform for the model.
+        processor ([`AutoProcessor`]):
+            The processor that will be used by the pipeline to preprocess audio before processing.
         chunk_length_s (`float`, *optional*, defaults to 0):
             The input length for in each chunk. If `chunk_length_s = 0` then chunking is disabled (default).
 
@@ -210,6 +213,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         device: Union[int, "torch.device"] = None,
         torch_dtype: Optional[Union[str, "torch.dtype"]] = None,
         binary_output: bool = False,
+        processor: Optional[AutoProcessor] = None,
         **kwargs,
     ):
         if framework is None:
@@ -219,6 +223,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         self.model = model
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
+        self.processor = processor
         self.modelcard = modelcard
         self.framework = framework
 
@@ -366,6 +371,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         return_language=None,
         generate_kwargs=None,
         max_new_tokens=None,
+        initial_prompt=None
     ):
         # No parameters on this pipeline right now
         preprocess_params = {}
@@ -384,6 +390,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
             forward_params["generate_kwargs"]["max_new_tokens"] = max_new_tokens
+        if initial_prompt is not None:
+            forward_params["generate_kwargs"]["initial_prompt"] = initial_prompt
         if generate_kwargs is not None:
             if max_new_tokens is not None and "max_new_tokens" in generate_kwargs:
                 raise ValueError(
@@ -566,6 +574,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             if self.type == "seq2seq_whisper" and inputs.shape[-1] > self.feature_extractor.nb_max_frames:
                 generate_kwargs["input_features"] = inputs
+                if self.processor:
+                    # Added initial prompt for whisper
+                    if "initial_prompt" in generate_kwargs:
+                        generate_kwargs["prompt_ids"] = self.processor.get_prompt_ids(generate_kwargs["initial_prompt"])
+                else:
+                    RuntimeWarning("No defined processor for Whisper Prompting. `initial_ptompt` will be ignored.")
             else:
                 generate_kwargs["encoder_outputs"] = encoder(inputs, attention_mask=attention_mask)
 
