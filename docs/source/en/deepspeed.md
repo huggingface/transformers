@@ -30,6 +30,12 @@ This guide will walk you through how to deploy DeepSpeed training, the features 
 
 DeepSpeed is available to install from PyPI or Transformers (for more detailed installation options, take a look at the DeepSpeed [installation details](https://www.deepspeed.ai/tutorials/advanced-install/) or the GitHub [README](https://github.com/microsoft/deepspeed#installation)).
 
+<Tip>
+
+If you're having difficulties installing DeepSpeed, check the [DeepSpeed CUDA installation](../debugging#deepspeed-cuda-installation) guide. While DeepSpeed has a pip installable PyPI package, it is highly recommended to [install it from source](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source) to best match your hardware and to support certain features, like 1-bit Adam, which aren’t available in the PyPI distribution.
+
+</Tip>
+
 <hfoptions id="install">
 <hfoption id="PyPI">
 
@@ -47,11 +53,31 @@ pip install transformers[deepspeed]
 </hfoption>
 </hfoptions>
 
-<Tip>
+## Memory requirements
 
-If you're having difficulties installing DeepSpeed, check the [DeepSpeed CUDA installation](../debugging#deepspeed-cuda-installation) guide.
+Before you begin, it is a good idea to check whether you have enough GPU and CPU memory to fit your model. DeepSpeed provides a tool for estimating the required CPU/GPU memory. For example, to estimate the memory requirements for the [bigscience/T0_3B](bigscience/T0_3B) model on a single GPU:
 
-</Tip>
+```bash
+$ python -c 'from transformers import AutoModel; \
+from deepspeed.runtime.zero.stage3 import estimate_zero3_model_states_mem_needs_all_live; \
+model = AutoModel.from_pretrained("bigscience/T0_3B"); \
+estimate_zero3_model_states_mem_needs_all_live(model, num_gpus_per_node=1, num_nodes=1)'
+[...]
+Estimated memory needed for params, optim states and gradients for a:
+HW: Setup with 1 node, 1 GPU per node.
+SW: Model with 2783M total params, 65M largest layer params.
+  per CPU  |  per GPU |   Options
+   70.00GB |   0.25GB | offload_param=cpu , offload_optimizer=cpu , zero_init=1
+   70.00GB |   0.25GB | offload_param=cpu , offload_optimizer=cpu , zero_init=0
+   62.23GB |   5.43GB | offload_param=none, offload_optimizer=cpu , zero_init=1
+   62.23GB |   5.43GB | offload_param=none, offload_optimizer=cpu , zero_init=0
+    0.37GB |  46.91GB | offload_param=none, offload_optimizer=none, zero_init=1
+   15.56GB |  46.91GB | offload_param=none, offload_optimizer=none, zero_init=0
+```
+
+This means you either need a single 80GB GPU without CPU offload or a 8GB GPU and a ~60GB CPU to offload to (these are just the memory requirements for the parameters, optimizer states and gradients, and you'll need a bit more for the CUDA kernels and activations). You should also consider the tradeoff between cost and speed because it'll be cheaper to rent or buy a smaller GPU but it'll take longer to train your model.
+
+If you have enough GPU memory make sure you disable CPU/NVMe offload to make everything faster.
 
 ## DeepSpeed configuration file
 
@@ -724,3 +750,394 @@ git clone https://github.com/huggingface/transformers
 cd transformers
 deepspeed examples/pytorch/translation/run_translation.py ...
 ```
+
+## Save model weights
+
+DeepSpeed stores the main full precision fp32 weights in custom checkpoint optimizer files (the glob pattern looks like `global_step*/*optim_states.pt`) and are saved under the normal checkpoint.
+
+<hfoptions id="save">
+<hfoption id="fp16">
+
+A model trained with ZeRO-2 saves the pytorch_model.bin weights in fp16. To save the model weights in fp16 for a model trained with ZeRO-3, you need to set `"stage3_gather_16bit_weights_on_model_save": true` because the model weights are partitioned across multiple GPUs. Otherwise, the [`Trainer`] won't save the weights in fp16 and it won't create a pytorch_model.bin file. This is because DeepSpeed's state_dict contains a placeholder instead of the real weights and you won't be able to load them.
+
+```yaml
+{
+    "zero_optimization": {
+        "stage3_gather_16bit_weights_on_model_save": true
+    }
+}
+```
+
+</hfoption>
+<hfoption id="fp32">
+
+The full precision weights shouldn't be saved during training because it can require a lot of memory. It is usually best to save the fp32 weights offline after training is complete. But if you have a lot of free CPU memory, it is possible to save the fp32 weights during training. This section covers both online and offline approaches.
+
+### Online
+
+You must have saved at least one checkpoint to load the latest checkpoint as shown in the following:
+
+```py
+from transformers.trainer_utils import get_last_checkpoint
+from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+
+checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
+fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+```
+
+If you've enabled the `--load_best_model_at_end` parameter to track the best checkpoint in [`TraininArguments`], you can finish training first and save the final model explicitly. Then you can reload it as shown below:
+
+```py
+from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
+
+checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
+trainer.deepspeed.save_checkpoint(checkpoint_dir)
+fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
+```
+
+<Tip>
+
+Once `load_state_dict_from_zero_checkpoint` is run, the model is no longer usable in DeepSpeed in the context of the same application. You'll need to initialize the DeepSpeed engine again since `model.load_state_dict(state_dict)` removes all the DeepSpeed magic from it. Only use this at the very end of training.
+
+</Tip>
+
+You can also extract and load the state_dict of the fp32 weights:
+
+```py
+from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
+
+state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir)  # already on cpu
+model = model.cpu()
+model.load_state_dict(state_dict)
+```
+
+### Offline
+
+DeepSpeed provides a zero_to_fp32.py script at the top-level of the checkpoint folder for extracting weights at any point. This is a standalone script and you don't need a configuration file or [`Trainer`].
+
+For example, if your checkpoint folder looked like this:
+
+```bash
+$ ls -l output_dir/checkpoint-1/
+-rw-rw-r-- 1 stas stas 1.4K Mar 27 20:42 config.json
+drwxrwxr-x 2 stas stas 4.0K Mar 25 19:52 global_step1/
+-rw-rw-r-- 1 stas stas   12 Mar 27 13:16 latest
+-rw-rw-r-- 1 stas stas 827K Mar 27 20:42 optimizer.pt
+-rw-rw-r-- 1 stas stas 231M Mar 27 20:42 pytorch_model.bin
+-rw-rw-r-- 1 stas stas  623 Mar 27 20:42 scheduler.pt
+-rw-rw-r-- 1 stas stas 1.8K Mar 27 20:42 special_tokens_map.json
+-rw-rw-r-- 1 stas stas 774K Mar 27 20:42 spiece.model
+-rw-rw-r-- 1 stas stas 1.9K Mar 27 20:42 tokenizer_config.json
+-rw-rw-r-- 1 stas stas  339 Mar 27 20:42 trainer_state.json
+-rw-rw-r-- 1 stas stas 2.3K Mar 27 20:42 training_args.bin
+-rwxrw-r-- 1 stas stas 5.5K Mar 27 13:16 zero_to_fp32.py*
+```
+
+To reconstruct the fp32 weights from the DeepSpeed checkpoint (ZeRO-2 or ZeRO-3) subfolder `global_step1`, run the following command to create and consolidate the full fp32 weights from multiple GPUs into a single pytorch_model.bin file. The script automatically discovers the subfolder containing the checkpoint.
+
+```py
+python zero_to_fp32.py . pytorch_model.bin
+```
+
+<Tip>
+
+Run `python zero_to_fp32.py -h` for more usage details. The script requirees 2x the general RAM of the final fp32 weights.
+
+</Tip>
+
+</hfoption>
+</hfoptions>
+
+## ZeRO Inference
+
+[ZeRO Inference](https://www.deepspeed.ai/2022/09/09/zero-inference.html) places the model weights in CPU or NVMe memory to avoid burdening the GPU which makes it possible to run inference with huge models on a GPU. Inference doesn't require any large additional amounts of memory for the optimizer states and gradients so you can fit much larger batches and/or sequence lengths on the same hardware.
+
+ZeRO Inference shares the same configuration file as [ZeRO-3](#zero-configuration), and ZeRO-2 and ZeRO-1 configs won't work because they don't provide any benefits for inference.
+
+To run ZeRO Inference, pass your usual training arguments to the [`TrainingArguments`] class and add the `--do_eval` argument.
+
+```bash
+deepspeed --num_gpus=2 your_program.py <normal cl args> --do_eval --deepspeed ds_config.json
+```
+
+## Troubleshoot
+
+When you encounter an issue, you should consider whether DeepSpeed is the cause of the problem because often it isn't (unless it's super obviously and you can see DeepSpeed modules in the exception)! The first step should be to retry your setup without DeepSpeed, and if the problem persists, then you can report the issue. If the issue is a core DeepSpeed problem and unrelated to the Transformers integration, open an Issue on the [DeepSpeed repository](https://github.com/microsoft/DeepSpeed).
+
+For issues related to the Transformers integration, please provide the following information:
+
+* the full DeepSpeed config file
+
+* the command line arguments of the [`Trainer`], or [`TrainingArguments`] arguments if you're scripting the [`Trainer`] setup yourself (don't dump the [`TrainingArguments`] which has dozens of irrelevant entries)
+
+* the outputs of:
+
+```bash
+python -c 'import torch; print(f"torch: {torch.__version__}")'
+python -c 'import transformers; print(f"transformers: {transformers.__version__}")'
+python -c 'import deepspeed; print(f"deepspeed: {deepspeed.__version__}")'
+```
+
+* a link to a Google Colab notebook to reproduce the issue
+
+* if impossible, a standard and non-custom dataset we can use and also try to use an existing example to reproduce the issue with
+
+The following sections provide a guide for resolving two of the most common issues.
+
+### DeepSpeed process killed at startup
+
+When the DeepSpeeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than your system has or your process tried to allocate more CPU memory than allowed leading the OS kernel to terminate the process. In this case, check whether your configuration file has either `offload_optimizer`, `offload_param` or both configured to offload to the CPU. 
+
+If you have NVMe and ZeRO-3 setup, experiment with offloading to the NVMe ([estimate](https://deepspeed.readthedocs.io/en/latest/memory.html) the memory requirements for your model).
+
+### NaN loss
+
+NaN loss often occurs when a model is pretrained in bf16 and then you try to use it with fp16 (especially relevant for TPU trained models). To resolve this, use fp32 or bf16 if your hardware supports it (TPU, Ampere GPUs or newer).
+
+The other issue may be related to using fp16. For example, if this is your fp16 configuration:
+
+```yaml
+{
+    "fp16": {
+        "enabled": "auto",
+        "loss_scale": 0,
+        "loss_scale_window": 1000,
+        "initial_scale_power": 16,
+        "hysteresis": 2,
+        "min_loss_scale": 1
+    }
+}
+```
+
+You might see the following `OVERFLOW!` messages in the logs:
+
+```bash
+0%|                                                                                                                             | 0/189 [00:00<?, ?it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 262144
+  1%|▌                                                                                                                    | 1/189 [00:00<01:26,  2.17it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 262144, reducing to 131072.0
+  1%|█▏
+ [...]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 14%|████████████████▌                                                                                                   | 27/189 [00:14<01:13,  2.21it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▏                                                                                                  | 28/189 [00:14<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+ 15%|█████████████████▊                                                                                                  | 29/189 [00:15<01:13,  2.18it/s]
+ [deepscale] OVERFLOW! Rank 0 Skipping step. Attempted loss scale: 1, reducing to 1
+[...]
+```
+
+This means the DeepSpeed loss scaler is unable to find a scaling coefficient to overcome loss overflow. To fix it, try a higher `initial_scale_power` value (32 usually works).
+
+## Non-Trainer DeepSpeed integration
+
+DeepSpeed also works with Transformers without the [`Trainer`] class. This is handled by the [`HfDeepSpeedConfig`] which only takes care of gathering ZeRO-3 parameters and splitting a model across multiple GPUs when you call [`~PreTrainedModel.from_pretrained`].
+
+<Tip>
+
+If you want everything automatically taken care of for you, try using DeepSpeed with the [`Trainer`]! You'll need to follow the [DeepSpeed documentation](https://www.deepspeed.ai/), and manually configure the parameter values in the config file (you can't use the `"auto"` value).
+
+</Tip>
+
+To efficiently deploy ZeRO-3, you must instantiate the [`HfDeepSpeedConfig`] object before the model and keep that object alive:
+
+<hfoptions id="models">
+<hfoption id="pretrained model">
+
+```py
+from transformers.integrations import HfDeepSpeedConfig
+from transformers import AutoModel
+import deepspeed
+
+ds_config = {...}  # deepspeed config object or path to the file
+# must run before instantiating the model to detect zero 3
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
+model = AutoModel.from_pretrained("gpt2")
+engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
+```
+
+</hfoption>
+<hfoption id="non-pretrained model">
+
+```py
+from transformers.integrations import HfDeepSpeedConfig
+from transformers import AutoModel, AutoConfig
+import deepspeed
+
+ds_config = {...}  # deepspeed config object or path to the file
+# must run before instantiating the model to detect zero 3
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
+config = AutoConfig.from_pretrained("gpt2")
+model = AutoModel.from_config(config)
+engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
+```
+
+[`HfDeepSpeedConfig`] is not required for ZeRO-1 or ZeRO-2.
+
+### Non-Trainer ZeRO Inference
+
+To run ZeRO Inference without the [`Trainer`] in cases where you can’t fit a model onto a single GPU, try using additional GPUs or/and offloading to CPU memory. The important nuance to understand here is that the way ZeRO is designed, you can process different inputs on different GPUs in parallel.
+
+Make sure to:
+
+* disable CPU offload if you have enough GPU memory (since it slows things down).
+* enable bf16 if you have an Ampere or newer GPU to make things faster. If you don’t have one of these GPUs, you may enable fp16 as long as you don’t use a model pretrained in bf16 (T5 models) because it may lead to an overflow error.
+
+Take a look at the following script to get a better idea of how to run ZeRO Inference without the [`Trainer`] on a model that won't fit on a single GPU.
+
+```py
+#!/usr/bin/env python
+
+# This script demonstrates how to use Deepspeed ZeRO in an inference mode when one can't fit a model
+# into a single GPU
+#
+# 1. Use 1 GPU with CPU offload
+# 2. Or use multiple GPUs instead
+#
+# First you need to install deepspeed: pip install deepspeed
+#
+# Here we use a 3B "bigscience/T0_3B" model which needs about 15GB GPU RAM - so 1 largish or 2
+# small GPUs can handle it. or 1 small GPU and a lot of CPU memory.
+#
+# To use a larger model like "bigscience/T0" which needs about 50GB, unless you have an 80GB GPU -
+# you will need 2-4 gpus. And then you can adapt the script to handle more gpus if you want to
+# process multiple inputs at once.
+#
+# The provided deepspeed config also activates CPU memory offloading, so chances are that if you
+# have a lot of available CPU memory and you don't mind a slowdown you should be able to load a
+# model that doesn't normally fit into a single GPU. If you have enough GPU memory the program will
+# run faster if you don't want offload to CPU - so disable that section then.
+#
+# To deploy on 1 gpu:
+#
+# deepspeed --num_gpus 1 t0.py
+# or:
+# python -m torch.distributed.run --nproc_per_node=1 t0.py
+#
+# To deploy on 2 gpus:
+#
+# deepspeed --num_gpus 2 t0.py
+# or:
+# python -m torch.distributed.run --nproc_per_node=2 t0.py
+
+from transformers import AutoTokenizer, AutoConfig, AutoModelForSeq2SeqLM
+from transformers.integrations import HfDeepSpeedConfig
+import deepspeed
+import os
+import torch
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To avoid warnings about parallelism in tokenizers
+
+# distributed setup
+local_rank = int(os.getenv("LOCAL_RANK", "0"))
+world_size = int(os.getenv("WORLD_SIZE", "1"))
+torch.cuda.set_device(local_rank)
+deepspeed.init_distributed()
+
+model_name = "bigscience/T0_3B"
+
+config = AutoConfig.from_pretrained(model_name)
+model_hidden_size = config.d_model
+
+# batch size has to be divisible by world_size, but can be bigger than world_size
+train_batch_size = 1 * world_size
+
+# ds_config notes
+#
+# - enable bf16 if you use Ampere or higher GPU - this will run in mixed precision and will be
+# faster.
+#
+# - for older GPUs you can enable fp16, but it'll only work for non-bf16 pretrained models - e.g.
+# all official t5 models are bf16-pretrained
+#
+# - set offload_param.device to "none" or completely remove the `offload_param` section if you don't
+# - want CPU offload
+#
+# - if using `offload_param` you can manually finetune stage3_param_persistence_threshold to control
+# - which params should remain on gpus - the larger the value the smaller the offload size
+#
+# For indepth info on Deepspeed config see
+# https://huggingface.co/docs/transformers/main/main_classes/deepspeed
+
+# keeping the same format as json for consistency, except it uses lower case for true/false
+# fmt: off
+ds_config = {
+    "fp16": {
+        "enabled": False
+    },
+    "bf16": {
+        "enabled": False
+    },
+    "zero_optimization": {
+        "stage": 3,
+        "offload_param": {
+            "device": "cpu",
+            "pin_memory": True
+        },
+        "overlap_comm": True,
+        "contiguous_gradients": True,
+        "reduce_bucket_size": model_hidden_size * model_hidden_size,
+        "stage3_prefetch_bucket_size": 0.9 * model_hidden_size * model_hidden_size,
+        "stage3_param_persistence_threshold": 10 * model_hidden_size
+    },
+    "steps_per_print": 2000,
+    "train_batch_size": train_batch_size,
+    "train_micro_batch_size_per_gpu": 1,
+    "wall_clock_breakdown": False
+}
+# fmt: on
+
+# next line instructs transformers to partition the model directly over multiple gpus using
+# deepspeed.zero.Init when model's `from_pretrained` method is called.
+#
+# **it has to be run before loading the model AutoModelForSeq2SeqLM.from_pretrained(model_name)**
+#
+# otherwise the model will first be loaded normally and only partitioned at forward time which is
+# less efficient and when there is little CPU RAM may fail
+dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
+
+# now a model can be loaded.
+model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+
+# initialise Deepspeed ZeRO and store only the engine object
+ds_engine = deepspeed.initialize(model=model, config_params=ds_config)[0]
+ds_engine.module.eval()  # inference
+
+# Deepspeed ZeRO can process unrelated inputs on each GPU. So for 2 gpus you process 2 inputs at once.
+# If you use more GPUs adjust for more.
+# And of course if you have just one input to process you then need to pass the same string to both gpus
+# If you use only one GPU, then you will have only rank 0.
+rank = torch.distributed.get_rank()
+if rank == 0:
+    text_in = "Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy"
+elif rank == 1:
+    text_in = "Is this review positive or negative? Review: this is the worst restaurant ever"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+inputs = tokenizer.encode(text_in, return_tensors="pt").to(device=local_rank)
+with torch.no_grad():
+    outputs = ds_engine.module.generate(inputs, synced_gpus=True)
+text_out = tokenizer.decode(outputs[0], skip_special_tokens=True)
+print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
+```
+
+Save the script as t0.py and launch it:
+
+```bash
+$ deepspeed --num_gpus 2 t0.py
+rank0:
+   in=Is this review positive or negative? Review: this is the best cast iron skillet you will ever buy
+  out=Positive
+rank1:
+   in=Is this review positive or negative? Review: this is the worst restaurant ever
+  out=negative
+```
+
+This is a very basic example and you'll want to adapt it to your use case.
+
+### Generate
+
+Using multiple GPUs with ZeRO-3 for generation requires sychronizing the GPUs by setting `synced_gpus=True` in the [`~GenerationMixin.generate`] method. Otherwise, if one GPU is finished generating before another one, the whole system hangs because the remaining GPUs haven't received the weight shard from the GPU that finished first.
+
+For Transformers>=4.28, if `synced_gpus` is automatically set to `True` if multiple GPUs are detected during generation.
