@@ -3384,7 +3384,7 @@ class ModelTesterMixin:
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and is_torch_fp16_available_on_device(torch_device):
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
             self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
 
         if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
