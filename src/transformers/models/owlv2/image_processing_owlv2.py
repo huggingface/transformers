@@ -482,6 +482,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         """
         # TODO: (amy) add support for other frameworks
         logits, boxes = outputs.logits, outputs.pred_boxes
+        objectness_logits = outputs.objectness_logits
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -508,11 +509,12 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             boxes = boxes * scale_fct[:, None, :]
 
         results = []
-        for s, l, b in zip(scores, labels, boxes):
+        for s, l, b, o in zip(scores, labels, boxes, objectness_logits):
             score = s[s > threshold]
             label = l[s > threshold]
             box = b[s > threshold]
-            results.append({"scores": score, "labels": label, "boxes": box})
+            obj = o[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box, "objectness": obj})
 
         return results
 
