@@ -195,6 +195,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.utils import (
         DistributedDataParallelKwargs,
+        DistributedType,
         GradientAccumulationPlugin,
         load_fsdp_model,
         load_fsdp_optimizer,
@@ -1913,7 +1914,14 @@ class Trainer:
                                 model.parameters(),
                                 args.max_grad_norm,
                             )
-                        grad_norm = _grad_norm.item() if _grad_norm is not None else None
+
+                        if (
+                            is_accelerate_available()
+                            and self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                        ):
+                            grad_norm = model.get_global_grad_norm()
+                        else:
+                            grad_norm = _grad_norm.item() if _grad_norm is not None else None
 
                     # Optimizer step
                     self.optimizer.step()
