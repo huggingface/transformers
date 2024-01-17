@@ -457,10 +457,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         """
         max_new_tokens = 30
 
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("saibo/llama-1B")
 
         model_sdpa = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -468,7 +468,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
+            "saibo/llama-1B",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
@@ -488,7 +488,11 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if not has_sdpa:
             raise ValueError("The SDPA model should have SDPA attention layers")
 
-        texts = ["hi", "Hello this is a very long sentence my friend", "Today I am in Paris and"]
+        texts = [
+            "hi here's a longer context, getting longer and",
+            "Hello this is a very long sentence my friend, very long for real",
+            "Today I am in Paris and",
+        ]
 
         for padding_side in ["left", "right"]:
             tokenizer.padding_side = padding_side
