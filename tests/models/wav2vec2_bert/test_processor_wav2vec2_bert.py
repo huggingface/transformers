@@ -154,3 +154,34 @@ class Wav2Vec2BertProcessorTest(unittest.TestCase):
             feature_extractor.model_input_names,
             msg="`processor` and `feature_extractor` model input names do not match",
         )
+
+    # Ignore copy
+    def test_audio_and_text_simultaneously(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = Wav2Vec2BertProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        raw_speech = floats_list((3, 1000))
+        input_str = ["This is a test string", "This is another test string"]
+
+        # test without attention mask
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt")
+        input_tok = tokenizer(input_str, return_tensors="pt", padding=True)
+        input_processor = processor(audio=raw_speech, text=input_str, return_tensors="pt", padding=True)
+
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+        self.assertTrue((input_tok["input_ids"] == input_processor["labels"]).all())
+
+        # test with attention mask
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="pt", return_attention_mask=True)
+        input_tok = tokenizer(input_str, return_tensors="pt", return_attention_mask=True, padding=True)
+        input_processor = processor(
+            audio=raw_speech, text=input_str, return_tensors="pt", return_attention_mask=True, padding=True
+        )
+
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+        self.assertTrue((input_tok["input_ids"] == input_processor["labels"]).all())
+        self.assertTrue((input_tok["attention_mask"] == input_processor["label_attention_mask"]).all())
