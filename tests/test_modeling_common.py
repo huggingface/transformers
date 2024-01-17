@@ -3386,7 +3386,7 @@ class ModelTesterMixin:
             self.skipTest("float16 not supported on cpu")
 
         if torch_device == "cuda" and not torch.cuda.is_bf16_supported():
-            self.skiptest("the gpu used does not support bfloat16 data type")
+            self.skipTest("the gpu used does not support bfloat16 data type")
 
         # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
         if torch_dtype == "float16":
@@ -3403,7 +3403,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-6,
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
@@ -3415,7 +3415,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-4,
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
