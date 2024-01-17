@@ -34,6 +34,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
     logging,
@@ -835,6 +836,23 @@ class ModelUtilsTest(TestCasePlus):
             outputs2 = new_model_with_offload(inputs)
             self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
 
+    @slow
+    @require_torch
+    def test_from_pretrained_non_contiguous_checkpoint(self):
+        # See: https://github.com/huggingface/transformers/pull/28414
+        # Tiny models on the Hub have contiguous weights, contrarily to google/owlvit
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        model = OwlViTForObjectDetection.from_pretrained(
+            "fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto"
+        )
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -1211,6 +1229,15 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model.config.top_k = 1
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
+                model.save_pretrained(tmp_dir)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
 
 
 @slow
