@@ -640,7 +640,7 @@ class PretrainedConfig(PushToHubMixin):
                         id3 = kwargs.pop("id3")
                         id4 = kwargs.pop("id4")
                         raise ValueError(
-                            f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}` | root loger level == `{logging.get_logger('transformers')}`"
+                            f"cl.out == `{cl.out}` | logger id == `{id(logger)} vs {id1}` | threading id == `{threading.get_ident()} vs {id2}` | thread native id == `{threading.get_native_id()} vs {id3}` | PID == `{os.getpid()} vs {id4}` | root loger level == `{logging.get_logger('transformers')}` |  loger handler level == `{cl.sh.level}`"
                         )
 
 
