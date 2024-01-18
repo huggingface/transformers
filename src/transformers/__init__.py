@@ -914,6 +914,11 @@ _import_structure = {
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
     ],
+    "models.wav2vec2_bert": [
+        "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2BertConfig",
+        "Wav2Vec2BertProcessor",
+    ],
     "models.wav2vec2_conformer": [
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2ConformerConfig",
@@ -3515,6 +3520,17 @@ else:
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.wav2vec2_bert"].extend(
+        [
+            "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2BertForAudioFrameClassification",
+            "Wav2Vec2BertForCTC",
+            "Wav2Vec2BertForSequenceClassification",
+            "Wav2Vec2BertForXVector",
+            "Wav2Vec2BertModel",
+            "Wav2Vec2BertPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2_conformer"].extend(
         [
             "WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5616,6 +5632,11 @@ if TYPE_CHECKING:
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
+    )
+    from .models.wav2vec2_bert import (
+        WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2BertConfig,
+        Wav2Vec2BertProcessor,
     )
     from .models.wav2vec2_conformer import (
         WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7820,6 +7841,15 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wav2vec2_bert import (
+            WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2BertForAudioFrameClassification,
+            Wav2Vec2BertForCTC,
+            Wav2Vec2BertForSequenceClassification,
+            Wav2Vec2BertForXVector,
+            Wav2Vec2BertModel,
+            Wav2Vec2BertPreTrainedModel,
         )
         from .models.wav2vec2_conformer import (
             WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
