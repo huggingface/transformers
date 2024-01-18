@@ -30,22 +30,24 @@ class TokenHealingTestCase(unittest.TestCase):
         use_cache=True,
     )
     generation_config = GenerationConfig(
-        token_healing=True,
-        temperature=0.7, do_sample=True, top_p=0.95, top_k=40, max_new_tokens=16,
-        pad_token_id=completion_model.config.pad_token_id,
+        max_new_tokens=1, pad_token_id=completion_model.config.pad_token_id,
     )
 
     @parameterized.expand(
         [
-            ('square_bracket', 'An example ["like this"] and another example [', 'An example ["like this"] and another example ["')
-            ('url', 'The link is <a href="http:', 'The link is <a href="http://')
-            ('aggressive_healing', 'The link is <a href="http', 'The link is <a href="http')
-            ('trailing_whitespace', 'I read a book about ', 'I read a book about a')
-            ('no_op', 'I read a book about', 'I read a book about')
-            ('single_token', 'I', 'I')
+            ('square_bracket', 'An example ["like this"] and another example [', 'An example ["like this"] and another example ["'),
+            ('url', 'The link is <a href="http:', 'The link is <a href="http://'),
+            ('aggressive_healing', 'The link is <a href="http', 'The link is <a href="http'),
+            ('trailing_whitespace', 'I read a book about ', 'I read a book about a'),
+            ('nothing_to_heal', 'I read a book about', 'I read a book about'),
+            ('single_token', 'I', 'I'),
+            ('empty_prompt', '', ''),
         ]
     )
     def test_prompts(self, name, input, expected):
         input_ids = self.tokenizer(input, return_tensors='pt').input_ids.cuda()
-        predicted = self.completion_model.generate(inputs=input_ids, generation_config=self.generation_config)
-        self.assertEqual(predicted, expected)
+        predicted = self.completion_model.generate(
+            inputs=input_ids, token_healing=True, generation_config=self.generation_config
+        )
+        predicted = self.tokenizer.batch_decode(predicted, skip_special_tokens=True)
+        self.assertListEqual(predicted, expected)
