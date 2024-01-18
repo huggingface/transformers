@@ -33,7 +33,6 @@ import h5py
 import numpy as np
 import tensorflow as tf
 from huggingface_hub import Repository, list_repo_files
-from keras import backend as K
 from packaging.version import parse
 
 from . import DataCollatorWithPadding, DefaultDataCollator
@@ -78,6 +77,20 @@ if is_safetensors_available():
 
 if TYPE_CHECKING:
     from . import PreTrainedTokenizerBase
+
+try:
+    import tf_keras as keras
+    from tf_keras import backend as K
+except ImportError:
+    import keras
+    from keras import backend as K
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 logger = logging.get_logger(__name__)

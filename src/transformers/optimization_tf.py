@@ -22,12 +22,14 @@ import tensorflow as tf
 
 
 try:
-    from tensorflow.keras.optimizers.legacy import Adam
+    from tf_keras.optimizers.legacy import Adam
 except ImportError:
-    from tensorflow.keras.optimizers import Adam
+    from tensorflow.keras.optimizers.legacy import Adam
+
+from .modeling_tf_utils import keras
 
 
-class WarmUp(tf.keras.optimizers.schedules.LearningRateSchedule):
+class WarmUp(keras.optimizers.schedules.LearningRateSchedule):
     """
     Applies a warmup schedule on a given learning rate decay schedule.
 
@@ -131,7 +133,7 @@ def create_optimizer(
             applied to all parameters except bias and layer norm parameters.
     """
     # Implements linear decay of the learning rate.
-    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+    lr_schedule = keras.optimizers.schedules.PolynomialDecay(
         initial_learning_rate=init_lr,
         decay_steps=num_train_steps - num_warmup_steps,
         end_learning_rate=init_lr * min_lr_ratio,
@@ -156,7 +158,7 @@ def create_optimizer(
             include_in_weight_decay=include_in_weight_decay,
         )
     else:
-        optimizer = tf.keras.optimizers.Adam(
+        optimizer = keras.optimizers.Adam(
             learning_rate=lr_schedule,
             beta_1=adam_beta1,
             beta_2=adam_beta2,
@@ -210,7 +212,7 @@ class AdamWeightDecay(Adam):
 
     def __init__(
         self,
-        learning_rate: Union[float, tf.keras.optimizers.schedules.LearningRateSchedule] = 0.001,
+        learning_rate: Union[float, keras.optimizers.schedules.LearningRateSchedule] = 0.001,
         beta_1: float = 0.9,
         beta_2: float = 0.999,
         epsilon: float = 1e-7,
