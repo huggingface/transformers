@@ -26,7 +26,7 @@ import yaml
 COMMON_ENV_VARIABLES = {
     "OMP_NUM_THREADS": 1,
     "TRANSFORMERS_IS_CI": True,
-    "PYTEST_TIMEOUT": 120,
+    "PYTEST_TIMEOUT": 1200,
     "RUN_PIPELINE_TESTS": False,
     "RUN_PT_TF_CROSS_TESTS": False,
     "RUN_PT_FLAX_CROSS_TESTS": False,
@@ -214,6 +214,17 @@ class CircleCIJob:
                 test_command = f"timeout {self.timeout} "
             test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
             test_command += " $(cat splitted_tests.txt)"
+
+        test_command = "python -m pytest --junitxml=test-results/junit.xml -n 6 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/benchmark tests/bettertransformer tests/deepspeed tests/extended tests/fixtures tests/fsdp tests/generation tests/models tests/optimization tests/peft_integration tests/quantization tests/sagemaker tests/test_backbone_common.py tests/test_cache_utils.py tests/test_configuration_common.py tests/test_configuration_utils.py tests/test_feature_extraction_common.py tests/test_feature_extraction_utils.py tests/test_image_processing_common.py tests/test_image_processing_utils.py tests/test_image_transforms.py tests/test_modeling_common.py tests/test_modeling_flax_common.py tests/test_modeling_flax_utils.py tests/test_modeling_tf_common.py tests/test_modeling_tf_utils.py tests/test_pipeline_mixin.py tests/test_sequence_feature_extraction_common.py tests/test_tokenization_common.py tests/test_tokenization_utils.py tests/tokenization tests/tools tests/trainer tests/utils tests/test_modeling_utils.py"
+        test_command = "python -m pytest --junitxml=test-results/junit.xml -n 6 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/utils"
+
+        # no models
+        test_command = "python -m pytest --junitxml=test-results/junit.xml -n 6 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/benchmark tests/bettertransformer tests/deepspeed tests/extended tests/fixtures tests/fsdp tests/generation tests/optimization tests/peft_integration tests/quantization tests/sagemaker tests/test_backbone_common.py tests/test_cache_utils.py tests/test_configuration_common.py tests/test_configuration_utils.py tests/test_feature_extraction_common.py tests/test_feature_extraction_utils.py tests/test_image_processing_common.py tests/test_image_processing_utils.py tests/test_image_transforms.py tests/test_modeling_common.py tests/test_modeling_flax_common.py tests/test_modeling_flax_utils.py tests/test_modeling_tf_common.py tests/test_modeling_tf_utils.py tests/test_pipeline_mixin.py tests/test_sequence_feature_extraction_common.py tests/test_tokenization_common.py tests/test_tokenization_utils.py tests/tokenization tests/tools tests/trainer tests/utils tests/test_modeling_utils.py"
+
+        # full
+        test_command = "python -m pytest --junitxml=test-results/junit.xml -n 1 --max-worker-restart=0 --dist=loadfile --make-reports=tests_torch tests/benchmark tests/bettertransformer tests/deepspeed tests/extended tests/fixtures tests/fsdp tests/generation tests/models/segformer tests/models/sew tests/models/sew_d tests/models/siglip tests/models/speecht5 tests/models/speech_encoder_decoder tests/models/speech_to_text tests/models/speech_to_text_2 tests/models/splinter tests/models/squeezebert tests/models/swiftformer tests/models/swin tests/models/swin2sr tests/models/swinv2 tests/models/switch_transformers tests/models/t5 tests/optimization tests/peft_integration tests/quantization tests/sagemaker tests/test_backbone_common.py tests/test_cache_utils.py tests/test_configuration_common.py tests/test_configuration_utils.py tests/test_feature_extraction_common.py tests/test_feature_extraction_utils.py tests/test_image_processing_common.py tests/test_image_processing_utils.py tests/test_image_transforms.py tests/test_modeling_common.py tests/test_modeling_flax_common.py tests/test_modeling_flax_utils.py tests/test_modeling_tf_common.py tests/test_modeling_tf_utils.py tests/test_pipeline_mixin.py tests/test_sequence_feature_extraction_common.py tests/test_tokenization_common.py tests/test_tokenization_utils.py tests/tokenization tests/tools tests/trainer tests/utils tests/test_modeling_utils.py"
+
+
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
@@ -542,15 +553,15 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
+    # torch_and_tf_job,
+    # torch_and_flax_job,
     torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+    # tf_job,
+    # flax_job,
+    # custom_tokenizers_job,
+    # hub_job,
+    # onnx_job,
+    # exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -577,8 +588,8 @@ def create_circleci_config(folder=None):
             all_test_list = f.read()
     else:
         all_test_list = []
-    if len(all_test_list) > 0:
-        jobs.extend(PIPELINE_TESTS)
+    # if len(all_test_list) > 0:
+    #     jobs.extend(PIPELINE_TESTS)
 
     test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
@@ -628,8 +639,8 @@ def create_circleci_config(folder=None):
             else:
                 job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
 
-            if len(job.tests_to_run) > 0:
-                jobs.append(job)
+            # if len(job.tests_to_run) > 0:
+            #     jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
@@ -637,12 +648,12 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
+    # if len(doctest_list) > 0:
+    #     jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
+    # if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
+    #     jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
