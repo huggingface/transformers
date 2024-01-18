@@ -173,13 +173,12 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.add_router_probs = add_router_probs
 
+        self.router_z_loss_coef = router_z_loss_coef
+        self.router_aux_loss_coef = router_aux_loss_coef
+        
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
-
-        self.router_z_loss_coef = router_z_loss_coef
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.dense_act_fn = dense_act_fn
 
         super().__init__(
             pad_token_id=pad_token_id,
