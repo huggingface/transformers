@@ -23,6 +23,7 @@ import warnings
 from typing import Dict, List, Tuple
 
 from packaging import version
+
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
@@ -553,7 +554,7 @@ class SpmConverter(Converter):
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         _normalizers = [
-            normalizers.Strip(left=False, right=True), # stripping is important
+            normalizers.Strip(left=False, right=True),  # stripping is important
             normalizers.Replace(Regex(" {2,}"), "▁"),
         ]
         if not precompiled_charsmap:
