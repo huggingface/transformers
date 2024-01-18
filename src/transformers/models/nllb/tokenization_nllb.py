@@ -174,8 +174,9 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         # Everything that follows is kept for BC and will be removed in v4.38
         self._fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+        language_codes = FAIRSEQ_LANGUAGE_CODES if additional_special_tokens is None else additional_special_tokens
         self._lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(language_codes)
         }
         self._id_to_lang_code = {v: k for k, v in self._lang_code_to_id.items()}
         self._fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
