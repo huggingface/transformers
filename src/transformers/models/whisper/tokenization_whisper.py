@@ -20,8 +20,6 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import regex as re
-import tensorflow as tf
-import torch
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -840,20 +838,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         batch_encoding.convert_to_tensors(tensor_type=return_tensors)
         return batch_encoding["input_ids"]
 
-    def _strip_prompt(
-        self,
-        token_ids: Union[List[int], np.ndarray, torch.Tensor, tf.Tensor],
-        prompt_token_id: int,
-        decoder_start_token_id: int,
-    ):
-        has_prompt = (
-            isinstance(token_ids, (List[int], np.ndarray, torch.Tensor, tf.Tensor))
-            and token_ids
-            and token_ids[0] == prompt_token_id
-        )
+    def _strip_prompt(self, token_ids: List[int], prompt_token_id: int, decoder_start_token_id: int):
+        has_prompt = isinstance(token_ids, list) and token_ids and token_ids[0] == prompt_token_id
+        if not isinstance(token_ids, list):
+            token_ids = self._convert_to_list(token_ids)
         if has_prompt:
-            if not isinstance(token_ids, list):
-                token_ids = self._convert_to_list(token_ids)
             if decoder_start_token_id in token_ids:
                 return token_ids[token_ids.index(decoder_start_token_id) :]
             else:
@@ -863,10 +852,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     @staticmethod
     def _convert_to_list(token_ids):
-        if isinstance(token_ids, (torch.Tensor, np.ndarray)):
-            return token_ids.tolist()
-        if isinstance(token_ids, tf.Tensor):
-            return token_ids.numpy().tolist()
+        # convert type to ndarray if necessary
+        if "torch" in str(type(token_ids)) or "tensorflow" in str(type(token_ids)) and hasattr(token_ids, "numpy"):
+            token_ids = token_ids.numpy()
+        # now the token ids are either a numpy array, or a list of lists
+        if isinstance(token_ids, np.ndarray):
+            token_ids = token_ids.tolist()
+        return token_ids
 
 
 def _decode_asr(tokenizer, model_outputs, *, return_timestamps, return_language, time_precision):
