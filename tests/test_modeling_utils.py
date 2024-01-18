@@ -34,6 +34,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
     logging,
@@ -43,6 +44,7 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     TestCasePlus,
+    is_flaky,
     is_staging_test,
     require_accelerate,
     require_flax,
@@ -288,6 +290,9 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertIsNotNone(model)
 
+    @is_flaky(
+        description="Capturing logs is flaky: https://app.circleci.com/pipelines/github/huggingface/transformers/81004/workflows/4919e5c9-0ea2-457b-ad4f-65371f79e277/jobs/1038999"
+    )
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
@@ -831,6 +836,23 @@ class ModelUtilsTest(TestCasePlus):
             outputs2 = new_model_with_offload(inputs)
             self.assertTrue(torch.allclose(outputs1[0].cpu(), outputs2[0].cpu()))
 
+    @slow
+    @require_torch
+    def test_from_pretrained_non_contiguous_checkpoint(self):
+        # See: https://github.com/huggingface/transformers/pull/28414
+        # Tiny models on the Hub have contiguous weights, contrarily to google/owlvit
+        model = OwlViTForObjectDetection.from_pretrained("fxmarty/owlvit-tiny-non-contiguous-weight")
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        model = OwlViTForObjectDetection.from_pretrained(
+            "fxmarty/owlvit-tiny-non-contiguous-weight", device_map="auto"
+        )
+        self.assertTrue(model.owlvit.visual_projection.weight.is_contiguous())
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=False)
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -1002,6 +1024,9 @@ class ModelUtilsTest(TestCasePlus):
             # Should only complain about the missing bias
             self.assertListEqual(load_info["missing_keys"], ["decoder.bias"])
 
+    @is_flaky(
+        description="Capturing logs is flaky: https://app.circleci.com/pipelines/github/huggingface/transformers/81004/workflows/4919e5c9-0ea2-457b-ad4f-65371f79e277/jobs/1038999"
+    )
     def test_unexpected_keys_warnings(self):
         model = ModelWithHead(PretrainedConfig())
         logger = logging.get_logger("transformers.modeling_utils")
@@ -1204,6 +1229,15 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
+
+    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        model.config.top_k = 1
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
+                model.save_pretrained(tmp_dir)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
 
 
 @slow
@@ -1428,6 +1462,11 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-model-with-tags")
+        except HTTPError:
+            pass
+
     @unittest.skip("This test is flaky")
     def test_push_to_hub(self):
         config = BertConfig(
@@ -1514,6 +1553,28 @@ The commit description supports markdown synthax see:
         config = AutoConfig.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         new_model = AutoModel.from_config(config, trust_remote_code=True)
         self.assertEqual(new_model.__class__.__name__, "CustomModel")
+
+    def test_push_to_hub_with_tags(self):
+        from huggingface_hub import ModelCard
+
+        new_tags = ["tag-1", "tag-2"]
+
+        CustomConfig.register_for_auto_class()
+        CustomModel.register_for_auto_class()
+
+        config = CustomConfig(hidden_size=32)
+        model = CustomModel(config)
+
+        self.assertTrue(model.model_tags is None)
+
+        model.add_model_tags(new_tags)
+
+        self.assertTrue(model.model_tags == new_tags)
+
+        model.push_to_hub("test-dynamic-model-with-tags", token=self._token)
+
+        loaded_model_card = ModelCard.load(f"{USER}/test-dynamic-model-with-tags")
+        self.assertEqual(loaded_model_card.data.tags, new_tags)
 
 
 @require_torch

@@ -559,7 +559,11 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # 11. Write Training Stats and push to hub.
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
+    finetuned_from = model_args.model_name_or_path
+    # If from a local directory, don't set `finetuned_from` as this is required to be a valid repo. id on the Hub.
+    if os.path.isdir(finetuned_from):
+        finetuned_from = None
+    kwargs = {"finetuned_from": finetuned_from, "tasks": "contrastive-image-text-modeling"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:

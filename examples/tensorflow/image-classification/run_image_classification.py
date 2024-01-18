@@ -440,7 +440,7 @@ def main():
     collate_fn = DefaultDataCollator(return_tensors="np")
 
     # Load the accuracy metric from the datasets package
-    metric = evaluate.load("accuracy")
+    metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
