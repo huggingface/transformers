@@ -177,6 +177,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self._src_lang = f"__{src_lang}__" if "__" not in src_lang else src_lang
         self._tgt_lang = f"__{tgt_lang}__" if "__" not in tgt_lang else tgt_lang
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             bos_token=bos_token,
@@ -190,7 +191,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
-            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

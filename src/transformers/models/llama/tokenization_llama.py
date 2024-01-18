@@ -180,6 +180,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             bos_token=bos_token,
@@ -193,7 +194,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
-            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 

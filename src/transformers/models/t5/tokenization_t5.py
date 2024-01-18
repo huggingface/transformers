@@ -204,6 +204,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
+        self.add_prefix_space = add_prefix_space
 
         super().__init__(
             eos_token=eos_token,
@@ -213,7 +214,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy=legacy,
-            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
