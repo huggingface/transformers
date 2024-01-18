@@ -148,7 +148,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         src_lang=None,
         tgt_lang=None,
-        additional_special_tokens=FAIRSEQ_LANGUAGE_CODES,
+        additional_special_tokens=None,
+        ...
+    ):
+        if additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
         legacy_behaviour=False,
         **kwargs,
     ):
