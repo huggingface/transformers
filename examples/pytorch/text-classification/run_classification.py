@@ -545,7 +545,7 @@ def main():
                 "run. You can ignore this if you are doing finetuning."
             )
         model.config.label2id = label_to_id
-        model.config.id2label = {id: label for label, id in config.label2id.items()}
+        model.config.id2label = {id: label for label, id in label_to_id.items()}
     elif not is_regression:  # classification, but not training
         logger.info("using label infos in the model config")
         logger.info("label2id: {}".format(model.config.label2id))
