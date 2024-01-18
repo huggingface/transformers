@@ -1393,8 +1393,7 @@ class GenerationMixin:
                 )
             if generation_config.max_new_tokens == 0:
                 logger.warning(
-                    f"`max_new_tokens`={generation_config.max_new_tokens}, no tokens will be generated.",
-                    UserWarning,
+                    f"`max_new_tokens`={generation_config.max_new_tokens}, no tokens will be generated."
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
