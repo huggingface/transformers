@@ -177,10 +177,7 @@ class LlamaConfig(PretrainedConfig):
             return
 
         if not isinstance(self.rope_scaling, dict):
-            raise ValueError(
-                "`rope_scaling` must be a dictionary, "
-                f"got {self.rope_scaling}"
-            )
+            raise ValueError("`rope_scaling` must be a dictionary, " f"got {self.rope_scaling}")
         rope_scaling_type = self.rope_scaling.get("type", None)
         rope_scaling_factor = self.rope_scaling.get("factor", None)
         if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic", "yarn", "dynamic-yarn"]:
@@ -192,4 +189,6 @@ class LlamaConfig(PretrainedConfig):
         if rope_scaling_type == "yarn" or rope_scaling_type == "dynamic-yarn":
             original_max_position_embeddings = self.rope_scaling.get("original_max_position_embeddings", None)
             if original_max_position_embeddings is None or not isinstance(original_max_position_embeddings, int):
-                raise ValueError("`rope_scaling.original_max_position_embeddings` must be set to an int when using yarn, and dynamic-yarn")
+                raise ValueError(
+                    "`rope_scaling.original_max_position_embeddings` must be set to an int when using yarn, and dynamic-yarn"
+                )
