@@ -29,7 +29,8 @@ _import_structure = {
         "Owlv2VisionConfig",
     ],
     "processing_owlv2": ["Owlv2Processor"],
-    "cnn_model" : ["MenteeVisionModel"]
+    "cnn_model" : ["ConvModel"],
+    "resnet" : ["ResNet"]
 }
 
 try:
@@ -64,7 +65,8 @@ if TYPE_CHECKING:
         Owlv2VisionConfig,
     )
     from .processing_owlv2 import Owlv2Processor
-    from .cnn_model import MenteeVisionModel
+    from .cnn_model import ConvModel
+    from .resnet import ResNet
 
     try:
         if not is_vision_available():
