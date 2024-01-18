@@ -633,23 +633,23 @@ def main():
 
     if data_args.metric_name is not None:
         metric = (
-            evaluate.load(data_args.metric_name, config_name="multilabel")
+            evaluate.load(data_args.metric_name, config_name="multilabel", cache_dir=model_args.cache_dir)
             if is_multi_label
-            else evaluate.load(data_args.metric_name)
+            else evaluate.load(data_args.metric_name, cache_dir=model_args.cache_dir)
         )
         logger.info(f"Using metric {data_args.metric_name} for evaluation.")
     else:
         if is_regression:
-            metric = evaluate.load("mse")
+            metric = evaluate.load("mse", cache_dir=model_args.cache_dir)
             logger.info("Using mean squared error (mse) as regression score, you can use --metric_name to overwrite.")
         else:
             if is_multi_label:
-                metric = evaluate.load("f1", config_name="multilabel")
+                metric = evaluate.load("f1", config_name="multilabel", cache_dir=model_args.cache_dir)
                 logger.info(
                     "Using multilabel F1 for multi-label classification task, you can use --metric_name to overwrite."
                 )
             else:
-                metric = evaluate.load("accuracy")
+                metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
                 logger.info("Using accuracy as classification score, you can use --metric_name to overwrite.")
 
     def compute_metrics(p: EvalPrediction):

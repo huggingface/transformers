@@ -1651,8 +1651,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        ds = load_dataset("mozilla-foundation/common_voice_6_1", "ja", split="test", streaming=True, token=token)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
             torch_device
@@ -2290,16 +2292,15 @@ class WhisperEncoderModelTester:
     def encoder_seq_length(self):
         return self.get_subsampled_output_lengths(self.seq_length)
 
-    def create_and_check_model_forward(self, config, inputs_dict, freeze_encoder=False):
-        model = WhisperForAudioClassification(config=config).to(torch_device).eval()
-
-        if freeze_encoder:
-            model.freeze_encoder()
+    def create_and_check_model_forward(self, config, inputs_dict, use_weighted_layer_sum=False):
+        config.use_weighted_layer_sum = use_weighted_layer_sum
+        model = WhisperForAudioClassification(config=config)
+        model.to(torch_device).eval()
 
         input_features = inputs_dict["input_features"]
 
-        # first forward pass
-        last_hidden_state = model(input_features).logits
+        with torch.no_grad():
+            last_hidden_state = model(input_features).logits
 
         self.parent.assertTrue(last_hidden_state.shape, (13, 2))
 
@@ -2333,6 +2334,14 @@ class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
             expected_arg_names = ["input_features", "head_mask", "encoder_outputs"]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_forward_pass(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_forward_pass_weighted_layer_sum(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_forward(*config_and_inputs, use_weighted_layer_sum=True)
 
     @unittest.skip(reason="Some undefined behavior encountered with tiny versions of this model. Skip for now.")
     def test_cpu_offload(self):

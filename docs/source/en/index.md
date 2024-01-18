@@ -232,6 +232,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [ProphetNet](model_doc/prophetnet)                    |       ✅        |         ❌         |      ❌      |
 |                           [PVT](model_doc/pvt)                           |       ✅        |         ❌         |      ❌      |
 |                       [QDQBert](model_doc/qdqbert)                       |       ✅        |         ❌         |      ❌      |
+|                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
 |                           [RAG](model_doc/rag)                           |       ✅        |         ✅         |      ❌      |
 |                         [REALM](model_doc/realm)                         |       ✅        |         ❌         |      ❌      |
 |                      [Reformer](model_doc/reformer)                      |       ✅        |         ❌         |      ❌      |
@@ -250,6 +251,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
+|                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |
@@ -294,6 +296,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [VITS](model_doc/vits)                          |       ✅        |         ❌         |      ❌      |
 |                         [ViViT](model_doc/vivit)                         |       ✅        |         ❌         |      ❌      |
 |                      [Wav2Vec2](model_doc/wav2vec2)                      |       ✅        |         ✅         |      ✅      |
+|                 [Wav2Vec2-BERT](model_doc/wav2vec2-bert)                 |       ✅        |         ❌         |      ❌      |
 |            [Wav2Vec2-Conformer](model_doc/wav2vec2-conformer)            |       ✅        |         ❌         |      ❌      |
 |              [Wav2Vec2Phoneme](model_doc/wav2vec2_phoneme)               |       ✅        |         ✅         |      ✅      |
 |                         [WavLM](model_doc/wavlm)                         |       ✅        |         ❌         |      ❌      |

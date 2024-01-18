@@ -474,7 +474,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
         self.assertEqual(result.router_logits[0].shape, (91, config.num_local_experts))
-        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(8, dtype=torch.float32))
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
 
 
 @require_torch

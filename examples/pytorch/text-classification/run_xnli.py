@@ -385,7 +385,7 @@ def main():
             )
 
     # Get the metric function
-    metric = evaluate.load("xnli")
+    metric = evaluate.load("xnli", cache_dir=model_args.cache_dir)
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.

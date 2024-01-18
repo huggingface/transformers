@@ -590,7 +590,7 @@ def main():
                 logits = logits[0]
             return logits.argmax(dim=-1)
 
-        metric = evaluate.load("accuracy")
+        metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
         def compute_metrics(eval_preds):
             preds, labels = eval_preds
