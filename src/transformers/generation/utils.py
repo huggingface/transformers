@@ -1392,9 +1392,7 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             if generation_config.max_new_tokens == 0:
-                logger.warning(
-                    f"`max_new_tokens`={generation_config.max_new_tokens}, no tokens will be generated."
-                )
+                logger.warning(f"`max_new_tokens`={generation_config.max_new_tokens}, no tokens will be generated.")
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -2336,7 +2334,7 @@ class GenerationMixin:
 
             if this_peer_finished and not synced_gpus:
                 break
-            
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2400,7 +2398,6 @@ class GenerationMixin:
                 # stop when each sentence is finished
                 if unfinished_sequences.max() == 0:
                     this_peer_finished = True
-
 
         if streamer is not None:
             streamer.end()
