@@ -6,9 +6,10 @@ from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
 from .tokenization_gpt2 import GPT2Tokenizer
+from ...modeling_tf_utils import keras
 
 
-class TFGPT2Tokenizer(tf.keras.layers.Layer):
+class TFGPT2Tokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for GPT2. It should be initialized similarly to other tokenizers, using the
     `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings

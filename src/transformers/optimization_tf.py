@@ -182,7 +182,7 @@ class AdamWeightDecay(Adam):
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
 
     Args:
-        learning_rate (`Union[float, tf.keras.optimizers.schedules.LearningRateSchedule]`, *optional*, defaults to 0.001):
+        learning_rate (`Union[float, keras.optimizers.schedules.LearningRateSchedule]`, *optional*, defaults to 0.001):
             The learning rate to use or a schedule.
         beta_1 (`float`, *optional*, defaults to 0.9):
             The beta1 parameter in Adam, which is the exponential decay rate for the 1st momentum estimates.

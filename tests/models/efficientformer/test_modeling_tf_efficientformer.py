@@ -355,7 +355,7 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
             # These are maximally general inputs for the model, with multiple None dimensions
             # Hopefully this will catch any conditionals that fail for flexible shapes
             functional_inputs = {
-                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                key: keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
                 for key, val in model.input_signature.items()
                 if key in model.dummy_inputs
             }

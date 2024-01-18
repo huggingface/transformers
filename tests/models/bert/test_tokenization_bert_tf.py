@@ -19,7 +19,7 @@ TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
 
-    class ModelToSave(tf.keras.Model):
+    class ModelToSave(keras.Model):
         def __init__(self, tokenizer):
             super().__init__()
             self.tokenizer = tokenizer

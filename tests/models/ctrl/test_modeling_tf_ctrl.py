@@ -226,18 +226,18 @@ class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.build_in_name_scope()  # may be needed for the get_bias() call below
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), keras.layers.Layer)
 
             if model_class in list_lm_models:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
+                assert isinstance(x, keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
                     assert isinstance(v, tf.Variable)
             elif model_class in list_other_models_with_output_ebd:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
+                assert isinstance(x, keras.layers.Layer)
                 name = model.get_bias()
                 assert name is None
             else:
