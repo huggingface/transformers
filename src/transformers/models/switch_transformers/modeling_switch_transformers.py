@@ -888,7 +888,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             n_heads = self.config.num_heads
             module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                if self.config.is_gated_act == True:
+                if self.config.is_gated_act:
                     module.experts[f"expert_{idx}"].wi_0.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
                     module.experts[f"expert_{idx}"].wi_1.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
                 else:
