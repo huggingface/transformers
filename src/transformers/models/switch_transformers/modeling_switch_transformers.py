@@ -272,7 +272,7 @@ class SwitchTransformersDenseActDense(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
+# Copied from transformers.models.t5.modeling_t5.T5DenseGatedActDense with T5->SwitchTransformers
 class SwitchTransformersDenseGatedActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
