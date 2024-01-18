@@ -454,43 +454,38 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
             )  # fmt: skip
 
+        # Up until here we have a 1 to 1 match.
+
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
-        # True is the default normalization scheme when adding a token. Normalize -> don't strip the space.
-        # the issue now is that our slow tokenizer should NOT strip the space if we want to simulate sentencepiece token addition.
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
+        
+        # `normalized=True` is the default normalization scheme when adding a token. Normalize -> don't strip the space.
+        # the issue now is that our slow tokenizer should NOT strip the space if we want to simulate sentencepiece token addition.
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y",      "<new_token_test_>", "!"] # fmt: skip
+        EXPECTED_FAST = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"] # fmt: skip
+        
         with self.subTest("Slow edge case"):
-            self.assertEqual(
-                slow_tokenizer.tokenize(edge_case),
-                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"],
-            )
+            self.assertEqual(slow_tokenizer.tokenize(edge_case),EXPECTED_SLOW)
         with self.subTest("Fast edge case"):
-            self.assertEqual(
-                fast_tokenizer.tokenize(edge_case),
-                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"],
-            )  # fmt: skip
-            
+            self.assertEqual(fast_tokenizer.tokenize(edge_case),EXPECTED_FAST)
             
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_2>", rstrip=False, lstrip=False, normalized=False))
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_2>!"
         with self.subTest("Fast edge case"):
-            self.assertEqual(
-                fast_tokenizer.tokenize(edge_case),
-                ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_2>", "!"],
-            )  # fmt: skip 
-            
+            self.assertEqual(fast_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
 
-        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
+        slow_tokenizer.add_tokens(AddedToken("<new_token_test_2>", rstrip=False, lstrip=False, normalized=False))
+        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_2>  !     .     "
+        EXPECTED_SLOW = ['▁Hey', '!',      '<new_token_test_>', '.', '▁How', '</s>', '▁Hey',    '<new_token_test_2>', '▁', '!', '▁', '.'] # fmt: skip
+        EXPECTED_FAST = ['▁Hey', '!', '▁', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey','▁', '<new_token_test_>', '▁', '!', '▁', '.'] # fmt: skip
+
         with self.subTest("Slow hard edge case"):
-            self.assertEqual(
-                slow_tokenizer.tokenize(hard_case),
-                ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.'],
-            )  # fmt: skip
+            self.assertEqual(slow_tokenizer.tokenize(hard_case),EXPECTED_SLOW)
         with self.subTest("Fast hard edge case"):
-            self.assertEqual(
-                fast_tokenizer.tokenize(hard_case),
-                ['▁Hey', '!', '▁', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey','▁', '<new_token_test_>', '▁', '!', '▁', '.'],
-            )  # fmt: skip
+            self.assertEqual(fast_tokenizer.tokenize(hard_case),EXPECTED_FAST)
+            
+        # End of the only test that is not 100% compatible
 
 
 @require_sentencepiece
