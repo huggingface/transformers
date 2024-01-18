@@ -19,22 +19,24 @@ A more thorough explanation can be found on [The Art of Prompt Design: Prompt Bo
 ## Usage
 
 ```py
-from token_healing import TokenBoundaryHealer
-
 prompt = 'The link is <a href="http:'
-
-output = generate(prompt, completion_model, tokenizer)
+raw_output = generate(prompt, completion_model, tokenizer, token_healing=False)
 # The link is <a href="http:&#47;&#47;www&#47;dailymail&#
 
 # The model saw '://' as a single token in training. Seeing a prompt ending with `:` tells it that the
 # next token is likely not `//`, because otherwise it would've seen `://`.
 # Thus, it completes with a token other than `//`, in this case, `&`.
 
-token_healer = TokenBoundaryHealer(completion_model, tokenizer)
-healed_prompt = token_healer(prompt)
-# The link is <a href="http://
-healed_output = generate(healed_prompt, completion_model, tokenizer)
+healed_output = generate(prompt, completion_model, tokenizer, token_healing=True)
 # The link is <a href="http://www.365doki.com/post/3699
+
+# You can also use token healing in isolation
+# This can be useful if you have other work to do before the generation
+# Or if you want to delegate generation to another process
+input_ids = tokenizer(test_prompts, return_tensors='pt', padding=True).input_ids.cuda()
+healed_ids = model.heal_tokens(input_ids)
+healed_prompts = tokenizer.batch_decode(healed_ids, skip_special_tokens=True)
+# outputs the healed prompts without further completion/generation
 ```
 
 See `run_token_healing.py` for the full example.
