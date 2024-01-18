@@ -83,19 +83,11 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
                 tokenizer.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
-            When both `audio` and `text` are passed:
-            - **input_features** -- Audio input features to be fed to a model.
-            - **attention_mask** -- List of indices specifying which timestamps should be attended to by the model. Returned if `return_attention_mask=True`.
-            - **labels** -- List of token ids to be fed to a model.
-            - **label_attention_mask** -- List of indices specifying which token ids should be attended to by the model. Returned if `return_attention_mask=True`.
-
-            If `audio` is not `None` but `text` is:
-            - **input_features** -- Audio input features to be fed to a model.
-            - **attention_mask** -- List of indices specifying which timestamps should be attended to by the model. Returned if `return_attention_mask=True`.
-
-            If `text` is not `None` but `audio` is:
-            - **input_ids** -- List of token ids to be fed to a model.
-            - **attention_mask** -- List of indices specifying which token ids should be attended to by the model. Returned if `return_attention_mask=True`.
+            - **input_features** -- Audio input features to be fed to a model. Returned when `audio` is not `None`.
+            - **attention_mask** -- List of indices specifying which timestamps should be attended to by the model when `audio` is not `None`.
+            When only `text` is specified, returns the token attention mask.
+            - **labels** -- List of token ids to be fed to a model. Returned when both `text` and `audio` are not `None`.
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None` and `audio` is `None`.
         """
 
         sampling_rate = kwargs.pop("sampling_rate", None)
@@ -114,8 +106,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             return encodings
         else:
             inputs["labels"] = encodings["input_ids"]
-            if "attention_mask" in encodings:
-                inputs["label_attention_mask"] = encodings["attention_mask"]
             return inputs
 
     def pad(self, input_features=None, labels=None, **kwargs):
@@ -138,8 +128,6 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
             return labels
         else:
             input_features["labels"] = labels["input_ids"]
-            if "attention_mask" in labels:
-                input_features["label_attention_mask"] = labels["attention_mask"]
             return input_features
 
     def batch_decode(self, *args, **kwargs):
