@@ -36,7 +36,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_owlv2 import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
-from .cnn_model import MenteeVisionModel
+from .cnn_model import ConvModel
 
 
 if is_vision_available():
@@ -968,7 +968,7 @@ class Owlv2CNN(nn.Module):
     def __init__(self, config: Owlv2VisionConfig):
         super().__init__()
         self.config = config
-        self.vision_model = MenteeVisionModel(config.name)
+        self.vision_model = ConvModel(name=config.name, out_dim=config.hidden_size)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(OWLV2_VISION_INPUTS_DOCSTRING)
