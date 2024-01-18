@@ -313,7 +313,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         filename = ds[40]["file"]
         output = speech_recognizer(filename)
-        self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
 
     @slow
     @require_torch
