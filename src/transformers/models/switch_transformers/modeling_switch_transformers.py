@@ -371,7 +371,7 @@ class SwitchTransformersLayerFF(nn.Module):
             if config.is_gated_act:
                 self.mlp = SwitchTransformersSparseMLP(config, SwitchTransformersDenseGatedActDense)
             else:
-                self.mlp = SwitchTransformersDenseActDense(config, SwitchTransformersDenseGatedActDense)
+                self.mlp = SwitchTransformersSparseMLP(config, SwitchTransformersDenseActDense)
 
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
