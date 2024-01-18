@@ -379,8 +379,6 @@ class TrainingArguments:
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
-
-            (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 

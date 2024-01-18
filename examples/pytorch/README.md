@@ -226,7 +226,7 @@ wandb.login()
 
 To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to_all` if you have `wandb` installed.
 
-Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
+Whenever you use the `Trainer` class, your losses, evaluation metrics, model topology and gradients will automatically be logged.
 
 Advanced configuration is possible by setting environment variables:
 
@@ -282,7 +282,7 @@ To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argu
 
 ```python
 training_args = TrainingArguments(
-    "quick-training-distilbert-mrpc", 
+    "quick-training-distilbert-mrpc",
     evaluation_strategy="steps",
     eval_steps=20,
     report_to="neptune",

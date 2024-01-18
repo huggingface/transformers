@@ -30,6 +30,13 @@ AWQ_FUSED_MAPPINGS = {
         "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
         "use_alibi": False,
     },
+    "mixtral": {
+        "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
+        "mlp": ["w1", "w3", "w2"],
+        "layernorm": ["input_layernorm", "post_attention_layernorm", "norm"],
+        "use_alibi": False,
+        "rope_theta": 1000000.0,
+    },
     "llama": {
         "attention": ["q_proj", "k_proj", "v_proj", "o_proj"],
         "mlp": ["gate_proj", "up_proj", "down_proj"],
@@ -353,6 +360,8 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
             previous_device,
             modules_to_fuse["max_seq_len"],
             use_alibi=modules_to_fuse["use_alibi"],
+            # The default value in autoawq is set to 10000.0
+            rope_theta=modules_to_fuse.get("rope_theta", 10000.0),
         )
 
         fused_attention_layer.is_hf_transformers = True
