@@ -16,7 +16,6 @@
 # limitations under the License.
 """ Pvt V2 model configuration"""
 
-import warnings
 from typing import Callable, List, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig

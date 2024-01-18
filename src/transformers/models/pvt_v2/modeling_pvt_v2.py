@@ -17,7 +17,7 @@
 """ PyTorch PVTv2 model."""
 
 import math
-from typing import Iterable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
