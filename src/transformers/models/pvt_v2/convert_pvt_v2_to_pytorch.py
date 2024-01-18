@@ -81,13 +81,13 @@ def create_rename_keys(config):
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.sr.weight",
-                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.sr.weight",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.spatial_reduction.weight",
                     )
                 )
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.sr.bias",
-                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.sr.bias",
+                        f"pvt_v2.encoder.layers.{i}.blocks.{j}.attention.spatial_reduction.bias",
                     )
                 )
 
