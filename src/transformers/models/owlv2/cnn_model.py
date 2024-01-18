@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from torchvision.models import convnext_tiny, convnext_small, convnext_base, convnext_large
-from resnet import ResNet
+from .resnet import ResNet
 
 
 class ConvModel(nn.Module):
@@ -58,10 +58,10 @@ class ConvModel(nn.Module):
 if __name__ == "__main__":
     import time
     input_tensor = torch.randn((1, 3, 960, 960)).cuda().half()
-    custom_resnet = ConvModel(name='convnext_tiny').cuda().eval().half()
+    custom_resnet = ConvModel(name='convnext_large').cuda().eval().half()
 
     for i in range(10000):
         start = time.time()
-        # output = custom_resnet(input_tensor)
-        nn.functional.gelu(input_tensor)
+        output = custom_resnet(input_tensor)
+        # nn.functional.gelu(input_tensor)
         print(1000*(time.time() - start))
