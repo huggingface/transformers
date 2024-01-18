@@ -180,7 +180,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
 
         language_codes = FAIRSEQ_LANGUAGE_CODES if additional_special_tokens is None else additional_special_tokens
         self._lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code  in enumerate(language_codes)
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in language_codes
         }
         
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
