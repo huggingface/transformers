@@ -29,6 +29,7 @@ _import_structure = {
         "Owlv2VisionConfig",
     ],
     "processing_owlv2": ["Owlv2Processor"],
+    "cnn_model" : ["MenteeVisionModel"]
 }
 
 try:
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
         Owlv2VisionConfig,
     )
     from .processing_owlv2 import Owlv2Processor
+    from .cnn_model import MenteeVisionModel
 
     try:
         if not is_vision_available():
