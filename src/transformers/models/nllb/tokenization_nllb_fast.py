@@ -149,14 +149,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         src_lang=None,
         tgt_lang=None,
         additional_special_tokens=None,
-        ...
-    ):
-        if additional_special_tokens is None:
-            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
         legacy_behaviour=False,
         **kwargs,
     ):
-        self.vocab_file = vocab_file
+        if additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)

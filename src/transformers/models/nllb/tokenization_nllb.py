@@ -137,10 +137,12 @@ class NllbTokenizer(PreTrainedTokenizer):
         src_lang=None,
         tgt_lang=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        additional_special_tokens=FAIRSEQ_LANGUAGE_CODES,
+        additional_special_tokens=None,
         legacy_behaviour=False,
         **kwargs,
     ):
+        if additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
         bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
         pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
         eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
