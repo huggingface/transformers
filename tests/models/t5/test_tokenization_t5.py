@@ -432,27 +432,14 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
 
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
-        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"]
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"]  # fmt: skip
         with self.subTest(f"slow {edge_case} normalized = False"):
             self.assertEqual(slow_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
         with self.subTest(f"Fast {edge_case} normalized = False"):
             self.assertEqual(fast_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
 
         hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
-        EXPECTED_SLOW = [
-            "▁Hey",
-            "!",
-            "<new_token_test_>",
-            ".",
-            "▁How",
-            "</s>",
-            "▁Hey",
-            "<new_token_test_>",
-            "▁",
-            "!",
-            "▁",
-            ".",
-        ]
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "▁Hey", "<new_token_test_>", "▁", "!", "▁", "."]  # fmt: skip
         with self.subTest(f"slow {edge_case} normalized = False"):
             self.assertEqual(slow_tokenizer.tokenize(hard_case), EXPECTED_SLOW)
         with self.subTest(f"fast {edge_case} normalized = False"):
