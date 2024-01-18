@@ -176,6 +176,7 @@ from . import (
     prophetnet,
     pvt,
     qdqbert,
+    qwen2,
     rag,
     realm,
     reformer,
