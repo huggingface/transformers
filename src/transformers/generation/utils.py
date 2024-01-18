@@ -4812,6 +4812,8 @@ def _speculative_sampling(
 
     # Ensure we don't generate beyond max_len or an EOS token (not in algorithm 1, but needed for correct behavior)
     if last_assistant_token_is_eos and n_matches == candidate_length:
+        # Output length is assumed to be `n_matches + 1`. Since we won't generate another token with the target model
+        # due to acceptance on EOS we fix `n_matches`
         n_matches -= 1
         valid_tokens = new_candidate_input_ids[:, : n_matches + 1]
     else:
