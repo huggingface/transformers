@@ -1791,7 +1791,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
-    
+
     # TODO: @assaf fix docs
     # @add_start_docstrings_to_model_forward(OWLV2_OBJECT_DETECTION_INPUTS_DOCSTRING)
     # @replace_return_docstrings(output_type=Owlv2ObjectDetectionOutput, config_class=Owlv2Config)
