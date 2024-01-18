@@ -432,54 +432,32 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
 
         edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
-        EXPECTED = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"]
+        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "<new_token_test_>", "!"]
         with self.subTest(f"slow {edge_case} normalized = False"):
-            self.assertEqual(slow_tokenizer.tokenize(edge_case),EXPECTED)
+            self.assertEqual(slow_tokenizer.tokenize(edge_case),EXPECTED_SLOW)
         with self.subTest(f"Fast {edge_case} normalized = False"):
-            self.assertEqual(fast_tokenizer.tokenize(edge_case),EXPECTED)
+            self.assertEqual(fast_tokenizer.tokenize(edge_case),EXPECTED_SLOW)
 
         hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
-        EXPECTED = ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.']
+        EXPECTED_SLOW = ['▁Hey', '!', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey', '<new_token_test_>', '▁', '!', '▁', '.']
         with self.subTest(f"slow {edge_case} normalized = False"):
-            self.assertEqual(slow_tokenizer.tokenize(hard_case),EXPECTED)  # fmt: skip
+            self.assertEqual(slow_tokenizer.tokenize(hard_case),EXPECTED_SLOW)
         with self.subTest(f"fast {edge_case} normalized = False"):
-            self.assertEqual(fast_tokenizer.tokenize(hard_case),EXPECTED)  # fmt: skip
-
-        # Up until here we have a 1 to 1 match.
+            self.assertEqual(fast_tokenizer.tokenize(hard_case),EXPECTED_SLOW)
 
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
-        
+
         # `normalized=True` is the default normalization scheme when adding a token. Normalize -> don't strip the space.
         # the issue now is that our slow tokenizer should NOT strip the space if we want to simulate sentencepiece token addition.
-        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
-        EXPECTED_SLOW = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y",      "<new_token_test_>", "!"] # fmt: skip
+
         EXPECTED_FAST = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"] # fmt: skip
-        with self.subTest(f"slow {edge_case} normalized = True"):
-            self.assertEqual(slow_tokenizer.tokenize(edge_case),EXPECTED_SLOW)
         with self.subTest(f"fast {edge_case} normalized = True"):
             self.assertEqual(fast_tokenizer.tokenize(edge_case),EXPECTED_FAST)
-            
-        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
-        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
-        edge_case = "Hey!<new_token_test_>. How</s>Hey <new_token_test_>!"
-        with self.subTest(f"fast {edge_case} normalized = False"):
-            self.assertEqual(fast_tokenizer.tokenize(edge_case), EXPECTED_SLOW)
 
-
-        hard_case = "Hey! <new_token_test_>. How</s>   Hey   <new_token_test_>  !     .     "
-        EXPECTED_SLOW = ['▁Hey', '!',      '<new_token_test_>', '.', '▁How', '</s>', '▁Hey',     '<new_token_test_>', '▁', '!', '▁', '.'] # fmt: skip
         EXPECTED_FAST = ['▁Hey', '!', '▁', '<new_token_test_>', '.', '▁How', '</s>', '▁Hey','▁', '<new_token_test_>', '▁', '!', '▁', '.'] # fmt: skip
-        with self.subTest(f"slow {hard_case} normalized = False"):
-            self.assertEqual(slow_tokenizer.tokenize(hard_case),EXPECTED_SLOW)
-        with self.subTest(f"fast {hard_case} normalized = False"):
-            self.assertEqual(fast_tokenizer.tokenize(hard_case),EXPECTED_SLOW)
-    
-        fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
-        fast_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=True))
-        with self.subTest(f"fast {hard_case} normalized = True"):
-            self.assertEqual(fast_tokenizer.tokenize(hard_case),EXPECTED_FAST)
-
+        with self.subTest(f"fast {edge_case} normalized = False"):
+            self.assertEqual(fast_tokenizer.tokenize(hard_case), EXPECTED_FAST)
 
 @require_sentencepiece
 @require_tokenizers
