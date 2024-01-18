@@ -272,6 +272,36 @@ class SwitchTransformersDenseActDense(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
+class SwitchTransformersDenseGatedActDense(nn.Module):
+    def __init__(self, config: SwitchTransformersConfig):
+        super().__init__()
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.act = ACT2FN[config.dense_act_fn]
+
+    def forward(self, hidden_states):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
+
+        # To make 8bit quantization work for google/flan-t5-xxl, self.wo is kept in float32.
+        # See https://github.com/huggingface/transformers/issues/20287
+        # we also make sure the weights are not in `int8` in case users will force `_keep_in_fp32_modules` to be `None``
+        if (
+            isinstance(self.wo.weight, torch.Tensor)
+            and hidden_states.dtype != self.wo.weight.dtype
+            and self.wo.weight.dtype != torch.int8
+        ):
+            hidden_states = hidden_states.to(self.wo.weight.dtype)
+
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
 class SwitchTransformersSparseMLP(nn.Module):
     r"""
     Implementation of the Switch Transformers Sparse MLP module.
@@ -333,9 +363,15 @@ class SwitchTransformersLayerFF(nn.Module):
 
         # Check if it is a sparse layer, if not then it is a dense layer
         if not self.is_sparse:
-            self.mlp = SwitchTransformersDenseActDense(config)
+            if config.is_gated_act:
+                self.mlp = SwitchTransformersDenseGatedActDense(config)
+            else:
+                self.mlp = SwitchTransformersDenseActDense(config)
         else:
-            self.mlp = SwitchTransformersSparseMLP(config)
+            if config.is_gated_act:
+                self.mlp = SwitchTransformersSparseMLP(config, SwitchTransformersDenseGatedActDense)
+            else:
+                self.mlp = SwitchTransformersDenseActDense(config, SwitchTransformersDenseGatedActDense)
 
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
