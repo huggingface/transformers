@@ -33,6 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_tokenization_common import TokenizerTesterMixin
+from transformers.models.nllb.tokenization_nllb import FAIRSEQ_LANGUAGE_CODES
 
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
@@ -292,6 +293,28 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_training_new_tokenizer(self):
         pass
 
+    def test_new_language_codes(self):
+
+        code1, code2 = 'myv_Cyrl', 'myv_Latn'
+        new_codes = FAIRSEQ_LANGUAGE_CODES + [code1, code2]
+        # here I create a tokenizer with the default behaviour
+        tok1 = NllbTokenizer.from_pretrained('facebook/nllb-200-distilled-600M')
+        # here I enhance the model's vocabulary with two new language codes
+        tok2 = NllbTokenizer.from_pretrained('facebook/nllb-200-distilled-600M', language_codes=new_codes)
+
+        # testing that the new codes can work
+        self.assertEqual(len(tok2), len(tok1) + 2)
+        tok2.tgt_lang = code1
+        tok2.src_lang = code2
+        self.assertEqual(tok2('šumbrat!').input_ids[0],tok2.convert_tokens_to_ids(code2))
+
+        # testing that saving and loading the tokenizer preserves the new behaviour
+        tok2.save_pretrained('tmp_tok')
+        tok3 = NllbTokenizer.from_pretrained('tmp_tok')
+        self.assertEqual(tok2.get_vocab(), tok3.get_vocab())
+        tok3.src_lang = code2
+        self.assertEqual(tok3('šumbrat!').input_ids[0], tok3.convert_tokens_to_ids(code2))
+
 
 @require_torch
 @require_sentencepiece
@@ -445,3 +468,4 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         self.assertEqual(
             inputs.input_ids, [256047, 16297, 134408, 25653, 6370, 248, 254, 103929, 94995, 108, 49486, 2]
         )
+        
