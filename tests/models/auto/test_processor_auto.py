@@ -101,6 +101,12 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # save in new folder
             processor.save_pretrained(tmpdirname)
 
+            if not os.path.isfile(os.path.join(tmpdirname, PROCESSOR_NAME)):
+                # create one manually in order to perform this test's objective
+                config_dict = {"processor_class": "Wav2Vec2Processor"}
+                with open(os.path.join(tmpdirname, PROCESSOR_NAME), "w") as fp:
+                    json.dump(config_dict, fp)
+
             # drop `processor_class` in tokenizer config
             with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "r") as f:
                 config_dict = json.load(f)
