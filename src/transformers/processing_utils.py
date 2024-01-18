@@ -188,6 +188,11 @@ class ProcessorMixin(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+        # `auto_map` is not specified.
+        if set(self.to_dict().keys()) == {"processor_class"}:
+            return []
+
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
