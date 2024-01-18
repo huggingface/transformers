@@ -175,7 +175,7 @@ class SwitchTransformersConfig(PretrainedConfig):
 
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
-        
+
         act_info = dense_act_fn.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
