@@ -161,12 +161,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             else mask_token
         )
         self.legacy_behaviour = legacy_behaviour
-
-        language_codes = FAIRSEQ_LANGUAGE_CODES if additional_special_tokens is None else additional_special_tokens
-        self._lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(language_codes)
-        }
-
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -184,6 +178,11 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        language_codes = FAIRSEQ_LANGUAGE_CODES if additional_special_tokens is None else additional_special_tokens
+        self._lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code  in enumerate(language_codes)
+        }
+        
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
