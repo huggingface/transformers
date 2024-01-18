@@ -179,10 +179,7 @@ class PvtV2SelfAttention(nn.Module):
             self.act = nn.GELU()
         elif spatial_reduction_ratio > 1:
             self.spatial_reduction = nn.Conv2d(
-                self.hidden_size,
-                self.hidden_size,
-                kernel_size=spatial_reduction_ratio,
-                stride=spatial_reduction_ratio
+                self.hidden_size, self.hidden_size, kernel_size=spatial_reduction_ratio, stride=spatial_reduction_ratio
             )
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
@@ -203,11 +200,15 @@ class PvtV2SelfAttention(nn.Module):
 
         if self.linear_attention:
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-            hidden_states = self.spatial_reduction(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = (
+                self.spatial_reduction(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            )
             hidden_states = self.act(self.layer_norm(hidden_states))
         elif self.spatial_reduction_ratio > 1:
             hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-            hidden_states = self.spatial_reduction(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            hidden_states = (
+                self.spatial_reduction(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+            )
             hidden_states = self.layer_norm(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
