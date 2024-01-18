@@ -457,7 +457,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         EXPECTED_FAST = ["▁Hey", "!", "<new_token_test_>", ".", "▁How", "</s>", "He", "y", "▁", "<new_token_test_>", "!"] # fmt: skip
         with self.subTest(f"slow {edge_case} normalized = True"):
             self.assertEqual(slow_tokenizer.tokenize(edge_case),EXPECTED_SLOW)
-        with self.subTest(f"fast {edge_case} normalized = True"):pip 
+        with self.subTest(f"fast {edge_case} normalized = True"):
             self.assertEqual(fast_tokenizer.tokenize(edge_case),EXPECTED_FAST)
             
         fast_tokenizer.add_tokens(AddedToken("<new_token_test_2>", rstrip=False, lstrip=False, normalized=False))
