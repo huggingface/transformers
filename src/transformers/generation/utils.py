@@ -4658,7 +4658,7 @@ class GenerationMixin:
                 else:
                     selected_tokens = new_logits.argmax(dim=-1)
 
-                candidate_new_tokens = candidate_input_ids[:, -candidate_length:]
+                candidate_new_tokens = candidate_input_ids[:, cur_len:]
                 n_matches = ((~(candidate_new_tokens == selected_tokens[:, :-1])).cumsum(dim=-1) < 1).sum()
 
                 # Ensure we don't generate beyond max_len or an EOS token

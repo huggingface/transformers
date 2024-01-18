@@ -171,10 +171,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """
         input_ids = input_ids.to(self.assistant_model.device)
 
-        # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
-        # (which implicitly contains the number of accepted candidates from the previous round)
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token. 
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
+        if max_new_tokens == 0:
+            return input_ids, None
+
+        # 1. If it is not the first round of candidate generation, prepare the inputs based on the input_ids length
+        # (which implicitly contains the number of accepted candidates from the previous round)
         has_past_key_values = self.assistant_kwargs.get("past_key_values", None) is not None
         if has_past_key_values:
             new_cache_size = new_cur_len - 1
