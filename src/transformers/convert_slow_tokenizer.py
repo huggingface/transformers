@@ -553,7 +553,7 @@ class SpmConverter(Converter):
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
         _normalizers = [
-            normalizers.Strip(left=False, right=True),
+            normalizers.Strip(left=False, right=True), # stripping is important
             normalizers.Replace(Regex(" {2,}"), "▁"),
         ]
         if not precompiled_charsmap:

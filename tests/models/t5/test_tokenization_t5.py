@@ -425,6 +425,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
 
     def test_fast_slow_edge_cases(self):
+        # We are testing spaces before and spaces after special tokens + space transformations
         slow_tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
         fast_tokenizer = T5TokenizerFast.from_pretrained("t5-base", legacy=False, from_slow=True)
         slow_tokenizer.add_tokens(AddedToken("<new_token_test_>", rstrip=False, lstrip=False, normalized=False))
