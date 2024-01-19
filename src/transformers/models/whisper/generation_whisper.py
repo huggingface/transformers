@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -710,7 +709,7 @@ class WhisperGenerationMixin:
         no_speech_threshold,
         do_condition_on_prev_tokens,
         condition_on_prev_tokens,
-        kwargs,
+        **kwargs,
     ):
         # 6.6 Batch generate current chunk
         seek_sequence_list = [None for _ in range(cur_bsz)]
