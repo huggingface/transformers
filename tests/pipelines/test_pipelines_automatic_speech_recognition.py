@@ -298,6 +298,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @require_torch
+    @slow
+    def test_torch_large_with_input_features(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-audio/wav2vec2-bert-CV16-en",
+            framework="pt",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": ""})
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
+
     @slow
     @require_torch
     @slow
