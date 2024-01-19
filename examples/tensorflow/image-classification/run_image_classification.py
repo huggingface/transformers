@@ -31,6 +31,7 @@ import evaluate
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
+from packaging.version import parse
 from PIL import Image
 
 import transformers
@@ -50,6 +51,19 @@ from transformers.keras_callbacks import KerasMetricCallback
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
+
+
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 logger = logging.getLogger(__name__)
@@ -363,7 +377,7 @@ def main():
 
     def _train_transforms(image):
         img_size = image_size
-        image = tf.keras.utils.img_to_array(image)
+        image = keras.utils.img_to_array(image)
         image = random_resized_crop(image, size=img_size)
         image = tf.image.random_flip_left_right(image)
         image /= 255.0
@@ -372,7 +386,7 @@ def main():
         return image
 
     def _val_transforms(image):
-        image = tf.keras.utils.img_to_array(image)
+        image = keras.utils.img_to_array(image)
         image = tf.image.resize(image, size=image_size)
         # image = np.array(image) # FIXME - use tf.image function
         image = center_crop(image, size=image_size)
