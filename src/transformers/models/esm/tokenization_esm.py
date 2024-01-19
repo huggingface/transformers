@@ -91,7 +91,7 @@ class EsmTokenizer(PreTrainedTokenizer):
         return text.split()
 
     def get_vocab(self):
-        base_vocab = {token: i for i, token in enumerate(self.all_tokens)}
+        base_vocab = self._token_to_id.copy()
         base_vocab.update(self.added_tokens_encoder)
         return base_vocab
 
