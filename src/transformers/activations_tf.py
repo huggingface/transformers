@@ -15,7 +15,7 @@
 import math
 
 import tensorflow as tf
-from packaging import version
+from packaging.version import parse
 
 
 try:
@@ -23,7 +23,7 @@ try:
 except (ModuleNotFoundError, ImportError):
     import keras
 
-    if version(keras.__version__).major > 2:
+    if parse(keras.__version__).major > 2:
         raise ValueError(
             "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
             "Transformers. Please install the backwards-compatible tf-keras package with "
@@ -112,7 +112,7 @@ def glu(x, axis=-1):
     return a * tf.math.sigmoid(b)
 
 
-if version.parse(tf.version.VERSION) >= version.parse("2.4"):
+if parse(tf.version.VERSION) >= parse("2.4"):
 
     def approximate_gelu_wrap(x):
         return keras.activations.gelu(x, approximate=True)
