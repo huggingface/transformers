@@ -778,7 +778,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
 
-    def generate(*args, **kwargs):
+    def generate(self, *args, **kwargs):
         # Thin wrapper to raise exceptions when trying to generate with methods that manipulate `past_key_values`.
         # RWKV is one of the few models that don't have it (it has `state` instead, which has different properties and
         # usage).
