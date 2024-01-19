@@ -154,6 +154,8 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
     ):
         if additional_special_tokens is None:
             additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
+            
+        self.vocab_file = vocab_file
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = (
             AddedToken(mask_token, normalized=True, lstrip=True, special=True)
@@ -178,8 +180,7 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        language_codes = FAIRSEQ_LANGUAGE_CODES if additional_special_tokens is None else additional_special_tokens
-        self._lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in language_codes}
+        self._lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in additional_special_tokens}
 
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
