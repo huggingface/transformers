@@ -5,8 +5,8 @@ import tensorflow as tf
 from keras_nlp.tokenizers import BytePairTokenizer
 from tensorflow_text import pad_model_inputs
 
-from .tokenization_gpt2 import GPT2Tokenizer
 from ...modeling_tf_utils import keras
+from .tokenization_gpt2 import GPT2Tokenizer
 
 
 class TFGPT2Tokenizer(keras.layers.Layer):

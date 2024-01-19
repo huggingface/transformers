@@ -800,7 +800,6 @@ def parse_log_history(log_history):
 
 
 def extract_hyperparameters_from_keras(model):
-    import tensorflow as tf
     from .modeling_tf_utils import keras
 
     hyperparameters = {}

@@ -17,12 +17,12 @@ import math
 import tensorflow as tf
 from packaging import version
 
+
 try:
     import tf_keras as keras
     from tf_keras import backend as K
 except ImportError:
     import keras
-    from keras import backend as K
 
     if version(keras.__version__).major > 2:
         raise ValueError(
@@ -30,7 +30,6 @@ except ImportError:
             "Transformers. Please install the backwards-compatible tf-keras package with "
             "`pip install tf-keras`."
         )
-
 
 
 def _gelu(x):

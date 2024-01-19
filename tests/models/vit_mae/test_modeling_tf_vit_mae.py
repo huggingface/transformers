@@ -323,9 +323,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = keras.models.load_model(
-                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                )
+                model = keras.models.load_model(filepath, custom_objects={main_layer_class.__name__: main_layer_class})
                 assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)

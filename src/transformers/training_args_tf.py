@@ -24,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 if is_tf_available():
     import tensorflow as tf
+
     from .modeling_tf_utils import keras
 
 
