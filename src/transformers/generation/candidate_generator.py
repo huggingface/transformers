@@ -171,7 +171,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """
         input_ids = input_ids.to(self.assistant_model.device)
 
-        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token. 
+        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
         if max_new_tokens == 0:
