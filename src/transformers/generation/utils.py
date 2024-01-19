@@ -1719,8 +1719,8 @@ class GenerationMixin:
         vocab_trie = CharTrie(tokenizer.get_vocab())
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
 
-        # assumption: leading/trailing whitespace is not meaningful, so the prompt is
-        # stripped before encoding to desensitize generation to whitespace artefacts
+        # assumption: leading/trailing whitespace is not meaningful, so the prompts are
+        # stripped before re-encoding to desensitize generation to whitespace artefacts
         prompts = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
         prompts = [p.strip() for p in prompts]
         input_ids = tokenizer(
