@@ -707,7 +707,7 @@ class WhisperGenerationMixin:
         synced_gpus,
         return_token_timestamps,
         do_condition_on_prev_tokens,
-        **kwargs,
+        kwargs,
     ):
         # 6.6 Batch generate current chunk
         seek_sequence_list = [None for _ in range(cur_bsz)]
