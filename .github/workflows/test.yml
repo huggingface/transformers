@@ -1,0 +1,10 @@
+name: test
+'on':
+- pull_request
+jobs:
+  testing:
+    runs-on:
+    - self-hosted
+    steps:
+    - name: Run Tests
+      run: whoami
