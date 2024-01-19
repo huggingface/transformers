@@ -30,8 +30,6 @@ except ImportError:
         )
     from .cuda_src import cvmm, cvmm_prepare_sel, CVMMSel
 
-# flag for debugging gradients
-DEBUG = False
 
 def dist_logsumexp(x: torch.Tensor, dim: int, keepdim: bool = False) -> torch.Tensor:
     # Calculate numerically stable distributed logsumexp
@@ -216,13 +214,7 @@ class SigmaMoELayer(torch.nn.Module):
             if self.values.ndim > 2:
                 self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
 
-        if DEBUG:
-            into_input = input.clone()
-            into_input.retain_grad()
-            sel = sel_raw = self.expert_sel(into_input)
-        else:
-            sel = sel_raw = self.expert_sel(input)
-
+        sel = sel_raw = self.expert_sel(input)
         reg_loss = self.entropy_reg(sel_raw)
 
         # Selection activation and topk
@@ -242,8 +234,6 @@ class SigmaMoELayer(torch.nn.Module):
         #     [2,1] are the indices
 
         sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
-        if DEBUG:
-            sel_val.retain_grad()
 
         if self.activation_after_topk or (self.selection_mode == "sinkmoid"):
             sel_val = torch.gather(sel_raw, -1, sel_index)
@@ -272,15 +262,7 @@ class SigmaMoELayer(torch.nn.Module):
 
         if IS_CUDA and IS_TRITON:
             # "Up-projection" layer for each head
-            if DEBUG:
-                input_into_up_proj = input.clone()
-                input_into_up_proj.retain_grad()
-                scores = self.compute_scores(input_into_up_proj, sel_indices)
-            else:
-                scores = self.compute_scores(input, sel_indices)
-
-            if DEBUG:
-                scores.retain_grad()
+            scores = self.compute_scores(input, sel_indices)
 
             # Down projection layer for each head
             sel_indices = sel_indices.clone()
@@ -310,7 +292,4 @@ class SigmaMoELayer(torch.nn.Module):
 
         if self.o_bias is not None:
             res = res + self.o_bias
-        if DEBUG:
-            return res, reg_loss, scores, sel_index, sel_val, into_input, input_into_up_proj
-        else:
-            return res, reg_loss
+        return res, reg_loss
