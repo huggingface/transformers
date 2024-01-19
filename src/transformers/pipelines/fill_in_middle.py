@@ -115,7 +115,6 @@ class FIMPipeline(Pipeline):
     def _sanitize_parameters(
         self,
         infill_token=None,
-        return_infilled_sequence=True,
         return_full_text=None,
         return_tensors=None,
         return_text=None,
@@ -153,7 +152,6 @@ class FIMPipeline(Pipeline):
         forward_params = generate_kwargs
 
         postprocess_params = {}
-        postprocess_params["return_infilled_sequence"] = return_infilled_sequence
 
         if return_full_text is not None and return_type is None:
             if return_text is not None:
@@ -221,6 +219,7 @@ class FIMPipeline(Pipeline):
             return_tensors=self.framework,
         )
         inputs["prompt_text"] = prompt_text
+        inputs["infill_token"] = infill_token
 
         # Ensure that infill token is in the input
         self.ensure_infill_token(
@@ -257,6 +256,7 @@ class FIMPipeline(Pipeline):
     def _forward(self, model_inputs, **generate_kwargs):
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs["attention_mask"]
+        infill_token = model_inputs["infill_token"]
 
         # Handle empty prompts by setting id and attention mask to None
         if input_ids.shape[1] == 0:
@@ -309,6 +309,7 @@ class FIMPipeline(Pipeline):
             "generated_sequence": generated_sequence,
             "input_ids": input_ids,
             "prompt_text": prompt_text,
+            "infill_token": infill_token,
         }
 
     def __call__(self, text_inputs, **kwargs):
@@ -357,15 +358,44 @@ class FIMPipeline(Pipeline):
     def postprocess(
         self,
         model_outputs,
-        return_infilled_sequence,
         return_type=ReturnType.FULL_TEXT,
         clean_up_tokenization_spaces=True,
     ):
         generated_sequence = model_outputs["generated_sequence"][0].numpy().tolist()
         input_ids = model_outputs["input_ids"]
-        prompt_text = model_outputs["prompt_text"]
+        prompt = model_outputs["prompt_text"]
+        infill_token = model_outputs["infill_token"]
 
         records = []
 
         for sequence in generated_sequence:
-            pass
+            if return_type == ReturnType.TENSORS:
+                # If the return type is Tensors, just return the model output, as-is
+                record = {"generated_token_ids": sequence}
+            elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
+                # Decode the text
+                filled_text = self.tokenizer.batch_decode(
+                    sequence[:, input_ids.shape[1] :],
+                    skip_special_tokens=True,
+                )
+
+                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
+                if input_ids is None:
+                    prompt_length = 0
+                else:
+                    prompt_length = len(
+                        self.tokenizer.decode(
+                            input_ids[0],
+                            skip_special_tokens=True,
+                        )
+                    )
+
+                # If full text is to be returned, replace the infill token with the generated infilled text
+                all_text = filled_text
+                if return_type == ReturnType.FULL_TEXT:
+                    all_text = prompt.replace(infill_token, filled_text)
+
+                record = {"generated_text": all_text}
+            records.append(record)
+
+        return records
