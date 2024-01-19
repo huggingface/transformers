@@ -1904,7 +1904,6 @@ class WhisperNoSpeechDetection(LogitsProcessor):
         self._no_speech_prob = [0.0]
         self.is_scores_logprobs = scores_is_logprobs
 
-
         # overwritten dynamically
         self.model = None
         self.inputs = None

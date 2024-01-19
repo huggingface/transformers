@@ -518,6 +518,13 @@ class WhisperGenerationMixin:
         self._set_num_frames(
             return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
         )
+        self._set_thresholds_and_condition(
+            generation_config=generation_config,
+            logprob_threshold=logprob_threshold,
+            compression_ratio_threshold=compression_ratio_threshold,
+            no_speech_threshold=no_speech_threshold,
+            condition_on_prev_tokens=condition_on_prev_tokens,
+        )
 
         # 4. Retrieve logits processors
         logits_processor = self._retrieve_logit_processors(
@@ -604,7 +611,6 @@ class WhisperGenerationMixin:
             suppress_tokens = _get_attr_from_logit_processors(
                 logits_processor, SuppressTokensLogitsProcessor, "suppress_tokens"
             )
-            prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
             decoder_input_ids, kwargs = self._prepare_decoder_input_ids(
                 cur_bsz=cur_bsz,
                 init_tokens=init_tokens,
@@ -614,8 +620,8 @@ class WhisperGenerationMixin:
                 generation_config=generation_config,
                 config=self.config,
                 device=segment_input.device,
+                suppress_tokens=suppress_tokens,
                 kwargs=kwargs,
-                prev_start_of_text=prev_start_of_text,
             )
 
             # 6.6 set max new tokens or max length
@@ -647,11 +653,7 @@ class WhisperGenerationMixin:
                 prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 synced_gpus=synced_gpus,
                 return_token_timestamps=return_token_timestamps,
-                compression_ratio_threshold=compression_ratio_threshold,
-                logprob_threshold=logprob_threshold,
-                no_speech_threshold=no_speech_threshold,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
-                condition_on_prev_tokens=condition_on_prev_tokens,
                 kwargs=kwargs,
             )
 
@@ -704,11 +706,7 @@ class WhisperGenerationMixin:
         prefix_allowed_tokens_fn,
         synced_gpus,
         return_token_timestamps,
-        compression_ratio_threshold,
-        logprob_threshold,
-        no_speech_threshold,
         do_condition_on_prev_tokens,
-        condition_on_prev_tokens,
         **kwargs,
     ):
         # 6.6 Batch generate current chunk
@@ -718,7 +716,7 @@ class WhisperGenerationMixin:
         should_skip = [False for _ in range(cur_bsz)]
         fallback_index_map = list(range(cur_bsz))
 
-        if no_speech_threshold is not None:
+        if generation_config.no_speech_threshold is not None:
             self._setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs)
 
         for fallback_idx, temperature in enumerate(temperatures):
@@ -772,18 +770,15 @@ class WhisperGenerationMixin:
                     seek_outputs,
                     i,
                     logits_processor,
-                    compression_ratio_threshold,
-                    logprob_threshold,
-                    no_speech_threshold,
+                    generation_config,
                     self.config.vocab_size,
-                    generation_config.eos_token_id,
                     temperature,
                 )
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
                 do_condition_on_prev_tokens[fallback_index_map[i]] = (
-                    condition_on_prev_tokens and temperature is not None and temperature < 0.5
+                    generation_config.condition_on_prev_tokens and temperature is not None and temperature < 0.5
                 )
 
                 if needs_fallback[i]:
@@ -842,37 +837,39 @@ class WhisperGenerationMixin:
         seek_outputs,
         index,
         logits_processor,
-        compression_ratio_threshold,
-        logprob_threshold,
-        no_speech_threshold,
+        generation_config,
         vocab_size,
-        eos_token_id,
         temperature,
     ):
         needs_fallback = False
         should_skip = False
-        if compression_ratio_threshold is not None:
+        if generation_config.compression_ratio_threshold is not None:
             compression_ratio = self._retrieve_compression_ratio(seek_sequence, vocab_size)
 
-            if compression_ratio > compression_ratio_threshold:
+            if compression_ratio > generation_config.compression_ratio_threshold:
                 needs_fallback = True
 
-        if logprob_threshold is not None:
+        if generation_config.logprob_threshold is not None:
             if "sequences_scores" in seek_outputs[0]:
                 logprobs = [s["sequences_scores"] for s in seek_outputs][index]
             else:
                 scores = seek_outputs[index]["scores"]
-                logprobs = self._retrieve_avg_logprobs(scores, seek_sequence, eos_token_id, temperature)
+                logprobs = self._retrieve_avg_logprobs(
+                    scores, seek_sequence, generation_config.eos_token_id, temperature
+                )
 
-            if logprobs < logprob_threshold:
+            if logprobs < generation_config.logprob_threshold:
                 needs_fallback = True
 
-        if no_speech_threshold is not None:
+        if generation_config.no_speech_threshold is not None:
             no_speech_prob = _get_attr_from_logit_processors(
                 logits_processor, WhisperNoSpeechDetection, "no_speech_prob"
             )
 
-            if logprobs < logprob_threshold and no_speech_prob[index] > no_speech_threshold:
+            if (
+                logprobs < generation_config.logprob_threshold
+                and no_speech_prob[index] > generation_config.no_speech_threshold
+            ):
                 needs_fallback = False
                 should_skip = True
 
@@ -1137,6 +1134,35 @@ class WhisperGenerationMixin:
             generation_config.num_frames = kwargs.pop("num_frames", None)
 
     @staticmethod
+    def _set_thresholds_and_condition(
+        generation_config,
+        logprob_threshold,
+        compression_ratio_threshold,
+        no_speech_threshold,
+        condition_on_prev_tokens,
+    ):
+        generation_config.logprob_threshold = (
+            logprob_threshold
+            if logprob_threshold is not None
+            else getattr(generation_config, "logprob_threshold", None)
+        )
+        generation_config.compression_ratio_threshold = (
+            compression_ratio_threshold
+            if compression_ratio_threshold is not None
+            else getattr(generation_config, "compression_ratio_threshold", None)
+        )
+        generation_config.logprob_threshold = (
+            no_speech_threshold
+            if no_speech_threshold is not None
+            else getattr(generation_config, "no_speech_threshold", None)
+        )
+        generation_config.condition_on_prev_tokens = (
+            condition_on_prev_tokens
+            if condition_on_prev_tokens is not None
+            else getattr(generation_config, "condition_on_prev_tokens", None)
+        )
+
+    @staticmethod
     def _set_condition_on_prev_tokens(condition_on_prev_tokens, generation_config):
         condition_on_prev_tokens = (
             condition_on_prev_tokens
@@ -1277,7 +1303,6 @@ class WhisperGenerationMixin:
 
         return segment_input
 
-    # TODO(Patrick) - remove prev_start_of_text
     @staticmethod
     def _prepare_decoder_input_ids(
         cur_bsz,
@@ -1288,13 +1313,17 @@ class WhisperGenerationMixin:
         generation_config,
         config,
         device,
+        suppress_tokens,
         kwargs,
-        prev_start_of_text,
     ):
         cut_off_length = config.max_target_positions // 2 - 1
 
         one_tensor = torch.ones((cur_bsz, 1), device=device, dtype=torch.long)
         decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
+
+        prev_start_of_text = getattr(generation_config, "prev_sot_token_id", None)
+        if prev_start_of_text is None:
+            prev_start_of_text = suppress_tokens[-2] if suppress_tokens is not None else None
 
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
