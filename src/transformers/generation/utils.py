@@ -1168,6 +1168,7 @@ class GenerationMixin:
         self,
         inputs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
+        token_healing: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
@@ -1376,6 +1377,9 @@ class GenerationMixin:
             )
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
+
+        if token_healing:
+            input_ids = self.heal_tokens(input_ids)
 
         if streamer is not None:
             streamer.put(input_ids.cpu())
@@ -1704,6 +1708,57 @@ class GenerationMixin:
                 synced_gpus=synced_gpus,
                 **model_kwargs,
             )
+
+    @torch.no_grad()
+    def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        from ..models.auto import AutoTokenizer
+        from pygtrie import CharTrie
+
+        tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
+        bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
+        vocab_trie = CharTrie(tokenizer.get_vocab())
+        gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
+
+        # assumption: leading/trailing whitespace is not meaningful, so the prompt is
+        # stripped before encoding to desensitize generation to whitespace artefacts
+        prompts = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
+        prompts = [p.strip() for p in prompts]
+        input_ids = tokenizer(
+            prompts, return_tensors='pt', padding=True,
+        ).input_ids.to(input_ids.device)
+
+        # replace bos with pad to not condition healing on it
+        input_ids = torch.where(input_ids == bos_id, pad_id, input_ids)
+
+        tail_ids = input_ids[:, -1].tolist()
+        space_tok = tokenizer.tokenize(' ')[0]
+        # tail tokens are used for a prefix search, thus, whitespaces are replaced with
+        # their tokenization to enable search for tokens prefixed with a whitespace
+        tail_toks = (tokenizer.decode(t).replace(' ', space_tok) for t in tail_ids)
+
+        # sequential processing of ids batch because sequence_bias can't be batched
+        for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
+            batch_ids = input_ids[batch_idx]
+            if torch.all(batch_ids == pad_id).item():
+                continue # skip empty sequences (all pad ids)
+
+            # apply bias for alternatives (extensions) to the tail token
+            seq_bias = {(alt_tok,): 10.0 for alt_tok in vocab_trie.values(prefix=tail_tok)}
+            if not seq_bias:
+                continue # skip if there are no token alternatives to heal with
+
+            # slightly favor original token to limit aggressive healing e.g. 'http' -> 'https'
+            seq_bias[(tail_id,)] += 1.0
+            gen_cfg.update(sequence_bias=seq_bias)
+
+            trimmed_ids = batch_ids[: -1]
+            # if the prompt is a single (non-pad) token, regenerate from bos
+            if len(batch_ids[batch_ids != pad_id]) == 1:
+                trimmed_ids[-1] = bos_id
+
+            input_ids[batch_idx] = self.generate(trimmed_ids.unsqueeze(0), generation_config=gen_cfg)
+
+        return input_ids
 
     @torch.no_grad()
     def contrastive_search(
