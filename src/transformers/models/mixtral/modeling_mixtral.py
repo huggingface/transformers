@@ -100,13 +100,9 @@ def load_balancing_loss_func(
     if gate_logits is None or not isinstance(gate_logits, tuple):
         return 0
 
-    # batch_size, sequence_length = attention_mask.shape
-
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
         concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
-
-    # num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
