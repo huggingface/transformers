@@ -860,7 +860,8 @@ def pipeline(
                 " arguments might conflict, use only one.)"
             )
         if torch_dtype is str:
-            torch_dtype = getattr(torch_dtype, torch_dtype)
+            if hasattr(torch, torch_dtype):
+                torch_dtype = getattr(torch, torch_dtype)
         model_kwargs["torch_dtype"] = torch_dtype
 
     model_name = model if isinstance(model, str) else None
