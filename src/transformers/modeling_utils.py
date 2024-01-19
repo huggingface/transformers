@@ -500,7 +500,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
-def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
+def load_state_dict(checkpoint_file: Union[str, os.PathLike], is_quantized: bool = False):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
@@ -517,7 +517,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     try:
         if (
             is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0
-        ) or (is_fsdp_enabled() and not is_local_dist_rank_0()):
+        ) or (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -4258,7 +4258,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
                     continue
-                state_dict = load_state_dict(shard_file)
+                state_dict = load_state_dict(shard_file, is_quantized=is_quantized)
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
@@ -4271,7 +4271,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                 )
                 if low_cpu_mem_usage:
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
+                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
                                 if not (is_quantized):
