@@ -300,7 +300,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
     @require_torch
     @slow
-    def test_torch_large_fbank(self):
+    def test_torch_large_with_input_features(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
             model="hf-audio/wav2vec2-bert-CV16-en",
