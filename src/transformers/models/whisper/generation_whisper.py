@@ -1151,7 +1151,7 @@ class WhisperGenerationMixin:
             if compression_ratio_threshold is not None
             else getattr(generation_config, "compression_ratio_threshold", None)
         )
-        generation_config.logprob_threshold = (
+        generation_config.no_speech_threshold = (
             no_speech_threshold
             if no_speech_threshold is not None
             else getattr(generation_config, "no_speech_threshold", None)
