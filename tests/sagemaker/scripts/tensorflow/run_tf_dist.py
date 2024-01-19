@@ -6,10 +6,24 @@ import time
 
 import tensorflow as tf
 from datasets import load_dataset
+from packaging import version
 from tqdm import tqdm
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 from transformers.utils import is_sagemaker_dp_enabled
+
+
+try:
+    import tf_keras as keras
+except ImportError:
+    import keras
+
+    if version(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 if os.environ.get("SDP_ENABLED") or is_sagemaker_dp_enabled():

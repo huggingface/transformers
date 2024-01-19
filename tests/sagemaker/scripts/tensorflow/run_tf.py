@@ -5,8 +5,22 @@ import time
 
 import tensorflow as tf
 from datasets import load_dataset
+from packaging import version
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
+
+
+try:
+    import tf_keras as keras
+except ImportError:
+    import keras
+
+    if version(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 
 if __name__ == "__main__":
