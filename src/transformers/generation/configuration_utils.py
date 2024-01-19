@@ -908,7 +908,7 @@ class GenerationConfig(PushToHubMixin):
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
 
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+        return json.dumps(config_dict, indent=2, sort_keys=False) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
         """
