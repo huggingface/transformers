@@ -213,9 +213,7 @@ class TFCausalLanguageModelingLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100 affect the loss
             active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
@@ -238,9 +236,7 @@ class TFQuestionAnsweringLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         start_loss = loss_fn(labels["start_position"], logits[0])
         end_loss = loss_fn(labels["end_position"], logits[1])
 
@@ -259,9 +255,7 @@ class TFTokenClassificationLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         if tf.executing_eagerly():  # Data-dependent conditionals are forbidden in XLA
             if tf.math.reduce_any(labels == -1):
                 tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
@@ -314,9 +308,7 @@ class TFMultipleChoiceLoss:
     """Loss function suitable for multiple choice tasks."""
 
     def hf_compute_loss(self, labels, logits):
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         return loss_fn(labels, logits)
 
 
@@ -344,9 +336,7 @@ class TFNextSentencePredictionLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        loss_fn = keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=keras.losses.Reduction.NONE
-        )
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction=keras.losses.Reduction.NONE)
         if self.config.tf_legacy_loss:
             # make sure only labels that are not equal to -100
             # are taken into account as loss
