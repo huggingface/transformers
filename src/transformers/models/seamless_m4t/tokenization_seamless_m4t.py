@@ -120,7 +120,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Can be used to specify the list of languages that will be
             supported by the tokenizer.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
     """
