@@ -17,7 +17,6 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.generation import GenerationConfig
 
 class TokenHealingTestCase(unittest.TestCase):
     model_name_or_path = 'TheBloke/deepseek-llm-7B-base-GPTQ'
@@ -29,25 +28,22 @@ class TokenHealingTestCase(unittest.TestCase):
         revision='main',
         use_cache=True,
     )
-    generation_config = GenerationConfig(
-        max_new_tokens=1, pad_token_id=completion_model.config.pad_token_id,
-    )
 
     @parameterized.expand(
         [
             ('square_bracket', 'An example ["like this"] and another example [', 'An example ["like this"] and another example ["'),
             ('url', 'The link is <a href="http:', 'The link is <a href="http://'),
             ('aggressive_healing', 'The link is <a href="http', 'The link is <a href="http'),
-            ('trailing_whitespace', 'I read a book about ', 'I read a book about a'),
+            ('trailing_whitespace', 'I read a book about ', 'I read a book about'),
             ('nothing_to_heal', 'I read a book about', 'I read a book about'),
             ('single_token', 'I', 'I'),
             ('empty_prompt', '', ''),
         ]
     )
     def test_prompts(self, name, input, expected):
-        input_ids = self.tokenizer(input, return_tensors='pt').input_ids.cuda()
-        predicted = self.completion_model.generate(
-            inputs=input_ids, token_healing=True, generation_config=self.generation_config
-        )
-        predicted = self.tokenizer.batch_decode(predicted, skip_special_tokens=True)
-        self.assertListEqual(predicted, expected)
+        input_ids = self.tokenizer(input, return_tensors='pt').input_ids.to(self.completion_model.device)
+
+        healed_ids = self.completion_model.heal_tokens(input_ids)
+        predicted = self.tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(predicted, expected)
