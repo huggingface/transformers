@@ -366,7 +366,7 @@ class SwitchTransformersLayerFF(nn.Module):
             mlp_cls = SwitchTransformersDenseGatedActDense if config.is_gated_act else SwitchTransformersDenseActDense
             self.mlp = mlp_cls(config)
         else:
-            mlp_cls = SwitchTransformersSparseMLP if config.is_gated_act else SwitchTransformersSparseMLP
+            mlp_cls = SwitchTransformersDenseGatedActDense if config.is_gated_act else SwitchTransformersDenseActDense
             self.mlp = SwitchTransformersSparseMLP(config, mlp_cls)
 
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
