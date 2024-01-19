@@ -21,7 +21,12 @@ import re
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
+
+
+try:
+    from tf_keras.layers import Dense
+except (ImportError, ModuleNotFoundError):
+    from keras.layers import Dense
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_utils import TFPreTrainedModel, keras, unpack_inputs

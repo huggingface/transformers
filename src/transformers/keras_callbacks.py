@@ -8,7 +8,12 @@ import numpy as np
 import tensorflow as tf
 from huggingface_hub import Repository, create_repo
 from packaging.version import parse
-from tensorflow.keras.callbacks import Callback
+
+
+try:
+    from tf_keras.callbacks import Callback
+except (ImportError, ModuleNotFoundError):
+    from keras.callbacks import Callback
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
