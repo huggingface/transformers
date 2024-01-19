@@ -12,7 +12,7 @@ from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 try:
     import tf_keras as keras
-except ImportError:
+except (ModuleNotFoundError, ImportError):
     import keras
 
     if version(keras.__version__).major > 2:

@@ -81,7 +81,7 @@ if TYPE_CHECKING:
 try:
     import tf_keras as keras
     from tf_keras import backend as K
-except ImportError:
+except (ModuleNotFoundError, ImportError):
     import keras
     from keras import backend as K
 

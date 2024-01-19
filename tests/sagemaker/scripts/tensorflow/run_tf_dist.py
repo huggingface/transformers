@@ -15,7 +15,7 @@ from transformers.utils import is_sagemaker_dp_enabled
 
 try:
     import tf_keras as keras
-except ImportError:
+except (ModuleNotFoundError, ImportError):
     import keras
 
     if version(keras.__version__).major > 2:
