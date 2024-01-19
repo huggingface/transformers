@@ -363,10 +363,8 @@ class SwitchTransformersLayerFF(nn.Module):
 
         # Check if it is a sparse layer, if not then it is a dense layer
         if not self.is_sparse:
-            if config.is_gated_act:
-                self.mlp = SwitchTransformersDenseGatedActDense(config)
-            else:
-                self.mlp = SwitchTransformersDenseActDense(config)
+            mlp_cls = SwitchTransformersDenseGatedActDense if config.is_gated_act else SwitchTransformersDenseActDense
+            self.mlp = mlp_cls(config)
         else:
             if config.is_gated_act:
                 self.mlp = SwitchTransformersSparseMLP(config, SwitchTransformersDenseGatedActDense)
