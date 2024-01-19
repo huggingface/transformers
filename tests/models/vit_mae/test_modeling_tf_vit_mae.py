@@ -41,6 +41,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():

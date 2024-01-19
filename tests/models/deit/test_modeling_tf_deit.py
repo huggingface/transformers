@@ -40,6 +40,7 @@ if is_tf_available():
         TFDeiTForMaskedImageModeling,
         TFDeiTModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.deit.modeling_tf_deit import TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

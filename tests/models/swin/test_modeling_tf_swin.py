@@ -34,6 +34,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.swin.modeling_tf_swin import (
         TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFSwinForImageClassification,

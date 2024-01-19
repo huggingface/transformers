@@ -22,6 +22,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFCvtForImageClassification, TFCvtModel
+    from transformers.modeling_tf_utils import keras
     from transformers.models.cvt.modeling_tf_cvt import TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

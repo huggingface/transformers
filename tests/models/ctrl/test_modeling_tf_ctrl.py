@@ -29,6 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.ctrl.modeling_tf_ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCTRLForSequenceClassification,

@@ -46,6 +46,7 @@ if is_tf_available():
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TFSharedEmbeddings,
     )
+    from transformers.modeling_tf_utils import keras
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")

@@ -80,6 +80,7 @@ if is_tf_available():
         TFSampleDecoderOnlyOutput,
         TFSampleEncoderDecoderOutput,
     )
+    from transformers.modeling_tf_utils import keras
 
     tf.config.experimental.enable_tensor_float_32_execution(False)
 

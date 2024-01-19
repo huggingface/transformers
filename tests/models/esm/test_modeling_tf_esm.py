@@ -30,6 +30,7 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.esm.modeling_tf_esm import (
         TF_ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFEsmForMaskedLM,

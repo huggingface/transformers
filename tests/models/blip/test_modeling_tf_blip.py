@@ -44,6 +44,7 @@ if is_tf_available():
         TFBlipTextModel,
         TFBlipVisionModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.blip.modeling_tf_blip import TF_BLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

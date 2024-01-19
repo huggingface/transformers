@@ -39,6 +39,7 @@ if is_tf_available():
         TFData2VecVisionForSemanticSegmentation,
         TFData2VecVisionModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.data2vec.modeling_tf_data2vec_vision import (
         TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
     )

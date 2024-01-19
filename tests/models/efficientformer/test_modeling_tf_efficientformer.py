@@ -37,6 +37,7 @@ if is_tf_available():
         TFEfficientFormerForImageClassificationWithTeacher,
         TFEfficientFormerModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.efficientformer.modeling_tf_efficientformer import (
         TF_EFFICIENTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )

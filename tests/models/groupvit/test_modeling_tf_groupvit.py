@@ -46,6 +46,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFGroupViTModel, TFGroupViTTextModel, TFGroupViTVisionModel, TFSharedEmbeddings
+    from transformers.modeling_tf_utils import keras
     from transformers.models.groupvit.modeling_tf_groupvit import TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 

@@ -43,6 +43,7 @@ if is_tf_available():
         TFMinLengthLogitsProcessor,
         tf_top_k_top_p_filtering,
     )
+    from transformers.modeling_tf_utils import keras
 
 if is_tensorflow_text_available():
     import tensorflow_text as text

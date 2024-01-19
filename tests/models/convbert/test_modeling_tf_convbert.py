@@ -37,6 +37,7 @@ if is_tf_available():
         TFConvBertForTokenClassification,
         TFConvBertModel,
     )
+    from transformers.modeling_tf_utils import keras
 
 
 class TFConvBertModelTester:
