@@ -84,7 +84,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        dense_act_fn (`string`, *optional*, defaults to `"relu"`):
+        feed_forward_proj (`string`, *optional*, defaults to `"relu"`):
             Type of feed forward layer to be used. Should be one of `"relu"` or `"gated-gelu"`. SwitchTransformersv1.1
             uses the `"gated-gelu"` feed forward projection. Original SwitchTransformers uses `"relu"`.
         add_router_probs (`bool`, *optional*, defaults to `False`):
@@ -121,7 +121,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
         initializer_factor=1.0,
-        dense_act_fn="relu",
+        feed_forward_proj="relu",
         is_encoder_decoder=True,
         add_router_probs=False,
         use_cache=True,
@@ -176,7 +176,8 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
 
-        act_info = dense_act_fn.split("-")
+        self.feed_forward_proj = feed_forward_proj
+        act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
 
