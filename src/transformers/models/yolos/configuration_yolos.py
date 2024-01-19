@@ -75,7 +75,7 @@ class YolosConfig(PretrainedConfig):
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
         auxiliary_loss (`bool`, *optional*, defaults to `False`):
-            Whether auxiliary decoding losses (loss at each decoder layer) are to be used. Due to the incompatibility with auxiliary_loss, please refrain from altering this variable..
+            Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
