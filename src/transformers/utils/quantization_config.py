@@ -302,6 +302,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+        output["bnb_4bit_quant_storage"] = str(output["bnb_4bit_quant_storage"]).split(".")[1]
 
         return output
 
