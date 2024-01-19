@@ -130,7 +130,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             [8774, 32099, 5, 1]
             ```
             Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
+        add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
 
@@ -250,10 +250,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
+        text = text.replace(SPIECE_UNDERLINE, " ")
         if kwargs.pop("add_prefix_space", self.add_prefix_space):
             text = SPIECE_UNDERLINE + text
 
-        tokens = super().tokenize(text.replace(SPIECE_UNDERLINE, " "), add_special_tokens=add_special_tokens, **kwargs)
+        tokens = super().tokenize(text, add_special_tokens=add_special_tokens, **kwargs)
 
         if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
