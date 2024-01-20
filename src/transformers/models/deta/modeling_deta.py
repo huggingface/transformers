@@ -1159,7 +1159,6 @@ class DetaEncoder(DetaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoder with DeformableDetr->Deta,Deformable DETR->DETA
 class DetaDecoder(DetaPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetaDecoderLayer`].
