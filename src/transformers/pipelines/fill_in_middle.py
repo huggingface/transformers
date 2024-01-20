@@ -294,15 +294,15 @@ class FIMPipeline(Pipeline):
         generated_bs = generated_sequence.shape[0]
 
         # Reshape the generated sequence depending on the framework
-        if self.framework == "pt":
-            generated_sequence = generated_sequence.reshape(
-                batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]
-            )
-        elif self.framework == "tf":
-            generated_sequence = tf.reshape(
-                generated_sequence,
-                (batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]),
-            )
+        # if self.framework == "pt":
+        #     generated_sequence = generated_sequence.reshape(
+        #         batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]
+        #     )
+        # elif self.framework == "tf":
+        #     generated_sequence = tf.reshape(
+        #         generated_sequence,
+        #         (batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]),
+        #     )
 
         return {
             "generated_sequence": generated_sequence,
@@ -360,10 +360,7 @@ class FIMPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         clean_up_tokenization_spaces=True,
     ):
-        print(model_outputs["generated_sequence"])
-        generated_sequence = model_outputs["generated_sequence"][0].numpy().tolist()
-        print(self.tokenizer.batch_decode(generated_sequence))
-
+        generated_sequence = model_outputs["generated_sequence"]
         input_ids = model_outputs["input_ids"]
         prompt = model_outputs["prompt_text"]
         infill_token = model_outputs["infill_token"]
@@ -374,26 +371,16 @@ class FIMPipeline(Pipeline):
             if return_type == ReturnType.TENSORS:
                 # If the return type is Tensors, just return the model output, as-is
                 record = {"generated_token_ids": sequence}
+
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode the text
-                filled_text = self.tokenizer.batch_decode(
+                filled_text = self.tokenizer.decode(
                     sequence[input_ids.shape[1] :],
                     skip_special_tokens=True,
+                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
-                # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used
-                if input_ids is None:
-                    prompt_length = 0
-                else:
-                    prompt_length = len(
-                        self.tokenizer.decode(
-                            input_ids[0],
-                            skip_special_tokens=True,
-                        )
-                    )
-
                 # If full text is to be returned, replace the infill token with the generated infilled text
-                print(filled_text)
                 all_text = filled_text
                 if return_type == ReturnType.FULL_TEXT:
                     all_text = prompt.replace(infill_token, all_text)
