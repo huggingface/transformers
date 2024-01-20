@@ -407,7 +407,7 @@ class IdeficsProcessor(ProcessorMixin):
                 if return_tensors == "pt":
                     padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
                 elif return_tensors == "tf":
-                    padded_image_tensor = tf.zeros(max_num_images, *self.default_image_dims)
+                    padded_image_tensor = tf.zeros((max_num_images, *self.default_image_dims))
 
             output_images.append(padded_image_tensor)
             if return_tensors == "pt":
