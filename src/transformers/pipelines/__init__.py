@@ -73,8 +73,8 @@ from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
-from .fill_mask import FillMaskPipeline
 from .fill_in_middle import FIMPipeline
+from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .image_to_image import ImageToImagePipeline
@@ -189,18 +189,14 @@ SUPPORTED_TASKS = {
     "automatic-speech-recognition": {
         "impl": AutomaticSpeechRecognitionPipeline,
         "tf": (),
-        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq)
-        if is_torch_available()
-        else (),
+        "pt": (AutoModelForCTC, AutoModelForSpeechSeq2Seq) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
         "type": "multimodal",
     },
     "text-to-audio": {
         "impl": TextToAudioPipeline,
         "tf": (),
-        "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram)
-        if is_torch_available()
-        else (),
+        "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
         "default": {"model": {"pt": ("suno/bark-small", "645cfba")}},
         "type": "text",
     },
@@ -323,15 +319,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {
-                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}
-            },
-            ("en", "de"): {
-                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}
-            },
-            ("en", "ro"): {
-                "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}
-            },
+            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         },
         "type": "text",
     },
@@ -339,9 +329,7 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {
-            "model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}
-        },
+        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
         "type": "text",
     },
     "text-generation": {
@@ -370,9 +358,7 @@ SUPPORTED_TASKS = {
     "zero-shot-image-classification": {
         "impl": ZeroShotImageClassificationPipeline,
         "tf": (TFAutoModelForZeroShotImageClassification,) if is_tf_available() else (),
-        "pt": (AutoModelForZeroShotImageClassification,)
-        if is_torch_available()
-        else (),
+        "pt": (AutoModelForZeroShotImageClassification,) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("openai/clip-vit-base-patch32", "f4881ba"),
@@ -394,12 +380,8 @@ SUPPORTED_TASKS = {
     },
     "conversational": {
         "impl": ConversationalPipeline,
-        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM)
-        if is_tf_available()
-        else (),
-        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM)
-        if is_torch_available()
-        else (),
+        "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
+        "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {
             "model": {
                 "pt": ("microsoft/DialoGPT-medium", "8bada3b"),
@@ -423,9 +405,7 @@ SUPPORTED_TASKS = {
     "image-segmentation": {
         "impl": ImageSegmentationPipeline,
         "tf": (),
-        "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation)
-        if is_torch_available()
-        else (),
+        "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "multimodal",
     },
@@ -466,9 +446,7 @@ SUPPORTED_TASKS = {
         "impl": VideoClassificationPipeline,
         "tf": (),
         "pt": (AutoModelForVideoClassification,) if is_torch_available() else (),
-        "default": {
-            "model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}
-        },
+        "default": {"model": {"pt": ("MCG-NJU/videomae-base-finetuned-kinetics", "4800870")}},
         "type": "video",
     },
     "mask-generation": {
@@ -510,13 +488,9 @@ for task, values in SUPPORTED_TASKS.items():
         NO_TOKENIZER_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
     elif values["type"] != "multimodal":
-        raise ValueError(
-            f"SUPPORTED_TASK {task} contains invalid type {values['type']}"
-        )
+        raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
-PIPELINE_REGISTRY = PipelineRegistry(
-    supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES
-)
+PIPELINE_REGISTRY = PipelineRegistry(supported_tasks=SUPPORTED_TASKS, task_aliases=TASK_ALIASES)
 
 
 def get_supported_tasks() -> List[str]:
@@ -534,29 +508,21 @@ def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> st
             FutureWarning,
         )
         if token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-            )
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     if is_offline_mode():
-        raise RuntimeError(
-            "You cannot infer task automatically within `pipeline` when using offline mode"
-        )
+        raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
         info = model_info(model, token=token)
     except Exception as e:
-        raise RuntimeError(
-            f"Instantiating a pipeline without a task set raised an error: {e}"
-        )
+        raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if not info.pipeline_tag:
         raise RuntimeError(
             f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
     if getattr(info, "library_name", "transformers") != "transformers":
-        raise RuntimeError(
-            f"This model is meant to be used with {info.library_name} not with transformers"
-        )
+        raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
     task = info.pipeline_tag
     return task
 
@@ -612,9 +578,7 @@ def clean_custom_task(task_info):
     import transformers
 
     if "impl" not in task_info:
-        raise RuntimeError(
-            "This model introduces a custom pipeline without specifying its implementation."
-        )
+        raise RuntimeError("This model introduces a custom pipeline without specifying its implementation.")
     pt_class_names = task_info.get("pt", ())
     if isinstance(pt_class_names, str):
         pt_class_names = [pt_class_names]
@@ -630,9 +594,7 @@ def pipeline(
     task: str = None,
     model: Optional[Union[str, "PreTrainedModel", "TFPreTrainedModel"]] = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[
-        Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]
-    ] = None,
+    tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
     framework: Optional[str] = None,
@@ -800,9 +762,7 @@ def pipeline(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-            )
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     code_revision = kwargs.pop("code_revision", None)
@@ -844,10 +804,7 @@ def pipeline(
         elif config is None and isinstance(model, str):
             pretrained_model_name_or_path = model
 
-        if (
-            not isinstance(config, PretrainedConfig)
-            and pretrained_model_name_or_path is not None
-        ):
+        if not isinstance(config, PretrainedConfig) and pretrained_model_name_or_path is not None:
             # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
             resolved_config_file = cached_file(
                 pretrained_model_name_or_path,
@@ -856,9 +813,7 @@ def pipeline(
                 _raise_exceptions_for_connection_errors=False,
                 **hub_kwargs,
             )
-            hub_kwargs["_commit_hash"] = extract_commit_hash(
-                resolved_config_file, commit_hash
-            )
+            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
         else:
             hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
 
@@ -877,9 +832,7 @@ def pipeline(
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
             # `find_adapter_config_file` doesn't accept `trust_remote_code`
-            _hub_kwargs = {
-                k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"
-            }
+            _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
             maybe_adapter_path = find_adapter_config_file(
                 model,
                 token=hub_kwargs["token"],
@@ -947,9 +900,7 @@ def pipeline(
     # Use default model/config/tokenizer for the task if no model is provided
     if model is None:
         # At that point framework might still be undetermined
-        model, default_revision = get_default_model_and_revision(
-            targeted_task, framework, task_options
-        )
+        model, default_revision = get_default_model_and_revision(targeted_task, framework, task_options)
         revision = revision if revision is not None else default_revision
         logger.warning(
             f"No model was supplied, defaulted to {model} and revision"
@@ -957,9 +908,7 @@ def pipeline(
             "Using a pipeline without specifying a model name and revision in production is not recommended."
         )
         if config is None and isinstance(model, str):
-            config = AutoConfig.from_pretrained(
-                model, _from_pipeline=task, **hub_kwargs, **model_kwargs
-            )
+            config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
             hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
@@ -1000,16 +949,9 @@ def pipeline(
 
     model_config = model.config
     hub_kwargs["_commit_hash"] = model.config._commit_hash
-    load_tokenizer = (
-        type(model_config) in TOKENIZER_MAPPING
-        or model_config.tokenizer_class is not None
-    )
-    load_feature_extractor = (
-        type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
-    )
-    load_image_processor = (
-        type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
-    )
+    load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
+    load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+    load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -1109,9 +1051,7 @@ def pipeline(
                 image_processor = config
             # Backward compatibility, as `feature_extractor` used to be the name
             # for `ImageProcessor`.
-            elif feature_extractor is not None and isinstance(
-                feature_extractor, BaseImageProcessor
-            ):
+            elif feature_extractor is not None and isinstance(feature_extractor, BaseImageProcessor):
                 image_processor = feature_extractor
             else:
                 # Impossible to guess what is the right image_processor here
@@ -1164,26 +1104,18 @@ def pipeline(
                             BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY,
                             "*",
                         )
-                        alphabet_filename = (
-                            BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
-                        )
+                        alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
                         allow_patterns = [language_model_glob, alphabet_filename]
-                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(
-                            model_name, allow_patterns=allow_patterns
-                        )
+                        decoder = BeamSearchDecoderCTC.load_from_hf_hub(model_name, allow_patterns=allow_patterns)
 
                     kwargs["decoder"] = decoder
                 except ImportError as e:
-                    logger.warning(
-                        f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}"
-                    )
+                    logger.warning(f"Could not load the `decoder` for {model_name}. Defaulting to raw CTC. Error: {e}")
                     if not is_kenlm_available():
                         logger.warning("Try to install `kenlm`: `pip install kenlm")
 
                     if not is_pyctcdecode_available():
-                        logger.warning(
-                            "Try to install `pyctcdecode`: `pip install pyctcdecode"
-                        )
+                        logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

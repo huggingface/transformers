@@ -4,12 +4,12 @@ import warnings
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
+
 # Ensure availability of the required models
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 if is_tf_available():
-    import tensorflow as tf
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
@@ -66,14 +66,10 @@ class FIMPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         # Check if the provided model is among the supported ones
         if self.model.name_or_path not in SUPPORTED_MODELS:
-            raise ValueError(
-                f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task."
-            )
+            raise ValueError(f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task.")
 
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -86,9 +82,7 @@ class FIMPipeline(Pipeline):
 
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
-                preprocess_params, forward_params, _ = self._sanitize_parameters(
-                    prefix=prefix, **self._forward_params
-                )
+                preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
                 self._preprocess_params = {
                     **self._preprocess_params,
                     **preprocess_params,
@@ -100,9 +94,7 @@ class FIMPipeline(Pipeline):
         Ensures the prompt text has an infill token in it.
         """
         if infill_token not in prompt_text:
-            raise ValueError(
-                f"Infill token {self.tokenizer.decode(infill_token_id)} not in the prompt"
-            )
+            raise ValueError(f"Infill token {self.tokenizer.decode(infill_token_id)} not in the prompt")
 
     def extract_prefix_suffix(self, input_text, infill_token):
         """
@@ -154,33 +146,21 @@ class FIMPipeline(Pipeline):
 
         if return_full_text is not None and return_type is None:
             if return_text is not None:
-                raise ValueError(
-                    "`return_text` is mutually exclusive with `return_full_text`"
-                )
+                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
             if return_tensors is not None:
-                raise ValueError(
-                    "`return_full_text` is mutually exclusive with `return_tensors`"
-                )
-            return_type = (
-                ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
-            )
+                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
+            return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
         if return_tensors is not None and return_type is None:
             if return_text is not None:
-                raise ValueError(
-                    "`return_text` is mutually exclusive with `return_tensors`"
-                )
+                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
             return_type = ReturnType.TENSORS
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
-            postprocess_params[
-                "clean_up_tokenization_spaces"
-            ] = clean_up_tokenization_spaces
+            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
 
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(
-                stop_sequence, add_special_tokens=False
-            )
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
             if len(stop_sequence_ids) > 1:
                 warnings.warn(
                     "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
@@ -206,14 +186,10 @@ class FIMPipeline(Pipeline):
         prefix, suffix = self.extract_prefix_suffix(prompt_text, infill_token)
 
         # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format based on the model architecture
-        # Currently, codellama model variants support using only the "<FILL_ME>" token
-        if not "codellama" in self.model.name_or_path.lower():
+        # Currently, codellama model variants support using only the "<FILL_ME>" token, so we won't overcomplicate things
+        if "codellama" not in self.model.name_or_path.lower():
             prompt_text = (
-                self.DEFAULT_PREFIX_TOKEN
-                + prefix
-                + self.DEFAULT_SUFFIX_TOKEN
-                + suffix
-                + self.DEFAULT_MIDDLE_TOKEN
+                self.DEFAULT_PREFIX_TOKEN + prefix + self.DEFAULT_SUFFIX_TOKEN + suffix + self.DEFAULT_MIDDLE_TOKEN
             )
 
         inputs = self.tokenizer(
@@ -230,10 +206,7 @@ class FIMPipeline(Pipeline):
             if "max_new_tokens" in generate_kwargs:
                 new_tokens = generate_kwargs["max_new_tokens"]
             else:
-                new_tokens = (
-                    generate_kwargs.get("max_length", self.model.config.max_length)
-                    - cur_len
-                )
+                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -246,9 +219,7 @@ class FIMPipeline(Pipeline):
 
                 inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
                 if "attention_mask" in inputs:
-                    inputs["attention_mask"] = inputs["attention_mask"][
-                        :, -keep_length:
-                    ]
+                    inputs["attention_mask"] = inputs["attention_mask"][:, -keep_length:]
 
         return inputs
 
@@ -275,9 +246,7 @@ class FIMPipeline(Pipeline):
                 and generate_kwargs["generation_config"].max_new_tokens is not None
             )
             if not has_max_new_tokens:
-                generate_kwargs["max_length"] = (
-                    generate_kwargs.get("max_length") or self.model.config.max_length
-                )
+                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.model.config.max_length
                 generate_kwargs["max_length"] += prefix_len
             has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
                 "generation_config" in generate_kwargs
@@ -291,18 +260,6 @@ class FIMPipeline(Pipeline):
             attention_mask=attention_mask,
             **generate_kwargs,
         )
-        generated_bs = generated_sequence.shape[0]
-
-        # Reshape the generated sequence depending on the framework
-        # if self.framework == "pt":
-        #     generated_sequence = generated_sequence.reshape(
-        #         batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]
-        #     )
-        # elif self.framework == "tf":
-        #     generated_sequence = tf.reshape(
-        #         generated_sequence,
-        #         (batch_size, generated_bs // batch_size, *generated_sequence.shape[1:]),
-        #     )
 
         return {
             "generated_sequence": generated_sequence,
