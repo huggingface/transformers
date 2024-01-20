@@ -596,7 +596,7 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = tf.transpose(hidden_states, perm=[0, 3, 1, 2])
-        if all_hidden_states:  # TODO: needed this to pass test_compile_tf_model
+        if all_hidden_states:
             all_hidden_states = tuple(tf.transpose(s, perm=[0, 3, 1, 2]) for s in all_hidden_states)
 
         if not return_dict:
