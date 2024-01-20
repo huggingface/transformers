@@ -1238,7 +1238,6 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
                 [
                     TFAdaptiveAvgPool2D(output_shape=pool_scale),
                     TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
-
                 ]
             )
 
