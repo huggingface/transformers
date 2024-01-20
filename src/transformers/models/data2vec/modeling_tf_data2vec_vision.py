@@ -1386,7 +1386,7 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
             self.convs = convs
         if self.concat_input:
             self.conv_cat = TFData2VecVisionConvModule(
-                 out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
+                out_channels=self.channels, kernel_size=kernel_size, padding="same", name="conv_cat"
             )
 
         self.classifier = tf.keras.layers.Conv2D(config.num_labels, kernel_size=1, name="classifier")
