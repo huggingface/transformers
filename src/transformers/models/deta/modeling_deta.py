@@ -1719,6 +1719,9 @@ class DetaModel(DetaPreTrainedModel):
             init_reference_points = reference_points
             pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_logits)))
             query_embed, target = torch.split(pos_trans_out, num_channels, dim=2)
+
+            topk_feats = torch.stack([object_query_embedding[b][topk_proposals[b]] for b in range(batch_size)]).detach()
+            target = target + self.pix_trans_norm(self.pix_trans(topk_feats))
         else:
             query_embed, target = torch.split(query_embeds, num_channels, dim=1)
             query_embed = query_embed.unsqueeze(0).expand(batch_size, -1, -1)
