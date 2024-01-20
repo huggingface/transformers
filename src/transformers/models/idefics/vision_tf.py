@@ -78,6 +78,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             kernel_size=self.patch_size,
             strides=self.patch_size,
             use_bias=False,
+            padding="valid",
             data_format="channels_last",
             name="patch_embedding",
         )
@@ -143,12 +144,14 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
                 )
 
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        patch_embeds = flatten(patch_embeds, 1, 2)
+        # flatten from 2D to a 1D
+        patch_embeds = tf.reshape(tensor=patch_embeds, shape=(batch_size, self.num_patches, -1))
 
         class_embeds = tf.broadcast_to(
             self.class_embedding[tf.newaxis, tf.newaxis, :], [batch_size, 1, self.embed_dim]
         )
         embeddings = tf.concat([class_embeds, patch_embeds], axis=1)
+
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
@@ -163,7 +166,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
-                self.patch_embedding.build(None)
+                self.patch_embedding.build([None, None, None, self.config.num_channels])
         if getattr(self, "position_embedding", None) is not None:
             with tf.name_scope(self.position_embedding.name):
                 self.position_embedding.build(None)
@@ -277,17 +280,16 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "k_proj", None) is not None:
             with tf.name_scope(self.k_proj.name):
-                self.k_proj.build(None)
+                self.k_proj.build((self.embed_dim, self.embed_dim))
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
-                self.v_proj.build(None)
+                self.v_proj.build((self.embed_dim, self.embed_dim))
         if getattr(self, "q_proj", None) is not None:
             with tf.name_scope(self.q_proj.name):
-                self.q_proj.build(None)
+                self.q_proj.build((self.embed_dim, self.embed_dim))
         if getattr(self, "out_proj", None) is not None:
             with tf.name_scope(self.out_proj.name):
-                self.out_proj.build(None)
-
+                self.out_proj.build((self.embed_dim, self.embed_dim))
 
 class TFIdeficsVisionMLP(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -308,11 +310,10 @@ class TFIdeficsVisionMLP(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "fc1", None) is not None:
             with tf.name_scope(self.fc1.name):
-                self.fc1.build(None)
+                self.fc1.build(self.config.hidden_size)
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
-                self.fc2.build(None)
-
+                self.fc2.build(self.config.intermediate_size)
 
 class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: IdeficsVisionConfig, **kwargs):
@@ -368,10 +369,10 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
         self.built = True
         if getattr(self, "layer_norm1", None) is not None:
             with tf.name_scope(self.layer_norm1.name):
-                self.layer_norm1.build(None)
+                self.layer_norm1.build([None, None, self.embed_dim])
         if getattr(self, "layer_norm2", None) is not None:
             with tf.name_scope(self.layer_norm2.name):
-                self.layer_norm2.build(None)
+                self.layer_norm2.build([None, None, self.embed_dim])
 
 
 class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
@@ -555,10 +556,10 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
                 self.embeddings.build(None)
         if getattr(self, "pre_layrnorm", None) is not None:
             with tf.name_scope(self.pre_layrnorm.name):
-                self.pre_layrnorm.build((None, None, self.embed_dim))
+                self.pre_layrnorm.build([None, None, self.embed_dim])
         if getattr(self, "encoder", None) is not None:
             with tf.name_scope(self.encoder.name):
                 self.encoder.build(None)
         if getattr(self, "post_layernorm", None) is not None:
             with tf.name_scope(self.post_layernorm.name):
-                self.post_layernorm.build((None, None, self.embed_dim))
+                self.post_layernorm.build([None, self.embed_dim])
