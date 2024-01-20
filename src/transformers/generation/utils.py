@@ -1764,6 +1764,17 @@ class GenerationMixin:
             `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
         """
 
+        from pygtrie import CharTrie
+
+        Generates sequences of token ids for models with a language modeling head.
+
+        Parameters:
+            input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
+
+        Return:
+            `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
+        """
+
         tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
         vocab_trie = CharTrie(tokenizer.get_vocab())
