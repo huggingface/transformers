@@ -73,13 +73,9 @@ class TFSwiftFormerPatchEmbeddingSequential(tf.keras.layers.Layer):
 
         self.zero_padding = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
         self.conv1 = tf.keras.layers.Conv2D(self.out_chs // 2, kernel_size=3, strides=2, name="0")
-        self.batch_norm1 = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="1"
-        )  # FIXME: is this the equivalent momentum?
+        self.batch_norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="1")
         self.conv2 = tf.keras.layers.Conv2D(self.out_chs, kernel_size=3, strides=2, name="3")
-        self.batch_norm2 = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="4"
-        )  # FIXME: is this the equivalent momentum?
+        self.batch_norm2 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="4")
         self.config = config
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -194,9 +190,7 @@ class TFSwiftFormerEmbeddings(tf.keras.layers.Layer):
 
         self.pad = tf.keras.layers.ZeroPadding2D(padding=padding)
         self.proj = tf.keras.layers.Conv2D(self.embed_dim, kernel_size=patch_size, strides=stride, name="proj")
-        self.norm = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
-        )  # FIXME: is this the correct momentum?
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.pad(x)
@@ -232,9 +226,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         self.dim = dim
         self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
         self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
-        )  # FIXME
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
         self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
         self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
@@ -293,9 +285,7 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         hidden_features = int(in_features * config.mlp_ratio)
-        self.norm1 = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="norm1"
-        )  # FIXME: is this the correct momentum?
+        self.norm1 = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm1")
         self.fc1 = tf.keras.layers.Conv2D(hidden_features, 1, name="fc1")
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer
@@ -409,9 +399,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
 
         self.pad = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
         self.depth_wise_conv = tf.keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
-        )  # FIXME: momentum
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
         self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
         self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
@@ -795,9 +783,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
-        self.norm = tf.keras.layers.BatchNormalization(
-            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
-        )  # FIXME
+        self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
         self.head = (
             tf.keras.layers.Dense(self.num_labels, name="head")
             if self.num_labels > 0
