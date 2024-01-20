@@ -1226,30 +1226,19 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(
-        self,
-        pool_scales: Tuple[int, ...],
-        in_channels: int,
-        out_channels: int,
-        **kwargs,
-    ) -> None:
+    def __init__(self, pool_scales: Tuple[int, ...], channels: int, **kwargs) -> None:
         super().__init__(**kwargs)
         self.pool_scales = pool_scales
-        self.in_channels = in_channels
-        self.out_channels = out_channels
+        self.channels = channels
 
         self.layer_list = []
         for idx, pool_scale in enumerate(pool_scales):
             pool_scale = pool_scale if isinstance(pool_scale, collections.abc.Iterable) else (pool_scale, pool_scale)
             self.layer_list.append(
                 [
-                    TFAdaptiveAvgPool2D(output_dims=pool_scale),
-                    TFData2VecVisionConvModule(
-                        in_channels=in_channels,
-                        out_channels=self.out_channels,
-                        kernel_size=1,
-                        name=f"{idx}.1",
-                    ),
+                    TFAdaptiveAvgPool2D(output_shape=pool_scale),
+                    TFData2VecVisionConvModule(out_channels=self.channels, kernel_size=1, name=f"{idx}.1"),
+
                 ]
             )
 
@@ -1265,12 +1254,6 @@ class TFData2VecVisionPyramidPoolingModule(tf.keras.layers.Layer):
             upsampled_ppm_out = tf.image.resize(ppm_out, size=shape_list(inputs)[1:-1], method="bilinear")
             ppm_outs.append(upsampled_ppm_out)
         return ppm_outs
-
-    def build(self, input_shape=None):
-        for layer in self.layer_list:
-            for layer_module in layer:
-                with tf.name_scope(layer_module.name):
-                    layer_module.build(None)
 
 
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitUperHead with Beit->Data2VecVision
