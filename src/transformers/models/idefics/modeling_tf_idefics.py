@@ -1483,7 +1483,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
     def __init__(self, config: IdeficsConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.model = TFIdeficsMainLayer(config, name="idefics")
+        self.model = TFIdeficsMainLayer(config, name="model")
 
     def call(
         self,
@@ -1536,7 +1536,7 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
     config_class = IdeficsConfig
     def __init__(self, config, vision_model=None, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = TFIdeficsMainLayer(config)
+        self.model = TFIdeficsMainLayer(config, name="model")
 
         self.lm_head = TFIdeficsDecoupledLinear(
             config.hidden_size,
