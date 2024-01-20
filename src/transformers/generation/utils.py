@@ -1752,6 +1752,17 @@ class GenerationMixin:
 
     @torch.no_grad()
     def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
+        r"""
+
+        Generates sequences of token ids for models with a language modeling head.
+
+        Parameters:
+            input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
+
+        Return:
+            `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
+        """
+
         from pygtrie import CharTrie
 
         from ..models.auto import AutoTokenizer
@@ -1762,9 +1773,8 @@ class GenerationMixin:
         gen_cfg = GenerationConfig(max_new_tokens=1, pad_token_id=pad_id)
 
         # assumption: leading/trailing whitespace is not meaningful, so the prompts are
-        # stripped before re-encoding to desensitize generation to whitespace artefacts
-        prompts = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
-        prompts = [p.strip() for p in prompts]
+        # stripped before re-tokenizing to desensitize generation to whitespace artefacts
+        prompts = [p.strip() for p in tokenizer.batch_decode(input_ids, skip_special_tokens=True)]
         input_ids = tokenizer(
             prompts,
             return_tensors="pt",
@@ -1777,10 +1787,9 @@ class GenerationMixin:
         tail_ids = input_ids[:, -1].tolist()
         space_tok = tokenizer.tokenize(" ")[0]
         # tail tokens are used for a prefix search, thus, whitespaces are replaced with
-        # their tokenization to enable search for tokens prefixed with a whitespace
+        # their tokenization (e.g. 'Ġ') to enable search for tokens prefixed with a whitespace
         tail_toks = (tokenizer.decode(t).replace(" ", space_tok) for t in tail_ids)
 
-        # sequential processing of ids batch because sequence_bias can't be batched
         for batch_idx, (tail_id, tail_tok) in enumerate(zip(tail_ids, tail_toks)):
             batch_ids = input_ids[batch_idx]
             if torch.all(batch_ids == pad_id).item():
@@ -1788,7 +1797,7 @@ class GenerationMixin:
 
             # apply bias for alternatives (extensions) to the tail token
             seq_bias = {(alt_tok,): 10.0 for alt_tok in vocab_trie.values(prefix=tail_tok)}
-            if not seq_bias:
+            if len(seq_bias) == 1:
                 continue  # skip if there are no token alternatives to heal with
 
             # slightly favor original token to limit aggressive healing e.g. 'http' -> 'https'
