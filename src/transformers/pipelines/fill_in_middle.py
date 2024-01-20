@@ -65,10 +65,9 @@ class FIMPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Check if the provided model is among the supported ones
-        model_name = kwargs.get("model", None)
-        if model_name not in self.SUPPORTED_MODELS:
+        if self.model.name_or_path not in SUPPORTED_MODELS:
             raise ValueError(
-                f"The model '{model_name}' is not supported for the Fill-in-Middle task."
+                f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task."
             )
 
         self.check_model_type(
@@ -96,13 +95,13 @@ class FIMPipeline(Pipeline):
                 }
                 self._forward_params = {**self._forward_params, **forward_params}
 
-    def ensure_infill_token(self, input_ids, infill_token_id):
+    def ensure_infill_token(self, prompt_text, infill_token):
         """
-        Ensures that the input has an infill token in it. If not, throw a value error.
+        Ensures the prompt text has an infill token in it.
         """
-        if infill_token_id not in input_ids["input_ids"]:
+        if infill_token not in prompt_text:
             raise ValueError(
-                f"The infill token '{self.tokenizer.decode(infill_token_id)}' was not found in the input. Please add it to the input."
+                f"Infill token {self.tokenizer.decode(infill_token_id)} not in the prompt"
             )
 
     def extract_prefix_suffix(self, input_text, infill_token):
@@ -200,31 +199,31 @@ class FIMPipeline(Pipeline):
         add_special_tokens=False,
         **generate_kwargs,
     ):
+        # Ensure the prompt_text contains the infill token
+        self.ensure_infill_token(prompt_text, infill_token)
+
         # Extract prefix and suffix
         prefix, suffix = self.extract_prefix_suffix(prompt_text, infill_token)
 
-        # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format
-        prompt_text = (
-            self.DEFAULT_PREFIX_TOKEN
-            + prefix
-            + self.DEFAULT_SUFFIX_TOKEN
-            + suffix
-            + self.DEFAULT_MIDDLE_TOKEN
-        )
+        # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format based on the model architecture
+        # Currently, codellama model variants support using only the "<FILL_ME>" token
+        if not "codellama" in self.model.name_or_path.lower():
+            prompt_text = (
+                self.DEFAULT_PREFIX_TOKEN
+                + prefix
+                + self.DEFAULT_SUFFIX_TOKEN
+                + suffix
+                + self.DEFAULT_MIDDLE_TOKEN
+            )
 
         inputs = self.tokenizer(
             prefix + prompt_text,
             padding=False,
             add_special_tokens=add_special_tokens,
-            return_tensors=self.framework,
+            return_tensors="pt",
         )
         inputs["prompt_text"] = prompt_text
         inputs["infill_token"] = infill_token
-
-        # Ensure that infill token is in the input
-        self.ensure_infill_token(
-            inputs, self.tokenizer(generate_kwargs["infill_token"])
-        )
 
         if handle_long_generation == "hole":
             cur_len = inputs["input_ids"].shape[-1]
@@ -361,7 +360,10 @@ class FIMPipeline(Pipeline):
         return_type=ReturnType.FULL_TEXT,
         clean_up_tokenization_spaces=True,
     ):
+        print(model_outputs["generated_sequence"])
         generated_sequence = model_outputs["generated_sequence"][0].numpy().tolist()
+        print(self.tokenizer.batch_decode(generated_sequence))
+
         input_ids = model_outputs["input_ids"]
         prompt = model_outputs["prompt_text"]
         infill_token = model_outputs["infill_token"]
@@ -375,7 +377,7 @@ class FIMPipeline(Pipeline):
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode the text
                 filled_text = self.tokenizer.batch_decode(
-                    sequence[:, input_ids.shape[1] :],
+                    sequence[input_ids.shape[1] :],
                     skip_special_tokens=True,
                 )
 
@@ -391,9 +393,10 @@ class FIMPipeline(Pipeline):
                     )
 
                 # If full text is to be returned, replace the infill token with the generated infilled text
+                print(filled_text)
                 all_text = filled_text
                 if return_type == ReturnType.FULL_TEXT:
-                    all_text = prompt.replace(infill_token, filled_text)
+                    all_text = prompt.replace(infill_token, all_text)
 
                 record = {"generated_text": all_text}
             records.append(record)
