@@ -88,22 +88,34 @@ LAYER_NAME_MAPPING = {
 def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
+    num_kv_heads = config.num_key_value_heads
+    head_dim = config.head_dim
 
     # permute for sliced rotary
     def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
         return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
-    model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")
+    model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
 
     state_dict = {}
     for k,v in model_state_dict["model_state_dict"].items():
-        if "qkv_proj" in k:
-            if config.num_key_value_heads != 1:
+        if "qkv_proj" in k:            
+            if num_kv_heads == 1:
+                v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
+                q_proj = v[:num_attn_heads, ...]
+                k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
+                v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
+
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(0,1).contiguous())
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj)
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
+            else:
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
                 state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0), dim2=q_proj.shape[0])
                 state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[0])
-                state_dict[k.replace("qkv_proj", "v_proj")] = permute(v_proj.transpose(1, 0), dim2=v_proj.shape[0])
+
+        
         if k in LAYER_NAME_MAPPING:
             state_dict[LAYER_NAME_MAPPING[k]] = v
         else:
@@ -149,8 +161,8 @@ def main():
     write_model(
         config = config,
         input_base_path=args.input_dir,
+        save_path=args.output_dir,
         safe_serialization=args.safe_serialization,
-        save_path=args.output_dir
     )
     write_tokenizer(
         spm_path
