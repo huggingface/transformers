@@ -224,23 +224,18 @@ class FlaxGoldenGateAttention(nn.Module):
 
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        
-        dense = lambda num_heads: partial(
-            nn.Dense,
-            num_heads * self.head_dim,
-            use_bias=config.attention_bias,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
-        )
 
-        self.q_proj, self.k_proj, self.v_proj = dense(self.num_heads), dense(self.num_key_value_heads), dense(self.num_key_value_heads)
-        self.o_proj = dense()
+        kernel = jax.nn.initializers.normal(self.config.initializer_range)
+        self.q_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
+        self.k_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
+        self.v_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
+        self.o_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxGoldenGateRotaryEmbedding(config, dtype=self.dtype)
 
-    def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+    def _split_heads(self, hidden_states, num_heads):
+        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
@@ -290,9 +285,9 @@ class FlaxGoldenGateAttention(nn.Module):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        query = self._split_heads(query, num_heads = self.num_heads)
+        key = self._split_heads(key, num_heads = self.num_key_value_heads)
+        value = self._split_heads(value, num_heads = self.num_key_value_heads)
 
         key, query = self.rotary_emb(key, query, position_ids)
 
@@ -329,8 +324,8 @@ class FlaxGoldenGateAttention(nn.Module):
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
 
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        key = repeat_kv(key, self.num_key_value_groups)
+        value = repeat_kv(value, self.num_key_value_groups)
         
         # usual dot product attention
         attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
