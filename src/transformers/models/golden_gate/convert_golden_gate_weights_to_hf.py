@@ -117,8 +117,8 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
             else:
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj)
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim2=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1 = k_proj.shape[1])
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
 
         elif k == "embedder.weight":
