@@ -94,10 +94,10 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
         return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
-    model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")
+    model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
 
     state_dict = {}
-    for k,v in model_state_dict:
+    for k,v in model_state_dict.items():
         if "qkv_proj" in k:
             q_proj, k_proj , v_proj = v.split(3)
             state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj)
@@ -146,9 +146,9 @@ def main():
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
-        model_path=args.output_dir,
-        config = config,
         input_base_path=args.input_dir,
+        save_path=args.output_dir,
+        config = config,
         safe_serialization=args.safe_serialization,
     )
     write_tokenizer(
