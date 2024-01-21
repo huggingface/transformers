@@ -81,9 +81,8 @@ golden_gate_7b_config = GoldenGateConfig(
 CONFIG_MAPPING = {"2B":golden_gate_2b_config,"7B":golden_gate_7b_config}
 
 LAYER_NAME_MAPPING = {
-    "model.embed_tokens.weight": "model.embedder.weight",
-    "lm_head.weight": "model.embedder.weight",
-}
+    "embedder.weight":"model.embed_tokens.weight"
+}   
 
 def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
@@ -97,9 +96,10 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
+    model_state_dict.pop("freqs_cis")
 
     state_dict = {}
-    for k,v in model_state_dict["model_state_dict"].items():
+    for k,v in model_state_dict.items():
         if "qkv_proj" in k:            
             if num_kv_heads == 1:
                 v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
@@ -107,16 +107,19 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
+                print(k_proj.shape)
+                
                 state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(0,1).contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj)
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim1 = k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0), dim2=q_proj.shape[0])
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[0])
+                print(q_proj.shape)
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0))
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
 
-        
-        if k in LAYER_NAME_MAPPING:
+        elif k in LAYER_NAME_MAPPING:
             state_dict[LAYER_NAME_MAPPING[k]] = v
         else:
             state_dict[k] = v
