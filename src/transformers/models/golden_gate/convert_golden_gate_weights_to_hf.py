@@ -88,6 +88,8 @@ LAYER_NAME_MAPPING = {
 def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
+    num_kv_heads = config.num_key_value_heads
+    head_dim = config.head_dim
 
     # permute for sliced rotary
     def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
@@ -99,10 +101,25 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     state_dict = {}
     for k,v in model_state_dict.items():
         if "qkv_proj" in k:
-            q_proj, k_proj , v_proj = torch.split(v,3, dim=0)
-            state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj)
+            print(v.shape)
+            
+            if num_kv_heads == 1:
+                v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
+                q_proj = v[:num_attn_heads, ...]
+                k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
+                v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
+            else:
+                v = v.reshape(3, num_attn_heads, head_dim, hidden_size)
+                q_proj, q_proj, q_proj = torch.split(v, 3)
+
+            print(q_proj.shape)
+            print(k_proj.shape)
+            print(v_proj.shape)
+            
+            state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(0,1).contiguous())
             state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj)
-            state_dict[k.replace("qkv_proj", "v_proj")] = permute(v_proj)
+            state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
+
         if k in LAYER_NAME_MAPPING:
             state_dict[LAYER_NAME_MAPPING[k]] = v
         else:
