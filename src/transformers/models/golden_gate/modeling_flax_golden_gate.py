@@ -189,6 +189,25 @@ class FlaxGoldenGateRotaryEmbedding(nn.Module):
         return key, query
 
 
+
+def repeat_kv(hidden_states, n_rep: int):
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    # Add a new axis along the third dimension and replicate the data
+    hidden_states = jnp.broadcast_to(
+        hidden_states[:, :, jnp.newaxis, :, :], 
+        (batch, num_key_value_heads, n_rep, slen, head_dim)
+    )
+
+    # Reshape to combine the new axis with the existing one
+    hidden_states = hidden_states.reshape((batch, num_key_value_heads * n_rep, slen, head_dim))
+
+    return hidden_states
+
+
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaAttention with Llama->GoldenGate
 class FlaxGoldenGateAttention(nn.Module):
     config: GoldenGateConfig
@@ -203,15 +222,18 @@ class FlaxGoldenGateAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
-        dense = partial(
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        
+        dense = lambda num_heads: partial(
             nn.Dense,
-            self.embed_dim,
+            num_heads * self.head_dim,
             use_bias=config.attention_bias,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
 
-        self.q_proj, self.k_proj, self.v_proj = dense(), dense(), dense()
+        self.q_proj, self.k_proj, self.v_proj = dense(self.num_heads), dense(self.num_key_value_heads), dense(self.num_key_value_heads)
         self.o_proj = dense()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
@@ -307,6 +329,9 @@ class FlaxGoldenGateAttention(nn.Module):
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
 
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
+        
         # usual dot product attention
         attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
         attn_weights = dot_product_attention_weights(

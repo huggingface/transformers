@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from transformers import GoldenGateConfig, GoldenGateForCausalLM, LlamaTokenizer
+from transformers import GoldenGateConfig, GoldenGateForCausalLM, LlamaTokenizer, FlaxGoldenGateForCausalLM
 
 
 try:
@@ -176,6 +176,14 @@ def main():
     model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000 + 1)
     model.to(torch.bfloat16)
     outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"))
+    print(outputs)
+    print(tokenizer.batch_decode(outputs))
+    
+    model = FlaxGoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000 + 1, from_pt=True)
+    
+    import jax.numpy as jnp 
+    inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
+    outputs = model.generate(inputs)
     print(outputs)
     print(tokenizer.batch_decode(outputs))
 
