@@ -106,21 +106,16 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 q_proj = v[:num_attn_heads, ...]
                 k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
-
-                print(k_proj.shape)
-                
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(0,1).contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim1 = k_proj.shape[1])
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
-                print(q_proj.shape)
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0))
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[1])
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
 
-        elif k in LAYER_NAME_MAPPING:
+            state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0))
+            state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[1])
+            state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
+
+        elif k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
+            state_dict["lm_head.weight"] = v
         else:
             state_dict[k] = v
 
@@ -154,6 +149,7 @@ def main():
     )
     parser.add_argument(
         "--output_dir",
+        default="golden_gate_2b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
