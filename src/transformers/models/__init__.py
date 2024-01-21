@@ -120,6 +120,7 @@ from . import (
     levit,
     lilt,
     llama,
+    golden_gate,
     llava,
     longformer,
     longt5,
