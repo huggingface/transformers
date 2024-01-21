@@ -61,7 +61,8 @@ golden_gate_2b_config = GoldenGateConfig(
     head_dim=256,
     max_position_embeddings=8192,
     rope=10000,
-    hidden_act = "gelu"
+    hidden_act = "gelu",
+    tie_word_embeddings=True,
 )
 
 golden_gate_7b_config = GoldenGateConfig(
@@ -75,7 +76,8 @@ golden_gate_7b_config = GoldenGateConfig(
     head_dim=256,
     max_position_embeddings=8192,
     rope=10000,
-    hidden_act = "gelu"
+    hidden_act = "gelu",
+    tie_word_embeddings=True,
 )
 
 CONFIG_MAPPING = {"2B":golden_gate_2b_config,"7B":golden_gate_7b_config}
@@ -83,6 +85,8 @@ CONFIG_MAPPING = {"2B":golden_gate_2b_config,"7B":golden_gate_7b_config}
 LAYER_NAME_MAPPING = {
     "embedder.weight":"model.embed_tokens.weight"
 }   
+
+import re
 
 def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
@@ -92,7 +96,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
     # permute for sliced rotary
     def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return w.view(n_heads, dim1 , 2, dim2 // n_heads // 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
@@ -106,12 +110,16 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 q_proj = v[:num_attn_heads, ...]
                 k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
+
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1 = k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
 
-            state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0))
-            state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[1])
-            state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj)
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim2=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
 
         elif k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
@@ -128,22 +136,28 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     model.save_pretrained(save_path, safe_serialization=safe_serialization)
 
 
-def write_tokenizer(tokenizer_path, input_tokenizer_path):
+def write_tokenizer(input_tokenizer_path, save_path):
     # Initialize the tokenizer based on the `spm` model
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
+    print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
-    tokenizer.save_pretrained(tokenizer_path)
+    tokenizer.save_pretrained(save_path)
 
 
 def main():
+    
+    
+
+    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
+        default="/Users/arthurzucker/Work/golden_gate/ckpt/2b.ckpt",
         help="Location of GoldenGate weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--model_size",
+        default="2B",
         choices=["2B", "7B", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the GoldenGate2 official release. For more details on GoldenGate2, checkout the original repo: https://huggingface.co/meta-golden_gate",
     )
@@ -154,8 +168,12 @@ def main():
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
-    spm_path = os.path.join(args.input_dir, "tokenizer.model")
+    spm_path = os.path.join("/Users/arthurzucker/Work/golden_gate/code/tokenizer.model")
 
+
+    
+
+    
     config = CONFIG_MAPPING[args.model_size]
     write_model(
         config = config,
@@ -163,10 +181,14 @@ def main():
         save_path=args.output_dir,
         safe_serialization=args.safe_serialization,
     )
-    write_tokenizer(
-        spm_path
-    )
-
+    write_tokenizer(spm_path, args.output_dir)
+    
+    tokenizer = LlamaTokenizerFast.from_pretrained(args.output_dir,pad_token="<pad>")
+    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000+1 )
+    model.to(torch.bfloat16)
+    outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"))
+    print(outputs)
+    print(tokenizer.batch_decode(outputs))
 
 
 if __name__ == "__main__":
