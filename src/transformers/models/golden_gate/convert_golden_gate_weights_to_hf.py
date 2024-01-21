@@ -78,16 +78,15 @@ golden_gate_7b_config = GoldenGateConfig(
     hidden_act = "gelu"
 )
 
+CONFIG_MAPPING = {"2B":golden_gate_2b_config,"7B":golden_gate_7b_config}
 
 LAYER_NAME_MAPPING = {
     "model.embed_tokens.weight": "model.embedder.weight",
     "lm_head.weight": "model.embedder.weight",
 }
 
-def write_model(save_path, input_base_path, config, tokenizer_path=None, safe_serialization=True):
+def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
-    num_kv_heads = config.num_key_value_heads
-    head_dim = config.head_dim
     hidden_size = config.hidden_size
 
     # permute for sliced rotary
@@ -144,16 +143,18 @@ def main():
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
-    if args.model_size != "tokenizer_only":
-        write_model(
-            model_path=args.output_dir,
-            input_base_path=args.input_dir,
-            model_size=args.model_size,
-            safe_serialization=args.safe_serialization,
-            tokenizer_path=spm_path,
-        )
-    else:
-        write_tokenizer(args.output_dir, spm_path)
+
+    config = CONFIG_MAPPING[args.model_size]
+    write_model(
+        model_path=args.output_dir,
+        config = config,
+        input_base_path=args.input_dir,
+        safe_serialization=args.safe_serialization,
+    )
+    write_tokenizer(
+        spm_path
+    )
+
 
 
 if __name__ == "__main__":
