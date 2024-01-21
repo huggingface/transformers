@@ -26,6 +26,7 @@ from transformers import (
     LlavaProcessor,
 )
 
+
 EPILOG_TXT = """Example:
     python transformers/src/transformers/models/llava/convert_llava_weights_to_hf.py --text_model_id lmsys/vicuna-7b-v1.5 --vision_model_id openai/clip-vit-large-patch14-336 --output_hub_path org/llava-v1.5-7b-conv --old_state_dict_id liuhaotian/llava-v1.5-7b
 
