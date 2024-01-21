@@ -48,6 +48,7 @@ from .pytorch_utils import (  # noqa: F401
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     id_tensor_storage,
+    is_torch_greater_or_equal_than_1_13,
     prune_conv1d_layer,
     prune_layer,
     prune_linear_layer,
@@ -481,7 +482,11 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", weights_only=True)
+    loader = (
+        safe_load_file
+        if load_safe
+        else partial(torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
+    )
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -525,7 +530,12 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
-        return torch.load(checkpoint_file, map_location=map_location, weights_only=True, **extra_args)
+        return torch.load(
+            checkpoint_file,
+            map_location=map_location,
+            weights_only=is_torch_greater_or_equal_than_1_13,
+            **extra_args,
+        )
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -2335,6 +2345,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
+                # generation config built from the model config + the model config holds generation kwargs -> generate
+                # may revert to legacy behavior if the two don't match
+                if (
+                    model_to_save.generation_config._from_model_config
+                    and model_to_save.config._has_non_default_generation_parameters()
+                ):
+                    new_generation_config = GenerationConfig.from_model_config(model_to_save.config)
+                    if new_generation_config != model_to_save.generation_config:
+                        logger.warning(
+                            "Your generation config was originally created from the model config, but the model "
+                            "config has changed since then. Unless you pass the `generation_config` argument to this "
+                            "model's `generate` calls, they will revert to the legacy behavior where the base "
+                            "`generate` parameterization is loaded from the model config instead. "
+                            "To avoid this behavior and this warning, we recommend you to overwrite the generation "
+                            "config model attribute before calling the model's `save_pretrained`, preferably also "
+                            "removing any generation kwargs from the model config. This warning will be raised to an "
+                            "exception in v4.41."
+                        )
                 model_to_save.generation_config.save_pretrained(save_directory)
 
             if _hf_peft_config_loaded:

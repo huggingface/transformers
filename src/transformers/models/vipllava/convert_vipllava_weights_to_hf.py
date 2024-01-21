@@ -58,7 +58,7 @@ def convert_vipllava_llama_to_hf(text_model_id, vision_model_id, output_hub_path
     text_config = AutoConfig.from_pretrained(text_model_id)
 
     tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False))
+    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
 
     image_processor = CLIPImageProcessor.from_pretrained(vision_model_id)

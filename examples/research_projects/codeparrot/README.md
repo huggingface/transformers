@@ -50,7 +50,7 @@ The raw dataset contains many duplicates. We deduplicated and filtered the datas
 - fraction of alphanumeric characters < 0.25
 - containing the word "auto-generated" or similar in the first 5 lines
 - filtering with a probability of 0.7 of files with a mention of "test file" or "configuration file" or similar in the first 5 lines
-- filtering with a probability of 0.7 of files with high occurence of the keywords "test " or "config" 
+- filtering with a probability of 0.7 of files with high occurrence of the keywords "test " or "config" 
 - filtering with a probability of 0.7  of files without a mention of the keywords `def` , `for`, `while`  and `class`
 - filtering files that use the assignment operator `=` less than 5 times 
 - filtering files with ratio between number of characters and number of tokens after tokenization < 1.5 (the average ratio is 3.6)
