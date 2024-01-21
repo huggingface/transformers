@@ -199,11 +199,11 @@ def repeat_kv(hidden_states, n_rep: int):
     # Add a new axis along the third dimension and replicate the data
     hidden_states = jnp.broadcast_to(
         hidden_states[:, :, jnp.newaxis, :, :], 
-        (batch, num_key_value_heads, n_rep, slen, head_dim)
+        (batch, slen, n_rep, num_key_value_heads, head_dim)
     )
 
     # Reshape to combine the new axis with the existing one
-    hidden_states = hidden_states.reshape((batch, num_key_value_heads, slen * n_rep, head_dim))
+    hidden_states = hidden_states.reshape((batch, slen, num_key_value_heads * n_rep, head_dim))
 
     return hidden_states
 
