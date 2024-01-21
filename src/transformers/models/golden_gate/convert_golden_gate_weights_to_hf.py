@@ -185,7 +185,7 @@ def main():
     inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
     outputs = model.generate(inputs)
     print(outputs)
-    print(tokenizer.batch_decode(outputs))
+    print(tokenizer.batch_decode(outputs.sequences))
 
 
 if __name__ == "__main__":
