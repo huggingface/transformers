@@ -146,10 +146,13 @@ def main():
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
+        model_path=args.output_dir,
+        config = config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
         config = config,
         safe_serialization=args.safe_serialization,
+        save_path=args.output_dir
     )
     write_tokenizer(
         spm_path
