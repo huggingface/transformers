@@ -99,7 +99,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     state_dict = {}
     for k,v in model_state_dict.items():
         if "qkv_proj" in k:
-            q_proj, k_proj , v_proj = v.split(3)
+            q_proj, k_proj , v_proj = torch.split(v,3, dim=0)
             state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj)
             state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj)
             state_dict[k.replace("qkv_proj", "v_proj")] = permute(v_proj)
@@ -146,13 +146,10 @@ def main():
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
-        model_path=args.output_dir,
         config = config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
-        config = config,
         safe_serialization=args.safe_serialization,
-        save_path=args.output_dir
     )
     write_tokenizer(
         spm_path
