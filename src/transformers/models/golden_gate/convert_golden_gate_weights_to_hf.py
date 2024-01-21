@@ -99,7 +99,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
 
     state_dict = {}
-    for k,v in model_state_dict["model_state_dict"].items():
+    for k,v in model_state_dict.items():
         if "qkv_proj" in k:            
             if num_kv_heads == 1:
                 v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
@@ -114,6 +114,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
                 state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.transpose(1, 0), dim2=q_proj.shape[0])
                 state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.transpose(1, 0), dim2=k_proj.shape[0])
+                state_dict[k.replace("qkv_proj", "v_proj")] = permute(v_proj.transpose(1, 0), dim2=v_proj.shape[0])
 
         
         if k in LAYER_NAME_MAPPING:
