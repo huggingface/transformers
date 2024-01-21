@@ -195,7 +195,7 @@ def repeat_kv(hidden_states, n_rep: int):
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    batch, slen, num_key_value_heads, head_dim = hidden_states.shape
     # Add a new axis along the third dimension and replicate the data
     hidden_states = jnp.broadcast_to(
         hidden_states[:, :, jnp.newaxis, :, :], 
@@ -203,7 +203,7 @@ def repeat_kv(hidden_states, n_rep: int):
     )
 
     # Reshape to combine the new axis with the existing one
-    hidden_states = hidden_states.reshape((batch, num_key_value_heads * n_rep, slen, head_dim))
+    hidden_states = hidden_states.reshape((batch, num_key_value_heads, slen * n_rep, head_dim))
 
     return hidden_states
 
