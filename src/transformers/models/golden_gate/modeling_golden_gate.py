@@ -19,7 +19,6 @@
 # limitations under the License.
 """ PyTorch GoldenGate model."""
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -78,6 +77,7 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
 
 class GoldenGateRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -179,6 +179,7 @@ class GoldenGateDynamicNTKScalingRotaryEmbedding(GoldenGateRotaryEmbedding):
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
+
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -230,6 +231,7 @@ class GoldenGateMLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -317,7 +319,6 @@ class GoldenGateAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -408,7 +409,6 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -967,7 +967,7 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
         hidden_states = inputs_embeds
 
         # normalized
-        hidden_states = hidden_states * (self.config.hidden_size ** 0.5)
+        hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

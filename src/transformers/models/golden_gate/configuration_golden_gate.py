@@ -29,6 +29,7 @@ GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "google/golden-gate-2b": "https://huggingface.co/google/golden-gate-2b/resolve/main/config.json",
 }
 
+
 class GoldenGateConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GoldenGateModel`]. It is used to instantiate an GoldenGate

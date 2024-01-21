@@ -27,7 +27,10 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 if is_flax_available():
     import jax.numpy as jnp
 
-    from transformers.models.golden_gate.modeling_flax_golden_gate import FlaxGoldenGateForCausalLM, FlaxGoldenGateModel
+    from transformers.models.golden_gate.modeling_flax_golden_gate import (
+        FlaxGoldenGateForCausalLM,
+        FlaxGoldenGateModel,
+    )
 
 
 if is_tokenizers_available():

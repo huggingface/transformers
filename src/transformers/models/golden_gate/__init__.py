@@ -44,7 +44,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_golden_gate"] = ["FlaxGoldenGateForCausalLM", "FlaxGoldenGateModel", "FlaxGoldenGatePreTrainedModel"]
+    _import_structure["modeling_flax_golden_gate"] = [
+        "FlaxGoldenGateForCausalLM",
+        "FlaxGoldenGateModel",
+        "FlaxGoldenGatePreTrainedModel",
+    ]
 
 
 if TYPE_CHECKING:
@@ -56,7 +60,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_golden_gate import GoldenGateForCausalLM, GoldenGateForSequenceClassification, GoldenGateModel, GoldenGatePreTrainedModel
+        from .modeling_golden_gate import (
+            GoldenGateForCausalLM,
+            GoldenGateForSequenceClassification,
+            GoldenGateModel,
+            GoldenGatePreTrainedModel,
+        )
 
     try:
         if not is_flax_available():
@@ -64,7 +73,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_flax_golden_gate import FlaxGoldenGateForCausalLM, FlaxGoldenGateModel, FlaxGoldenGatePreTrainedModel
+        from .modeling_flax_golden_gate import (
+            FlaxGoldenGateForCausalLM,
+            FlaxGoldenGateModel,
+            FlaxGoldenGatePreTrainedModel,
+        )
 
 
 else:

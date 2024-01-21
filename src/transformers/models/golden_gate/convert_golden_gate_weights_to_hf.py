@@ -61,7 +61,7 @@ golden_gate_2b_config = GoldenGateConfig(
     head_dim=256,
     max_position_embeddings=8192,
     rope=10000,
-    hidden_act = "gelu",
+    hidden_act="gelu",
     tie_word_embeddings=True,
 )
 
@@ -70,23 +70,20 @@ golden_gate_7b_config = GoldenGateConfig(
     intermediate_size=24576,
     num_attention_heads=16,
     num_hidden_layers=28,
-    rms_norm_eps= 1e-6,
+    rms_norm_eps=1e-6,
     num_key_value_heads=16,
     vocab_size=256128,
     head_dim=256,
     max_position_embeddings=8192,
     rope=10000,
-    hidden_act = "gelu",
+    hidden_act="gelu",
     tie_word_embeddings=True,
 )
 
-CONFIG_MAPPING = {"2B":golden_gate_2b_config,"7B":golden_gate_7b_config}
+CONFIG_MAPPING = {"2B": golden_gate_2b_config, "7B": golden_gate_7b_config}
 
-LAYER_NAME_MAPPING = {
-    "embedder.weight":"model.embed_tokens.weight"
-}   
+LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
-import re
 
 def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_attn_heads = config.num_attention_heads
@@ -96,29 +93,29 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
     # permute for sliced rotary
     def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
-        return w.view(n_heads, dim1 , 2, dim2 // n_heads // 2).reshape(dim1, dim2)
+        return w.view(n_heads, dim1, 2, dim2 // n_heads // 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
     model_state_dict.pop("freqs_cis")
 
     state_dict = {}
-    for k,v in model_state_dict.items():
-        if "qkv_proj" in k:            
+    for k, v in model_state_dict.items():
+        if "qkv_proj" in k:
             if num_kv_heads == 1:
                 v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
                 q_proj = v[:num_attn_heads, ...]
-                k_proj = v[num_attn_heads:num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
+                k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
                 state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1 = k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1=k_proj.shape[1])
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
-                q_proj, k_proj , v_proj = torch.split(v, v.shape[0] // 3, 0)
+                q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
 
                 state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1 = k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1=k_proj.shape[1])
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
 
         elif k == "embedder.weight":
@@ -145,10 +142,6 @@ def write_tokenizer(input_tokenizer_path, save_path):
 
 
 def main():
-    
-    
-
-    
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
@@ -170,21 +163,17 @@ def main():
     args = parser.parse_args()
     spm_path = os.path.join("/Users/arthurzucker/Work/golden_gate/code/tokenizer.model")
 
-
-    
-
-    
     config = CONFIG_MAPPING[args.model_size]
     write_model(
-        config = config,
+        config=config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
         safe_serialization=args.safe_serialization,
     )
     write_tokenizer(spm_path, args.output_dir)
-    
-    tokenizer = LlamaTokenizerFast.from_pretrained(args.output_dir,pad_token="<pad>")
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000+1 )
+
+    tokenizer = LlamaTokenizerFast.from_pretrained(args.output_dir, pad_token="<pad>")
+    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000 + 1)
     model.to(torch.bfloat16)
     outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"))
     print(outputs)

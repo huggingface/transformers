@@ -278,7 +278,9 @@ class GoldenGateModelTester:
 
 @require_torch
 class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (GoldenGateModel, GoldenGateForCausalLM, GoldenGateForSequenceClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (GoldenGateModel, GoldenGateForCausalLM, GoldenGateForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (GoldenGateForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
@@ -404,7 +406,10 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         output_native = tokenizer.batch_decode(output_native)
 
         model = GoldenGateForCausalLM.from_pretrained(
-            "meta-golden_gate/GoldenGate-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
+            "meta-golden_gate/GoldenGate-2-7b-hf",
+            load_in_4bit=True,
+            device_map={"": 0},
+            attn_implementation="flash_attention_2",
         )
 
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
