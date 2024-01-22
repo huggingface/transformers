@@ -189,26 +189,6 @@ class FlaxGoldenGateRotaryEmbedding(nn.Module):
         return key, query
 
 
-
-def repeat_kv(hidden_states, n_rep: int):
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    # Add a new axis along the third dimension and replicate the data
-    hidden_states = jnp.broadcast_to(
-        hidden_states[:, :, jnp.newaxis, :, :], 
-        (batch, num_key_value_heads, n_rep, slen,head_dim)
-    )
-
-    # Reshape to combine the new axis with the existing one
-    hidden_states = hidden_states.reshape((batch, num_key_value_heads * n_rep, slen, head_dim))
-
-    return hidden_states
-
-
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaAttention with Llama->GoldenGate
 class FlaxGoldenGateAttention(nn.Module):
     config: GoldenGateConfig
     dtype: jnp.dtype = jnp.float32
@@ -285,9 +265,9 @@ class FlaxGoldenGateAttention(nn.Module):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self._split_heads(query, num_heads = self.num_heads).transpose(0, 2, 1, 3)
-        key = self._split_heads(key, num_heads = self.num_key_value_heads).transpose(0, 2, 1, 3)
-        value = self._split_heads(value, num_heads = self.num_key_value_heads).transpose(0, 2, 1, 3)
+        query = self._split_heads(query, self.num_heads)
+        key = self._split_heads(key, self.num_key_value_heads)
+        value = self._split_heads(value, self.num_key_value_heads)
 
         key, query = self.rotary_emb(key, query, position_ids)
 
@@ -324,8 +304,8 @@ class FlaxGoldenGateAttention(nn.Module):
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
 
-        key = repeat_kv(key, self.num_key_value_groups)
-        value = repeat_kv(value, self.num_key_value_groups)
+        key = jnp.repeat(key, repeats=self.num_key_value_groups, axis=2)
+        value = jnp.repeat(value, repeats=self.num_key_value_groups, axis=2)
         
         # usual dot product attention
         attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
@@ -614,6 +594,7 @@ class FlaxGoldenGateModule(nn.Module):
         self.layers = FlaxGoldenGateLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxGoldenGateRMSNorm(self.config, dtype=self.dtype)
 
+    # Ignore copy
     def __call__(
         self,
         input_ids,
@@ -626,6 +607,8 @@ class FlaxGoldenGateModule(nn.Module):
         return_dict: bool = True,
     ):
         input_embeds = self.embed_tokens(input_ids.astype("i4"))
+
+        input_embeds = input_embeds * (self.config.hidden_size**0.5)
 
         outputs = self.layers(
             input_embeds,
