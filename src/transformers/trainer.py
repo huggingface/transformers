@@ -1614,11 +1614,17 @@ class Trainer:
             )
 
         # Ensure save_steps < max_steps
+        self.max_steps = max_steps
         if self.args.save_strategy == "steps" and max_steps < self.args.save_steps:
-            raise ValueError(
-                'args.save_steps must be less than max_steps. Either set args.save_strategy to "no" or "epoch", '
-                'or increase number of training steps.'
+            logger.warning(
+                'Model(s) will not be saved because max_steps is less than args.save_steps: '
+                'Set args.save_strategy to "no" or "epoch", or increase duration of training.'
             )
+            if self.args.load_best_model_at_end:
+                raise ValueError(
+                    'Max steps is less than args.save_steps: Set args.save_strategy to "no" or "epoch", '
+                    'set args.load_best_model_at_end to False, or increase duration of training.'
+                )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
