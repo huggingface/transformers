@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
+from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
 from transformers.utils import logging
 
 
@@ -236,21 +236,22 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     model.eval()
 
     # TODO use image processor
-    from PIL import Image
     import requests
+    from PIL import Image
 
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
     # predict depth
     import torchvision.transforms as T
 
-    transform = T.Compose([
-        T.Resize((518,518), interpolation=Image.BICUBIC),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406],
-                    std=[0.229, 0.224, 0.225]),
-    ])
+    transform = T.Compose(
+        [
+            T.Resize((518, 518), interpolation=Image.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
 
     pixel_values = transform(image).unsqueeze(0)
 
