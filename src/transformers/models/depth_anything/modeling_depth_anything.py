@@ -251,7 +251,7 @@ DEPTH_ANYTHING_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`DepthAnythingConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -261,12 +261,6 @@ DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
             for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -329,8 +323,8 @@ class DepthAnythingNeck(nn.Module):
 
 class DepthAnythingDepthEstimationHead(nn.Module):
     """
-    Output head head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
-    the predictions to the input resolution after the first convolutional layer (details can be found in the paper's
+    Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
+    the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
     supplementary material).
     """
 
@@ -341,7 +335,6 @@ class DepthAnythingDepthEstimationHead(nn.Module):
 
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
-        
         self.conv2 = nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1)
         self.activation1 = nn.ReLU()
         self.conv3 = nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0)
@@ -349,9 +342,11 @@ class DepthAnythingDepthEstimationHead(nn.Module):
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.config.head_in_index]
-        
+
         predicted_depth = self.conv1(hidden_states)
-        predicted_depth = nn.functional.interpolate(predicted_depth, (int(patch_height * 14), int(patch_width * 14)), mode="bilinear", align_corners=True)
+        predicted_depth = nn.functional.interpolate(
+            predicted_depth, (int(patch_height * 14), int(patch_width * 14)), mode="bilinear", align_corners=True
+        )
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
@@ -383,7 +378,6 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        head_mask: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
