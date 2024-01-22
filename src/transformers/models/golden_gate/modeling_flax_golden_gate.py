@@ -164,7 +164,7 @@ class FlaxGoldenGateRMSNorm(nn.Module):
         # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
         hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
-        return self.weight * jnp.asarray(hidden_states, dtype=self.dtype)
+        return (1+ self.weight) * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->GoldenGate
