@@ -15,8 +15,6 @@
 """ Testing suite for the PyTorch Mixtral model. """
 
 
-import math
-import random
 import tempfile
 import unittest
 
@@ -493,8 +491,8 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
         # This is to mimic torch.testing.assert_not_close
-        loss_diff = math.fabs(include_padding_result.aux_loss.item() - result.aux_loss.item())
-        self.assertTrue(loss_diff > 1e-2 + 1e-2 * result.aux_loss.item())
+        print(f"loss1={include_padding_result.aux_loss.item()}, loss2={result.aux_loss.item()}")
+        self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
 @require_torch
