@@ -40,13 +40,26 @@ def get_dpt_config(model_name):
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-small", out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
         )
+        fusion_hidden_size = 64
         neck_hidden_sizes = [48, 96, 192, 384]
+    elif "base" in model_name:
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-base", out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
+        )
+        fusion_hidden_size = 128
+        neck_hidden_sizes = [96, 192, 384, 768]
+    elif "large" in model_name:
+        backbone_config = Dinov2Config.from_pretrained(
+            "facebook/dinov2-large", out_indices=[21, 22, 23, 24], apply_layernorm=True, reshape_hidden_states=False
+        )
+        fusion_hidden_size = 256
+        neck_hidden_sizes = [256, 512, 1024, 1024]
     else:
         raise NotImplementedError("To do")
 
     config = DPTConfig(
         backbone_config=backbone_config,
-        fusion_hidden_size=64,
+        fusion_hidden_size=fusion_hidden_size,
         neck_hidden_sizes=neck_hidden_sizes,
         use_bias_in_fusion_residual=True,
         readout_type="ignore",
@@ -219,9 +232,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # define DPT configuration
     config = get_dpt_config(model_name)
 
+    model_name_to_filename = {
+        "depth-anything-small": "depth_anything_vits14.pth",
+        "depth-anything-base": "depth_anything_vitb14.pth",
+        "depth-anything-large": "depth_anything_vitl14.pth",
+    }
+
     # load original state_dict
+    filename = model_name_to_filename[model_name]
     filepath = hf_hub_download(
-        repo_id="LiheYoung/Depth-Anything", filename="checkpoints/depth_anything_vits14.pth", repo_type="space"
+        repo_id="LiheYoung/Depth-Anything", filename=f"checkpoints/{filename}", repo_type="space"
     )
     state_dict = torch.load(filepath, map_location="cpu")
     # rename keys
@@ -272,13 +292,25 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         outputs = model(pixel_values)
         predicted_depth = outputs.predicted_depth
 
+    print("First values:", predicted_depth[0, :3, :3])
+
     # assert logits
     if verify_logits:
+        expected_shape = torch.Size([1, 518, 518])
         if model_name == "depth-anything-small":
-            expected_shape = torch.Size([1, 518, 518])
             expected_slice = torch.tensor(
                 [[8.7884, 8.6028, 8.5929], [8.2999, 8.5714, 8.7190], [8.6204, 8.6461, 8.7075]],
             )
+        elif model_name == "depth-anything-base":
+            expected_slice = torch.tensor(
+                [[27.1071, 27.0391, 27.0847], [26.9969, 26.9416, 27.0589], [26.8511, 26.8068, 26.8654]],
+            )
+        elif model_name == "depth-anything-large":
+            expected_slice = torch.tensor(
+                [[92.8992, 92.5946, 93.1578], [91.9489, 92.4338, 92.1804], [91.5336, 91.7159, 91.6404]],
+            )
+        else:
+            raise ValueError("Not supported")
 
         assert predicted_depth.shape == torch.Size(expected_shape)
         assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
