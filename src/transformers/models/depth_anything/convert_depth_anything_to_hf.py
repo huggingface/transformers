@@ -244,10 +244,10 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # assert logits
     if verify_logits:
-        expected_shape = torch.Size([1, 518, 518])
+        expected_shape = torch.Size([1, 518, 686])
         if model_name == "depth-anything-small":
             expected_slice = torch.tensor(
-                [[8.9057, 8.6622, 8.7080], [8.4528, 8.6227, 8.7643], [8.7802, 8.7076, 8.7360]],
+                [[8.0733, 7.6533, 7.7400], [7.5546, 7.6822, 7.9520], [7.8951, 7.8835, 8.1229]],
             )
         elif model_name == "depth-anything-base":
             expected_slice = torch.tensor(
@@ -261,7 +261,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             raise ValueError("Not supported")
 
         assert predicted_depth.shape == torch.Size(expected_shape)
-        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-5)
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6)
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

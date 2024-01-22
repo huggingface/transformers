@@ -184,21 +184,16 @@ class DepthAnythingPreActResidualLayer(nn.Module):
         return hidden_state + residual
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionLayer with DPT->DepthAnything
 class DepthAnythingFeatureFusionLayer(nn.Module):
     """Feature fusion layer, merges feature maps from different stages.
 
     Args:
         config (`[DepthAnythingConfig]`):
             Model configuration class defining the model architecture.
-        align_corners (`bool`, *optional*, defaults to `True`):
-            The align_corner setting for bilinear upsample.
     """
 
-    def __init__(self, config, align_corners=True):
+    def __init__(self, config):
         super().__init__()
-
-        self.align_corners = align_corners
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
@@ -218,7 +213,10 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
         modifier = {"scale_factor": 2} if size is None else {"size": size}
 
         hidden_state = nn.functional.interpolate(
-            hidden_state, **modifier, mode="bilinear", align_corners=self.align_corners
+            hidden_state,
+            **modifier,
+            mode="bilinear",
+            align_corners=True,
         )
         hidden_state = self.projection(hidden_state)
 
@@ -336,7 +334,8 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.config = config
+        self.head_in_index = config.head_in_index
+        self.patch_size = config.backbone_config.patch_size
 
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
@@ -346,11 +345,14 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.activation2 = nn.ReLU()
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
-        hidden_states = hidden_states[self.config.head_in_index]
+        hidden_states = hidden_states[self.head_in_index]
 
         predicted_depth = self.conv1(hidden_states)
         predicted_depth = nn.functional.interpolate(
-            predicted_depth, (int(patch_height * 14), int(patch_width * 14)), mode="bilinear", align_corners=True
+            predicted_depth,
+            (int(patch_height * self.patch_size), int(patch_width * self.patch_size)),
+            mode="bilinear",
+            align_corners=True,
         )
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)

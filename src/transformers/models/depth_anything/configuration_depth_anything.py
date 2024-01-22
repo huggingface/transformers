@@ -40,16 +40,8 @@ class DepthAnythingConfig(PretrainedConfig):
 
 
     Args:
-        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-        readout_type (`str`, *optional*, defaults to `"project"`):
-            The readout type to use when processing the readout token (CLS token) of the intermediate hidden states of
-            the ViT backbone. Can be one of [`"ignore"`, `"add"`, `"project"`].
-
-            - "ignore" simply ignores the CLS token.
-            - "add" passes the information from the CLS token to all other tokens by adding the representations.
-            - "project" passes information to the other tokens by concatenating the readout to all other tokens before
-              projecting the
-            representation to the original feature dimension D using a linear layer followed by a GELU non-linearity.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
