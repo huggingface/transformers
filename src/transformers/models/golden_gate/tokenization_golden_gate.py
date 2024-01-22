@@ -25,13 +25,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
+    pass
 
 logger = logging.get_logger(__name__)
 
@@ -165,11 +164,11 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
-        
+
         # add_dummy_prefix_space is false
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -222,7 +221,6 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         return self.sp_model.encode(text, out_type=str)
-
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""

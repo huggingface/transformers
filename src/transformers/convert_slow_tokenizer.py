@@ -73,9 +73,15 @@ class SentencePieceExtractor:
             local = []
             for index in range(1, len(merge)):
                 piece_l, piece_r = merge[:index], merge[index:]
-                if (piece_l in vocab and piece_r in vocab):
+                if piece_l in vocab and piece_r in vocab:
                     local.append((piece_l, piece_r, piece_score))
-                elif len(piece_l)==1 and len(piece_r)==1 and f"<0x0{ord(piece_l)}>" in vocab and f"<0x0{ord(piece_l)}>" in vocab and (piece_l + piece_r) in vocab:
+                elif (
+                    len(piece_l) == 1
+                    and len(piece_r) == 1
+                    and f"<0x0{ord(piece_l)}>" in vocab
+                    and f"<0x0{ord(piece_l)}>" in vocab
+                    and (piece_l + piece_r) in vocab
+                ):
                     merges.extend([(piece_l, piece_r, piece_score)])
             local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
             merges.extend(local)
@@ -1190,9 +1196,10 @@ class XGLMConverter(SpmConverter):
             ],
         )
 
+
 class GoldenGateConvert(SpmConverter):
     handle_byte_fallback = True
-        
+
     """"
     split_by_unicode_script: true
     split_by_number: true
@@ -1204,15 +1211,14 @@ class GoldenGateConvert(SpmConverter):
     """
 
     def normalizer(self, proto):
-        return normalizers.Replace(" ", '▁')
-        
+        return normalizers.Replace(" ", "▁")
+
         if len(precompiled_charsmap) > 0:
             return normalizers.Precompiled(precompiled_charsmap)
         return None
-    
+
     # def normalizer(self, proto):
     #     return None
-    
 
     def vocab(self, proto):
         vocab = [
@@ -1222,16 +1228,14 @@ class GoldenGateConvert(SpmConverter):
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
-    
+
     def pre_tokenizer(self, replacement, add_prefix_space):
         return None
-
 
     def unk_id(self, proto):
         unk_id = 3
         return unk_id
-    
-    
+
     def decoder(self, replacement, add_prefix_space):
         return decoders.Sequence(
             [
@@ -1240,7 +1244,7 @@ class GoldenGateConvert(SpmConverter):
                 decoders.Fuse(),
             ]
         )
-        
+
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
         vocab_scores = self.vocab(proto)
@@ -1255,12 +1259,19 @@ class GoldenGateConvert(SpmConverter):
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-            
+
             # there is a missing token in the vocab. We have to do this to support merges
             # "<0x09>" is the bytefallback for `\t`
             bpe_vocab["\t"] = bpe_vocab.pop("<0x09>")
             tokenizer = Tokenizer(
-                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True, dropout=None)
+                BPE(
+                    bpe_vocab,
+                    merges,
+                    unk_token=proto.trainer_spec.unk_piece,
+                    fuse_unk=True,
+                    byte_fallback=True,
+                    dropout=None,
+                )
             )
             tokenizer.add_special_tokens(
                 [
@@ -1277,6 +1288,7 @@ class GoldenGateConvert(SpmConverter):
 
         return tokenizer
 
+
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True
 
@@ -1288,8 +1300,6 @@ class LlamaConverter(SpmConverter):
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
-
-
 
     def decoder(self, replacement, add_prefix_space):
         return decoders.Sequence(

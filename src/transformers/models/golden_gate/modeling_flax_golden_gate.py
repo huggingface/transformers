@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Flax GoldenGate model."""
-from functools import partial
 from typing import Optional, Tuple
 
 import flax.linen as nn
@@ -163,7 +162,7 @@ class FlaxGoldenGateRMSNorm(nn.Module):
         # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
         hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
-        return (1+ self.weight) * jnp.asarray(hidden_states, dtype=self.dtype)
+        return (1 + self.weight) * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
 # Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRotaryEmbedding with Llama->GoldenGate
@@ -205,10 +204,24 @@ class FlaxGoldenGateAttention(nn.Module):
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
 
         kernel = jax.nn.initializers.normal(self.config.initializer_range)
-        self.q_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
-        self.k_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
-        self.v_proj = nn.Dense(self.num_key_value_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
-        self.o_proj = nn.Dense(self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype,kernel_init=kernel)
+        self.q_proj = nn.Dense(
+            self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
+        )
+        self.k_proj = nn.Dense(
+            self.num_key_value_heads * self.head_dim,
+            use_bias=config.attention_bias,
+            dtype=self.dtype,
+            kernel_init=kernel,
+        )
+        self.v_proj = nn.Dense(
+            self.num_key_value_heads * self.head_dim,
+            use_bias=config.attention_bias,
+            dtype=self.dtype,
+            kernel_init=kernel,
+        )
+        self.o_proj = nn.Dense(
+            self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
+        )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxGoldenGateRotaryEmbedding(config, dtype=self.dtype)
@@ -305,7 +318,7 @@ class FlaxGoldenGateAttention(nn.Module):
 
         key = jnp.repeat(key, repeats=self.num_key_value_groups, axis=2)
         value = jnp.repeat(value, repeats=self.num_key_value_groups, axis=2)
-        
+
         # usual dot product attention
         attention_dtype = jnp.float32 if self.attention_softmax_in_fp32 else self.dtype
         attn_weights = dot_product_attention_weights(

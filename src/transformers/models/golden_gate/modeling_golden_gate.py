@@ -128,8 +128,8 @@ class GoldenGateRotaryEmbedding(nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:seq_len], # .to(dtype=x.dtype),
-            self.sin_cached[:seq_len], # .to(dtype=x.dtype),
+            self.cos_cached[:seq_len],  # .to(dtype=x.dtype),
+            self.sin_cached[:seq_len],  # .to(dtype=x.dtype),
         )
 
 
@@ -271,7 +271,7 @@ class GoldenGateAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        if self.hidden_size % self.num_heads  != 0:
+        if self.hidden_size % self.num_heads != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."

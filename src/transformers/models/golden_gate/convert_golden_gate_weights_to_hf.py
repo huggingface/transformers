@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from transformers import GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer, FlaxGoldenGateForCausalLM
+from transformers import FlaxGoldenGateForCausalLM, GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer
 
 
 try:
@@ -96,8 +96,12 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous(), n_heads=16,  dim1 = q_proj.shape[0], dim2=q_proj.shape[1])
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.contiguous(), n_heads=16,  dim1 = k_proj.shape[0], dim2=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(
+                    q_proj.contiguous(), n_heads=16, dim1=q_proj.shape[0], dim2=q_proj.shape[1]
+                )
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(
+                    k_proj.contiguous(), n_heads=16, dim1=k_proj.shape[0], dim2=k_proj.shape[1]
+                )
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
 
         elif k == "embedder.weight":
@@ -112,15 +116,14 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
     model.config.torch_dtype = torch.float32
     import contextlib
-    
+
     @contextlib.contextmanager
     def _set_default_tensor_type(dtype: torch.dtype):
         """Sets the default torch dtype to the given dtype."""
         torch.set_default_dtype(dtype)
         yield
         torch.set_default_dtype(torch.float)
-    
-    
+
     with _set_default_tensor_type(torch.float32):
         model.load_state_dict(state_dict, assign=True, strict=True)
     del model.config._name_or_path
@@ -130,7 +133,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
 def write_tokenizer(input_tokenizer_path, save_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GoldenGateTokenizer # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
+    tokenizer_class = GoldenGateTokenizer  # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(save_path)
@@ -163,33 +166,40 @@ def main():
         config=config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
-        safe_serialization=args.safe_serialization, 
+        safe_serialization=args.safe_serialization,
     )
     write_tokenizer(spm_path, args.output_dir)
 
-    import random 
+    import random
+
     import numpy as np
+
     random.seed(12345)
     np.random.seed(12345)
     torch.manual_seed(12345)
-    
-    
-    tokenizer = GoldenGateTokenizerFast.from_pretrained(args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens = "<bos>")
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id =1, bos_token_id = 2)
+
+    tokenizer = GoldenGateTokenizerFast.from_pretrained(
+        args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens="<bos>"
+    )
+    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2)
     model = model.to(torch.bfloat16).eval()
 
     model.generation_config.temperature = 1
-    model.generation_config.top_p = 1 
+    model.generation_config.top_p = 1
 
-    outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"), do_sample=False, max_new_tokens = 30)
+    outputs = model.generate(
+        torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"), do_sample=False, max_new_tokens=30
+    )
     print(outputs)
     print(tokenizer.batch_decode(outputs))
-    import jax.numpy as jnp 
-    
-    model = FlaxGoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id =1, bos_token_id = 2, from_pt=True, dtype = jnp.bfloat16)
-    
+    import jax.numpy as jnp
+
+    model = FlaxGoldenGateForCausalLM.from_pretrained(
+        args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, from_pt=True, dtype=jnp.bfloat16
+    )
+
     inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
-    outputs = model.generate(inputs, do_sample=True, max_new_tokens = 20)
+    outputs = model.generate(inputs, do_sample=True, max_new_tokens=20)
     print(outputs)
     print(tokenizer.batch_decode(outputs.sequences))
 
@@ -198,8 +208,39 @@ if __name__ == "__main__":
     main()
 
     input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
-    EXPECTED_IDS = [2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]
-    
-    
+    EXPECTED_IDS = [
+        2,
+        6750,
+        1,
+        235265,
+        235248,
+        255969,
+        235248,
+        109,
+        4747,
+        139,
+        235335,
+        139,
+        216311,
+        241316,
+        139,
+        239880,
+        235341,
+        144,
+        235269,
+        235248,
+        235274,
+        235284,
+        235304,
+        235310,
+        235248,
+        235274,
+        235308,
+        235248,
+        235308,
+        235269,
+        235318,
+        235274,
+    ]
+
     input_text = "\t\t\t\t \n\n61"
-    

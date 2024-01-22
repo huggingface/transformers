@@ -21,10 +21,10 @@ import pytest
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GoldenGateConfig, is_torch_available
 from transformers.testing_utils import (
+    require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
-    require_bitsandbytes,
     slow,
     torch_device,
 )
@@ -456,6 +456,7 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("GoldenGate flash attention does not support right padding")
 
+
 @require_torch_gpu
 @slow
 class GoldenGateIntegrationTest(unittest.TestCase):
@@ -464,10 +465,13 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
-        EXPECTED_TEXTS = ['Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will', 'Hi,\n\nI have a problem with my 2005 1.6 16']
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
-        
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
@@ -479,10 +483,15 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     def test_model_2b_fp16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
-        EXPECTED_TEXTS = ['Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will', 'Hi,\n\nI have a problem with my 2005 1.6 16']
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(torch_device)
-        
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
@@ -494,10 +503,15 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     def test_model_2b_bf16(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
-        EXPECTED_TEXTS = ['Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>', 'Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(']
+        EXPECTED_TEXTS = [
+            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
+            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+        ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(torch_device)
-        
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
@@ -510,10 +524,13 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     def test_model_2b_4bit(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
-        EXPECTED_TEXTS = ['Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1', 'Hi,\n\nI have a 2007 335i with the 6 speed']
+        EXPECTED_TEXTS = [
+            "Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1",
+            "Hi,\n\nI have a 2007 335i with the 6 speed",
+        ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
-        
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 

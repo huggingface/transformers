@@ -80,7 +80,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_golden_gate import GoldenGateTokenizer
-        
+
     try:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
@@ -88,7 +88,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_golden_gate_fast import GoldenGateTokenizerFast
-        
 
     try:
         if not is_torch_available():
