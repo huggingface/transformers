@@ -1257,6 +1257,7 @@ class GoldenGateConvert(SpmConverter):
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
             
             # there is a missing token in the vocab. We have to do this to support merges
+            # "<0x09>" is the bytefallback for `\t`
             bpe_vocab["\t"] = bpe_vocab.pop("<0x09>")
             tokenizer = Tokenizer(
                 BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True, dropout=None)
