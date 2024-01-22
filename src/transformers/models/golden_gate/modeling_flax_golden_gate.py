@@ -172,7 +172,7 @@ class FlaxGoldenGateRotaryEmbedding(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        head_dim = self.config.hidden_size // self.config.num_attention_heads
+        head_dim = self.config.head_dim
         self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
 
     def __call__(self, key, query, position_ids):
@@ -198,7 +198,7 @@ class FlaxGoldenGateAttention(nn.Module):
         config = self.config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
+        self.head_dim = self.config.head_dim
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         self.num_key_value_heads = config.num_key_value_heads
