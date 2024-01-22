@@ -124,6 +124,7 @@ class GoldenGateConfig(PretrainedConfig):
         num_hidden_layers=28,
         num_attention_heads=16,
         num_key_value_heads=16,
+        head_dim=256,
         hidden_act="gelu",
         max_position_embeddings=8192,
         initializer_range=0.02,
@@ -145,7 +146,7 @@ class GoldenGateConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-
+        self.head_dim = head_dim
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = num_attention_heads

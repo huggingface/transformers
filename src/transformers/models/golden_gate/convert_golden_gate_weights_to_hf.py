@@ -51,34 +51,14 @@ come in several checkpoints they each contain a part of each weight of the model
 """
 
 golden_gate_2b_config = GoldenGateConfig(
+    num_hidden_layers=18,
+    num_attention_heads=8,
+    num_key_value_heads=1,
     hidden_size=2048,
     intermediate_size=16384,
-    num_attention_heads=8,
-    num_hidden_layers=18,
-    rms_norm_eps=1e-6,
-    num_key_value_heads=1,
-    vocab_size=256128,
-    head_dim=256,
-    max_position_embeddings=8192,
-    rope=10000,
-    hidden_act="gelu",
-    tie_word_embeddings=True,
 )
 
-golden_gate_7b_config = GoldenGateConfig(
-    hidden_size=3072,
-    intermediate_size=24576,
-    num_attention_heads=16,
-    num_hidden_layers=28,
-    rms_norm_eps=1e-6,
-    num_key_value_heads=16,
-    vocab_size=256128,
-    head_dim=256,
-    max_position_embeddings=8192,
-    rope=10000,
-    hidden_act="gelu",
-    tie_word_embeddings=True,
-)
+golden_gate_7b_config = GoldenGateConfig()
 
 CONFIG_MAPPING = {"2B": golden_gate_2b_config, "7B": golden_gate_7b_config}
 
@@ -94,6 +74,8 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     # permute for sliced rotary
     def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
         return w.view(n_heads, dim1, 2, dim2 // n_heads // 2).reshape(dim1, dim2)
+        # Vs slicing for llama:
+        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
@@ -114,9 +96,9 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1=k_proj.shape[1])
-                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
+                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous(), n_heads=16,  dim1 = q_proj.shape[0], dim2=q_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj.contiguous(), n_heads=16,  dim1 = k_proj.shape[0], dim2=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
 
         elif k == "embedder.weight":
             state_dict[LAYER_NAME_MAPPING[k]] = v
@@ -158,18 +140,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/Users/arthurzucker/Work/golden_gate/ckpt/2b.ckpt",
+        default="/Users/arthurzucker/Work/golden_gate/ckpt/7b.ckpt",
         help="Location of GoldenGate weights, which contains tokenizer.model and model folders",
     )
     parser.add_argument(
         "--model_size",
-        default="2B",
+        default="7B",
         choices=["2B", "7B", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the GoldenGate2 official release. For more details on GoldenGate2, checkout the original repo: https://huggingface.co/meta-golden_gate",
     )
     parser.add_argument(
         "--output_dir",
-        default="golden_gate_2b",
+        default="golden_gate_7b",
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
