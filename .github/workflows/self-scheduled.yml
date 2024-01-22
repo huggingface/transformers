@@ -85,6 +85,7 @@ jobs:
         run: |
           echo ${{ needs.setup.outputs.matrix }}
           echo ${{ needs.setup.outputs.matrix_2 }}
+          echo ${{ matrix.bon }}
 
 
 #  run_tests_single_gpu:
