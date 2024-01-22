@@ -19,11 +19,12 @@ import unittest
 
 import pytest
 
-from transformers import GoldenGateConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, GoldenGateConfig, is_torch_available
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_bitsandbytes,
     slow,
     torch_device,
 )
@@ -455,72 +456,68 @@ class GoldenGateModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_flash_attn_2_inference_padding_right(self):
         self.skipTest("GoldenGate flash attention does not support right padding")
 
-@require_torch
+@require_torch_gpu
+@slow
 class GoldenGateIntegrationTest(unittest.TestCase):
-    @slow
-    @require_torch_gpu
-    def test_small_model_logits(self):
-        model_id = "google/golden-gate-2b"
-        input_ids = torch.LongTensor([[2, 651, 6037, 576, 6081, 603]]).to(torch_device)
+    input_text = ["Hello my name is", "Hi"]
 
+    def test_model_2b_fp32(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = ['Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will', 'Hi,\n\nI have a problem with my 2005 1.6 16']
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
+        
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = GoldenGateForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-        EXPECTED_LOGITS = torch.Tensor(
-            [[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]
-        ).to(torch_device)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        with torch.no_grad():
-            logits = model(input_ids).logits
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, :3, :3].half(), EXPECTED_LOGITS, atol=1e-3, rtol=1e-3)
+    def test_model_2b_fp16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = ['Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will', 'Hi,\n\nI have a problem with my 2005 1.6 16']
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(torch_device)
         
-        EXPECTED_IDS = [2, 651, 6037, 576, 6081, 603, 476, 3413, 576,82777, 235265, 1165, 603, 476, 3413, 576, 4281, 235269,6981, 235269, 578, 3096, 235265, 1165, 603, 476, 3413,576, 8012, 235269, 2960, 235269, 578, 10058, 235265, 1165]
-        outputs = model.generate(input_ids, do_sample = False, max_new_tokens = 30)
-        torch.testing.assert_close(outputs, EXPECTED_IDS)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_2b_bf16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = ['Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>', 'Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(']
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(torch_device)
         
-        EXPECTED_TEXT = ['<bos>The capital of France is a city of contrasts. It is a city of history, culture, and art. It is a city of fashion, food, and wine. It']
-        text = tokenizer.batch_decode(outputs)
-        self.assert_equal(EXPECTED_TEXT, text)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-    @slow
-    # @require_torch_gpu
-    def test_small_model_logits_batched(self):
-        model_id = "hf-internal-testing/GoldenGate-tiny"
-        input_ids = torch.LongTensor([[2, 651, 6037, 576, 6081, 603, 0, 0, 0], [2, 1841, 749, 692, 1742, 2229, 615, 577, 573]]).to(torch_device)
-        attention_mask = input_ids.ne(0).to(torch.long)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        model = GoldenGateForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
-        EXPECTED_LOGITS_LEFT = torch.Tensor(
-            [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-        )
+    @require_bitsandbytes
+    def test_model_2b_4bit(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = ['Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1', 'Hi,\n\nI have a 2007 335i with the 6 speed']
 
-        # logits[0, -3:, -3:].half()
-        EXPECTED_LOGITS_LEFT_UNPADDED = torch.Tensor(
-            [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
+        
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
-        # logits[1, -3:, -3:].half()
-        EXPECTED_LOGITS_RIGHT_UNPADDED = torch.Tensor(
-            [[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]
-        )
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        with torch.no_grad():
-            logits = model(input_ids, attention_mask=attention_mask).logits
-
-        torch.testing.assert_close(logits[0, :3, :3].half(), EXPECTED_LOGITS_LEFT, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[0, -3:, -3:].half(), EXPECTED_LOGITS_LEFT_UNPADDED, atol=1e-3, rtol=1e-3)
-        torch.testing.assert_close(logits[1, -3:, -3:].half(), EXPECTED_LOGITS_RIGHT_UNPADDED, atol=1e-3, rtol=1e-3)
-
-    @slow
-    # @require_torch_gpu
-    def test_7b_generation(self):
-        model_id = "hf-internal-testing/GoldenGate-tiny"
-        input_ids = torch.LongTensor([[2, 651, 6037, 576, 6081, 603, 0, 0, 0], [2, 1841, 749, 692, 1742, 2229, 615, 577, 573]]).to(torch_device)
-        attention_mask = input_ids.ne(0).to(torch.long)
+        self.assertEqual(output_text, EXPECTED_TEXTS)

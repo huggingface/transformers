@@ -109,7 +109,7 @@ class GoldenGateRotaryEmbedding(nn.Module):
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.float32
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
@@ -271,7 +271,7 @@ class GoldenGateAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        if self.hidden_size % self.head_dim  != 0:
+        if self.hidden_size % self.num_heads  != 0:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
