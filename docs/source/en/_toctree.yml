@@ -523,6 +523,8 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
