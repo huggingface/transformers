@@ -116,7 +116,6 @@ class DepthAnythingReassembleLayer(nn.Module):
         return hidden_state
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage with DPT->DepthAnything
 class DepthAnythingFeatureFusionStage(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -124,17 +123,20 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DepthAnythingFeatureFusionLayer(config))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, size=None):
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]
 
         fused_hidden_states = []
         # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
+        size = hidden_states[1].shape[2:]
+        fused_hidden_state = self.layers[0](hidden_states[0], size=size)
         fused_hidden_states.append(fused_hidden_state)
         # looping from the last layer to the second
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
+            if idx != len(hidden_states[1:]) - 1:
+                size = hidden_states[1:][idx + 1].shape[2:]
+            fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
@@ -203,7 +205,7 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
         self.residual_layer1 = DepthAnythingPreActResidualLayer(config)
         self.residual_layer2 = DepthAnythingPreActResidualLayer(config)
 
-    def forward(self, hidden_state, residual=None):
+    def forward(self, hidden_state, residual=None, size=None):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -212,8 +214,11 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
             hidden_state = hidden_state + self.residual_layer1(residual)
 
         hidden_state = self.residual_layer2(hidden_state)
+
+        modifier = {"scale_factor": 2} if size is None else {"size": size}
+
         hidden_state = nn.functional.interpolate(
-            hidden_state, scale_factor=2, mode="bilinear", align_corners=self.align_corners
+            hidden_state, **modifier, mode="bilinear", align_corners=self.align_corners
         )
         hidden_state = self.projection(hidden_state)
 
