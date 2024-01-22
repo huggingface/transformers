@@ -1189,241 +1189,30 @@ class XGLMConverter(SpmConverter):
         )
 
 class GoldenGateConvert(SpmConverter):
-    """
-    unk_id: 3
-    bos_id: 2
-    eos_id: 1
-    pad_id: 0
-    unk_piece: "<unk>"
-    bos_piece: "<bos>"
-    eos_piece: "<eos>"
-    pad_piece: "<pad>"
+    handle_byte_fallback = True
     
+    """"
     
-    
-user_defined_symbols: "<mask>"
-user_defined_symbols: "<2mass>"
-user_defined_symbols: "[@BOS@]"
-user_defined_symbols: "<unused0>"
-user_defined_symbols: "<unused1>"
-user_defined_symbols: "<unused2>"
-user_defined_symbols: "<unused3>"
-user_defined_symbols: "<unused4>"
-user_defined_symbols: "<unused5>"
-user_defined_symbols: "<unused6>"
-user_defined_symbols: "<unused7>"
-user_defined_symbols: "<unused8>"
-user_defined_symbols: "<unused9>"
-user_defined_symbols: "<unused10>"
-user_defined_symbols: "<unused11>"
-user_defined_symbols: "<unused12>"
-user_defined_symbols: "<unused13>"
-user_defined_symbols: "<unused14>"
-user_defined_symbols: "<unused15>"
-user_defined_symbols: "<unused16>"
-user_defined_symbols: "<unused17>"
-user_defined_symbols: "<unused18>"
-user_defined_symbols: "<unused19>"
-user_defined_symbols: "<unused20>"
-user_defined_symbols: "<unused21>"
-user_defined_symbols: "<unused22>"
-user_defined_symbols: "<unused23>"
-user_defined_symbols: "<unused24>"
-user_defined_symbols: "<unused25>"
-user_defined_symbols: "<unused26>"
-user_defined_symbols: "<unused27>"
-user_defined_symbols: "<unused28>"
-user_defined_symbols: "<unused29>"
-user_defined_symbols: "<unused30>"
-user_defined_symbols: "<unused31>"
-user_defined_symbols: "<unused32>"
-user_defined_symbols: "<unused33>"
-user_defined_symbols: "<unused34>"
-user_defined_symbols: "<unused35>"
-user_defined_symbols: "<unused36>"
-user_defined_symbols: "<unused37>"
-user_defined_symbols: "<unused38>"
-user_defined_symbols: "<unused39>"
-user_defined_symbols: "<unused40>"
-user_defined_symbols: "<unused41>"
-user_defined_symbols: "<unused42>"
-user_defined_symbols: "<unused43>"
-user_defined_symbols: "<unused44>"
-user_defined_symbols: "<unused45>"
-user_defined_symbols: "<unused46>"
-user_defined_symbols: "<unused47>"
-user_defined_symbols: "<unused48>"
-user_defined_symbols: "<unused49>"
-user_defined_symbols: "<unused50>"
-user_defined_symbols: "<unused51>"
-user_defined_symbols: "<unused52>"
-user_defined_symbols: "<unused53>"
-user_defined_symbols: "<unused54>"
-user_defined_symbols: "<unused55>"
-user_defined_symbols: "<unused56>"
-user_defined_symbols: "<unused57>"
-user_defined_symbols: "<unused58>"
-user_defined_symbols: "<unused59>"
-user_defined_symbols: "<unused60>"
-user_defined_symbols: "<unused61>"
-user_defined_symbols: "<unused62>"
-user_defined_symbols: "<unused63>"
-user_defined_symbols: "<unused64>"
-user_defined_symbols: "<unused65>"
-user_defined_symbols: "<unused66>"
-user_defined_symbols: "<unused67>"
-user_defined_symbols: "<unused68>"
-user_defined_symbols: "<unused69>"
-user_defined_symbols: "<unused70>"
-user_defined_symbols: "<unused71>"
-user_defined_symbols: "<unused72>"
-user_defined_symbols: "<unused73>"
-user_defined_symbols: "<unused74>"
-user_defined_symbols: "<unused75>"
-user_defined_symbols: "<unused76>"
-user_defined_symbols: "<unused77>"
-user_defined_symbols: "<unused78>"
-user_defined_symbols: "<unused79>"
-user_defined_symbols: "<unused80>"
-user_defined_symbols: "<unused81>"
-user_defined_symbols: "<unused82>"
-user_defined_symbols: "<unused83>"
-user_defined_symbols: "<unused84>"
-user_defined_symbols: "<unused85>"
-user_defined_symbols: "<unused86>"
-user_defined_symbols: "<unused87>"
-user_defined_symbols: "<unused88>"
-user_defined_symbols: "<unused89>"
-user_defined_symbols: "<unused90>"
-user_defined_symbols: "<unused91>"
-user_defined_symbols: "<unused92>"
-user_defined_symbols: "<unused93>"
-user_defined_symbols: "<unused94>"
-user_defined_symbols: "<unused95>"
-user_defined_symbols: "<unused96>"
-user_defined_symbols: "<unused97>"
-user_defined_symbols: "<unused98>"
-user_defined_symbols: "<start_of_turn>"
-user_defined_symbols: "<end_of_turn>"
-user_defined_symbols: "\n"
-user_defined_symbols: "\n\n"
-user_defined_symbols: "\n\n\n"
-user_defined_symbols: "\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-user_defined_symbols: "▁▁"
-user_defined_symbols: "▁▁▁"
-user_defined_symbols: "▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
-user_defined_symbols: "<table>"
-user_defined_symbols: "<caption>"
-user_defined_symbols: "<thead>"
-user_defined_symbols: "<tbody>"
-user_defined_symbols: "<tfoot>"
-user_defined_symbols: "<tr>"
-user_defined_symbols: "<th>"
-user_defined_symbols: "<td>"
-user_defined_symbols: "</table>"
-user_defined_symbols: "</caption>"
-user_defined_symbols: "</thead>"
-user_defined_symbols: "</tbody>"
-user_defined_symbols: "</tfoot>"
-user_defined_symbols: "</tr>"
-user_defined_symbols: "</th>"
-user_defined_symbols: "</td>"
-user_defined_symbols: "<h1>"
-user_defined_symbols: "<h2>"
-user_defined_symbols: "<h3>"
-user_defined_symbols: "<h4>"
-user_defined_symbols: "<h5>"
-user_defined_symbols: "<h6>"
-user_defined_symbols: "<blockquote>"
-user_defined_symbols: "</h1>"
-user_defined_symbols: "</h2>"
-user_defined_symbols: "</h3>"
-user_defined_symbols: "</h4>"
-user_defined_symbols: "</h5>"
-user_defined_symbols: "</h6>"
-user_defined_symbols: "</blockquote>"
-user_defined_symbols: "<strong>"
-user_defined_symbols: "<em>"
-user_defined_symbols: "<b>"
-user_defined_symbols: "<i>"
-user_defined_symbols: "<u>"
-user_defined_symbols: "<s>"
-user_defined_symbols: "<sub>"
-user_defined_symbols: "<sup>"
-user_defined_symbols: "<code>"
-user_defined_symbols: "</strong>"
-user_defined_symbols: "</em>"
-user_defined_symbols: "</b>"
-user_defined_symbols: "</i>"
-user_defined_symbols: "</u>"
-user_defined_symbols: "</s>"
-user_defined_symbols: "</sub>"
-user_defined_symbols: "</sup>"
-user_defined_symbols: "</code>"
-
-max_sentencepiece_length: 16
 split_by_unicode_script: true
 split_by_number: true
 split_by_whitespace: true
 treat_whitespace_as_suffix: false
 allow_whitespace_only_pieces: true
 split_digits: true
-    
+byte_fallback: true
+
     """
+    def normalizer(self, proto):
+        return normalizers.Replace(" ", '▁')
+        
+        if len(precompiled_charsmap) > 0:
+            return normalizers.Precompiled(precompiled_charsmap)
+        return None
+    
+    # def normalizer(self, proto):
+    #     return None
+    
+
     def vocab(self, proto):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),
@@ -1434,10 +1223,8 @@ split_digits: true
         return vocab
     
     def pre_tokenizer(self, replacement, add_prefix_space):
-        prepend_scheme = "first"
-        return pre_tokenizers.Metaspace(
-            replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
-        )
+        return None
+
 
     def unk_id(self, proto):
         unk_id = 3
@@ -1450,11 +1237,40 @@ split_digits: true
                 decoders.Replace("▁", " "),
                 decoders.ByteFallback(),
                 decoders.Fuse(),
-                decoders.Strip(content=" ", left=1),
             ]
         )
         
-        
+    def tokenizer(self, proto):
+        model_type = proto.trainer_spec.model_type
+        vocab_scores = self.vocab(proto)
+        if model_type == 1:
+            import tokenizers
+
+            if version.parse(tokenizers.__version__) < version.parse("0.14.0"):
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0))
+            else:
+                tokenizer = Tokenizer(Unigram(vocab_scores, 0, byte_fallback=True))
+
+        elif model_type == 2:
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            tokenizer = Tokenizer(
+                BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True, dropout=None)
+            )
+            tokenizer.add_special_tokens(
+                [
+                    AddedToken("<pad>", normalized=False, special=True),
+                    AddedToken("<eos>", normalized=False, special=True),
+                    AddedToken("<bos>", normalized=False, special=True),
+                    AddedToken("<unk>", normalized=False, special=True),
+                ]
+            )
+        else:
+            raise Exception(
+                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
+            )
+
+        return tokenizer
 
 class LlamaConverter(SpmConverter):
     handle_byte_fallback = True

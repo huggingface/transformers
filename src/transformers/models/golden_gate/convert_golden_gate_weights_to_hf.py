@@ -148,7 +148,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
 def write_tokenizer(input_tokenizer_path, save_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GoldenGateTokenizerFast # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
+    tokenizer_class = GoldenGateTokenizer # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(save_path)
@@ -181,7 +181,7 @@ def main():
         config=config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
-        safe_serialization=args.safe_serialization,
+        safe_serialization=args.safe_serialization, 
     )
     write_tokenizer(spm_path, args.output_dir)
 

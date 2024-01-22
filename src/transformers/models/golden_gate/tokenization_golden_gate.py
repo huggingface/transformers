@@ -165,8 +165,11 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
-
+        
+        # add_dummy_prefix_space is false
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+        
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -185,19 +188,6 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
     @property
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
-
-    def get_spm_processor(self, from_slow=False):
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -221,16 +211,6 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
-        """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
-        """
-        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
-        return tokens
-
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
@@ -241,11 +221,8 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
-        # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        return self.sp_model.encode(text, out_type=str)
+
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
