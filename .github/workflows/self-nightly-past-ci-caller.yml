@@ -6,7 +6,13 @@ on:
       - check_nightly_build
 
 jobs:
-  build_nightly_ci_images:
-    name: Build Nightly CI Docker Images
-    uses: ./.github/workflows/build-nightly-ci-docker-images.yml
+#  build_nightly_ci_images:
+#    name: Build Nightly CI Docker Images
+#    uses: ./.github/workflows/build-nightly-ci-docker-images.yml
+#    secrets: inherit
+
+  run_nightly_ci:
+    name: Nightly CI
+    # needs: [build_nightly_ci_images]
+    uses: ./.github/workflows/self-nightly-scheduled.yml
     secrets: inherit
