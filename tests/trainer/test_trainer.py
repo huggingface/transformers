@@ -1283,10 +1283,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # test with the default log_level - should be the same as before and thus we test depending on is_info
         is_info = logging.get_verbosity() <= 20
-        with LoggingLevel(logging.INFO):
-            with CaptureLogger(logger) as cl:
-                trainer = get_regression_trainer()
-                trainer.train()
+        with CaptureLogger(logger) as cl:
+            trainer = get_regression_trainer()
+            trainer.train()
         if is_info:
             self.assertIn(log_info_string, cl.out)
         else:
