@@ -888,7 +888,7 @@ def forecast_masking(
 
     Parameters:
         inputs (`torch.Tensor`):
-            Input of shape `(bs, num_channels, num_patch, patch_len)`
+            Input of shape `(bs, num_channels, num_patch, patch_length)`
         num_forecast_mask_patches (`list`):
             Number of patches to be masked at the end of each batch sample. e.g. 4 or [3, 5].
         unmasked_channel_indices (`list`, *optional*):
