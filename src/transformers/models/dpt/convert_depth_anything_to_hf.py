@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team.
+# Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert DINOv2 + DPT checkpoints from the original repository. URL:
-https://github.com/facebookresearch/dinov2/tree/main"""
+"""Convert Depth Anything checkpoints from the original repository. URL:
+https://github.com/LiheYoung/Depth-Anything"""
 
 
 import argparse
@@ -23,13 +23,12 @@ from pathlib import Path
 
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
-
-from huggingface_hub import hf_hub_download
 
 
 logging.set_verbosity_info()
@@ -65,8 +64,8 @@ def get_dpt_config(model_name):
         backbone_config=backbone_config,
         fusion_hidden_size=64,
         neck_hidden_sizes=neck_hidden_sizes,
-        use_bias_in_fusion_residual=False,
-        add_projection=True,
+        use_bias_in_fusion_residual=True,
+        readout_type="ignore",
     )
 
     return config
@@ -103,16 +102,18 @@ def create_rename_keys(config):
     rename_keys.append(("pretrained.norm.bias", "backbone.layernorm.bias"))
 
     # activation postprocessing (readout projections + resize blocks)
-    # for i in range(4):
+    # Depth Anything does not use CLS token => readout_projects not required
+
     #     rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
     #     rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
 
-    #     rename_keys.append((f"pretrained.act_postprocess{i+1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
-    #     rename_keys.append((f"pretrained.act_postprocess{i+1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
+    for i in range(4):
+        rename_keys.append((f"depth_head.projects.{i}.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
+        rename_keys.append((f"depth_head.projects.{i}.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
 
-    #     if i != 2:
-    #         rename_keys.append((f"pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
-    #         rename_keys.append((f"pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
+        if i != 2:
+            rename_keys.append((f"depth_head.resize_layers.{i}.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
+            rename_keys.append((f"depth_head.resize_layers.{i}.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
     mapping = {1:3, 2:2, 3:1, 4:0}
@@ -135,9 +136,12 @@ def create_rename_keys(config):
         rename_keys.append((f"depth_head.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
-    # for i in range(0, 5, 2):
-    #     rename_keys.append((f"depth_head.scratch.output_conv.{i}.weight", f"head.head.{i}.weight"))
-    #     rename_keys.append((f"depth_head.scratch.output_conv.{i}.bias", f"head.head.{i}.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.head.0.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv1.bias", "head.head.0.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv2.0.weight", "head.head.2.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv2.0.bias", "head.head.2.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv2.2.weight", "head.head.4.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv2.2.bias", "head.head.4.bias"))
 
     return rename_keys
 
@@ -151,11 +155,15 @@ def read_in_q_k_v(state_dict, config):
         in_proj_bias = state_dict.pop(f"pretrained.blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: hidden_size]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[hidden_size : hidden_size * 2, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
         state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size :]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
 
 
 def rename_key(dct, old, new):
@@ -165,7 +173,7 @@ def rename_key(dct, old, new):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "https://dl.fbaipublicfiles.com/dinov2/images/example.jpg"
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
@@ -227,7 +235,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     config = get_dpt_config(model_name)
 
     # load original state_dict
-    filepath = hf_hub_download(repo_id="LiheYoung/Depth-Anything", filename="checkpoints/depth_anything_vits14.pth", repo_type="space")
+    filepath = hf_hub_download(
+        repo_id="LiheYoung/Depth-Anything", filename="checkpoints/depth_anything_vits14.pth", repo_type="space"
+    )
     state_dict = torch.load(filepath, map_location="cpu")
     # rename keys
     rename_keys = create_rename_keys(config)
@@ -238,13 +248,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # load HuggingFace model
     model = DPTForDepthEstimation(config)
-    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    print("Missing keys:", missing_keys)
-    print("Unexpected keys:", unexpected_keys)
-    assert missing_keys == [
-        "neck.fusion_stage.layers.0.residual_layer1.convolution1.weight",
-        "neck.fusion_stage.layers.0.residual_layer1.convolution2.weight",
-    ]
+    model.load_state_dict(state_dict)
     model.eval()
 
     # Verify image processor
@@ -269,6 +273,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         outputs = model(pixel_values)
 
     predicted_depth = outputs.predicted_depth
+
+    import numpy as np
+
+    prediction = torch.nn.functional.interpolate(
+        predicted_depth.unsqueeze(1), size=image.size[::-1], mode="bicubic", align_corners=False
+    )
+    output = prediction.squeeze().cpu().numpy()
+    formatted = (output * 255 / np.max(output)).astype("uint8")
+    depth = Image.fromarray(formatted)
+    depth.save("depth.jpg")
 
     print("Shape of predicted depth:", predicted_depth.shape)
     print("First values of predicted depth:", predicted_depth[0, :3, :3])
