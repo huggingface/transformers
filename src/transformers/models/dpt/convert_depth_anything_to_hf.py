@@ -50,6 +50,7 @@ def get_dpt_config(model_name):
         neck_hidden_sizes=neck_hidden_sizes,
         use_bias_in_fusion_residual=True,
         readout_type="ignore",
+        use_size=True,
     )
 
     return config
@@ -276,10 +277,10 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # assert logits
     if verify_logits:
-        if model_name == "dpt-dinov2-small-nyu":
-            expected_shape = torch.Size([1, 576, 736])
+        if model_name == "depth-anything-small":
+            expected_shape = torch.Size([1, 518, 518])
             expected_slice = torch.tensor(
-                [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
+                [[8.7884, 8.6028, 8.5929], [8.2999, 8.5714, 8.7190], [8.6204, 8.6461, 8.7075]],
             )
 
         assert predicted_depth.shape == torch.Size(expected_shape)
@@ -321,9 +322,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--verify_logits",
-        action="store_true",
+        action="store_false",
         required=False,
-        help="Path to the output PyTorch model directory.",
+        help="Whether to verify the logits after conversion.",
     )
 
     args = parser.parse_args()

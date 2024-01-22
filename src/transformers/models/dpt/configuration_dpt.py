@@ -96,6 +96,8 @@ class DPTConfig(PretrainedConfig):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
         add_projection (`bool`, *optional*, defaults to `False`):
             Whether to add a projection layer before the depth estimation head.
+        use_size (`bool`, *optional*, defaults to `False`):
+            Whether to use the size for interpolation, rather than scale factor, as in Depth Anything.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
             Whether to use an auxiliary head during training.
         auxiliary_loss_weight (`float`, *optional*, defaults to 0.4):
@@ -154,6 +156,7 @@ class DPTConfig(PretrainedConfig):
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=None,
         add_projection=False,
+        use_size=False,
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
         semantic_loss_ignore_index=255,
@@ -237,6 +240,7 @@ class DPTConfig(PretrainedConfig):
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
         self.add_projection = add_projection
+        self.use_size = use_size
 
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head

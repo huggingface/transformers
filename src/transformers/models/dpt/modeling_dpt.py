@@ -692,6 +692,8 @@ class DPTReassembleLayer(nn.Module):
 class DPTFeatureFusionStage(nn.Module):
     def __init__(self, config):
         super().__init__()
+
+        self.config = config
         self.layers = nn.ModuleList()
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DPTFeatureFusionLayer(config))
@@ -708,7 +710,8 @@ class DPTFeatureFusionStage(nn.Module):
         # first layer only uses the last hidden_state
         # NOTE passing size is only required for Depth Anything
         # TODO adapt for other checkpoints
-        fused_hidden_state = self.layers[0](hidden_states[0], size=hidden_states[1].shape[2:])
+        size = hidden_states[1].shape[2:] if self.config.use_size else None
+        fused_hidden_state = self.layers[0](hidden_states[0], size=size)
 
         # print("Shape of hidden state after fusion:", fused_hidden_state.shape)
         # print("First values after fusion:", fused_hidden_state[0,0,:3,:3])
@@ -722,7 +725,7 @@ class DPTFeatureFusionStage(nn.Module):
 
             # NOTE passing size is only required for Depth Anything
             # TODO adapt for other checkpoints
-            size = hidden_states[1:][idx + 1].shape[2:] if idx != len(hidden_states[1:]) - 1 else None
+            size = hidden_states[1:][idx + 1].shape[2:] if self.config.use_size and idx != len(hidden_states[1:]) - 1 else None
             fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
 
             if idx == 0:
@@ -1081,9 +1084,13 @@ class DPTDepthEstimationHead(nn.Module):
             self.projection = nn.Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
 
         features = config.fusion_hidden_size
+
+        image_size = config.backbone_config.image_size if config.backbone_config is not None and not config.is_hybrid else config.image_size
+        modifier = {"size": (int(image_size), int(image_size))} if config.use_size else {"scale_factor": 2}
+
         self.head = nn.Sequential(
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
+            nn.Upsample(**modifier, mode="bilinear", align_corners=True),
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
@@ -1098,9 +1105,15 @@ class DPTDepthEstimationHead(nn.Module):
             hidden_states = self.projection(hidden_states)
             hidden_states = nn.ReLU()(hidden_states)
 
+        print("Shape after first conv:", self.head[0](hidden_states).shape)
+        print("First values after first conv:", self.head[0](hidden_states)[0, 0, :3, :3])
+
         predicted_depth = self.head(hidden_states)
 
         predicted_depth = predicted_depth.squeeze(dim=1)
+
+        print("Shape after prediction head:", predicted_depth.shape)
+        print("First values after prediction head:", predicted_depth[0, :3, :3])
 
         return predicted_depth
 
