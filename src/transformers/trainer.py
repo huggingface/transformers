@@ -1984,8 +1984,7 @@ class Trainer:
             self._load_best_model()
         elif args.load_best_model_at_end and self.state.best_model_checkpoint is None:
             logger.warning(
-                'Best model cannot be loaded because "trainer.state.best_model_checkpoint" is None. '
-                'Have you set the "save_strategy" Training Argument?'
+                'Best model cannot be loaded because "trainer.state.best_model_checkpoint" is None.'
             )
 
         # add remaining tr_loss
