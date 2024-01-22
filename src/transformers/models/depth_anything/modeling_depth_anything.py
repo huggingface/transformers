@@ -15,14 +15,12 @@
 """ PyTorch Depth Anything model."""
 
 
-import math
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -342,18 +340,22 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.config = config
 
         features = config.fusion_hidden_size
-        self.head = nn.Sequential(
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(),
-        )
+        self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
+        
+        self.conv2 = nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1)
+        self.activation1 = nn.ReLU()
+        self.conv3 = nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0)
+        self.activation2 = nn.ReLU()
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.config.head_in_index]
-        predicted_depth = self.head(hidden_states)
+        
+        predicted_depth = self.conv1(hidden_states)
+        predicted_depth = nn.functional.interpolate(predicted_depth, (int(patch_height * 14), int(patch_width * 14)), mode="bilinear", align_corners=True)
+        predicted_depth = self.conv2(predicted_depth)
+        predicted_depth = self.activation1(predicted_depth)
+        predicted_depth = self.conv3(predicted_depth)
+        predicted_depth = self.activation2(predicted_depth)
         predicted_depth = predicted_depth.squeeze(dim=1)
 
         return predicted_depth
@@ -370,11 +372,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         super().__init__(config)
 
         self.backbone = AutoBackbone.from_config(config.backbone_config)
-
-        # Neck
         self.neck = DepthAnythingNeck(config)
-
-        # Depth estimation head
         self.head = DepthAnythingDepthEstimationHead(config)
 
         # Initialize weights and apply final processing
@@ -447,13 +445,9 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         patch_height = height // patch_size
         patch_width = width // patch_size
 
-        print("Backbone features:")
-        for i in hidden_states:
-            print(i.shape)
-
         hidden_states = self.neck(hidden_states, patch_height, patch_width)
 
-        predicted_depth = self.head(hidden_states)
+        predicted_depth = self.head(hidden_states, patch_height, patch_width)
 
         loss = None
         if labels is not None:

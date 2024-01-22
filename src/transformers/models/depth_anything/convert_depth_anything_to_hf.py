@@ -24,7 +24,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import Dinov2Config, DepthAnythingConfig, DepthAnythingForDepthEstimation, DPTImageProcessor
+from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
 from transformers.utils import logging
 
 
@@ -125,12 +125,12 @@ def create_rename_keys(config):
         rename_keys.append((f"depth_head.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
-    rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.head.0.weight"))
-    rename_keys.append(("depth_head.scratch.output_conv1.bias", "head.head.0.bias"))
-    rename_keys.append(("depth_head.scratch.output_conv2.0.weight", "head.head.2.weight"))
-    rename_keys.append(("depth_head.scratch.output_conv2.0.bias", "head.head.2.bias"))
-    rename_keys.append(("depth_head.scratch.output_conv2.2.weight", "head.head.4.weight"))
-    rename_keys.append(("depth_head.scratch.output_conv2.2.bias", "head.head.4.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.conv1.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv1.bias", "head.conv1.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv2.0.weight", "head.conv2.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv2.0.bias", "head.conv2.bias"))
+    rename_keys.append(("depth_head.scratch.output_conv2.2.weight", "head.conv3.weight"))
+    rename_keys.append(("depth_head.scratch.output_conv2.2.bias", "head.conv3.bias"))
 
     return rename_keys
 
