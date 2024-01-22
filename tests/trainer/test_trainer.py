@@ -50,6 +50,7 @@ from transformers.testing_utils import (
     TOKEN,
     USER,
     CaptureLogger,
+    LoggingLevel,
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
@@ -1282,25 +1283,28 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # test with the default log_level - should be the same as before and thus we test depending on is_info
         is_info = logging.get_verbosity() <= 20
-        with CaptureLogger(logger) as cl:
-            trainer = get_regression_trainer()
-            trainer.train()
+        with LoggingLevel(logging.INFO):
+            with CaptureLogger(logger) as cl:
+                trainer = get_regression_trainer()
+                trainer.train()
         if is_info:
             self.assertIn(log_info_string, cl.out)
         else:
             self.assertNotIn(log_info_string, cl.out)
 
-        # test with low log_level - lower than info
-        with CaptureLogger(logger) as cl:
-            trainer = get_regression_trainer(log_level="debug")
-            trainer.train()
-        self.assertIn(log_info_string, cl.out)
+        with LoggingLevel(logging.INFO):
+            # test with low log_level - lower than info
+            with CaptureLogger(logger) as cl:
+                trainer = get_regression_trainer(log_level="debug")
+                trainer.train()
+            self.assertIn(log_info_string, cl.out)
 
-        # test with high log_level - should be quiet
-        with CaptureLogger(logger) as cl:
-            trainer = get_regression_trainer(log_level="error")
-            trainer.train()
-        self.assertNotIn(log_info_string, cl.out)
+        with LoggingLevel(logging.INFO):
+            # test with high log_level - should be quiet
+            with CaptureLogger(logger) as cl:
+                trainer = get_regression_trainer(log_level="error")
+                trainer.train()
+            self.assertNotIn(log_info_string, cl.out)
 
     def test_save_checkpoints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
