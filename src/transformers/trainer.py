@@ -1617,13 +1617,13 @@ class Trainer:
         self.max_steps = max_steps
         if self.args.save_strategy == "steps" and max_steps < self.args.save_steps:
             logger.warning(
-                'Model(s) will not be saved because max_steps is less than args.save_steps: '
+                "Model(s) will not be saved because max_steps is less than args.save_steps: "
                 'Set args.save_strategy to "no" or "epoch", or increase duration of training.'
             )
             if self.args.load_best_model_at_end:
                 raise ValueError(
                     'Max steps is less than args.save_steps: Set args.save_strategy to "no" or "epoch", '
-                    'set args.load_best_model_at_end to False, or increase duration of training.'
+                    "set args.load_best_model_at_end to False, or increase duration of training."
                 )
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
@@ -1983,9 +1983,7 @@ class Trainer:
                 smp.barrier()
             self._load_best_model()
         elif args.load_best_model_at_end and self.state.best_model_checkpoint is None:
-            logger.warning(
-                'Best model cannot be loaded because "trainer.state.best_model_checkpoint" is None.'
-            )
+            logger.warning('Best model cannot be loaded because "trainer.state.best_model_checkpoint" is None.')
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
