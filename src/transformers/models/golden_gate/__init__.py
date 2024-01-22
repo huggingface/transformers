@@ -17,6 +17,8 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
+    is_sentencepiece_available,
+    is_tokenizers_available,
     is_torch_available,
 )
 
@@ -24,6 +26,23 @@ from ...utils import (
 _import_structure = {
     "configuration_golden_gate": ["GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP", "GoldenGateConfig"],
 }
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_golden_gate"] = ["GoldenGateTokenizer"]
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_golden_gate_fast"] = ["GoldenGateTokenizerFast"]
+
 
 try:
     if not is_torch_available():
@@ -53,6 +72,23 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_golden_gate import GOLDEN_GATE_PRETRAINED_CONFIG_ARCHIVE_MAP, GoldenGateConfig
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_golden_gate import GoldenGateTokenizer
+        
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_golden_gate_fast import GoldenGateTokenizerFast
+        
 
     try:
         if not is_torch_available():

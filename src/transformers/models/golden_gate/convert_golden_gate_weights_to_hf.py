@@ -17,17 +17,17 @@ import warnings
 
 import torch
 
-from transformers import GoldenGateConfig, GoldenGateForCausalLM, LlamaTokenizer, FlaxGoldenGateForCausalLM
+from transformers import GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer, FlaxGoldenGateForCausalLM
 
 
 try:
-    from transformers import LlamaTokenizerFast
+    from transformers import GoldenGateTokenizerFast
 except ImportError as e:
     warnings.warn(e)
     warnings.warn(
         "The converted tokenizer will be the `slow` tokenizer. To use the fast, update your `tokenizers` library and re-run the tokenizer conversion"
     )
-    LlamaTokenizerFast = None
+    GoldenGateTokenizerFast = None
 
 """
 Sample usage:
@@ -40,10 +40,10 @@ python src/transformers/models/golden_gate/convert_golden_gate_weights_to_hf.py 
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import GoldenGateForCausalLM, LlamaTokenizer
+from transformers import GoldenGateForCausalLM, GoldenGateTokenizerFast
 
 model = GoldenGateForCausalLM.from_pretrained("/output/path")
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
+tokenizer = GoldenGateTokenizerFast.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -127,7 +127,20 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     print("Loading the checkpoint in a GoldenGate model.")
     with torch.device("meta"):
         model = GoldenGateForCausalLM(config)
-    model.load_state_dict(state_dict, assign=True, strict=True)
+
+    model.config.torch_dtype = torch.float32
+    import contextlib
+    
+    @contextlib.contextmanager
+    def _set_default_tensor_type(dtype: torch.dtype):
+        """Sets the default torch dtype to the given dtype."""
+        torch.set_default_dtype(dtype)
+        yield
+        torch.set_default_dtype(torch.float)
+    
+    
+    with _set_default_tensor_type(torch.float32):
+        model.load_state_dict(state_dict, assign=True, strict=True)
     del model.config._name_or_path
     print("Saving in the Transformers format.")
     model.save_pretrained(save_path, safe_serialization=safe_serialization)
@@ -135,7 +148,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
 
 def write_tokenizer(input_tokenizer_path, save_path):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
+    tokenizer_class = GoldenGateTokenizerFast # if GoldenGateTokenizerFast is None else GoldenGateTokenizerFast
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     tokenizer.save_pretrained(save_path)
@@ -172,18 +185,29 @@ def main():
     )
     write_tokenizer(spm_path, args.output_dir)
 
-    tokenizer = LlamaTokenizerFast.from_pretrained(args.output_dir, pad_token="<pad>")
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000 + 1)
-    model.to(torch.bfloat16)
-    outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"))
+    import random 
+    import numpy as np
+    random.seed(12345)
+    np.random.seed(12345)
+    torch.manual_seed(12345)
+    
+    
+    tokenizer = GoldenGateTokenizerFast.from_pretrained(args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens = "<bos>")
+    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id =1, bos_token_id = 2)
+    model = model.to(torch.bfloat16).eval()
+
+    model.generation_config.temperature = 1
+    model.generation_config.top_p = 1 
+
+    outputs = model.generate(torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"), do_sample=False, max_new_tokens = 30)
     print(outputs)
     print(tokenizer.batch_decode(outputs))
     import jax.numpy as jnp 
     
-    model = FlaxGoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=256000 + 1, from_pt=True, dtype = jnp.bfloat16)
+    model = FlaxGoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id =1, bos_token_id = 2, from_pt=True, dtype = jnp.bfloat16)
     
     inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
-    outputs = model.generate(inputs)
+    outputs = model.generate(inputs, do_sample=True, max_new_tokens = 20)
     print(outputs)
     print(tokenizer.batch_decode(outputs.sequences))
 

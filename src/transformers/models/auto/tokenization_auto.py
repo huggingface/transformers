@@ -182,8 +182,8 @@ else:
             (
                 "golden_gate",
                 (
-                    "LlamaTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                    "GoldenGateTokenizer" if is_sentencepiece_available() else None,
+                    "GoldenGateTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
