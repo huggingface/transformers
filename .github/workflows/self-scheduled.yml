@@ -40,6 +40,7 @@ jobs:
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix_2: ${{ steps.set-matrix.outputs.matrix_2 }}
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -62,28 +63,46 @@ jobs:
         working-directory: /transformers/tests
         run: |
           echo "matrix=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2[:4] + d1[:4]; print(d)')" >> $GITHUB_OUTPUT
+          echo "matrix_2=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = {"0": d2[:4], "1": d1[:4]}; print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
 
-  run_tests_single_gpu:
-    name: Model tests
+  check_setup:
+    name: Check Setup
     needs: setup
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ needs.setup.outputs.matrix }}
-      machine_type: single-gpu
-    secrets: inherit
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: Check Setup
+        run: |
+          echo ${{ needs.setup.outputs.matrix }}
+          echo ${{ needs.setup.outputs.matrix_2 }}
 
-  run_tests_multi_gpu:
-    name: Model tests
-    needs: setup
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ needs.setup.outputs.matrix }}
-      machine_type: multi-gpu
-    secrets: inherit
+
+#  run_tests_single_gpu:
+#    name: Model tests
+#    needs: setup
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ needs.setup.outputs.matrix }}
+#      machine_type: single-gpu
+#    secrets: inherit
+#
+#  run_tests_multi_gpu:
+#    name: Model tests
+#    needs: setup
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ needs.setup.outputs.matrix }}
+#      machine_type: multi-gpu
+#    secrets: inherit
 #
 #  run_examples_gpu:
 #    name: Examples directory
