@@ -538,3 +538,83 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @unittest.skip("The test will not fit our CI runners")
+    def test_model_7b_fp32(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(torch_device)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_fp16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        import pdb; pdb.set_trace()
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_bf16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
+            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @require_bitsandbytes
+    def test_model_7b_4bit(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1",
+            "Hi,\n\nI have a 2007 335i with the 6 speed",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
