@@ -16,42 +16,88 @@ rendered properly in your Markdown viewer.
 
 # Depth Anything
 
-# Depth Anything
-
-# Depth Anything
-
 ## Overview
 
-The Depth Anything model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Depth Anything model was proposed in [Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data](https://arxiv.org/abs/2401.10891) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. Depth Anything is based on the [DPT](dpt) architecture, trained on ~62 million images, obtaining state-of-the-art results for both relative and absolute depth estimation.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*This work presents Depth Anything, a highly practical solution for robust monocular depth estimation. Without pursuing novel technical modules, we aim to build a simple yet powerful foundation model dealing with any images under any circumstances. To this end, we scale up the dataset by designing a data engine to collect and automatically annotate large-scale unlabeled data (~62M), which significantly enlarges the data coverage and thus is able to reduce the generalization error. We investigate two simple yet effective strategies that make data scaling-up promising. First, a more challenging optimization target is created by leveraging data augmentation tools. It compels the model to actively seek extra visual knowledge and acquire robust representations. Second, an auxiliary supervision is developed to enforce the model to inherit rich semantic priors from pre-trained encoders. We evaluate its zero-shot capabilities extensively, including six public datasets and randomly captured photos. It demonstrates impressive generalization ability. Further, through fine-tuning it with metric depth information from NYUv2 and KITTI, new SOTAs are set. Our better depth model also results in a better depth-conditioned ControlNet.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- Usage of Depth Anything is easiest with the pipeline as shown below.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/LiheYoung/Depth-Anything).
 
+## Usage example
+
+There are 2 main ways to use Depth Anything: either using the pipeline API, which abstracts away all the complexity for you, or by using the `DepthAnythingForDepthEstimation` class yourself.
+
+### Pipeline API
+
+The pipeline allows to use the model in a few lines of code:
+
+```python
+>>> from transformers import pipeline
+>>> from PIL import Image
+>>> import requests
+
+>>> # load pipe
+>>> depth_estimator = pipeline(model="nielsr/depth-anything-small")
+
+>>> # load image
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> # inference
+>>> depth = depth_estimator(image)["depth"]
+```
+
+### Using the model yourself
+
+If you want to do the pre- and postprocessing yourself, here's how to do that:
+
+```python
+>>> from transformers import AutoImageProcessor, DepthAnythingForDepthEstimation
+>>> import torch
+>>> import numpy as np
+>>> from PIL import Image
+>>> import requests
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> image_processor = AutoImageProcessor.from_pretrained("nielsr/depth-anything-small")
+>>> model = DepthAnythingForDepthEstimation.from_pretrained("nielsr/depth-anything-small")
+
+>>> # prepare image for the model
+>>> inputs = image_processor(images=image, return_tensors="pt")
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+...     predicted_depth = outputs.predicted_depth
+
+>>> # interpolate to original size
+>>> prediction = torch.nn.functional.interpolate(
+...     predicted_depth.unsqueeze(1),
+...     size=image.size[::-1],
+...     mode="bicubic",
+...     align_corners=False,
+... )
+
+>>> # visualize the prediction
+>>> output = prediction.squeeze().cpu().numpy()
+>>> formatted = (output * 255 / np.max(output)).astype("uint8")
+>>> depth = Image.fromarray(formatted)
+```
 
 ## DepthAnythingConfig
 
 [[autodoc]] DepthAnythingConfig
 
-## DepthAnythingModel
-
-[[autodoc]] DepthAnythingModel
-    - forward
-
 ## DepthAnythingForDepthEstimation
 
 [[autodoc]] DepthAnythingForDepthEstimation
-    - forward
-
-## DepthAnythingForSemanticSegmentation
-
-[[autodoc]] DepthAnythingForSemanticSegmentation
     - forward

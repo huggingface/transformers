@@ -19,7 +19,6 @@ import unittest
 
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -30,7 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import MODEL_MAPPING, DepthAnythingForDepthEstimation
+    from transformers import DepthAnythingForDepthEstimation
     from transformers.models.depth_anything.modeling_depth_anything import DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -41,6 +40,7 @@ if is_vision_available():
 
 
 class DepthAnythingModelTester:
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.__init__
     def __init__(
         self,
         parent,
@@ -81,6 +81,7 @@ class DepthAnythingModelTester:
         # DPT's sequence length
         self.seq_length = (self.image_size // self.patch_size) ** 2 + 1
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -92,6 +93,7 @@ class DepthAnythingModelTester:
 
         return config, pixel_values, labels
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.get_config with DPT->DepthAnything
     def get_config(self):
         return DepthAnythingConfig(
             backbone_config=self.get_backbone_config(),
@@ -99,6 +101,7 @@ class DepthAnythingModelTester:
             fusion_hidden_size=self.fusion_hidden_size,
         )
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.get_backbone_config
     def get_backbone_config(self):
         return Dinov2Config(
             image_size=self.image_size,
@@ -113,6 +116,7 @@ class DepthAnythingModelTester:
             reshape_hidden_states=self.reshape_hidden_states,
         )
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.create_and_check_for_depth_estimation with DPT->DepthAnything
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = DepthAnythingForDepthEstimation(config)
@@ -121,6 +125,7 @@ class DepthAnythingModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
+    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -165,42 +170,13 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
+    @unittest.skip(reason="Depth Anything does not support training yet")
     def test_training(self):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "DepthAnythingForDepthEstimation":
-                continue
+        pass
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            if model_class in get_values(MODEL_MAPPING):
-                continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
+    @unittest.skip(reason="Depth Anything does not support training yet")
     def test_training_gradient_checkpointing(self):
-        for model_class in self.all_model_classes:
-            if model_class.__name__ == "DepthAnythingForDepthEstimation":
-                continue
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.use_cache = False
-            config.return_dict = True
-
-            if model_class in get_values(MODEL_MAPPING) or not model_class.supports_gradient_checkpointing:
-                continue
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable()
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
+        pass
 
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_common_attributes(self):
