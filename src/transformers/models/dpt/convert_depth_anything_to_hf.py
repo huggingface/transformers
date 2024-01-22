@@ -264,6 +264,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     print("Shape of predicted depth:", predicted_depth.shape)
     print("First values of predicted depth:", predicted_depth[0, :3, :3])
 
+    import numpy as np
+
+    prediction = torch.nn.functional.interpolate(
+        predicted_depth.unsqueeze(1), size=image.size[::-1], mode="bicubic", align_corners=False
+    )
+    output = prediction.squeeze().cpu().numpy()
+    formatted = (output * 255 / np.max(output)).astype("uint8")
+    depth = Image.fromarray(formatted)
+    # depth.save("depth.jpg")
+
     # assert logits
     if verify_logits:
         if model_name == "dpt-dinov2-small-nyu":

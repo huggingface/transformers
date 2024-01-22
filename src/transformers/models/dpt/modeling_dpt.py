@@ -700,7 +700,7 @@ class DPTFeatureFusionStage(nn.Module):
         print("INSIDE FUSION")
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]
-        
+
         # print("Shape of hidden state before fusion:", hidden_states[0].shape)
         # print("First values before fusion:", hidden_states[0][0,0,:3,:3])
 
@@ -717,24 +717,23 @@ class DPTFeatureFusionStage(nn.Module):
         fused_hidden_states.append(fused_hidden_state)
         # looping from the last layer to the second
         for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
-
             if idx == 0:
                 print("SECOND FUSION")
 
             # NOTE passing size is only required for Depth Anything
             # TODO adapt for other checkpoints
-            size = hidden_states[1:][idx+1].shape[2:] if idx != len(hidden_states[1:]) - 1 else None
+            size = hidden_states[1:][idx + 1].shape[2:] if idx != len(hidden_states[1:]) - 1 else None
             fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
 
             if idx == 0:
                 print("Size:", size)
                 print("Shape of fused_hidden_state:", fused_hidden_state.shape)
-                print("First values after second fusion:", fused_hidden_state[0,0,:3,:3])
+                print("First values after second fusion:", fused_hidden_state[0, 0, :3, :3])
 
             fused_hidden_states.append(fused_hidden_state)
 
         print("Shape of final fused hidden state:", fused_hidden_state.shape)
-        print("First values of final fused hidden state:", fused_hidden_state[0,0,:3,:3])
+        print("First values of final fused hidden state:", fused_hidden_state[0, 0, :3, :3])
 
         return fused_hidden_states
 
