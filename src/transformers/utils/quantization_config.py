@@ -578,6 +578,8 @@ class AwqConfig(QuantizationConfigMixin):
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
         do_fuse: Optional[bool] = None,
+        use_exllama: Optional[bool] = None,
+        exllama_config: Optional[Dict[str, Any]] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
         modules_to_not_convert: Optional[List] = None,
@@ -590,6 +592,8 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
+        self.use_exllama = use_exllama
+        self.exllama_config = exllama_config
         self.fuse_max_seq_len = fuse_max_seq_len
         self.modules_to_not_convert = modules_to_not_convert
 
@@ -670,6 +674,43 @@ class AwqConfig(QuantizationConfigMixin):
             if not all(key in self.modules_to_fuse for key in required_keys):
                 raise ValueError(
                     f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
+                )
+
+        if self.use_exllama is None:
+            # Default behaviour
+            self.use_exllama = False
+
+        if self.exllama_config is None:
+            self.exllama_config = {"version": ExllamaVersion.ONE}
+        else:
+            if "version" not in self.exllama_config:
+                raise ValueError("`exllama_config` needs to have a `version` key.")
+            elif self.exllama_config["version"] not in [
+                ExllamaVersion.ONE,
+                ExllamaVersion.TWO,
+            ]:
+                exllama_version = self.exllama_config["version"]
+                raise ValueError(
+                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
+                )
+
+        if self.use_exllama:
+            awq_version_supports_exllama = False
+            MIN_AWQ_VERSION = "0.1.8"
+            if is_auto_awq_available():
+                awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
+                    MIN_AWQ_VERSION
+                )
+
+            if not awq_version_supports_exllama:
+                raise ValueError(
+                    f"You current version of `autoawq` does not support exllama backend, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+            if self.exllama_config["version"] == ExllamaVersion.ONE:
+                logger.info(
+                    "You have activated exllama backend. Note that you can get better inference "
+                    "speed using exllamav2 kernel by setting `exllama_config`."
                 )
 
     def get_loading_attributes(self):

@@ -3670,7 +3670,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = quantizer.convert_model(model)
             model._is_quantized_training_enabled = True
         elif quantization_method_from_config == QuantizationMethod.AWQ:
-            from .integrations import fuse_awq_modules, get_keys_to_not_convert, replace_with_awq_linear
+            from .integrations import (
+                fuse_awq_modules,
+                get_keys_to_not_convert,
+                post_init_awq_exllama_modules,
+                replace_with_awq_linear,
+            )
 
             modules_to_not_convert = get_keys_to_not_convert(model)
 
@@ -3899,13 +3904,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if (
-            quantization_config is not None
-            and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.do_fuse
-        ):
-            model = fuse_awq_modules(model, config.quantization_config)
-            model._awq_is_fused = True
+        if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ:
+            if quantization_config.use_exllama:
+                print("Using exllama")
+                model = post_init_awq_exllama_modules(model, quantization_config.exllama_config)
+                model._awq_use_exllama = True
+
+            if quantization_config.do_fuse:
+                model = fuse_awq_modules(model, quantization_config)
+                model._awq_is_fused = True
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
