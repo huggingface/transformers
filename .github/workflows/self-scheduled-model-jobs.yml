@@ -42,7 +42,6 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
     steps:
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
