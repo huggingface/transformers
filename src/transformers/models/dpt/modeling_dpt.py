@@ -633,7 +633,6 @@ class DPTReassembleStage(nn.Module):
                 # reshape to (batch_size, num_channels, height, width)
                 cls_token, hidden_state = hidden_state[:, 0], hidden_state[:, 1:]
                 batch_size, sequence_length, num_channels = hidden_state.shape
-
                 if patch_height is not None and patch_width is not None:
                     hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
                 else:
@@ -684,7 +683,6 @@ class DPTReassembleLayer(nn.Module):
 
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
-
         hidden_state = self.resize(hidden_state)
         return hidden_state
 
