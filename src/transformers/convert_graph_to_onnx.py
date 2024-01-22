@@ -418,7 +418,7 @@ def quantize(onnx_model_path: Path) -> Path:
     import onnx
     import onnxruntime
     from onnx.onnx_pb import ModelProto
-    from onnxruntime.quantization import QuantizationMode
+    from onnxruntime.quantization import QuantizationMode, QuantType
     from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
     from onnxruntime.quantization.registry import IntegerOpsRegistry
 
@@ -446,8 +446,8 @@ def quantize(onnx_model_path: Path) -> Path:
             reduce_range=False,
             mode=QuantizationMode.IntegerOps,
             static=False,
-            weight_qType=True,
-            input_qType=False,
+            weight_qType=QuantType.QInt8,
+            input_qType=QuantType.QUInt8,
             tensors_range=None,
             nodes_to_quantize=None,
             nodes_to_exclude=None,
@@ -460,8 +460,8 @@ def quantize(onnx_model_path: Path) -> Path:
             reduce_range=False,
             mode=QuantizationMode.IntegerOps,
             static=False,
-            weight_qType=True,
-            activation_qType=False,
+            weight_qType=QuantType.QInt8,
+            activation_qType=QuantType.QUInt8,
             tensors_range=None,
             nodes_to_quantize=None,
             nodes_to_exclude=None,
