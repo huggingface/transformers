@@ -224,19 +224,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    # predict depth
-    # TODO use image processor instead
-    import torchvision.transforms as T
-
-    transform = T.Compose(
-        [
-            T.Resize((518, 518), interpolation=Image.BICUBIC),
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-
-    pixel_values = transform(image).unsqueeze(0)
+    pixel_values = processor(image, return_tensors="pt").pixel_values
 
     # Verify forward pass
     with torch.no_grad():
@@ -250,15 +238,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 518, 518])
         if model_name == "depth-anything-small":
             expected_slice = torch.tensor(
-                [[8.7884, 8.6028, 8.5929], [8.2999, 8.5714, 8.7190], [8.6204, 8.6461, 8.7075]],
+                [[8.9057, 8.6622, 8.7080], [8.4528, 8.6227, 8.7643], [8.7802, 8.7076, 8.7360]],
             )
         elif model_name == "depth-anything-base":
             expected_slice = torch.tensor(
-                [[27.1071, 27.0391, 27.0847], [26.9969, 26.9416, 27.0589], [26.8511, 26.8068, 26.8654]],
+                [[26.1444, 26.1177, 26.2908], [26.2718, 26.0039, 26.2705], [26.3118, 25.8757, 26.0465]],
             )
         elif model_name == "depth-anything-large":
             expected_slice = torch.tensor(
-                [[92.8992, 92.5946, 93.1578], [91.9489, 92.4338, 92.1804], [91.5336, 91.7159, 91.6404]],
+                [[89.1983, 87.2038, 87.9492], [88.3479, 87.4503, 86.9602], [87.9399, 86.7877, 86.3949]],
             )
         else:
             raise ValueError("Not supported")
