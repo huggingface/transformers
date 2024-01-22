@@ -19,6 +19,7 @@
 # limitations under the License.
 """ PyTorch GoldenGate model."""
 import math
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -230,7 +231,7 @@ class GoldenGateMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(F.gelu(self.gate_proj(x)) * self.up_proj(x))
+        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -264,14 +265,14 @@ class GoldenGateAttention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
+        self.head_dim = self.hidden_size // self.num_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        if self.hidden_size % self.num_heads != 0:
+        if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
@@ -310,6 +311,10 @@ class GoldenGateAttention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    # Ignore Copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -318,6 +323,7 @@ class GoldenGateAttention(nn.Module):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -375,6 +381,7 @@ class GoldenGateAttention(nn.Module):
             )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
+
         attn_output = attn_output.reshape(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
@@ -408,7 +415,17 @@ class GoldenGateFlashAttention2(GoldenGateAttention):
         past_key_value: Optional[Cache] = None,
         output_attentions: bool = False,
         use_cache: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # GoldenGateFlashAttention2 attention does not support output_attentions
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
+            # overwrite attention_mask with padding_mask
+            attention_mask = kwargs.pop("padding_mask")
+
         output_attentions = False
 
         bsz, q_len, _ = hidden_states.size()
@@ -693,6 +710,7 @@ class GoldenGateDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -708,6 +726,11 @@ class GoldenGateDecoderLayer(nn.Module):
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
+        if "padding_mask" in kwargs:
+            warnings.warn(
+                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
+            )
+
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -720,6 +743,7 @@ class GoldenGateDecoderLayer(nn.Module):
             past_key_value=past_key_value,
             output_attentions=output_attentions,
             use_cache=use_cache,
+            **kwargs,
         )
         hidden_states = residual + hidden_states
 
@@ -871,6 +895,7 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [GoldenGateDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -889,6 +914,7 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
+    # Ignore Copy
     @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -964,7 +990,6 @@ class GoldenGateModel(GoldenGatePreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
         # normalized
         hidden_states = hidden_states * (self.config.hidden_size**0.5)
 
@@ -1055,6 +1080,7 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    # Ignore Copy
     @add_start_docstrings_to_model_forward(GOLDEN_GATE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1115,7 +1141,9 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
         )
 
         hidden_states = outputs[0]
+
         logits = self.lm_head(hidden_states)
+        logits = logits.float()
 
         loss = None
         if labels is not None:
