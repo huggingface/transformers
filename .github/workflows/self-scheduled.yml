@@ -72,7 +72,7 @@ jobs:
     needs: setup
     uses: ./.github/workflows/self-scheduled-model-jobs.yml
     with:
-      folders: needs.setup.outputs.matrix
+      folders: ${{ needs.setup.outputs.matrix }}
       machine_type: single-gpu
     secrets: inherit
 
@@ -81,7 +81,7 @@ jobs:
     needs: setup
     uses: ./.github/workflows/self-scheduled-model-jobs.yml
     with:
-      folders: needs.setup.outputs.matrix
+      folders: ${{ needs.setup.outputs.matrix }}
       machine_type: multi-gpu
     secrets: inherit
 #
