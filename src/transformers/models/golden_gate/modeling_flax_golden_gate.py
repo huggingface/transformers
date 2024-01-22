@@ -148,7 +148,6 @@ def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
-# Copied from transformers.models.llama.modeling_flax_llama.FlaxLlamaRMSNorm with Llama->GoldenGate
 class FlaxGoldenGateRMSNorm(nn.Module):
     config: GoldenGateConfig
     dtype: jnp.dtype = jnp.float32
