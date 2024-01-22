@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ inputs.folders }}
+        folders: ${{ fromJson(inputs.folders) }}
         machine_type: ['${{ inputs.machine_type }}']
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
