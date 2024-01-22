@@ -130,6 +130,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.vmamba": ["VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "VMambaConfig", "VMambaTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1144,6 +1145,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.vmamba"].append("VMambaTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1399,6 +1401,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.vmamba"].extend(
+        [
+            "VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VMambaForMaskedLM",
+            "VMambaForCausalLM",
+            "VMambaForMultipleChoice",
+            "VMambaForQuestionAnswering",
+            "VMambaForSequenceClassification",
+            "VMambaForTokenClassification",
+            "VMambaLayer",
+            "VMambaModel",
+            "VMambaPreTrainedModel",
+            "load_tf_weights_in_vmamba",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -4858,6 +4876,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.vmamba import VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, VMambaConfig, VMambaTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -5858,6 +5877,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.vmamba import VMambaTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -7532,6 +7552,20 @@ if TYPE_CHECKING:
         )
 
         # PyTorch model imports
+
+        from .models.vmamba import (
+            VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VMambaForMaskedLM,
+            VMambaForCausalLM,
+            VMambaForMultipleChoice,
+            VMambaForQuestionAnswering,
+            VMambaForSequenceClassification,
+            VMambaForTokenClassification,
+            VMambaLayer,
+            VMambaModel,
+            VMambaPreTrainedModel,
+            load_tf_weights_in_vmamba,
+        )
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
             SeamlessM4TCodeHifiGan,
