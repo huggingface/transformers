@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation
+from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
 
 
@@ -237,6 +237,17 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     model.eval()
 
     # TODO use image processor
+    processor = DPTImageProcessor(
+        do_resize=True,
+        size={"height": 518, "width": 518},
+        ensure_multiple_of=14,
+        keep_aspect_ratio=True,
+        do_rescale=True,
+        do_normalize=True,
+        image_mean=[0.485, 0.456, 0.406],
+        image_std=[0.229, 0.224, 0.225],
+    )
+
     import requests
     from PIL import Image
 
@@ -259,21 +270,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # Verify forward pass
     with torch.no_grad():
         outputs = model(pixel_values)
-
-    predicted_depth = outputs.predicted_depth
-
-    print("Shape of predicted depth:", predicted_depth.shape)
-    print("First values of predicted depth:", predicted_depth[0, :3, :3])
-
-    import numpy as np
-
-    prediction = torch.nn.functional.interpolate(
-        predicted_depth.unsqueeze(1), size=image.size[::-1], mode="bicubic", align_corners=False
-    )
-    output = prediction.squeeze().cpu().numpy()
-    formatted = (output * 255 / np.max(output)).astype("uint8")
-    depth = Image.fromarray(formatted)
-    # depth.save("depth.jpg")
+        predicted_depth = outputs.predicted_depth
 
     # assert logits
     if verify_logits:
@@ -295,8 +292,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(repo_id=f"facebook/{model_name}")
-        processor.push_to_hub(repo_id=f"facebook/{model_name}")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

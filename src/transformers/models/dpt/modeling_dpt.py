@@ -725,7 +725,11 @@ class DPTFeatureFusionStage(nn.Module):
 
             # NOTE passing size is only required for Depth Anything
             # TODO adapt for other checkpoints
-            size = hidden_states[1:][idx + 1].shape[2:] if self.config.use_size and idx != len(hidden_states[1:]) - 1 else None
+            size = (
+                hidden_states[1:][idx + 1].shape[2:]
+                if self.config.use_size and idx != len(hidden_states[1:]) - 1
+                else None
+            )
             fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
 
             if idx == 0:
@@ -1085,7 +1089,11 @@ class DPTDepthEstimationHead(nn.Module):
 
         features = config.fusion_hidden_size
 
-        image_size = config.backbone_config.image_size if config.backbone_config is not None and not config.is_hybrid else config.image_size
+        image_size = (
+            config.backbone_config.image_size
+            if config.backbone_config is not None and not config.is_hybrid
+            else config.image_size
+        )
         modifier = {"size": (int(image_size), int(image_size))} if config.use_size else {"scale_factor": 2}
 
         self.head = nn.Sequential(
