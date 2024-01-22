@@ -37,26 +37,10 @@ logger = logging.get_logger(__name__)
 
 def get_dpt_config(model_name):
     if "small" in model_name:
-        # equivalent to stage 3, stage 6, stage 9, stage 12
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
+            "facebook/dinov2-small", out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
         )
         neck_hidden_sizes = [48, 96, 192, 384]
-    elif "base" in model_name:
-        backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-base", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
-        )
-        neck_hidden_sizes = [96, 192, 384, 768]
-    elif "large" in model_name:
-        backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-large", out_indices=[5, 12, 18, 24], apply_layernorm=False, reshape_hidden_states=False
-        )
-        neck_hidden_sizes = [128, 256, 512, 1024]
-    elif "giant" in model_name:
-        backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-giant", out_indices=[10, 20, 30, 40], apply_layernorm=False, reshape_hidden_states=False
-        )
-        neck_hidden_sizes = [192, 384, 768, 1536]
     else:
         raise NotImplementedError("To do")
 
@@ -251,38 +235,30 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Verify image processor
-    processor = DPTImageProcessor(
-        do_resize=False,
-        do_rescale=False,
-        do_pad=True,
-        size_divisor=14,
-        do_normalize=True,
-        image_mean=(123.675, 116.28, 103.53),
-        image_std=(58.395, 57.12, 57.375),
-    )
+    # TODO use image processor
+    from PIL import Image
+    import requests
 
-    image = prepare_img()
-    pixel_values = processor(image, return_tensors="pt").pixel_values.float()
-    original_pixel_values = get_original_pixel_values(image)
+    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    image = Image.open(requests.get(url, stream=True).raw)
 
-    assert torch.allclose(pixel_values, original_pixel_values)
+    # predict depth
+    import torchvision.transforms as T
+
+    transform = T.Compose([
+        T.Resize((518,518), interpolation=Image.BICUBIC),
+        T.ToTensor(),
+        T.Normalize(mean=[0.485, 0.456, 0.406],
+                    std=[0.229, 0.224, 0.225]),
+    ])
+
+    pixel_values = transform(image).unsqueeze(0)
 
     # Verify forward pass
     with torch.no_grad():
         outputs = model(pixel_values)
 
     predicted_depth = outputs.predicted_depth
-
-    import numpy as np
-
-    prediction = torch.nn.functional.interpolate(
-        predicted_depth.unsqueeze(1), size=image.size[::-1], mode="bicubic", align_corners=False
-    )
-    output = prediction.squeeze().cpu().numpy()
-    formatted = (output * 255 / np.max(output)).astype("uint8")
-    depth = Image.fromarray(formatted)
-    depth.save("depth.jpg")
 
     print("Shape of predicted depth:", predicted_depth.shape)
     print("First values of predicted depth:", predicted_depth[0, :3, :3])

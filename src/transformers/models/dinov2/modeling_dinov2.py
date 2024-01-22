@@ -116,6 +116,7 @@ class Dinov2Embeddings(nn.Module):
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -133,6 +134,9 @@ class Dinov2Embeddings(nn.Module):
         embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         embeddings = self.dropout(embeddings)
+
+        print("Shape of initial patch embeddings:", embeddings.shape)
+        print("First values of initial patch embeddings:", embeddings[0, :3, :3])
 
         return embeddings
 
@@ -459,6 +463,10 @@ class Dinov2Encoder(nn.Module):
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
 
             hidden_states = layer_outputs[0]
+
+            if i == 11:
+                print("Shape of features after layer", i, ":", hidden_states.shape)
+                print("First values of features after layer", i, ":", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -834,6 +842,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
+                print("First values of feature map", stage, hidden_state[0,:3,:3])
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
