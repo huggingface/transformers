@@ -73,8 +73,10 @@ class SentencePieceExtractor:
             local = []
             for index in range(1, len(merge)):
                 piece_l, piece_r = merge[:index], merge[index:]
-                if piece_l in vocab and piece_r in vocab:
+                if (piece_l in vocab and piece_r in vocab):
                     local.append((piece_l, piece_r, piece_score))
+                elif len(piece_l)==1 and len(piece_r)==1 and f"<0x0{ord(piece_l)}>" in vocab and f"<0x0{ord(piece_l)}>" in vocab and (piece_l + piece_r) in vocab:
+                    merges.extend([(piece_l, piece_r, piece_score)])
             local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
             merges.extend(local)
 
@@ -1190,18 +1192,17 @@ class XGLMConverter(SpmConverter):
 
 class GoldenGateConvert(SpmConverter):
     handle_byte_fallback = True
-    
+        
     """"
-    
-split_by_unicode_script: true
-split_by_number: true
-split_by_whitespace: true
-treat_whitespace_as_suffix: false
-allow_whitespace_only_pieces: true
-split_digits: true
-byte_fallback: true
-
+    split_by_unicode_script: true
+    split_by_number: true
+    split_by_whitespace: true
+    treat_whitespace_as_suffix: false
+    allow_whitespace_only_pieces: true
+    split_digits: true
+    byte_fallback: true
     """
+
     def normalizer(self, proto):
         return normalizers.Replace(" ", '▁')
         
@@ -1254,6 +1255,9 @@ byte_fallback: true
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
             bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
+            
+            # there is a missing token in the vocab. We have to do this to support merges
+            bpe_vocab["\t"] = bpe_vocab.pop("<0x09>")
             tokenizer = Tokenizer(
                 BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True, byte_fallback=True, dropout=None)
             )
