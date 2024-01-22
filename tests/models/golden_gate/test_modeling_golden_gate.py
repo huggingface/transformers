@@ -562,8 +562,8 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
-            "Hi,\n\nI have a problem with my 2005 1.6 16",
+            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
+            "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.float16).to(
@@ -576,7 +576,9 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        import pdb; pdb.set_trace()
+        import pdb
+
+        pdb.set_trace()
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
@@ -584,8 +586,8 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
-            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+            "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
+            'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
@@ -605,8 +607,8 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-7b"
         EXPECTED_TEXTS = [
-            "Hello my name is <strong><em><u>A.K.</u></em></strong> and I am a <strong><em><u>1",
-            "Hi,\n\nI have a 2007 335i with the 6 speed",
+            'Hello my name is***** and I will be helping you with Bumblebee. I am not a fan of the new "',
+            "Hiệu của 2 số là:\n\n1001x2=2002\n\n",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, load_in_4bit=True)
