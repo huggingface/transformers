@@ -17,15 +17,12 @@ https://github.com/LiheYoung/Depth-Anything"""
 
 
 import argparse
-import itertools
-import math
 from pathlib import Path
 
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-from torchvision import transforms
 
 from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
 from transformers.utils import logging
@@ -101,9 +98,6 @@ def create_rename_keys(config):
 
     # activation postprocessing (readout projections + resize blocks)
     # Depth Anything does not use CLS token => readout_projects not required
-
-    #     rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
-    #     rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
 
     for i in range(4):
         rename_keys.append((f"depth_head.projects.{i}.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
@@ -183,46 +177,6 @@ name_to_checkpoint = {
 }
 
 
-def get_original_pixel_values(image):
-    class CenterPadding(object):
-        def __init__(self, multiple):
-            super().__init__()
-            self.multiple = multiple
-
-        def _get_pad(self, size):
-            new_size = math.ceil(size / self.multiple) * self.multiple
-            pad_size = new_size - size
-            pad_size_left = pad_size // 2
-            pad_size_right = pad_size - pad_size_left
-            return pad_size_left, pad_size_right
-
-        def __call__(self, img):
-            pads = list(itertools.chain.from_iterable(self._get_pad(m) for m in img.shape[-2:][::-1]))
-            output = torch.nn.functional.pad(img, pads)
-            return output
-
-        def __repr__(self):
-            return self.__class__.__name__ + "()"
-
-    def make_depth_transform() -> transforms.Compose:
-        return transforms.Compose(
-            [
-                transforms.ToTensor(),
-                lambda x: 255.0 * x[:3],  # Discard alpha component and scale by 255
-                transforms.Normalize(
-                    mean=(123.675, 116.28, 103.53),
-                    std=(58.395, 57.12, 57.375),
-                ),
-                CenterPadding(multiple=14),
-            ]
-        )
-
-    transform = make_depth_transform()
-    original_pixel_values = transform(image).unsqueeze(0)
-
-    return original_pixel_values
-
-
 @torch.no_grad()
 def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
     """
@@ -256,7 +210,6 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     model.load_state_dict(state_dict)
     model.eval()
 
-    # TODO use image processor
     processor = DPTImageProcessor(
         do_resize=True,
         size={"height": 518, "width": 518},
@@ -268,13 +221,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         image_std=[0.229, 0.224, 0.225],
     )
 
-    import requests
-    from PIL import Image
-
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
     # predict depth
+    # TODO use image processor instead
     import torchvision.transforms as T
 
     transform = T.Compose(
