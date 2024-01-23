@@ -62,6 +62,9 @@ class SentencePieceExtractor:
         """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        
+        vocab["\t"] = vocab.pop("<0x09>")
+                
         if vocab_scores is not None:
             vocab_scores, reverse = dict(vocab_scores), True
         else:
@@ -75,14 +78,6 @@ class SentencePieceExtractor:
                 piece_l, piece_r = merge[:index], merge[index:]
                 if piece_l in vocab and piece_r in vocab:
                     local.append((piece_l, piece_r, piece_score))
-                elif (
-                    len(piece_l) == 1
-                    and len(piece_r) == 1
-                    and f"<0x0{ord(piece_l)}>" in vocab
-                    and f"<0x0{ord(piece_l)}>" in vocab
-                    and (piece_l + piece_r) in vocab
-                ):
-                    merges.extend([(piece_l, piece_r, piece_score)])
             local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
             merges.extend(local)
 
@@ -1219,7 +1214,12 @@ class GoldenGateConvert(SpmConverter):
             (self.original_tokenizer.eos_token, 0.0),
             (self.original_tokenizer.bos_token, 0.0),
         ]
-        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        for piece in proto.pieces[3:]:
+            if piece.piece == '<0x09>':
+                vocab += [('\t', piece.score)]
+            else:
+                vocab += [(piece.piece, piece.score)]
+        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         return vocab
 
     def pre_tokenizer(self, replacement, add_prefix_space):
@@ -1255,7 +1255,7 @@ class GoldenGateConvert(SpmConverter):
 
             # there is a missing token in the vocab. We have to do this to support merges
             # "<0x09>" is the bytefallback for `\t`
-            bpe_vocab["\t"] = bpe_vocab.pop("<0x09>")
+            # bpe_vocab["\t"] = bpe_vocab.pop("<0x09>")
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,

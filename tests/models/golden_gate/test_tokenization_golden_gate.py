@@ -165,7 +165,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
             checkpoint_name, eos_token="<s>"
         )  # add this token
         cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(
-            checkpoint_name, eos_token="<s>"
+            checkpoint_name, eos_token="<s>", from_slow=True
         )  # add this token
         return cls
 
@@ -316,7 +316,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
             self.assertEqual(encoded1, encoded2)
 
             decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)
-            decoded2 = rust_tokenizer.decode(encoded2, skip_special_tokens=True)
+            decoded2 = rust_tokenizer.decode(encoded1, skip_special_tokens=True)
 
             self.assertEqual(decoded1, decoded2)
 
