@@ -491,7 +491,6 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         include_padding_result = model(padded_input_ids, attention_mask=None)
 
         # This is to mimic torch.testing.assert_not_close
-        print(f"loss1={include_padding_result.aux_loss.item()}, loss2={result.aux_loss.item()}")
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
 
