@@ -69,10 +69,8 @@ class DepthAnythingReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
-        for i, factor in zip(range(len(config.neck_hidden_sizes)), config.reassemble_factors):
-            self.layers.append(
-                DepthAnythingReassembleLayer(config, channels=config.neck_hidden_sizes[i], factor=factor)
-            )
+        for channels, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
+            self.layers.append(DepthAnythingReassembleLayer(config, channels=channels, factor=factor))
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
@@ -212,11 +210,9 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
 
         hidden_state = self.residual_layer2(hidden_state)
 
-        modifier = {"scale_factor": 2} if size is None else {"size": size}
-
         hidden_state = nn.functional.interpolate(
             hidden_state,
-            **modifier,
+            size=size,
             mode="bilinear",
             align_corners=True,
         )
@@ -360,7 +356,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
         predicted_depth = self.activation2(predicted_depth)
-        predicted_depth = predicted_depth.squeeze(dim=1)
+        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
 
         return predicted_depth
 

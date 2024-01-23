@@ -223,24 +223,10 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    print("Shape of pixel values:", pixel_values.shape)
-
     # Verify forward pass
     with torch.no_grad():
         outputs = model(pixel_values)
         predicted_depth = outputs.predicted_depth
-
-    print("First values:", predicted_depth[0, :3, :3])
-
-    import numpy as np
-
-    prediction = torch.nn.functional.interpolate(
-        predicted_depth.unsqueeze(1), size=image.size[::-1], mode="bicubic", align_corners=False
-    )
-    output = prediction.squeeze().cpu().numpy()
-    formatted = (output * 255 / np.max(output)).astype("uint8")
-    depth = Image.fromarray(formatted)
-    depth.save("depth.png")
 
     # assert logits
     if verify_logits:
