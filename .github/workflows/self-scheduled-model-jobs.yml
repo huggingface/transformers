@@ -51,7 +51,6 @@ jobs:
         run: |
           echo "${{ github.job }}"
           echo "${{ github.run_id }}"
-          echo "${{ toJson(jobs) }}"
           echo "${{ toJson(github) }}"
           echo "${{ toJson(job) }}"
 
