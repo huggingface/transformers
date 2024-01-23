@@ -96,6 +96,7 @@ jobs:
     with:
       folders: ${{ needs.setup.outputs.matrix_2 }}
       machine_type: single-gpu
+      slice_id: 1
     secrets: inherit
 #
 #  run_tests_multi_gpu:

@@ -15,6 +15,9 @@ on:
       machine_type:
         required: true
         type: string
+      slice_id:
+        required: true
+        type: number
 
 env:
   HF_HOME: /mnt/cache
