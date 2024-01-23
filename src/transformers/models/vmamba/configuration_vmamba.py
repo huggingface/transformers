@@ -14,6 +14,8 @@
 # limitations under the License.
 """ VMamba model configuration """
 
+import torch
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -87,45 +89,34 @@ class VMambaConfig(PretrainedConfig):
     ```
 """
     model_type = "vmamba"
-    
+
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        patch_size=4,
+        in_channels=3,
+        num_classes=1000,
+        depths=[2, 2, 9, 2],
+        dims=[96, 192, 384, 768],
+        d_state=16,
+        drop_rate=0,
+        attn_drop_rate=0.,
+        drop_path_rate=0.1,
+        norm_layer=torch.nn.LayerNorm,
+        patch_norm=True,
+        use_checkpoint=False,
         **kwargs
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
-
+        self.patch_size = patch_size
+        self.in_channels = in_channels
+        self.num_classes = num_classes
+        self.depths = depths
+        self.dims = dims
+        self.d_state = d_state
+        self.drop_rate = drop_rate
+        self.attn_drop_rate = attn_drop_rate
+        self.drop_path_rate = drop_path_rate
+        self.norm_layer = norm_layer
+        self.patch_norm = patch_norm
+        self.use_checkpoint = False
+        super().__init__(**kwargs)

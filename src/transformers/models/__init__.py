@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    vmamba,
     albert,
     align,
     altclip,
@@ -235,6 +234,7 @@ from . import (
     vitmatte,
     vits,
     vivit,
+    vmamba,
     wav2vec2,
     wav2vec2_bert,
     wav2vec2_conformer,

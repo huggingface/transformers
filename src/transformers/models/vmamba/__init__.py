@@ -13,10 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -40,13 +37,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_vmamba"] = [
         "VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VMambaForMaskedLM",
-        "VMambaForCausalLM",
-        "VMambaForMultipleChoice",
-        "VMambaForQuestionAnswering",
-        "VMambaForSequenceClassification",
-        "VMambaForTokenClassification",
-        "VMambaLayer",
+        "VMambaForImageClassification",
         "VMambaModel",
         "VMambaPreTrainedModel",
         "load_tf_weights_in_vmamba",
@@ -57,15 +48,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_vmamba import VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, VMambaConfig
-    from .tokenization_vmamba import VMambaTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_vmamba_fast import VMambaTokenizerFast
 
     try:
         if not is_torch_available():
@@ -75,13 +57,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_vmamba import (
             VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VMambaForMaskedLM,
-            VMambaForCausalLM,
-            VMambaForMultipleChoice,
-            VMambaForQuestionAnswering,
-            VMambaForSequenceClassification,
-            VMambaForTokenClassification,
-            VMambaLayer,
+            VMambaForImageClassification,
             VMambaModel,
             VMambaPreTrainedModel,
             load_tf_weights_in_vmamba,
