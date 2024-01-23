@@ -157,6 +157,7 @@ class DetaModelTester:
             assign_first_stage=assign_first_stage,
             assign_second_stage=assign_second_stage,
             backbone_config=resnet_config,
+            backbone=None,
         )
 
     def prepare_config_and_inputs_for_common(self, model_class_name="DetaModel"):
