@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available
+from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, AutoModelForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -204,61 +204,115 @@ class FlaxGoldenGateModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, u
             self.assertIsNotNone(outputs)
 
 
-@slow
+# @slow
 @require_flax
 class FlaxGoldenGateIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.model_id = "openlm-research/open_golden_gate_3b_v2"
-        self.model = FlaxGoldenGateForCausalLM.from_pretrained(self.model_id, from_pt=True)
-        self.test_batch = jnp.arange(32).reshape(4, 8) + 1911
-
-    def test_model_logits(self):
-        flax_logits = self.model(self.test_batch).logits
-
-        # fmt: off
-        EXPECTED_LOGITS = [-74.4243, -74.0680, -65.2507, -79.1658, -77.7460, -69.2379, -86.4588, -84.8933, -77.8456]
-        EXPECTED_MIN, EXPECTED_MAX, EXPECTED_MEAN = -96.9952
-        EXPECTED_MAX = -18.4571
-        EXPECTED_MEAN = -65.0608
-        # fmt: on
-
-        self.assertTrue(np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4))
-        self.assertAlmostEqual(flax_logits.min(), EXPECTED_MIN, places=3)
-        self.assertAlmostEqual(flax_logits.max(), EXPECTED_MAX, places=3)
-        self.assertAlmostEqual(flax_logits.mean(), EXPECTED_MEAN, places=3)
-
-    def test_model_hidden_states(self):
-        flax_hidden_states = self.model(self.test_batch, output_hidden_states=True).hidden_states
-        flax_hidden_means = [h.mean() for h in flax_hidden_states]
-
-        # fmt: off
-        EXPECTED_HIDDEN_MEANS = [
-            -0.00007,-0.00049,-0.00169,-0.00253,-0.00271,
-            -0.00290,-0.00252,0.00230,0.00230,0.00198,
-            0.00196,0.00174,0.00246,0.00205,0.00242,
-            0.00171,0.00092,0.00054,0.00102,0.00024,
-            0.00029,0.00037,-0.00101,-0.00062,-0.00341,-0.00636,-0.00357
+    
+    def test_model_2b_fp32(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
-        # fmt: on
 
-        self.assertTrue(np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4))
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
 
-    def test_generated_text(self):
-        tokenizer = LlamaTokenizerFast.from_pretrained(self.model_id)
-        tokenizer.pad_token_id = 2
-        test_batch = ["Aloha, World! ", "2 + 2 = ", "Paris is the capital of ", "我很高興認識"]
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
 
-        inputs = tokenizer(test_batch, return_tensors="np", truncation=True, padding=True)
-        generated_ids = self.model.generate(**inputs, max_length=15).sequences
-        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        # fmt: off
-        EXPECTED_GENERATION = [
-            "Aloha, World! 201",
-            "2 + 2 = 4\n2",
-            "Paris is the capital of Île-",
-            "我很高興認識你，我"
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_2b_fp16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
-        # fmt: on
 
-        self.assertListEqual(generated_text, EXPECTED_GENERATION)
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_2b_bf16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-2b"
+        EXPECTED_TEXTS = [
+            "Hello my name is <strong><em><u>Aisha</u></em></strong> and I am a <strong><em><u>Certified</u></em>",
+            "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @unittest.skip("The test will not fit our CI runners")
+    def test_model_7b_fp32(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be assisting you today. I am sorry to hear about your issue. I will",
+            "Hi,\n\nI have a problem with my 2005 1.6 16",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_fp16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is ***** ***** I will be happy to assist you with your question.\n\nI am sorry to hear about",
+            "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    def test_model_7b_bf16(self):
+        # TODO: change it to the new repo after the release
+        model_id = "gg-hf/golden-gate-7b"
+        EXPECTED_TEXTS = [
+            "Hello my name is***** and I am a licensed veterinarian with Just Answer. I am so sorry to hear that you are",
+            'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)

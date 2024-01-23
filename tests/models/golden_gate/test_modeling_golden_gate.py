@@ -576,10 +576,6 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
-        import pdb
-
-        pdb.set_trace()
-
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_7b_bf16(self):
