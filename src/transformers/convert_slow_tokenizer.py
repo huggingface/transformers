@@ -1213,13 +1213,6 @@ class GoldenGateConvert(SpmConverter):
     def normalizer(self, proto):
         return normalizers.Replace(" ", "▁")
 
-        if len(precompiled_charsmap) > 0:
-            return normalizers.Precompiled(precompiled_charsmap)
-        return None
-
-    # def normalizer(self, proto):
-    #     return None
-
     def vocab(self, proto):
         vocab = [
             (self.original_tokenizer.pad_token, 0.0),

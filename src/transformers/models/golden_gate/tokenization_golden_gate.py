@@ -238,7 +238,6 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
         added_tokens = self._added_tokens_encoder.keys()
 

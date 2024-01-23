@@ -14,15 +14,12 @@
 # limitations under the License.
 
 import os
-import pickle
-import shutil
 import tempfile
 import unittest
 
 from datasets import load_dataset
 
 from transformers import (
-    SPIECE_UNDERLINE,
     AddedToken,
     GoldenGateTokenizer,
     GoldenGateTokenizerFast,
@@ -164,8 +161,12 @@ class GoldenGateIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "gg-hf/golden-gate-7b"
-        cls.tokenizer: GoldenGateTokenizer = GoldenGateTokenizer.from_pretrained(checkpoint_name, eos_token = "<s>") # add this token
-        cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(checkpoint_name, eos_token = "<s>") # add this token
+        cls.tokenizer: GoldenGateTokenizer = GoldenGateTokenizer.from_pretrained(
+            checkpoint_name, eos_token="<s>"
+        )  # add this token
+        cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(
+            checkpoint_name, eos_token="<s>"
+        )  # add this token
         return cls
 
     @require_torch
@@ -234,7 +235,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
-        
+
         self.assertEqual(pyth_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
         self.assertEqual(rust_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
         self.assertEqual(pyth_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True), "This is a test")
@@ -244,15 +245,11 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
         self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
         self.assertEqual(
-            pyth_tokenizer.decode(
-                [2, 122182, 235710, 245467, 235427] , skip_special_tokens=True
-            ),
+            pyth_tokenizer.decode([2, 122182, 235710, 245467, 235427], skip_special_tokens=True),
             "生活的真谛是",
         )
         self.assertEqual(
-            rust_tokenizer.decode(
-                [2, 122182, 235710, 245467, 235427] , skip_special_tokens=True
-            ),
+            rust_tokenizer.decode([2, 122182, 235710, 245467, 235427], skip_special_tokens=True),
             "生活的真谛是",
         )
 
@@ -278,7 +275,6 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
         self.assertEqual(pyth_tokenizer.encode(" Hello"), [2, 25957])
         self.assertEqual(rust_tokenizer.encode(" Hello"), [2, 25957])
-
 
     def test_no_differences_decode(self):
         self.tokenizer.add_eos_token = False
@@ -352,7 +348,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # decoding strips the added prefix space.
         self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [256000, 43910]) 
+        self.assertEqual(input_ids, [256000, 43910])
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -382,7 +378,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
-        self.assertEqual(sp_tokens, ['<s>', '>'])
+        self.assertEqual(sp_tokens, ["<s>", ">"])
         tokens = tokenizer.tokenize("<s>>")
         self.assertEqual(sp_tokens, tokens)
         self.assertEqual(tokens, ["<s>", ">"])
@@ -444,13 +440,45 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         fast_tokenizer = GoldenGateTokenizerFast.from_pretrained("gg-hf/golden-gate-7b")
         slow_tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
-        EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274] # fmt: skip
-        EXPECTED_TOKENS = ['Hey', '<eos>', '.', '▁', '\t\t', '▁', '\n\n', 'you', '▁▁', 'é', '▁▁', '@#', '😈', '▁▁', '🤗', '!', '▁▁▁▁▁▁▁', ',', '▁', '1', '2', '3', '4', '▁', '1', '5', '▁', '5', ',', '6', '1']
+        EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274]  # fmt: skip
+        EXPECTED_TOKENS = [
+            "Hey",
+            "<eos>",
+            ".",
+            "▁",
+            "\t\t",
+            "▁",
+            "\n\n",
+            "you",
+            "▁▁",
+            "é",
+            "▁▁",
+            "@#",
+            "😈",
+            "▁▁",
+            "🤗",
+            "!",
+            "▁▁▁▁▁▁▁",
+            ",",
+            "▁",
+            "1",
+            "2",
+            "3",
+            "4",
+            "▁",
+            "1",
+            "5",
+            "▁",
+            "5",
+            ",",
+            "6",
+            "1",
+        ]
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(tokens, EXPECTED_TOKENS)
-        
+
         tokens = slow_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(tokens, EXPECTED_TOKENS)
@@ -462,23 +490,23 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = slow_tokenizer.encode(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(input_ids, EXPECTED_IDS)
-        
+
         text = fast_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
-        
+
         text = slow_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
 
         input_text = "\t\t\t\t \n\n61"
         EXPECTED_IDS = [2, 255971, 235248, 109, 235318, 235274]
-        EXPECTED_TOKENS = ['\t\t\t\t', '▁', '\n\n', '6', '1']
+        EXPECTED_TOKENS = ["\t\t\t\t", "▁", "\n\n", "6", "1"]
 
         tokens = fast_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(tokens, EXPECTED_TOKENS)
-        
+
         tokens = slow_tokenizer.tokenize(input_text)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(tokens, EXPECTED_TOKENS)
@@ -494,7 +522,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         text = fast_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(text, "<bos>\t\t\t\t \n\n61")
-        
+
         text = slow_tokenizer.decode(EXPECTED_IDS)
         with self.subTest("test fast edge case fast"):
             self.assertEqual(text, "<bos>\t\t\t\t \n\n61")
