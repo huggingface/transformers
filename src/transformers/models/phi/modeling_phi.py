@@ -302,6 +302,9 @@ class PhiAttention(nn.Module):
             else:
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
+    # Phi-2 has an attention overflow issue (with FP16) and requires autocast to be disabled
+    @torch.autocast("cpu", enabled=False)
+    @torch.autocast("cuda", enabled=False)
     def forward(
         self,
         hidden_states: torch.Tensor,
