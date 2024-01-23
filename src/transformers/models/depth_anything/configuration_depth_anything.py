@@ -43,8 +43,8 @@ class DepthAnythingConfig(PretrainedConfig):
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
-        hidden_size (`int, *optional*, defaults to 384):
-            The number of channels in the hidden state of the reassemble layers.
+        reassemble_hidden_size (`int`, *optional*, defaults to 384):
+            The number of input channels of the reassemble layers.
         patch_size (`int`, *optional*, defaults to 14):
             The size of the patches to extract from the backbone features.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -56,7 +56,9 @@ class DepthAnythingConfig(PretrainedConfig):
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
         head_in_index (`int`, *optional*, defaults to -1):
-            The index of the features to use in the heads.
+            The index of the features to use in the depth estimation head.
+        head_hidden_size (`int`, *optional*, defaults to 32):
+            The number of output channels in the second convolution of the depth estimation head.
 
     Example:
 
@@ -78,13 +80,14 @@ class DepthAnythingConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
-        hidden_size=384,
         patch_size=14,
         initializer_range=0.02,
+        reassemble_hidden_size=384,
         reassemble_factors=[4, 2, 1, 0.5],
         neck_hidden_sizes=[96, 192, 384, 768],
         fusion_hidden_size=256,
         head_in_index=-1,
+        head_hidden_size=32,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -95,13 +98,14 @@ class DepthAnythingConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
-        self.hidden_size = hidden_size
+        self.reassemble_hidden_size = reassemble_hidden_size
         self.patch_size = patch_size
         self.initializer_range = initializer_range
         self.reassemble_factors = reassemble_factors
         self.neck_hidden_sizes = neck_hidden_sizes
         self.fusion_hidden_size = fusion_hidden_size
         self.head_in_index = head_in_index
+        self.head_hidden_size = head_hidden_size
 
     def to_dict(self):
         """

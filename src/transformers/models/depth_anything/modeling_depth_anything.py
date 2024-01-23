@@ -80,7 +80,7 @@ DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
 class DepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
-        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+        self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
         if factor > 1:
@@ -228,6 +228,14 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DepthAnythingFeatureFusionLayer(config))
 
+class DepthAnythingFeatureFusionStage(nn.Module):
+    # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage.__init__ with DPT->DepthAnything
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for _ in range(len(config.neck_hidden_sizes)):
+            self.layers.append(DepthAnythingFeatureFusionLayer(config))
+
     def forward(self, hidden_states, size=None):
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]
@@ -335,9 +343,9 @@ class DepthAnythingDepthEstimationHead(nn.Module):
 
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
         self.activation1 = nn.ReLU()
-        self.conv3 = nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0)
+        self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
         self.activation2 = nn.ReLU()
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
