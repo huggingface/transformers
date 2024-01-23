@@ -220,7 +220,7 @@ def prepare_img():
 @require_vision
 @slow
 class DepthAnythingModelIntegrationTest(unittest.TestCase):
-    def test_inference_depth_estimation_dinov2(self):
+    def test_inference(self):
         # TODO update organization
         image_processor = DPTImageProcessor.from_pretrained("nielsr/depth-anything-small")
         model = DepthAnythingForDepthEstimation.from_pretrained("nielsr/depth-anything-small").to(torch_device)

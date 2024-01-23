@@ -38,11 +38,6 @@ logger = logging.get_logger(__name__)
 # General docstring
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "tiktok/depth-anything-small"
-_EXPECTED_OUTPUT_SHAPE = [1, 577, 1024]
-
-
 DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "tiktok/depth-anything-small",
     # See all Depth Anything models at https://huggingface.co/models?filter=depth_anything
@@ -394,7 +389,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import AutoImageProcessor, DepthAnythingForDepthEstimation
+        >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
@@ -403,8 +398,8 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("tiktok/depth-anything-small")
-        >>> model = DepthAnythingForDepthEstimation.from_pretrained("tiktok/depth-anything-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/depth-anything-small")
+        >>> model = AutoModelForDepthEstimation.from_pretrained("nielsr/depth-anything-small")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")

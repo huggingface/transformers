@@ -56,7 +56,7 @@ The pipeline allows to use the model in a few lines of code:
 If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 ```python
->>> from transformers import AutoImageProcessor, DepthAnythingForDepthEstimation
+>>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
 >>> import torch
 >>> import numpy as np
 >>> from PIL import Image
@@ -66,7 +66,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/depth-anything-small")
->>> model = DepthAnythingForDepthEstimation.from_pretrained("nielsr/depth-anything-small")
+>>> model = AutoModelForDepthEstimation.from_pretrained("nielsr/depth-anything-small")
 
 >>> # prepare image for the model
 >>> inputs = image_processor(images=image, return_tensors="pt")
