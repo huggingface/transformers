@@ -614,8 +614,8 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 XLM_START_DOCSTRING = r"""
