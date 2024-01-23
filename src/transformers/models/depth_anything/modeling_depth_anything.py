@@ -49,6 +49,55 @@ DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+DEPTH_ANYTHING_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthAnythingConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
+            for details.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+class DepthAnythingReassembleLayer(nn.Module):
+    def __init__(self, config, channels, factor):
+        super().__init__()
+        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+
+        # up/down sampling depending on factor
+        if factor > 1:
+            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+        elif factor == 1:
+            self.resize = nn.Identity()
+        elif factor < 1:
+            # so should downsample
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
+
+    # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleLayer.forward
+    def forward(self, hidden_state):
+        hidden_state = self.projection(hidden_state)
+        hidden_state = self.resize(hidden_state)
+        return hidden_state
+
+
 class DepthAnythingReassembleStage(nn.Module):
     """
     This class reassembles the hidden states of the backbone into image-like feature representations at various
@@ -90,56 +139,6 @@ class DepthAnythingReassembleStage(nn.Module):
             out.append(hidden_state)
 
         return out
-
-
-class DepthAnythingReassembleLayer(nn.Module):
-    def __init__(self, config, channels, factor):
-        super().__init__()
-        # projection
-        hidden_size = config.backbone_config.hidden_size
-        self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
-
-        # up/down sampling depending on factor
-        if factor > 1:
-            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
-        elif factor == 1:
-            self.resize = nn.Identity()
-        elif factor < 1:
-            # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
-
-    # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleLayer.forward
-    def forward(self, hidden_state):
-        hidden_state = self.projection(hidden_state)
-        hidden_state = self.resize(hidden_state)
-        return hidden_state
-
-
-class DepthAnythingFeatureFusionStage(nn.Module):
-    # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage.__init__ with DPT->DepthAnything
-    def __init__(self, config):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        for _ in range(len(config.neck_hidden_sizes)):
-            self.layers.append(DepthAnythingFeatureFusionLayer(config))
-
-    def forward(self, hidden_states, size=None):
-        # reversing the hidden_states, we start from the last
-        hidden_states = hidden_states[::-1]
-
-        fused_hidden_states = []
-        # first layer only uses the last hidden_state
-        size = hidden_states[1].shape[2:]
-        fused_hidden_state = self.layers[0](hidden_states[0], size=size)
-        fused_hidden_states.append(fused_hidden_state)
-        # looping from the last layer to the second
-        for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
-            if idx != len(hidden_states[1:]) - 1:
-                size = hidden_states[1:][idx + 1].shape[2:]
-            fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
-            fused_hidden_states.append(fused_hidden_state)
-
-        return fused_hidden_states
 
 
 class DepthAnythingPreActResidualLayer(nn.Module):
@@ -221,6 +220,33 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
         return hidden_state
 
 
+class DepthAnythingFeatureFusionStage(nn.Module):
+    # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage.__init__ with DPT->DepthAnything
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for _ in range(len(config.neck_hidden_sizes)):
+            self.layers.append(DepthAnythingFeatureFusionLayer(config))
+
+    def forward(self, hidden_states, size=None):
+        # reversing the hidden_states, we start from the last
+        hidden_states = hidden_states[::-1]
+
+        fused_hidden_states = []
+        # first layer only uses the last hidden_state
+        size = hidden_states[1].shape[2:]
+        fused_hidden_state = self.layers[0](hidden_states[0], size=size)
+        fused_hidden_states.append(fused_hidden_state)
+        # looping from the last layer to the second
+        for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
+            if idx != len(hidden_states[1:]) - 1:
+                size = hidden_states[1:][idx + 1].shape[2:]
+            fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
+            fused_hidden_states.append(fused_hidden_state)
+
+        return fused_hidden_states
+
+
 # Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->DepthAnything,dpt->depth_anything
 class DepthAnythingPreTrainedModel(PreTrainedModel):
     """
@@ -244,34 +270,6 @@ class DepthAnythingPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-
-DEPTH_ANYTHING_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthAnythingConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class DepthAnythingNeck(nn.Module):
@@ -333,7 +331,7 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         super().__init__()
 
         self.head_in_index = config.head_in_index
-        self.patch_size = config.backbone_config.patch_size
+        self.patch_size = config.patch_size
 
         features = config.fusion_hidden_size
         self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
@@ -440,7 +438,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
-        patch_size = self.config.backbone_config.patch_size
+        patch_size = self.config.patch_size
         patch_height = height // patch_size
         patch_width = width // patch_size
 

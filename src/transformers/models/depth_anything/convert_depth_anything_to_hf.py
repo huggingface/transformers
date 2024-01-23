@@ -55,6 +55,8 @@ def get_dpt_config(model_name):
         raise NotImplementedError("To do")
 
     config = DepthAnythingConfig(
+        hidden_size=backbone_config.hidden_size,
+        patch_size=backbone_config.patch_size,
         backbone_config=backbone_config,
         fusion_hidden_size=fusion_hidden_size,
         neck_hidden_sizes=neck_hidden_sizes,

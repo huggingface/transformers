@@ -93,10 +93,11 @@ class DepthAnythingModelTester:
 
         return config, pixel_values, labels
 
-    # Copied from tests.models.dpt.test_modeling_dpt_auto_backbone.DPTModelTester.get_config with DPT->DepthAnything
     def get_config(self):
         return DepthAnythingConfig(
             backbone_config=self.get_backbone_config(),
+            hidden_size=self.hidden_size,
+            patch_size=self.patch_size,
             neck_hidden_sizes=self.neck_hidden_sizes,
             fusion_hidden_size=self.fusion_hidden_size,
         )
