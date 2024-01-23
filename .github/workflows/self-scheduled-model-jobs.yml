@@ -51,8 +51,8 @@ jobs:
         run: |
           echo "${{ github.job }}"
           echo "${{ github.run_id }}"
-          echo "${{ toJson(github) }}"
-          echo "${{ toJson(job) }}"
+#          echo "${{ toJson(github) }}"
+#          echo "${{ toJson(job) }}"
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
