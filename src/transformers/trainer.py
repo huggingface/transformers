@@ -2415,9 +2415,11 @@ class Trainer:
                     os.rename(staging_output_dir, output_dir)
 
                     # Ensure rename completed in cases where os.rename is not atomic
-                    fd = os.open(output_dir, os.O_RDONLY)
-                    os.fsync(fd)
-                    os.close(fd)
+                    # And can only happen on non-windows based systems
+                    if os.name != "nt":
+                        fd = os.open(output_dir, os.O_RDONLY)
+                        os.fsync(fd)
+                        os.close(fd)
 
             # Maybe delete some older checkpoints.
             if self.args.should_save:
