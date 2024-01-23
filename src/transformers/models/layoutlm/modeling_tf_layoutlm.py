@@ -944,6 +944,12 @@ class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
     config_class = LayoutLMConfig
     base_model_prefix = "layoutlm"
 
+    @property
+    def input_signature(self):
+        signature = super().input_signature
+        signature["bbox"] = tf.TensorSpec(shape=(None, None, 4), dtype=tf.int32, name="bbox")
+        return signature
+
 
 LAYOUTLM_START_DOCSTRING = r"""
 
