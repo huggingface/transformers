@@ -909,9 +909,12 @@ class GenerationConfig(PushToHubMixin):
                 config_dict.pop(metadata_field, None)
 
         def convert_keys_to_string(obj):
-            if not isinstance(obj, dict):
+            if isinstance(obj, dict):
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys_to_string(item) for item in obj]
+            else:
                 return obj
-            return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
 
         config_dict = convert_keys_to_string(config_dict)
 
