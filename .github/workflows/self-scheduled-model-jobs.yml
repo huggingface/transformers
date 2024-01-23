@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(inputs.folders)[0] }}
+        folders: ${{ fromJson(inputs.folders)[1] }}
         machine_type: ['${{ inputs.machine_type }}']
     runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
