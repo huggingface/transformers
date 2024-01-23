@@ -998,7 +998,7 @@ class TrainingArguments:
             "help": (
                 "Number of batches loaded in advance by each worker. "
                 "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
-                "(default value is None)"
+                "Default is unset"
             )
         },
     )
