@@ -154,17 +154,16 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
 
     # forward pass
     outputs = model(inputs=inputs)
-    logits = outputs.logits
 
     # verify logits
-    if not isinstance(logits, dict):
-        print("Shape of logits:", logits.shape)
-    else:
-        for k, v in logits.items():
-            print(f"Shape of logits of modality {k}", v.shape)
+    # if not isinstance(logits, dict):
+    #     print("Shape of logits:", logits.shape)
+    # else:
+    #     for k, v in logits.items():
+    #         print(f"Shape of logits of modality {k}", v.shape)
 
     if architecture == "image_classification":
-        print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
+        print("Predicted class:", model.config.id2label[outputs.argmax(-1).item()])
 
     # Finally, save files
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)

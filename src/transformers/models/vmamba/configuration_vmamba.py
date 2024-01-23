@@ -102,7 +102,6 @@ class VMambaConfig(PretrainedConfig):
         drop_rate=0,
         attn_drop_rate=0.,
         drop_path_rate=0.1,
-        norm_layer=torch.nn.LayerNorm,
         patch_norm=True,
         use_checkpoint=False,
         **kwargs
@@ -116,7 +115,6 @@ class VMambaConfig(PretrainedConfig):
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.norm_layer = norm_layer
         self.patch_norm = patch_norm
         self.use_checkpoint = False
         super().__init__(**kwargs)

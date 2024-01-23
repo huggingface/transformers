@@ -25,7 +25,7 @@ from typing import Callable
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
+from mamba_ssm.ops.selective_scan_interface import selective_scan_ref # selective_scan_fn
 from timm.models.layers import DropPath
 from torch import nn
 
@@ -260,7 +260,7 @@ class SS2D(nn.Module):
         self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True) # (K=4, D, N)
         self.Ds = self.D_init(self.d_inner, copies=4, merge=True) # (K=4, D, N)
 
-        self.selective_scan = selective_scan_fn
+        self.selective_scan = selective_scan_ref
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
@@ -593,7 +593,7 @@ class VMambaModel(VMambaPreTrainedModel):
         self.dims = dims
 
         self.patch_embed = PatchEmbed2D(patch_size=config.patch_size, in_chans=config.in_channels, embed_dim=self.embed_dim,
-            norm_layer=config.norm_layer if config.patch_norm else None)
+            norm_layer=torch.nn.LayerNorm)
 
         self.pos_drop = nn.Dropout(p=config.drop_rate)
 
@@ -608,13 +608,13 @@ class VMambaModel(VMambaPreTrainedModel):
                 drop=config.drop_rate,
                 attn_drop=config.attn_drop_rate,
                 drop_path=dpr[sum(config.depths[:i_layer]):sum(config.depths[:i_layer + 1])],
-                norm_layer=config.norm_layer,
+                norm_layer=torch.nn.LayerNorm,
                 downsample=PatchMerging2D if (i_layer < self.num_layers - 1) else None,
                 use_checkpoint=config.use_checkpoint,
             )
             self.layers.append(layer)
 
-        self.norm = config.norm_layer(self.num_features)
+        self.norm = torch.nn.LayerNorm(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
         # self.apply(self._init_weights)
