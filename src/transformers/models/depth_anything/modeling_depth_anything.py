@@ -228,14 +228,6 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         for _ in range(len(config.neck_hidden_sizes)):
             self.layers.append(DepthAnythingFeatureFusionLayer(config))
 
-class DepthAnythingFeatureFusionStage(nn.Module):
-    # Copied from transformers.models.dpt.modeling_dpt.DPTFeatureFusionStage.__init__ with DPT->DepthAnything
-    def __init__(self, config):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        for _ in range(len(config.neck_hidden_sizes)):
-            self.layers.append(DepthAnythingFeatureFusionLayer(config))
-
     def forward(self, hidden_states, size=None):
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]

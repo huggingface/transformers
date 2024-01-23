@@ -43,12 +43,12 @@ class DepthAnythingConfig(PretrainedConfig):
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
-        reassemble_hidden_size (`int`, *optional*, defaults to 384):
-            The number of input channels of the reassemble layers.
         patch_size (`int`, *optional*, defaults to 14):
             The size of the patches to extract from the backbone features.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        reassemble_hidden_size (`int`, *optional*, defaults to 384):
+            The number of input channels of the reassemble layers.
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
         neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
