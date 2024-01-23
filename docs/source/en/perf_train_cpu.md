@@ -18,12 +18,13 @@ rendered properly in your Markdown viewer.
 This guide focuses on training large models efficiently on CPU.
 
 ## Mixed precision with IPEX
-Mixed precision is the use of both single and half-precision data types in a model to accelerate training or inference while still preserving much of the single-precison accuracy. Modern CPUs such as 3rd Gen 
-Intel® Xeon® Scalable processors and 4th Gen Intel® Xeon® Scalable processors supports the lower-precision data type BFloat16 natively, so you should get performance boost out of the box by simply turning the mixed precision training with BFloat16 on.
+Mixed precision is the use of both single and half-precision data types in a model to accelerate training or inference while still preserving much of the single-precision accuracy. Modern CPUs such as 3rd Gen Intel® Xeon® Scalable processors and 4th Gen Intel® Xeon® Scalable processors support the lower-precision data type BFloat16 natively, so you should get performance benefits out of the box by simply turning the mixed precision training with BFloat16 on.
 
-To further maximize training performance, you can use Intel® Extension for PyTorch (IPEX), which is a libray built upon PyTorch and adds additional CPU ISA level support such as Intel® Advanced Vector Extensions 512 (Intel® AVX-512) Vector Neural Network Instructions (VNNI) and Intel® Advanced Matrix Extensions (Intel® AMX) for an extra performance boost on Intel CPUs. However, CPUs with only AVX2 (e.g., AMD CPUs or older Intel CPUs) might result in a better performance under IPEX, but not guaranteed. 
+To further maximize training performance, you can use Intel® Extension for PyTorch (IPEX), which is a library built upon PyTorch and adds additional CPU ISA level support such as Intel® Advanced Vector Extensions 512 (Intel® AVX-512) Vector Neural Network Instructions (VNNI) and Intel® Advanced Matrix Extensions (Intel® AMX) for an extra performance boost on Intel CPUs. However, CPUs with only AVX2 (e.g., AMD CPUs or older Intel CPUs) might result in better performance under IPEX, but not guaranteed.
 
-The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision. Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html).
+The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
+
+Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html).
 
 ### IPEX installation:
 
