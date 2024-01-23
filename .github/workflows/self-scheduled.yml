@@ -33,8 +33,8 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+        machine_type: [single-gpu]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -76,7 +76,7 @@ jobs:
       matrix:
         machine_type: [single-gpu, multi-gpu]
         bon: ${{ fromJson(needs.setup.outputs.matrix_2)[0] }}
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -89,29 +89,29 @@ jobs:
           echo '${{ toJSON(matrix.bon) }}'
 
 
-  run_tests_single_gpu:
-    name: Model tests
-    needs: setup
-    strategy:
-      matrix:
-        bon: ${{ fromJson(needs.setup.outputs.matrix_2) }}
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ toJSON(matrix.bon) }}
-      machine_type: single-gpu
-    secrets: inherit
-
-  run_tests_multi_gpu:
-    name: Model tests
-    needs: setup
-    strategy:
-      matrix:
-        bon: ${{ fromJson(needs.setup.outputs.matrix_2) }}
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ toJSON(matrix.bon) }}
-      machine_type: single-gpu
-    secrets: inherit
+#  run_tests_single_gpu:
+#    name: Model tests
+#    needs: setup
+#    strategy:
+#      matrix:
+#        bon: ${{ fromJson(needs.setup.outputs.matrix_2) }}
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ toJSON(matrix.bon) }}
+#      machine_type: single-gpu
+#    secrets: inherit
+#
+#  run_tests_multi_gpu:
+#    name: Model tests
+#    needs: setup
+#    strategy:
+#      matrix:
+#        bon: ${{ fromJson(needs.setup.outputs.matrix_2) }}
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ toJSON(matrix.bon) }}
+#      machine_type: single-gpu
+#    secrets: inherit
 
 #
 #  run_examples_gpu:
