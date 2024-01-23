@@ -75,7 +75,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-        bon: ${{ fromJson(needs.setup.outputs.matrix_2) }}
+        bon: ${{ fromJson(needs.setup.outputs.matrix_2)[0] }}
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
       image: huggingface/transformers-all-latest-gpu
