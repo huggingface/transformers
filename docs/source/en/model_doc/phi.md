@@ -73,11 +73,9 @@ The original code for Phi-1, Phi-1.5 and Phi-2 can be found [here](https://huggi
 
 <Tip warning={true}>
 
-Phi-2 has been integrated in the development version (4.37.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
+Phi-2 has been integrated in `transformers` 4.37.0 version. If you are using a lower version, ensure that you are doing the following:
 
 * When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
-
-* Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
 
 </Tip>
 
@@ -134,8 +132,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
 >>> # define the model and tokenizer and push the model and tokens to the GPU.
->>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
->>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
+>>> model = PhiForCausalLM.from_pretrained("microsoft/phi-2", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
 
 >>> # feel free to change the prompt to your liking.
 >>> prompt = "If I were an AI that had just achieved"
