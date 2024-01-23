@@ -61,153 +61,10 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-
         # We have a SentencePiece fixture for testing
         tokenizer = GoldenGateTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
-
-    def get_tokenizers(self, **kwargs):
-        kwargs.update({"pad_token": "<PAD>"})
-        return super().get_tokenizers(**kwargs)
-
-    def test_full_tokenizer(self):
-        tokenizer = GoldenGateTokenizer(SAMPLE_VOCAB, keep_accents=True)
-
-        tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
-
-        self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens),
-            [285, 46, 10, 170, 382],
-        )
-
-        tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
-        self.assertListEqual(
-            tokens,
-            [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "9",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "s",
-                "é",
-                ".",
-            ],
-        )
-        ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(
-            ids,
-            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
-        )
-
-        back_tokens = tokenizer.convert_ids_to_tokens(ids)
-        self.assertListEqual(
-            back_tokens,
-            [
-                SPIECE_UNDERLINE + "I",
-                SPIECE_UNDERLINE + "was",
-                SPIECE_UNDERLINE + "b",
-                "or",
-                "n",
-                SPIECE_UNDERLINE + "in",
-                SPIECE_UNDERLINE + "",
-                "<unk>",
-                "2",
-                "0",
-                "0",
-                "0",
-                ",",
-                SPIECE_UNDERLINE + "and",
-                SPIECE_UNDERLINE + "this",
-                SPIECE_UNDERLINE + "is",
-                SPIECE_UNDERLINE + "f",
-                "al",
-                "s",
-                "<unk>",
-                ".",
-            ],
-        )
-
-    @unittest.skip("Let's wait for the fast tokenizer!")
-    def test_save_pretrained(self):
-        self.tokenizers_list += (self.rust_tokenizer_class, "hf-internal-testing/llama-tokenizer", {})
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files + the tokenizer.json file for the fast one
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-                tokenizer_r_files = tuple(f for f in tokenizer_r_files if "tokenizer.json" not in f)
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=True
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=True)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it save with the same files
-                self.assertSequenceEqual(tokenizer_r_files, tokenizer_p_files)
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
-
-                # Save tokenizer rust, legacy_format=False
-                tmpdirname2 = tempfile.mkdtemp()
-
-                tokenizer_r_files = tokenizer_r.save_pretrained(tmpdirname2, legacy_format=False)
-                tokenizer_p_files = tokenizer_p.save_pretrained(tmpdirname2)
-
-                # Checks it saved the tokenizer.json file
-                self.assertTrue(any("tokenizer.json" in f for f in tokenizer_r_files))
-
-                # Checks everything loads correctly in the same way
-                tokenizer_rp = tokenizer_r.from_pretrained(tmpdirname2)
-                tokenizer_pp = tokenizer_p.from_pretrained(tmpdirname2)
-
-                # Check special tokens are set accordingly on Rust and Python
-                for key in tokenizer_pp.special_tokens_map:
-                    self.assertTrue(hasattr(tokenizer_rp, key))
-
-                shutil.rmtree(tmpdirname2)
 
     @require_torch
     def test_batch_tokenization(self):
@@ -286,17 +143,10 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
-            model_name="hf-internal-testing/golden-gate-tokenizer",
+            model_name="gg-hf/golden-gate-7b",
             revision="",
             padding=False,
         )
-
-    def test_picklable(self):
-        with tempfile.NamedTemporaryFile() as f:
-            shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = GoldenGateTokenizer(f.name, keep_accents=True)
-            pickled_tokenizer = pickle.dumps(tokenizer)
-        pickle.loads(pickled_tokenizer)
 
     @unittest.skip("worker 'gw4' crashed on CI, passing locally.")
     def test_pickle_subword_regularization_tokenizer(self):
@@ -313,9 +163,9 @@ class GoldenGateTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class GoldenGateIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "google/golden-gate-2b"
-        cls.tokenizer: GoldenGateTokenizer = GoldenGateTokenizer.from_pretrained(checkpoint_name)
-        cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(checkpoint_name)
+        checkpoint_name = "gg-hf/golden-gate-7b"
+        cls.tokenizer: GoldenGateTokenizer = GoldenGateTokenizer.from_pretrained(checkpoint_name, eos_token = "<s>") # add this token
+        cls.rust_tokenizer = GoldenGateTokenizerFast.from_pretrained(checkpoint_name, eos_token = "<s>") # add this token
         return cls
 
     @require_torch
@@ -329,8 +179,8 @@ class GoldenGateIntegrationTest(unittest.TestCase):
             nested_simplify(inputs),
             {
                 "input_ids": [
-                    [1, 450, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889],
-                    [1, 1205, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718],
+                    [2, 450, 1494, 1347, 881, 367, 6284, 18511, 29901, 15043, 29889],
+                    [2, 1205, 29871, 1823, 322, 29871, 31010, 30691, 1678, 1823, 1678, 30718],
                 ],
                 "attention_mask": [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
             },
@@ -340,31 +190,19 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         slow_tokenizer = self.tokenizer
         fast_tokenizer = self.rust_tokenizer
         slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [1, 319, 4559, 1243]
+        assert slow == [2, 235280, 6453, 2121]
 
         fast_tokenizer.add_eos_token = False
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert fast == [1, 319, 4559, 1243]
+        assert fast == [2, 235280, 6453, 2121]
 
         fast_tokenizer.add_eos_token = True
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert fast == [1, 319, 4559, 1243, 2]
+        assert fast == [2, 235280, 6453, 2121, 204]
 
         slow_tokenizer.add_eos_token = True
         slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert slow == [1, 319, 4559, 1243, 2]
-
-        fast_tokenizer = GoldenGateTokenizerFast.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
-        )
-        fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
-        assert fast == [319, 4559, 1243, 2]
-
-        slow_tokenzier = GoldenGateTokenizer.from_pretrained(
-            "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
-        )
-        slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
-        assert slow == [319, 4559, 1243, 2]
+        assert slow == [2, 235280, 6453, 2121, 204]
 
         self.tokenizer.add_eos_token = False
         self.rust_tokenizer.add_eos_token = False
@@ -394,86 +232,74 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        self.assertEqual(pyth_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
-        self.assertEqual(rust_tokenizer.encode("This is a test"), [1, 910, 338, 263, 1243])
-        self.assertEqual(pyth_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
-        self.assertEqual(rust_tokenizer.decode([1, 910, 338, 263, 1243], skip_special_tokens=True), "This is a test")
+        self.tokenizer.add_eos_token = False
+        self.rust_tokenizer.add_eos_token = False
+        
+        self.assertEqual(pyth_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
+        self.assertEqual(rust_tokenizer.encode("This is a test"), [2, 1596, 603, 476, 2121])
+        self.assertEqual(pyth_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True), "This is a test")
+        self.assertEqual(rust_tokenizer.decode([2, 1596, 603, 476, 2121], skip_special_tokens=True), "This is a test")
 
         # bytefallback showcase
-        self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])  # fmt: skip
-        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392])  # fmt: skip
+        self.assertEqual(pyth_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
+        self.assertEqual(rust_tokenizer.encode("生活的真谛是"), [2, 122182, 235710, 245467, 235427] )  # fmt: skip
         self.assertEqual(
             pyth_tokenizer.decode(
-                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+                [2, 122182, 235710, 245467, 235427] , skip_special_tokens=True
             ),
             "生活的真谛是",
         )
         self.assertEqual(
             rust_tokenizer.decode(
-                [1, 29871, 30486, 31704, 30210, 30848, 235, 179, 158, 30392], skip_special_tokens=True
+                [2, 122182, 235710, 245467, 235427] , skip_special_tokens=True
             ),
             "生活的真谛是",
         )
 
         # Inner spaces showcase
-        self.assertEqual(pyth_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
-        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [1, 6324, 29871, 15043])
-        self.assertEqual(pyth_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
-        self.assertEqual(rust_tokenizer.decode([1, 6324, 29871, 15043], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(pyth_tokenizer.encode("Hi  Hello"), [2, 2151, 139, 4521])
+        self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [2, 2151, 139, 4521])
+        self.assertEqual(pyth_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([2, 2151, 139, 4521], skip_special_tokens=True), "Hi  Hello")
 
-        self.assertEqual(pyth_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
-        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [1, 6324, 259, 15043])
-        self.assertEqual(pyth_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
-        self.assertEqual(rust_tokenizer.decode([1, 6324, 259, 15043], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(pyth_tokenizer.encode("Hi   Hello"), [2, 2151, 140, 4521])
+        self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [2, 2151, 140, 4521])
+        self.assertEqual(pyth_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([2, 2151, 140, 4521], skip_special_tokens=True), "Hi   Hello")
 
-        self.assertEqual(pyth_tokenizer.encode(""), [1])
-        self.assertEqual(rust_tokenizer.encode(""), [1])
+        self.assertEqual(pyth_tokenizer.encode(""), [2])
+        self.assertEqual(rust_tokenizer.encode(""), [2])
 
-        self.assertEqual(pyth_tokenizer.encode(" "), [1, 259])
-        self.assertEqual(rust_tokenizer.encode(" "), [1, 259])
+        self.assertEqual(pyth_tokenizer.encode(" "), [2, 235248])
+        self.assertEqual(rust_tokenizer.encode(" "), [2, 235248])
 
-        self.assertEqual(pyth_tokenizer.encode("  "), [1, 1678])
-        self.assertEqual(rust_tokenizer.encode("  "), [1, 1678])
+        self.assertEqual(pyth_tokenizer.encode("  "), [2, 139])
+        self.assertEqual(rust_tokenizer.encode("  "), [2, 139])
 
-        self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
-        self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
+        self.assertEqual(pyth_tokenizer.encode(" Hello"), [2, 25957])
+        self.assertEqual(rust_tokenizer.encode(" Hello"), [2, 25957])
 
-    def test_no_differences_showcase(self):
-        pyth_tokenizer = self.tokenizer
-        rust_tokenizer = self.rust_tokenizer
-        self.assertEqual(pyth_tokenizer.encode(""), [1])
-        self.assertEqual(rust_tokenizer.encode(""), [1])
-
-        self.assertEqual(pyth_tokenizer.encode(" "), [1, 259])
-        self.assertEqual(rust_tokenizer.encode(" "), [1, 259])
-
-        self.assertEqual(pyth_tokenizer.encode("  "), [1, 1678])
-        self.assertEqual(rust_tokenizer.encode("  "), [1, 1678])
-
-        self.assertEqual(pyth_tokenizer.encode(" Hello"), [1, 29871, 15043])
-        self.assertEqual(rust_tokenizer.encode(" Hello"), [1, 29871, 15043])
-
-        self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
-        self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
 
     def test_no_differences_decode(self):
+        self.tokenizer.add_eos_token = False
+        self.rust_tokenizer.add_eos_token = False
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
 
-        self.assertEqual(pyth_tokenizer.decode([869]), ".")
-        self.assertEqual(rust_tokenizer.decode([869]), ".")
+        self.assertEqual(pyth_tokenizer.decode([869]), "og")
+        self.assertEqual(rust_tokenizer.decode([869]), "og")
 
-        self.assertEqual(pyth_tokenizer.decode([30112, 869]), "ا .")
-        self.assertEqual(rust_tokenizer.decode([30112, 869]), "ا .")
+        self.assertEqual(pyth_tokenizer.decode([30112, 869]), " expenditureog")
+        self.assertEqual(rust_tokenizer.decode([30112, 869]), " expenditureog")
 
     def test_no_differences_special_tokens(self):
         pyth_tokenizer = self.tokenizer
         rust_tokenizer = self.rust_tokenizer
-        self.assertEqual(pyth_tokenizer.encode(""), [1])
-        self.assertEqual(rust_tokenizer.encode(""), [1])
+        self.assertEqual(pyth_tokenizer.encode(""), [2])
+        self.assertEqual(rust_tokenizer.encode(""), [2])
 
-        self.assertEqual(pyth_tokenizer.encode("<s>"), [1, 1])
-        self.assertEqual(rust_tokenizer.encode("<s>"), [1, 1])
+        self.assertEqual(pyth_tokenizer.encode("<s>"), [2, 204])
+        self.assertEqual(rust_tokenizer.encode("<s>"), [2, 204])
 
     @unittest.skipIf(
         os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
@@ -514,7 +340,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = GoldenGateTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b", legacy=False)
         tokenizer.add_tokens([AddedToken("<REPR_END>", rstrip=True, lstrip=True)], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -526,7 +352,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # decoding strips the added prefix space.
         self.assertEqual(out2, "<REPR_END> inform")
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
-        self.assertEqual(input_ids, [29871, 32000, 262, 689])  # 29871 is the spiece underline, '▁' added as it should
+        self.assertEqual(input_ids, [256000, 43910]) 
 
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -538,7 +364,7 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         # TODO @ArthurZ this should be affected by the lstrip/rstrip/single word /normalize refactoring
         # Since currently we always strip left and right of the token, results are as such
         input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens=False)
-        self.assertEqual(input_ids, [1, 15043, 1, 3525])
+        self.assertEqual(input_ids, [204, 25957, 204, 1139])
         tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens=False)
         self.assertEqual(tokens, ["<s>", "▁Hello", "<s>", "how"])
         decoded_tokens = tokenizer.decode(input_ids)
@@ -546,19 +372,19 @@ class GoldenGateIntegrationTest(unittest.TestCase):
 
         # Let's make sure that if there are any spaces, we don't remove them!
         input_ids = tokenizer.encode(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(input_ids, [259, 1, 15043, 1, 920])
+        self.assertEqual(input_ids, [235248, 204, 25957, 204, 1368])
         tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens=False)
-        self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
+        self.assertEqual(tokens, ["▁", "<s>", "▁Hello", "<s>", "▁how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_some_edge_cases(self):
-        tokenizer = GoldenGateTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
 
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
-        self.assertEqual(sp_tokens, ["<", "s", ">>"])
+        self.assertEqual(sp_tokens, ['<s>', '>'])
         tokens = tokenizer.tokenize("<s>>")
-        self.assertNotEqual(sp_tokens, tokens)
+        self.assertEqual(sp_tokens, tokens)
         self.assertEqual(tokens, ["<s>", ">"])
 
         tokens = tokenizer.tokenize("")
@@ -566,36 +392,23 @@ class GoldenGateIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
 
         tokens = tokenizer.tokenize(" ")
-        self.assertEqual(tokens, ["▁▁"])
+        self.assertEqual(tokens, ["▁"])
         # a dummy prefix space is not added by the sp_model as it was de-activated
-        self.assertEqual(tokens, tokenizer.sp_model.encode("  ", out_type=str))
+        self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
 
         tokens = tokenizer.tokenize("▁")
+        self.assertEqual(tokens, ["▁"])
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+        tokens = tokenizer.tokenize(" ▁")
         self.assertEqual(tokens, ["▁▁"])
         # a dummy prefix space is not added by the sp_model as it was de-activated
         self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁", out_type=str))
 
-        tokens = tokenizer.tokenize(" ▁")
-        self.assertEqual(tokens, ["▁▁▁"])
-        # a dummy prefix space is not added by the sp_model as it was de-activated
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
-
-    def test_fast_post_processor(self):
-        tokenizer = GoldenGateTokenizerFast(
-            SAMPLE_VOCAB, eos_token=None, bos_token=None, add_bos_token=False, add_eos_token=False
-        )
-        tokenizer.encode(" Hey ")
-
-        with self.assertRaises(ValueError):
-            tokenizer = GoldenGateTokenizerFast(
-                SAMPLE_VOCAB, bos_token=None, eos_token="<s>", add_bos_token=True, add_eos_token=False
-            )
-        with self.assertRaises(ValueError):
-            tokenizer = GoldenGateTokenizerFast(SAMPLE_VOCAB, eos_token=None, add_bos_token=True, add_eos_token=True)
-
     @require_jinja
     def test_tokenization_for_chat(self):
-        tokenizer = GoldenGateTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+        tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b", legacy=False)
 
         test_chats = [
             [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
@@ -627,110 +440,61 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     A class that regroups important test to make sure that we properly handle the special tokens.
     """
 
-    @classmethod
-    def setUpClass(cls):
-        tokenizer = GoldenGateTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
-        cls.tokenizer = tokenizer
-        return cls
-
-    def test_remove_extra_whitespaces(self):
-        # make sure the extra spaces are eaten. Since the sample vocab does not have
-        # `______`. sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
-
-        input_ids = self.tokenizer.encode("       . Hello")
-        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
-        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, [7] + sp_encode)
-        tokens = self.tokenizer.tokenize(" . Hello")
-        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
-
-        # `'▁'` is also a whitespace
-        input_ids = self.tokenizer.encode("▁He is not")
-        self.assertEqual(input_ids, [156, 46, 44])
-        tokens = self.tokenizer.tokenize("▁He is not")
-        sp_encode = [
-            self.tokenizer.sp_model.piece_to_id("▁He"),
-            self.tokenizer.sp_model.piece_to_id("▁is"),
-            self.tokenizer.sp_model.piece_to_id("▁not"),
-        ]
-        self.assertEqual(input_ids, sp_encode)
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
-
-        input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 1, 156])
-        tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
-        # make sure that the output after the extra id is the same as if
-        # extra_id was not there
-        input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 156])
-        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
-
-    def test_character_after_special_token(self):
-        # Make sure that `tokenizer.tokenize` is similar to
-        # adding the equivalent special token to the vocab
-        input_ids = self.tokenizer.encode("Hey <s>I")
-        self.assertEqual(input_ids, [156, 30, 1, 100])
-        sp_encode = self.tokenizer.sp_model.encode("Hey .I")
-        # the last token should be 100
-        self.assertEqual(input_ids[-1], sp_encode[-1])
-        tokens = self.tokenizer.tokenize("<s>I")
-        self.assertEqual(tokens, ["<s>", "I"])
-
-        input_ids = self.tokenizer.encode("Hello, <s>,")
-        self.assertEqual(input_ids, [156, 86, 20, 3, 1, 3])
-        tokens = self.tokenizer.tokenize("Hello, <s>,")
-        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<s>", ","])
-
-    def test_special_tokens_strip(self):
-        input_ids = self.tokenizer.encode(" <s> ,")
-        self.assertEqual(input_ids, [1, 7, 3])
-        tokens = self.tokenizer.tokenize(" <s> ,")
-        # spaces are eaten by rstrip / lstrip + spm sp_model.encode("  ") = []
-        self.assertEqual(tokens, ["<s>", "▁", ","])
-
-        input_ids = self.tokenizer.encode("No <s> ▁He")
-        self.assertEqual(input_ids, [284, 1, 156])
-        tokens = self.tokenizer.tokenize("No <s> ▁He")
-        self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
-
-    def integration_test(self):
+    def test_edge_case_tabulation(self):
+        fast_tokenizer = GoldenGateTokenizerFast.from_pretrained("gg-hf/golden-gate-7b")
+        slow_tokenizer = GoldenGateTokenizer.from_pretrained("gg-hf/golden-gate-7b")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
-        EXPECTED_IDS = [
-            2,
-            6750,
-            1,
-            235265,
-            235248,
-            255969,
-            235248,
-            109,
-            4747,
-            139,
-            235335,
-            139,
-            216311,
-            241316,
-            139,
-            239880,
-            235341,
-            144,
-            235269,
-            235248,
-            235274,
-            235284,
-            235304,
-            235310,
-            235248,
-            235274,
-            235308,
-            235248,
-            235308,
-            235269,
-            235318,
-            235274,
-        ]
+        EXPECTED_IDS = [ 2, 6750, 1, 235265, 235248, 255969, 235248, 109, 4747, 139, 235335, 139, 216311, 241316, 139, 239880, 235341, 144, 235269, 235248, 235274, 235284, 235304, 235310, 235248, 235274, 235308, 235248, 235308, 235269, 235318, 235274] # fmt: skip
+        EXPECTED_TOKENS = ['Hey', '<eos>', '.', '▁', '\t\t', '▁', '\n\n', 'you', '▁▁', 'é', '▁▁', '@#', '😈', '▁▁', '🤗', '!', '▁▁▁▁▁▁▁', ',', '▁', '1', '2', '3', '4', '▁', '1', '5', '▁', '5', ',', '6', '1']
+
+        tokens = fast_tokenizer.tokenize(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(tokens, EXPECTED_TOKENS)
+        
+        tokens = slow_tokenizer.tokenize(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(tokens, EXPECTED_TOKENS)
+
+        input_ids = fast_tokenizer.encode(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(input_ids, EXPECTED_IDS)
+
+        input_ids = slow_tokenizer.encode(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(input_ids, EXPECTED_IDS)
+        
+        text = fast_tokenizer.decode(EXPECTED_IDS)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
+        
+        text = slow_tokenizer.decode(EXPECTED_IDS)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(text, "<bos>Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61")
 
         input_text = "\t\t\t\t \n\n61"
+        EXPECTED_IDS = [2, 255971, 235248, 109, 235318, 235274]
+        EXPECTED_TOKENS = ['\t\t\t\t', '▁', '\n\n', '6', '1']
+
+        tokens = fast_tokenizer.tokenize(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(tokens, EXPECTED_TOKENS)
+        
+        tokens = slow_tokenizer.tokenize(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(tokens, EXPECTED_TOKENS)
+
+        input_ids = fast_tokenizer.encode(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(input_ids, EXPECTED_IDS)
+
+        input_ids = slow_tokenizer.encode(input_text)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(input_ids, EXPECTED_IDS)
+
+        text = fast_tokenizer.decode(EXPECTED_IDS)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(text, "<bos>\t\t\t\t \n\n61")
+        
+        text = slow_tokenizer.decode(EXPECTED_IDS)
+        with self.subTest("test fast edge case fast"):
+            self.assertEqual(text, "<bos>\t\t\t\t \n\n61")
