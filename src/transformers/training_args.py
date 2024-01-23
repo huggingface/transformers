@@ -2674,7 +2674,7 @@ class TrainingArguments:
                 If True, the data loader will not shut down the worker processes after a dataset has been consumed
                 once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training,
                 but will increase RAM usage. Will default to `False`.
-            prefetch_factor (`int`, *optional*, defaults to None):
+            prefetch_factor (`int`, *optional*):
                 Number of batches loaded in advance by each worker.
                 2 means there will be a total of 2 * num_workers batches prefetched across all workers.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
