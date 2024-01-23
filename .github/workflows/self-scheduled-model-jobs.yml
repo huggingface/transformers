@@ -46,6 +46,14 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
+      - name: Echo job info
+        shell: bash
+        run: |
+          echo "${{ github.job }}"
+          echo "${{ github.run_id }}"
+          echo "${{ toJson(github) }}"
+          echo "${{ toJson(job) }}"
+
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
