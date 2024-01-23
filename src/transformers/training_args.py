@@ -1836,12 +1836,6 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
-        if self.split_batches is not None:
-            warnings.warn(
-                "using `split_batches` is deprecated and will be removed in version 5"
-                " of 🤗 Transformers. Use the `accelerator_config` argument instead.",
-                FutureWarning,
-            )
 
     def __str__(self):
         self_as_dict = asdict(self)
