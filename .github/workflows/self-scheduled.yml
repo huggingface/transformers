@@ -68,26 +68,6 @@ jobs:
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
-#
-#  check_setup:
-#    name: Check Setup
-#    needs: setup
-#    strategy:
-#      matrix:
-#        machine_type: [single-gpu, multi-gpu]
-#        bon: ${{ fromJson(needs.setup.outputs.matrix_2)[0] }}
-#    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
-#    container:
-#      image: huggingface/transformers-all-latest-gpu
-#      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-#    steps:
-#      - name: Check Setup
-#        run: |
-#          echo ${{ needs.setup.outputs.matrix }}
-#          echo ${{ needs.setup.outputs.matrix_2 }}
-#          echo ${{ matrix.bon }}
-#          echo '${{ toJSON(matrix.bon) }}'
-
 
   run_tests_single_gpu_0:
     name: Model tests

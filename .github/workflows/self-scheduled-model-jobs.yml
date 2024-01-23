@@ -39,7 +39,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # folders: ${{ fromJson(inputs.folders)[1] }}
         folders: ${{ fromJson(inputs.folders)[inputs.slice_id] }}
         machine_type: ['${{ inputs.machine_type }}']
     runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
@@ -54,38 +53,38 @@ jobs:
         run: |
           echo "${{ inputs.folders }}"
           echo "${{ matrix.folders }}"
-          echo "${{ fromJson(inputs.folders)[0] }}"
-#      - name: Echo folder ${{ matrix.folders }}
-#        shell: bash
-#        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
-#        # set the artifact folder names (because the character `/` is not allowed).
-#        run: |
-#          echo "${{ matrix.folders }}"
-#          matrix_folders=${{ matrix.folders }}
-#          matrix_folders=${matrix_folders/'models/'/'models_'}
-#          echo "$matrix_folders"
-#          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
-#
-#      - name: Update clone
-#        working-directory: /transformers
-#        run: git fetch && git checkout ${{ github.sha }}
-#
-#      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-#        working-directory: /transformers
-#        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-#
-#      - name: NVIDIA-SMI
-#        run: |
-#          nvidia-smi
-#
-#      - name: Environment
-#        working-directory: /transformers
-#        run: |
-#          python3 utils/print_env.py
-#
-#      - name: Show installed libraries and their versions
-#        working-directory: /transformers
-#        run: pip freeze
+          echo "${{ toJson(fromJson(inputs.folders)[0]) }}"
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
 #
 #      - name: Run all tests on GPU
 #        working-directory: /transformers
