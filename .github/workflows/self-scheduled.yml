@@ -69,35 +69,38 @@ jobs:
         run: |
           nvidia-smi
 
-  run_tests_single_gpu_0:
+  run_tests_single_gpu:
     name: Model tests
     needs: setup
+    strategy:
+      matrix:
+        slice_id: [0, 1, 2]
     uses: ./.github/workflows/self-scheduled-model-jobs.yml
     with:
       folders: ${{ needs.setup.outputs.matrix_2 }}
       machine_type: single-gpu
-      slice_id: 0
+      slice_id: ${{ matrix.slice_id }}
     secrets: inherit
-
-  run_tests_single_gpu_1:
-    name: Model tests
-    needs: setup
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ needs.setup.outputs.matrix_2 }}
-      machine_type: single-gpu
-      slice_id: 1
-    secrets: inherit
-
-  run_tests_single_gpu_2:
-    name: Model tests
-    needs: setup
-    uses: ./.github/workflows/self-scheduled-model-jobs.yml
-    with:
-      folders: ${{ needs.setup.outputs.matrix_2 }}
-      machine_type: single-gpu
-      slice_id: 2
-    secrets: inherit
+#
+#  run_tests_single_gpu_1:
+#    name: Model tests
+#    needs: setup
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ needs.setup.outputs.matrix_2 }}
+#      machine_type: single-gpu
+#      slice_id: ${{ matrix.machine_type }}
+#    secrets: inherit
+#
+#  run_tests_single_gpu_2:
+#    name: Model tests
+#    needs: setup
+#    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+#    with:
+#      folders: ${{ needs.setup.outputs.matrix_2 }}
+#      machine_type: single-gpu
+#      slice_id: 2
+#    secrets: inherit
 
 #
 #  run_tests_multi_gpu:
