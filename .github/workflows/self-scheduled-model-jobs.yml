@@ -35,7 +35,6 @@ env:
 
 jobs:
   run_tests_models_gpu:
-    name: Model tests
     strategy:
       fail-fast: false
       matrix:
