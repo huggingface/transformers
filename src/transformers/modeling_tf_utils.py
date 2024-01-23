@@ -1214,8 +1214,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
         This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
-        shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
-        the model.
+        shape and dtype for model inputs. It is used for both serving and for generating dummy inputs.
         """
         model_inputs = list(inspect.signature(self.call).parameters)
         sig = {}
