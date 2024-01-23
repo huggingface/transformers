@@ -560,6 +560,11 @@ class AwqConfig(QuantizationConfigMixin):
             that quantize their own models using `llm-awq` library.
         do_fuse (`bool`, *optional*, defaults to `False`):
             Whether to fuse attention and mlp layers together for faster inference
+        use_exllama (`Optional`, *optional*): 
+            Whether to use exllama kernels. Defaults to `False` if unset. Only works with `bits` = 4.
+        exllama_config (`Optional`, *optional*):
+            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
+            to `{"version": 1}` if unset.
         fuse_max_seq_len (`int`, *optional*):
             The Maximum sequence length to generate when using fusing.
         modules_to_fuse (`dict`, *optional*, default to `None`):
