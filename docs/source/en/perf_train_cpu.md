@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Efficient Training on CPU
 
-This guide focuses on training large models efficiently on CPUs.
+This guide focuses on training large models efficiently on CPU.
 
 ## Mixed precision with IPEX
 Mixed precision is the use of both single and half-precision data types in a model to accelerate training or inference while still preserving much of the single-precison accuracy. Modern CPUs such as 3rd Gen 
