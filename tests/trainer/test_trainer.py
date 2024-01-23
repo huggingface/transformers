@@ -83,6 +83,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+from transformers.trainer_pt_utils import AcceleratorConfig
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
@@ -2411,6 +2412,72 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ]
             execute_subprocess_async(command)
             # successful return here == success - any errors would have caused an error or a timeout in the sub-call
+
+    def test_accelerator_config_from_dict(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config={
+                    "split_batches": True,
+                    "dispatch_batches": True,
+                    "even_batches": False,
+                    "use_seedable_sampler": True,
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
+    def test_accelerator_config_from_yaml(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path_file = Path(tmp_dir) / "accelerator_config.json"
+            with open(path_file, "w") as f:
+                accelerator_config = {
+                    "split_batches": True,
+                    "dispatch_batches": True,
+                    "even_batches": False,
+                    "use_seedable_sampler": False,
+                }
+                json.dump(accelerator_config, f)
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=path_file)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
+
+    def test_accelerator_config_from_dataclass(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        accelerator_config = AcceleratorConfig(
+            split_batches=True, dispatch_batches=True, even_batches=False, use_seedable_sampler=False
+        )
+        config = RegressionModelConfig(a=1.5, b=2.5)
+        model = RegressionPreTrainedModel(config)
+        eval_dataset = SampleIterableDataset()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
 
 @require_torch
