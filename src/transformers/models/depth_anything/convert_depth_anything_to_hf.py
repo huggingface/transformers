@@ -239,11 +239,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             )
         elif model_name == "depth-anything-base":
             expected_slice = torch.tensor(
-                [[26.1444, 26.1177, 26.2908], [26.2718, 26.0039, 26.2705], [26.3118, 25.8757, 26.0465]],
+                [[24.0704, 23.9674, 23.6665], [22.9856, 22.4825, 23.0281], [23.1742, 23.0900, 23.5513]],
             )
         elif model_name == "depth-anything-large":
             expected_slice = torch.tensor(
-                [[89.1983, 87.2038, 87.9492], [88.3479, 87.4503, 86.9602], [87.9399, 86.7877, 86.3949]],
+                [[78.7736, 76.9226, 79.0606], [78.2098, 74.7568, 76.6376], [77.5394, 75.7316, 77.5426]],
             )
         else:
             raise ValueError("Not supported")

@@ -41,14 +41,14 @@ The pipeline allows to use the model in a few lines of code:
 >>> import requests
 
 >>> # load pipe
->>> depth_estimator = pipeline(model="nielsr/depth-anything-small")
+>>> pipe = pipeline(task="depth-estimation", model="nielsr/depth-anything-small")
 
 >>> # load image
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> # inference
->>> depth = depth_estimator(image)["depth"]
+>>> depth = pipe(image)["depth"]
 ```
 
 ### Using the model yourself
