@@ -46,7 +46,7 @@ class DepthAnythingConfig(PretrainedConfig):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
-        use_pretrained_backbone (`bool`, *optional*, `False`):
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
             Whether to use pretrained weights for the backbone.
         patch_size (`int`, *optional*, defaults to 14):
             The size of the patches to extract from the backbone features.
@@ -56,9 +56,9 @@ class DepthAnythingConfig(PretrainedConfig):
             The number of input channels of the reassemble layers.
         reassemble_factors (`List[int]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
             The up/downsampling factors of the reassemble layers.
-        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[96, 192, 384, 768]`):
+        neck_hidden_sizes (`List[str]`, *optional*, defaults to `[48, 96, 192, 384]`):
             The hidden sizes to project to for the feature maps of the backbone.
-        fusion_hidden_size (`int`, *optional*, defaults to 256):
+        fusion_hidden_size (`int`, *optional*, defaults to 64):
             The number of channels before fusion.
         head_in_index (`int`, *optional*, defaults to -1):
             The index of the features to use in the depth estimation head.
@@ -68,7 +68,7 @@ class DepthAnythingConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DepthAnythingForDepthEstimation, DepthAnythingConfig, Dinov2Config
+    >>> from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation
 
     >>> # Initializing a DepthAnything small style configuration
     >>> configuration = DepthAnythingConfig()
@@ -91,8 +91,8 @@ class DepthAnythingConfig(PretrainedConfig):
         initializer_range=0.02,
         reassemble_hidden_size=384,
         reassemble_factors=[4, 2, 1, 0.5],
-        neck_hidden_sizes=[96, 192, 384, 768],
-        fusion_hidden_size=256,
+        neck_hidden_sizes=[48, 96, 192, 384],
+        fusion_hidden_size=64,
         head_in_index=-1,
         head_hidden_size=32,
         **kwargs,
@@ -108,7 +108,12 @@ class DepthAnythingConfig(PretrainedConfig):
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
             backbone_config = CONFIG_MAPPING["dinov2"](
-                out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
+                image_size=518,
+                hidden_size=384,
+                num_attention_heads=6,
+                out_indices=[9, 10, 11, 12],
+                apply_layernorm=True,
+                reshape_hidden_states=False,
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
