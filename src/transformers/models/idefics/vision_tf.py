@@ -24,6 +24,7 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 from ...modeling_tf_utils import TFPreTrainedModel, shape_list
+from ...tf_utils import flatten
 from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 
@@ -140,7 +141,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
         # Change the 2D spatial dimensions to a single temporal dimension.
         # shape = (batch_size, num_patches, out_channels=embed_dim)
-        patch_embeds = tf.reshape(tensor=patch_embeds, shape=(batch_size, self.num_patches, -1))
+        patch_embeds = flatten(patch_embeds, 1, 2)
 
         class_embeds = tf.broadcast_to(
             self.class_embedding[tf.newaxis, tf.newaxis, :], [batch_size, 1, self.embed_dim]
