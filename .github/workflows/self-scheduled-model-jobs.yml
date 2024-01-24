@@ -106,8 +106,7 @@ jobs:
       - name: Run test
         shell: bash
         run: |
-          mkdir /transformers/reports
-          mkdir /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          mkdir -p /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
           echo "hello" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
           echo "${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
 
