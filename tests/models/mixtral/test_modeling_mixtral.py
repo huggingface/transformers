@@ -477,9 +477,9 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
-        pad_leng = 1000
+        pad_length = 1000
         # Add padding tokens (assume that pad_token_id=1) to input_ids
-        padding_block = torch.ones(input_ids.shape[0], pad_leng, dtype=torch.int32).to(torch_device)
+        padding_block = torch.ones(input_ids.shape[0], pad_length, dtype=torch.int32).to(torch_device)
         padded_input_ids = torch.cat((padding_block, input_ids), dim=1)  # this is to simulate padding to the left
         padded_attention_mask = padded_input_ids.ne(1).to(torch_device)
 
