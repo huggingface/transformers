@@ -105,7 +105,10 @@ jobs:
 #
       - name: Run test
         shell: bash
-        run: echo "${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
+        run: |
+          mkdir /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          echo "hello" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/hello.txt
+          echo "${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
 
       - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}"
         if: ${{ always() }}
