@@ -90,6 +90,7 @@ class DepthAnythingReassembleLayer(nn.Module):
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
         hidden_state = self.resize(hidden_state)
+
         return hidden_state
 
 
@@ -204,9 +205,11 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
 
         hidden_state = self.residual_layer2(hidden_state)
 
+        modifier = {"scale_factor": 2} if size is None else {"size": size}
+
         hidden_state = nn.functional.interpolate(
             hidden_state,
-            size=size,
+            **modifier,
             mode="bilinear",
             align_corners=True,
         )
@@ -232,11 +235,13 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         size = hidden_states[1].shape[2:]
         fused_hidden_state = self.layers[0](hidden_states[0], size=size)
         fused_hidden_states.append(fused_hidden_state)
+
         # looping from the last layer to the second
         for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
-            if idx != len(hidden_states[1:]) - 1:
-                size = hidden_states[1:][idx + 1].shape[2:]
+            size = hidden_states[1:][idx + 1].shape[2:] if idx != 2 else None
+
             fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
+
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
