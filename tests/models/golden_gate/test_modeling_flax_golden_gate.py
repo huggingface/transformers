@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import jax
 
 from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, FlaxGoldenGateForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_flax, slow
@@ -225,6 +226,11 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_fp16(self):
         # TODO: change it to the new repo after the release
@@ -243,6 +249,11 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_2b_bf16(self):
         # TODO: change it to the new repo after the release
@@ -260,6 +271,11 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @unittest.skip("The test will not fit our CI runners")
@@ -280,6 +296,11 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_7b_fp16(self):
         # TODO: change it to the new repo after the release
@@ -298,6 +319,11 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+        self.assertEqual(output_text, EXPECTED_TEXTS)
 
     def test_model_7b_bf16(self):
         # TODO: change it to the new repo after the release
@@ -315,4 +341,9 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+        
+        jit_generate = jax.jit(model.generate)
+        output_sequences = jit_generate(**inputs).sequences
+        output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
