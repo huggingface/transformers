@@ -174,6 +174,7 @@ class UMT5Attention(nn.Module):
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
+        self.rpe_attn_mask = config.rpe_attn_mask
 
     def _shape(self, projection: torch.Tensor) -> torch.Tensor:
         new_projection_shape = projection.size()[:-1] + (self.n_heads, self.key_value_proj_dim)
@@ -268,19 +269,18 @@ class UMT5Attention(nn.Module):
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
 
         query_states = self._shape(self.q(hidden_states))
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
 
         # compute positional bias
         if self.has_relative_attention_bias:
             query_length = seq_length
             if past_key_value is not None:
                 query_length += past_key_value[0].shape[2]
-            position_bias = self.compute_bias(query_length, key_states.size(2), device=attention_scores.device)
+            position_bias = self.compute_bias(query_length, key_states.size(2), device=query_states.device)
         else:
             position_bias = torch.zeros(
                 (1, self.n_heads, seq_length, key_states.size(2)),
-                device=attention_scores.device,
-                dtype=attention_scores.dtype,
+                device=query_states.device,
+                dtype=query_states.dtype,
                 requires_grad=self.training,
             )
         if past_key_value is not None:
@@ -298,19 +298,32 @@ class UMT5Attention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        attention_scores += position_bias
-        # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        if self.rpe_attn_mask:
+            context_states = nn.functional.scaled_dot_product_attention(
+                query=query_states,
+                key=key_states,
+                value=value_states,
+                attn_mask=position_bias.detach(),
+                dropout_p=self.dropout,
+                scale=1.0,
+            )
+            attn_weights = None
+        else:
+            attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+            attention_scores += position_bias
+            # (batch_size, n_heads, seq_length, key_length)
+            attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
+            attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
+            # Mask heads if we want to
+            if layer_head_mask is not None:
+                attn_weights = attn_weights * layer_head_mask
 
-        #  attn_output = torch.bmm(attn_probs, value_states) ?
-        context_states = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
-        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)
+            #  attn_output = torch.bmm(attn_probs, value_states) ?
+            context_states = torch.matmul(attn_weights, value_states)
+            # attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim) ?
+
+        context_states = context_states.permute(0, 2, 1, 3).contiguous().view(batch_size, seq_length, -1)        
         attn_output = self.o(context_states)
         return attn_output, attn_weights, past_key_value
 

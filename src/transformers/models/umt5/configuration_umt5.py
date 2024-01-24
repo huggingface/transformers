@@ -100,6 +100,7 @@ class UMT5Config(PretrainedConfig):
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        rpe_attn_mask=False,
         **kwargs,
     ):
         super().__init__(
@@ -142,6 +143,8 @@ class UMT5Config(PretrainedConfig):
 
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
+
+        self.rpe_attn_mask = rpe_attn_mask
 
     @property
     def hidden_size(self):
