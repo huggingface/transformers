@@ -24,7 +24,7 @@ import time
 from typing import Dict, List, Optional, Union
 
 import requests
-from get_ci_error_statistics import get_job_links
+from get_ci_error_statistics import get_job_links, get_jobs, get_artifacts
 from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
@@ -852,6 +852,26 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
+
+    github_actions_jobs = get_jobs(
+        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    )
+
+    github_actions_artifacts = get_artifacts(
+        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    )
+
+    info_dir = os.path.join(os.getcwd(), "jobs_and_artifacts")
+    os.makedirs(info_dir, exist_ok=True)
+
+    with open(os.path.join(info_dir, "jobs.json"), "w", encoding="UTF-8") as fp:
+        json.dump(github_actions_jobs, fp, ensure_ascii=False, indent=4)
+
+    with open(os.path.join(info_dir, "artifacts.json"), "w", encoding="UTF-8") as fp:
+        json.dump(github_actions_artifacts, fp, ensure_ascii=False, indent=4)
+
+    exit(0)
+
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")

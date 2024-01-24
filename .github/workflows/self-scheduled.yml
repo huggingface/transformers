@@ -426,3 +426,31 @@ jobs:
 #        with:
 #          name: prev_ci_results
 #          path: prev_ci_results
+
+
+  send_results:
+    name: Send results to webhook
+    runs-on: ubuntu-22.04
+    if: always()
+    needs: [
+      setup,
+      run_tests_single_gpu,
+    ]
+    steps:
+
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+      - name: Send message to Slack
+        run: |
+          sudo apt-get install -y curl
+          pip install slack_sdk
+          pip show slack_sdk
+          python utils/notification_service.py "models/bert"
+
+      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+      - name: Failure table artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: jobs_and_artifacts
+          path: jobs_and_artifacts

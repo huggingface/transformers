@@ -10,7 +10,7 @@ from collections import Counter
 import requests
 
 
-def get_all_jobs(workflow_run_id, token=None):
+def get_jobs(workflow_run_id, token=None):
     """Extract jobs in a GitHub Actions workflow run"""
 
     headers = None
@@ -36,7 +36,7 @@ def get_all_jobs(workflow_run_id, token=None):
     return {}
 
 
-def get_all_artifacts(workflow_run_id, token=None):
+def get_artifacts(workflow_run_id, token=None):
     """Extract artifacts in a GitHub Actions workflow run"""
 
     headers = None
