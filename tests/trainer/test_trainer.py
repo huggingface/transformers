@@ -83,7 +83,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.trainer_pt_utils import AcceleratorConfig
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend, get_last_checkpoint
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
@@ -119,6 +118,7 @@ if is_torch_available():
         TrainerState,
     )
     from transformers.modeling_utils import unwrap_model
+    from transformers.trainer_pt_utils import AcceleratorConfig
 
     if is_safetensors_available():
         import safetensors.torch
