@@ -183,9 +183,6 @@ class DPTConfig(PretrainedConfig):
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
 
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
-
         use_autobackbone = False
         if self.is_hybrid:
             if backbone_config is None and backbone is None:
@@ -197,17 +194,17 @@ class DPTConfig(PretrainedConfig):
                     "out_features": ["stage1", "stage2", "stage3"],
                     "embedding_dynamic_padding": True,
                 }
-                self.backbone_config = BitConfig(**backbone_config)
+                backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, dict):
                 logger.info("Initializing the config with a `BiT` backbone.")
-                self.backbone_config = BitConfig(**backbone_config)
+                backbone_config = BitConfig(**backbone_config)
             elif isinstance(backbone_config, PretrainedConfig):
-                self.backbone_config = backbone_config
+                backbone_config = backbone_config
             else:
                 raise ValueError(
                     f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
                 )
-
+            self.backbone_config = backbone_config
             self.backbone_featmap_shape = backbone_featmap_shape
             self.neck_ignore_stages = neck_ignore_stages
 
@@ -225,11 +222,13 @@ class DPTConfig(PretrainedConfig):
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
-
         else:
             self.backbone_config = backbone_config
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
+
+        if use_autobackbone and backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
