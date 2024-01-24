@@ -82,6 +82,20 @@ jobs:
       machine_type: single-gpu
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
+
+  run_tests_multi_gpu:
+    name: " "
+    needs: setup
+    strategy:
+      matrix:
+        slice_id: [0, 1]
+    uses: ./.github/workflows/self-scheduled-model-jobs.yml
+    with:
+      folders: ${{ needs.setup.outputs.matrix_2 }}
+      machine_type: multi-gpu
+      slice_id: ${{ matrix.slice_id }}
+    secrets: inherit
+
 #
 #  run_tests_single_gpu_1:
 #    name: Model tests
@@ -429,6 +443,7 @@ jobs:
 #          path: prev_ci_results
 
 
+
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-22.04
@@ -438,22 +453,68 @@ jobs:
       run_tests_single_gpu,
     ]
     steps:
+      - name: Preliminary job status
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          echo "Setup status: ${{ needs.setup.result }}"
 
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
       - name: Send message to Slack
         env:
+          CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
+          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
+          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          CI_EVENT: scheduled
+          CI_SHA: ${{ github.sha }}
+          CI_WORKFLOW_REF: ${{ github.workflow_ref }}
+          SETUP_STATUS: ${{ needs.setup.result }}
+        # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
+        # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py "models/bert"
+          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v3
         with:
-          name: jobs_and_artifacts
-          path: jobs_and_artifacts
+          name: prev_ci_results
+          path: prev_ci_results
+
+
+#  send_results:
+#    name: Send results to webhook
+#    runs-on: ubuntu-22.04
+#    if: always()
+#    needs: [
+#      setup,
+#      run_tests_single_gpu,
+#    ]
+#    steps:
+#
+#      - uses: actions/checkout@v3
+#      - uses: actions/download-artifact@v3
+#      - name: Send message to Slack
+#        env:
+#          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+#        run: |
+#          sudo apt-get install -y curl
+#          pip install slack_sdk
+#          pip show slack_sdk
+#          python utils/notification_service.py "models/bert"
+#
+#      # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
+#      - name: Failure table artifacts
+#        if: ${{ always() }}
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: jobs_and_artifacts
+#          path: jobs_and_artifacts
