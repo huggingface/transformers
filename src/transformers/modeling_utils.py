@@ -52,6 +52,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
+from .quantizers import AutoHFQuantizer
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -95,7 +96,6 @@ from .utils.import_utils import (
     is_torchdynamo_compiling,
 )
 from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
-from .utils.quantizers import QuantizationConfigParser
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -2233,10 +2233,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
 
-        # initializing quantizer to validate saving
-        quantizer = QuantizationConfigParser.get_quantizer(self.config, None)
-        if quantizer is not None:
-            quantizer.validate_saving(model=self)
+        quantizer = getattr(self, "quantizer", None)
+        quantization_serializable = quantizer is not None and quantizer.is_serializable
+
+        if quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+            raise ValueError(
+                f"The model is quantized with {quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                " the logger on the traceback to understand the reason why the quantized model is not serializable."
+            )
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -2920,8 +2924,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             logger.warning(
                 "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
-                "Please, use `quantization_config` argument instead.",
-                FutureWarning,
+                "Please, use `quantization_config` argument instead."
             )
 
         from_pt = not (from_tf | from_flax)
@@ -2967,23 +2970,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
 
-        # parse model config and init quantizer
-        quantizer = QuantizationConfigParser.get_quantizer(
-            config=config,
-            quantization_config_from_args=quantization_config,
-        )
+        pre_quantized = getattr(config, "quantization_config", None) is not None
+        if pre_quantized or quantization_config is not None:
+            if pre_quantized:
+                config.quantization_config = AutoHFQuantizer.merge_quantization_configs(
+                    config.quantization_config, quantization_config
+                )
+            else:
+                config.quantization_config = quantization_config
+            quantizer = AutoHFQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+        else:
+            quantizer = None
 
         if quantizer is not None:
-            quantizer.validate_environment(torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax)
+            quantizer.validate_environment(
+                torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax, device_map=device_map
+            )
+            torch_dtype = quantizer.set_torch_dtype(torch_dtype)
+            device_map = quantizer.set_device_map(device_map)
 
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
                 logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
-
-            torch_dtype = quantizer.set_torch_dtype(torch_dtype)
-
-            device_map = quantizer.update_device_map(device_map)
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -3338,9 +3347,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if quantizer is not None:
-            quantizer.process_model_before_weight_loading(
-                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
-            )
+            quantizer.preprocess_model(model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules)
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
@@ -3400,7 +3407,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
             if quantizer is not None:
-                quantizer.validate_device_map(device_map)
+                quantizer.validate_environment(device_map=device_map)
 
         elif device_map is not None:
             model.tie_weights()
@@ -3509,7 +3516,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dispatch_model(model, **device_map_kwargs)
 
         if quantizer is not None:
-            quantizer.process_model_after_weight_loading(model)
+            quantizer.postprocess_model(model)
 
         if _adapter_model_path is not None:
             model.load_adapter(
