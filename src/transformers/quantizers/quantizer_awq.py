@@ -11,24 +11,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import TYPE_CHECKING
+
 from .base import HFQuantizer
 
-from typing import TYPE_CHECKING, Any, Dict, List, Union, Optional
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_torch_available, is_auto_awq_available, is_accelerate_available, logging
+from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
 
+
 class AwqQuantizer(HFQuantizer):
     """
     4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
     """
+
     # TODO: what is this?
     requires_parameters_quantization = False
 
@@ -105,5 +109,5 @@ class AwqQuantizer(HFQuantizer):
     @property
     def is_trainable(self):
         # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
-        # TODO: if this is supported in the future, do a version check here. 
+        # TODO: if this is supported in the future, do a version check here.
         return True

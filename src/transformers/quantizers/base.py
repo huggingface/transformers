@@ -11,19 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import inspect
-from typing import TYPE_CHECKING, Dict, Union, Any, Optional
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from ..utils import is_torch_available
-from ..utils.quantization_config import QuantizationConfigMixin
 from ..utils.import_utils import _is_package_available
+from ..utils.quantization_config import QuantizationConfigMixin
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 if is_torch_available():
     import torch
+
 
 class HFQuantizer(ABC):
     """
@@ -32,27 +33,15 @@ class HFQuantizer(ABC):
     Attributes
         quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
-        is_model_serializable (`bool`):
-            Whether the quantization method supports serialization
-        is_model_trainable (`bool`):
-            Whether the quantized model can be trainable purely (e.g. through QAT (quantization aware training)) or by attaching
-            adapters.
         modules_to_not_convert (`List[str]`, *optional*):
-            The list of module names to not convert when quantizing the model. 
+            The list of module names to not convert when quantizing the model.
         required_packages (`List[str]`, *optional*):
             The list of required pip packages to install prior to using the quantizer
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
     """
+
     requires_calibration = False
-
-    # This might depend on the version of the extra packages that needs to be handled in the property method
-    # By default we set it to `False`
-    is_model_serializable = False
-
-    # Same as above, since this might depend on the extra packages versions, we need to handle that in the property
-    # method
-    is_model_trainable = False
 
     required_packages = None
 
@@ -119,7 +108,7 @@ class HFQuantizer(ABC):
         If no explicit check are needed, simply return nothing.
         """
         return
-    
+
     def check_packages_compatibility(self):
         if self.required_packages is not None:
             non_available_packages = []
@@ -127,7 +116,7 @@ class HFQuantizer(ABC):
                 is_package_available = _is_package_available(package_name)
                 if not is_package_available:
                     non_available_packages.append(package_name)
-                
+
             if len(non_available_packages) > 0:
                 raise ValueError(
                     f"The packages {self.required_packages} are required to use {self.__class__.__name__}"

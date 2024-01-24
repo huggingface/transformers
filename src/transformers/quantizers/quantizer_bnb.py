@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+
 from packaging import version
-from abc import ABC
 
 from .base import HFQuantizer
 
-from typing import TYPE_CHECKING, Any, Dict, List, Union, Optional, Tuple
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_torch_available, is_bitsandbytes_available, logging, is_accelerate_available
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
+
 
 if is_torch_available():
     import torch
@@ -34,6 +34,7 @@ if is_bitsandbytes_available():
     from ..pytorch_utils import Conv1D
 
 logger = logging.get_logger(__name__)
+
 
 def get_module_from_name(module, tensor_name: str) -> Tuple[Any, str]:
     if "." in tensor_name:
@@ -51,6 +52,7 @@ class BnbHFQuantizerMixin:
     """
     A mixin class that stores all important common methods and attributes for bitsandbytes quantization.
     """
+
     use_keep_in_fp32_modules = True
     requires_parameters_quantization = True
     requires_calibration = False
@@ -72,7 +74,7 @@ class BnbHFQuantizerMixin:
 
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-        
+
         device_map = kwargs.get("device_map", None)
         if device_map is not None and isinstance(device_map, dict):
             device_map_without_lm_head = {
@@ -188,9 +190,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
             logger.info("target_dtype {target_dtype} is replaced by `torch.int8` for 8-bit BnB quantization")
         return torch.int8
 
-    def is_model_serializable(self, model: "PreTrainedModel" = None) -> bool:
-        return version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
-
     def check_quantized_param(
         self, model: "PreTrainedModel", param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
     ):
@@ -239,7 +238,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
             raise ValueError(f"{tensor_name} is on the meta device, we need a `value` to put in on {target_device}.")
 
         new_value = param_value.to("cpu")
-        if self.pre_quantized and not self.is_model_serializable():
+        if self.pre_quantized and not self.is_serializable:
             raise ValueError(
                 "Detected int8 weights but the version of bitsandbytes is not compatible with int8 serialization. "
                 "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -261,12 +260,14 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         super()._process_model_after_weight_loading(model, **kwargs)
-        model.is_8bit_serializable = self.is_model_serializable()
+        model.is_8bit_serializable = self.is_serializable
         model.is_loaded_in_8bit = True
 
     @property
     def is_serializable(self):
-        _bnb_supports_8bit_serialization = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
+        _bnb_supports_8bit_serialization = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
+            "0.37.2"
+        )
 
         if not _bnb_supports_8bit_serialization:
             logger.warning(
@@ -281,7 +282,6 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
     @property
     def is_trainable(self) -> bool:
         return version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.37.0")
-    
 
 
 class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
@@ -376,7 +376,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
             # 4bit loading. Collecting components for restoring quantized weight
             # This can be expanded to make a universal call for any quantized weight loading
 
-            if not self.is_model_serializable:
+            if not self.is_serializable:
                 raise ValueError(
                     "Detected int4 weights but the version of bitsandbytes is not compatible with int4 serialization. "
                     "Make sure to download the latest `bitsandbytes` version. `pip install --upgrade bitsandbytes`."
@@ -401,7 +401,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
                 requires_grad=False,
                 device=target_device,
             )
-        else:  
+        else:
             new_value = param_value.to("cpu")
 
             # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
@@ -429,7 +429,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
                 "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
             )
             return False
-    
+
         return True
 
     @property

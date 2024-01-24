@@ -11,28 +11,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .base import HFQuantizer
-from packaging import version
 import importlib
+from typing import TYPE_CHECKING, Optional
 
-from typing import TYPE_CHECKING, Any, Dict, List, Union, Optional
+from packaging import version
+
+from .base import HFQuantizer
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_torch_available, logging, is_optimum_available, is_auto_gptq_available
-from ..utils.quantization_config import QuantizationConfigMixin, GPTQConfig
+from ..utils import is_auto_gptq_available, is_optimum_available, is_torch_available, logging
+from ..utils.quantization_config import GPTQConfig, QuantizationConfigMixin
+
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
 
+
 class GptqHFQuantizer(HFQuantizer):
     """
     Quantizer of the GPTQ method - for GPTQ the quantizer support calibration of the model through
     `auto_gptq` package. Quantization is done under the hood for users if they load a non-prequantized model.
     """
+
     # TODO: what is this?
     requires_parameters_quantization = False
 
