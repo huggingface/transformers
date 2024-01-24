@@ -991,7 +991,6 @@ _import_structure = {
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
-    "quantizers": ["AutoHFQuantizer", "AutoQuantizationConfig"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [

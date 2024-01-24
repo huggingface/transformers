@@ -29,6 +29,8 @@ if is_torch_available():
 class HFQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
+    This class is used only for transformers.PreTrainedModel.from_pretrained and cannot be easily used outside the scope of that method
+    yet.
 
     Attributes
         quantization_config (`transformers.utils.quantization_config.QuantizationConfigMixin`):
