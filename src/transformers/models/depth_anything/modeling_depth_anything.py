@@ -238,7 +238,7 @@ class DepthAnythingFeatureFusionStage(nn.Module):
 
         # looping from the last layer to the second
         for idx, (hidden_state, layer) in enumerate(zip(hidden_states[1:], self.layers[1:])):
-            size = hidden_states[1:][idx + 1].shape[2:] if idx != 2 else None
+            size = hidden_states[1:][idx + 1].shape[2:] if idx != (len(hidden_states[1:]) - 1) else None
 
             fused_hidden_state = layer(fused_hidden_state, hidden_state, size=size)
 
