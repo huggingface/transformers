@@ -262,8 +262,8 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         # as super won't do it
         if return_labels:
             inputs_dict["labels"] = tf.zeros(
-                (self.model_tester.batch_size,
-                 self.model_tester.seq_length), dtype=tf.int64)
+                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
+            )
         return inputs_dict
 
     def test_model_outputs_equivalence(self):
