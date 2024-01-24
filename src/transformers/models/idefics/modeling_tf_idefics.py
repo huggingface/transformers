@@ -614,6 +614,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         self.num_heads = num_heads
         self.head_dim = hidden_size // num_heads
         self.dropout = dropout
+        self.config = config
 
         if (self.head_dim * num_heads) != self.hidden_size:
             raise ValueError(
