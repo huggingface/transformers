@@ -884,6 +884,17 @@ if __name__ == "__main__":
     with open(os.path.join(info_dir, "artifact_names.json"), "w", encoding="UTF-8") as fp:
         json.dump(artifact_names, fp, ensure_ascii=False, indent=4)
 
+    artifact_name_to_job_map = {}
+    for job in github_actions_jobs:
+        for step in job["steps"]:
+            if step["name"].startswith("Test suite reports artifacts: "):
+                artifact_name = step["name"][len("Test suite reports artifacts: "):]
+                artifact_name_to_job_map[artifact_name_to_job_map] = job
+                break
+
+    with open(os.path.join(info_dir, "artifact_name_to_job_map.json"), "w", encoding="UTF-8") as fp:
+        json.dump(artifact_name_to_job_map, fp, ensure_ascii=False, indent=4)
+
     exit(0)
 
     # runner_status = os.environ.get("RUNNER_STATUS")
