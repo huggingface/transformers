@@ -27,7 +27,6 @@ from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import ModelOutput
 from ...modeling_tf_utils import TFModelInputType, keras_serializable, shape_list, unpack_inputs
-from ...modeling_utils import PretrainedConfig
 from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
@@ -606,7 +605,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         num_heads: int,
         dropout: float = 0.0,
         is_cross_attention: bool = False,
-        config: PretrainedConfig = None,
+        config: IdeficsConfig = None,
         qk_layer_norms: bool = False,
         **kwargs,
     ):
