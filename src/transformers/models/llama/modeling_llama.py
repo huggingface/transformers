@@ -731,7 +731,7 @@ class LlamaSdpaAttention(LlamaAttention):
         past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
 
         if past_key_value is not None:
-            cache_kwargs = {"attention_mask":attention_mask}
+            cache_kwargs = {"attention_mask":attention_mask, "position_ids":position_ids}
             # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
             key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -755,7 +755,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask, #self.causal_mask[:query_states.shape[2]],
+            attn_mask = None, #self.causal_mask[:query_states.shape[2]],
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
