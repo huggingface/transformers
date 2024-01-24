@@ -93,16 +93,16 @@ jobs:
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
-#
-#      - name: Run all tests on GPU
-#        working-directory: /transformers
-#        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
-#
-#      - name: Failure short reports
-#        if: ${{ failure() }}
-#        continue-on-error: true
-#        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
-#
+
+      - name: Run all tests on GPU
+        working-directory: /transformers
+        run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
       - name: Run test
         shell: bash
         run: |
