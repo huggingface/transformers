@@ -225,18 +225,6 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-    import torchvision.transforms as T
-
-    transform = T.Compose(
-        [
-            T.Resize((518, 518), interpolation=Image.BICUBIC),
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
-
-    pixel_values = transform(image).unsqueeze(0)
-
     # Verify forward pass
     with torch.no_grad():
         outputs = model(pixel_values)
@@ -250,15 +238,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 518, 686])
         if model_name == "depth-anything-small":
             expected_slice = torch.tensor(
-                [[8.0733, 7.6533, 7.7400], [7.5546, 7.6822, 7.9520], [7.8951, 7.8835, 8.1229]],
+                [[8.8204, 8.6468, 8.6195], [8.3313, 8.6027, 8.7526], [8.6526, 8.6866, 8.7453]],
             )
         elif model_name == "depth-anything-base":
             expected_slice = torch.tensor(
-                [[24.0704, 23.9674, 23.6665], [22.9856, 22.4825, 23.0281], [23.1742, 23.0900, 23.5513]],
+                [[26.3997, 26.3004, 26.3928], [26.2260, 26.2092, 26.3427], [26.0719, 26.0483, 26.1254]],
             )
         elif model_name == "depth-anything-large":
             expected_slice = torch.tensor(
-                [[78.7736, 76.9226, 79.0606], [78.2098, 74.7568, 76.6376], [77.5394, 75.7316, 77.5426]],
+                [[87.9968, 87.7493, 88.2704], [87.1927, 87.6611, 87.3640], [86.7789, 86.9469, 86.7991]]
             )
         else:
             raise ValueError("Not supported")
@@ -275,8 +263,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     if push_to_hub:
         print("Pushing model and processor to hub...")
-        model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"LiheYoung/{model_name}-hf")
+        processor.push_to_hub(repo_id=f"LiheYoung/{model_name}-hf")
 
 
 if __name__ == "__main__":
