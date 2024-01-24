@@ -80,15 +80,15 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         )
 
         # test with image processor parameters
-        preprocess_kwargs = {"size": {"height": 300, "width": 300}}
+        image_processor_kwargs = {"size": {"height": 300, "width": 300}}
         img = prepare_img()
         with pytest.raises(ValueError):
             # Image doesn't match model input size
-            feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+            feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
 
-        preprocess_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
+        image_processor_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
         img = prepare_img()
-        outputs = feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+        outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
     @require_tf
@@ -98,15 +98,15 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
         )
 
         # test with image processor parameters
-        preprocess_kwargs = {"size": {"height": 300, "width": 300}}
+        image_processor_kwargs = {"size": {"height": 300, "width": 300}}
         img = prepare_img()
         with pytest.raises(ValueError):
             # Image doesn't match model input size
-            feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+            feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
 
-        preprocess_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
+        image_processor_kwargs = {"image_mean": [0, 0, 0], "image_std": [1, 1, 1]}
         img = prepare_img()
-        outputs = feature_extractor(img, preprocess_kwargs=preprocess_kwargs)
+        outputs = feature_extractor(img, image_processor_kwargs=image_processor_kwargs)
         self.assertEqual(np.squeeze(outputs).shape, (226, 32))
 
     @require_torch

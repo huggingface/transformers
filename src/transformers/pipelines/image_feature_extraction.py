@@ -58,8 +58,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
             (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
     """
 
-    def _sanitize_parameters(self, return_tensors=None, **kwargs):
-        preprocess_params = kwargs.pop("image_processor_kwargs", {})
+    def _sanitize_parameters(self, return_tensors=None, image_processor_kwargs=None, **kwargs):
+        preprocess_params = {} if image_processor_kwargs is None else image_processor_kwargs
         postprocess_params = {"return_tensors": return_tensors} if return_tensors is not None else {}
 
         if "timeout" in kwargs:
