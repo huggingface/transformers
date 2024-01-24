@@ -22,7 +22,7 @@ Mixed precision uses single (fp32) and half-precision (bf16/fp16) data types in 
 
 To further maximize training performance, you can use Intel® Extension for PyTorch (IPEX), which is a library built on PyTorch and adds additional CPU instruction level architecture (ISA) level support such as Intel® Advanced Vector Extensions 512 (Intel® AVX-512), Vector Neural Network Instructions (VNNI), and Intel® Advanced Matrix Extensions (Intel® AMX) for an extra performance boost on Intel CPUs. However, CPUs with only AVX2 (e.g., AMD or older Intel CPUs) are not guaranteed to have better performance under IPEX.
 
-The Auto Mixed Precision for CPU backend has been enabled since PyTorch-1.10. At the same time, the support of Auto Mixed Precision with BFloat16 for CPU and BFloat16 optimization of operators has been massively enabled in Intel® Extension for PyTorch, and partially upstreamed to PyTorch master branch. Users can get better performance and user experience with IPEX Auto Mixed Precision.
+Auto Mixed Precision (AMP) for CPU backends has been enabled since PyTorch 1.10. AMP support for bf16 on CPUs and bf16 operator optimization is also supported in IPEX and partially upstreamed to the main PyTorch branch. You can get better performance and user experience with IPEX AMP.
 
 Check more detailed information for [Auto Mixed Precision](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html).
 
