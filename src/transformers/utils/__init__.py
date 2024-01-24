@@ -52,6 +52,7 @@ from .generic import (
     is_torch_tensor,
     reshape,
     squeeze,
+    squeeze_batch_axis,
     strtobool,
     tensor_size,
     to_numpy,

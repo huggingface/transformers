@@ -42,7 +42,7 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from .utils import PaddingStrategy, add_end_docstrings, logging, squeeze_batch_axis
 
 
 logger = logging.get_logger(__name__)
@@ -593,14 +593,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             **kwargs,
         )
 
-        # Return tensor is None, then we can remove the leading batch axis
+        # We will remove the leading batch axis consider method is not for batching usage.
         # Overflowing tokens are returned as a batch of output so we keep them in this case
-        if return_tensors is None and not return_overflowing_tokens:
+        if not return_overflowing_tokens:
             batched_output = BatchEncoding(
-                {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
-                    for key, value in batched_output.items()
-                },
+                {key: squeeze_batch_axis(value, return_tensors) for key, value in batched_output.items()},
                 batched_output.encodings,
             )
 

@@ -22,7 +22,7 @@ from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ContextManager, Iterable, List, Tuple
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -56,6 +56,41 @@ class cached_property(property):
         return cached
 
 
+class ExplicitEnum(str, Enum):
+    """
+    Enum with more explicit error message for missing values.
+    """
+
+    @classmethod
+    def _missing_(cls, value):
+        raise ValueError(
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
+        )
+
+
+class PaddingStrategy(ExplicitEnum):
+    """
+    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
+    IDE.
+    """
+
+    LONGEST = "longest"
+    MAX_LENGTH = "max_length"
+    DO_NOT_PAD = "do_not_pad"
+
+
+class TensorType(ExplicitEnum):
+    """
+    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
+    tab-completion in an IDE.
+    """
+
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
+    NUMPY = "np"
+    JAX = "jax"
+
+
 # vendored from distutils.util
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -85,6 +120,19 @@ def infer_framework_from_repr(x):
         return "jax"
     elif representation.startswith("<class 'numpy."):
         return "np"
+
+
+def infer_tensor_type(array) -> Optional[TensorType]:
+    tensor_type = None
+    if is_numpy_array(array):
+        tensor_type = TensorType.NUMPY
+    elif is_torch_tensor(array):
+        tensor_type = TensorType.PYTORCH
+    elif is_tf_tensor(array):
+        tensor_type = TensorType.TENSORFLOW
+    elif is_jax_tensor(array):
+        tensor_type = TensorType.JAX
+    return tensor_type
 
 
 def _get_frameworks_and_test_func(x):
@@ -449,41 +497,6 @@ if is_torch_available():
     )
 
 
-class ExplicitEnum(str, Enum):
-    """
-    Enum with more explicit error message for missing values.
-    """
-
-    @classmethod
-    def _missing_(cls, value):
-        raise ValueError(
-            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
-        )
-
-
-class PaddingStrategy(ExplicitEnum):
-    """
-    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
-    IDE.
-    """
-
-    LONGEST = "longest"
-    MAX_LENGTH = "max_length"
-    DO_NOT_PAD = "do_not_pad"
-
-
-class TensorType(ExplicitEnum):
-    """
-    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
-    tab-completion in an IDE.
-    """
-
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-    JAX = "jax"
-
-
 class ContextManagers:
     """
     Wrapper for `contextlib.ExitStack` which enters a collection of context managers. Adaptation of `ContextManagers`
@@ -585,7 +598,7 @@ def transpose(array, axes=None):
     elif is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
     else:
-        raise ValueError(f"Type not supported for transpose: {type(array)}.")
+        raise NotImplementedError(f"Type not supported for transpose: {type(array)}.")
 
 
 def reshape(array, newshape):
@@ -604,7 +617,69 @@ def reshape(array, newshape):
     elif is_jax_tensor(array):
         return jnp.reshape(array, newshape)
     else:
-        raise ValueError(f"Type not supported for reshape: {type(array)}.")
+        raise NotImplementedError(f"Type not supported for reshape: {type(array)}.")
+
+
+def _tensor_shape(array, tensor_type: Optional[TensorType] = None) -> Tuple[int, ...]:
+    if tensor_type == TensorType.NUMPY:
+        return array.shape
+    elif tensor_size == TensorType.PYTORCH:
+        return tuple(array.shape)
+    elif tensor_size == TensorType.TENSORFLOW:
+        return tuple(array.shape)
+    elif tensor_size == TensorType.JAX:
+        return array.shape
+    else:
+        raise NotImplementedError(f"Type not supported for tensor_shape: {type(array)}.")
+
+
+def tensor_shape(array):
+    """
+    Framework-agnostic version to get the ternsor's shape that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    """
+    tensor_type = infer_tensor_type(array)
+    return _tensor_shape(array, tensor_type=tensor_type)
+
+
+def _tensor_size(array, tensor_type: Optional[TensorType] = None):
+    if tensor_type == TensorType.NUMPY:
+        return np.size(array)
+    elif tensor_size == TensorType.PYTORCH:
+        return array.numel()
+    elif tensor_size == TensorType.TENSORFLOW:
+        import tensorflow as tf
+
+        return tf.size(array)
+    elif tensor_size == TensorType.JAX:
+        return array.size
+    else:
+        raise NotImplementedError(f"Type not supported for tensor_size: {type(array)}.")
+
+
+def tensor_size(array):
+    """
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    """
+    tensor_type = infer_tensor_type(array)
+    return _tensor_size(array, tensor_type=tensor_type)
+
+
+def _squeeze(array, axis=None, tensor_type: Optional[TensorType] = None):
+    if tensor_type == TensorType.NUMPY:
+        try:
+            return np.squeeze(array, axis=axis)
+        except np.exceptions.AxisError as e:
+            raise IndexError("Out of bound for array of dimension") from e
+    elif tensor_size == TensorType.PYTORCH:
+        return array.squeeze() if axis is None else array.squeeze(dim=axis)
+    elif tensor_size == TensorType.TENSORFLOW:
+        import tensorflow as tf
+
+        return tf.squeeze(array, axis=axis)
+    elif tensor_size == TensorType.JAX:
+        return jnp.squeeze(array, axis=axis)
+    else:
+        raise NotImplementedError(f"Type not supported for squeeze: {type(array)}.")
 
 
 def squeeze(array, axis=None):
@@ -612,18 +687,31 @@ def squeeze(array, axis=None):
     Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
     arrays.
     """
-    if is_numpy_array(array):
-        return np.squeeze(array, axis=axis)
-    elif is_torch_tensor(array):
-        return array.squeeze() if axis is None else array.squeeze(dim=axis)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
+    tensor_type = infer_tensor_type(array)
+    return _squeeze(array, axis=axis, tensor_type=tensor_type)
 
-        return tf.squeeze(array, axis=axis)
-    elif is_jax_tensor(array):
-        return jnp.squeeze(array, axis=axis)
+
+def squeeze_batch_axis(array, tensor_type: Optional[TensorType] = None):
+    if not isinstance(tensor_type, TensorType):
+        tensor_type = TensorType(tensor_type)
+    try:
+        shape = _tensor_shape(array, tensor_type=tensor_type)
+        size, nested, tensor = (shape[0], True, False) if len(shape) == 2 else (0, False, False)
+    except NotImplementedError:
+        tensor = False
+        size = len(array)
+        nested = True if size and isinstance(array[0], list) else False
+    if size == 0:
+        return array
+    if size != 1:
+        raise ValueError("cannot squeeze batch axis with batch size is not equal to one")
+    if nested:
+        if tensor:
+            return _squeeze(array, axis=0, tensor_type=tensor_type)
+        else:
+            return array[0]
     else:
-        raise ValueError(f"Type not supported for squeeze: {type(array)}.")
+        return array
 
 
 def expand_dims(array, axis):
@@ -642,25 +730,7 @@ def expand_dims(array, axis):
     elif is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
     else:
-        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
-
-
-def tensor_size(array):
-    """
-    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
-    """
-    if is_numpy_array(array):
-        return np.size(array)
-    elif is_torch_tensor(array):
-        return array.numel()
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.size(array)
-    elif is_jax_tensor(array):
-        return array.size
-    else:
-        raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
+        raise NotImplementedError(f"Type not supported for expand_dims: {type(array)}.")
 
 
 def add_model_info_to_auto_map(auto_map, repo_id):
