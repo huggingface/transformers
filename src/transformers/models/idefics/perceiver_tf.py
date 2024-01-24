@@ -75,19 +75,17 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
             else config.vision_config.embed_dim * 4
         )
         # Create Transformer Blocks
-        self.blocks = [
-            [
-                TFIdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
-                TFIdeficsMLP(self.intermediate_dim, config),
-            ]
-            for _ in range(depth)
-        ]
+        self.blocks = []
+        for i in range(depth):
+            self.blocks.append([TFIdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms, name=f"blocks.{i}.0"),
+                                TFIdeficsMLP(self.intermediate_dim, config, name=f"blocks.{i}.1")])
+
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
     def build(self, input_shape):
         # Create Latents for Perceiver
         self.latents = self.add_weight(
-            shape=(self.n_latents, self.embed_dim), initializer="random_normal", trainable=True
+            shape=(self.n_latents, self.embed_dim), initializer="random_normal", trainable=True, name="latents"
         )
         super().build(input_shape)
 
@@ -111,20 +109,20 @@ class TFIdeficsPerceiverAttention(tf.keras.layers.Layer):
         self.embed_dim, self.n_heads, self.head_dim = embed_dim, n_heads, head_dim
         self.qk_layer_norms = qk_layer_norms
         # Normalization & Scaling
-        self.context_layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
-        self.latents_layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
+        self.context_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="context_layer_norm")
+        self.latents_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="latents_layer_norm")
         if self.qk_layer_norms:
-            self.q_layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
-            self.k_layer_norm = tf.keras.layers.LayerNormalization(axis=-1)
+            self.q_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="q_layer_norm")
+            self.k_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="k_layer_norm")
 
         self.qk_scale = self.head_dim**-0.5
 
         # Q, K, V Projection (no bias -- detail from Perceiver/Flamingo Papers).
-        self.q_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False)
-        self.k_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False)
-        self.v_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False)
+        self.q_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False, name="q_proj")
+        self.k_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False, name="k_proj")
+        self.v_proj = tf.keras.layers.Dense(self.n_heads * self.head_dim, use_bias=False, name="v_proj")
 
-        self.output_proj = tf.keras.layers.Dense(embed_dim, use_bias=False)
+        self.output_proj = tf.keras.layers.Dense(embed_dim, use_bias=False, name="output_proj")
 
     def call(self, context: tf.Tensor, latents: tf.Tensor) -> tf.Tensor:
         """
@@ -177,10 +175,10 @@ class TFIdeficsMLP(tf.keras.layers.Layer):
         """Simple MLP block with intermediate_size and embedding size"""
         super().__init__(**kwargs)
         self.embed_dim = config.vision_config.embed_dim
-        self.ln = tf.keras.layers.LayerNormalization(axis=-1)
-        self.fc = tf.keras.layers.Dense(intermediate_size, use_bias=False)
-        self.act = tf.keras.layers.ReLU()
-        self.c_proj = tf.keras.layers.Dense(self.embed_dim, use_bias=False)
+        self.ln = tf.keras.layers.LayerNormalization(axis=-1, name="ln")
+        self.fc = tf.keras.layers.Dense(intermediate_size, use_bias=False, name="fc")
+        self.act = tf.keras.layers.ReLU(name="act")
+        self.c_proj = tf.keras.layers.Dense(self.embed_dim, use_bias=False, name="c_proj")
 
     def call(self, hidden_states: Optional[Tuple[tf.Tensor]]) -> tf.Tensor:
         hidden_states = self.ln(hidden_states)
