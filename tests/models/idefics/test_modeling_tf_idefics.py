@@ -326,25 +326,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
         )
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        for model_class in self.all_model_classes:
-            # IdeficsModel does not support training, users should use
-            # IdeficsForVisionText2Text for this purpose
-            if model_class == TFIdeficsModel:
-                return
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-
-            model = model_class(config)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
     def test_training_gradient_checkpointing(self):
         pass
 
