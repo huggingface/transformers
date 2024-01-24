@@ -41,6 +41,11 @@ from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 logger = logging.get_logger(__name__)
 
 
+from transformers import AutoTokenizer
+
+tok = AutoTokenizer.from_pretrained("openai/whisper-medium.en")
+
+
 def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
     """
     Applies a median filter of width `filter_width` along the last dimension of the input.
@@ -260,6 +265,7 @@ class WhisperGenerationMixin:
         language: Optional[str] = None,
         is_multilingual: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
+        prompt_condition_type: str = "first-segment",  # first-segment, all-segments
         condition_on_prev_tokens: Optional[bool] = None,
         temperature: Optional[Union[float, Tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
@@ -505,15 +511,6 @@ class WhisperGenerationMixin:
         self._set_language_and_task(
             language=language, task=task, is_multilingual=is_multilingual, generation_config=generation_config
         )
-        # pass self.config for backward compatibility
-        self._set_forced_decoder_ids(
-            task=task,
-            language=language,
-            prompt_ids=prompt_ids,
-            generation_config=generation_config,
-            config=self.config,
-            kwargs=kwargs,
-        )
         self._set_token_ids(generation_config=generation_config, config=self.config, kwargs=kwargs)
         self._set_num_frames(
             return_token_timestamps=return_token_timestamps, generation_config=generation_config, kwargs=kwargs
@@ -525,12 +522,19 @@ class WhisperGenerationMixin:
             no_speech_threshold=no_speech_threshold,
             condition_on_prev_tokens=condition_on_prev_tokens,
         )
+        # pass self.config for backward compatibility
+        init_tokens = self.retrieve_init_tokens(
+            generation_config=generation_config,
+            config=self.config,
+            kwargs=kwargs,
+        )
 
         # 4. Retrieve logits processors
+        begin_index = len(init_tokens)
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
-            no_speech_threshold=no_speech_threshold,
+            begin_index=begin_index, # begin index is index of first generated decoder token
             is_shortform=is_shortform,
             num_beams=kwargs.get("num_beams", 1),
         )
@@ -540,6 +544,14 @@ class WhisperGenerationMixin:
             if temperature is not None:
                 kwargs["temperature"] = temperature
 
+            decoder_input_ids = kwargs.pop("decoder_input_ids", None)
+
+            if decoder_input_ids is not None and len(init_tokens) > 0:
+                logger.warn(f"You have provided `decoder_input_ids` which will overwrite the `init_tokens` {init_tokens}. This might lead to unexpected behavior.")
+            elif len(init_tokens) > 0:
+                one_tensor = torch.ones((input_features.shape[0], 1), device=input_features.device, dtype=torch.long)
+                decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
+
             outputs = super().generate(
                 input_features,
                 generation_config=generation_config,
@@ -547,6 +559,7 @@ class WhisperGenerationMixin:
                 stopping_criteria=stopping_criteria,
                 prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                 synced_gpus=synced_gpus,
+                decoder_input_ids=decoder_input_ids,
                 **kwargs,
             )
 
@@ -573,11 +586,11 @@ class WhisperGenerationMixin:
         max_frames, seek = self._retrieve_max_frames_and_seek(
             batch_size=batch_size, attention_mask=attention_mask, total_input_frames=total_input_frames
         )
-        init_tokens = self._retrieve_init_tokens_from_forced_decoder_ids(generation_config=generation_config)
 
         # 6.2 Preppare running variables, list for generation
         cur_bsz = batch_size
-        current_segments = [[] for _ in range(batch_size)]
+        current_segments = self._prepare_segments(prompt_ids=prompt_ids, batch_size=batch_size, prompt_condition_type=prompt_condition_type, generation_config=generation_config)
+
         batch_idx_map = list(range(batch_size))
         do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(batch_size)]
 
@@ -617,6 +630,7 @@ class WhisperGenerationMixin:
                 current_segments=current_segments,
                 batch_idx_map=batch_idx_map,
                 do_condition_on_prev_tokens=do_condition_on_prev_tokens,
+                prompt_ids=prompt_ids,
                 generation_config=generation_config,
                 config=self.config,
                 device=segment_input.device,
@@ -682,11 +696,12 @@ class WhisperGenerationMixin:
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
-        sequences = _pad_to_max_length(current_segments, generation_config.pad_token_id, padding="right")
+        final_segments = [x[1:] for x in current_segments] if (prompt_ids is not None and prompt_condition_type == "first-segment") else current_segments
+        sequences = _pad_to_max_length(final_segments, generation_config.pad_token_id, padding="right")
 
         # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
         if return_segments:
-            return {"sequences": sequences, "segments": current_segments}
+            return {"sequences": sequences, "segments": final_segments}
 
         return sequences
 
@@ -721,8 +736,18 @@ class WhisperGenerationMixin:
 
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
-            generation_config.temperature = temperature
+
+            if generation_config.do_sample:
+                generation_config.temperature = temperature
+            else:
+                # default
+                generation_config.temperature = 1.0
+
             generation_config.num_beams = kwargs.pop("num_beams", 1) if not generation_config.do_sample else 1
+
+            # print(decoder_input_ids)
+            print(tok.batch_decode(decoder_input_ids, skip_special_tokens=False))
+            print(temperature)
 
             seek_outputs = super().generate(
                 segment_input,
@@ -777,8 +802,9 @@ class WhisperGenerationMixin:
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
+                is_low_temperature = temperature is None or temperature < 0.5
                 do_condition_on_prev_tokens[fallback_index_map[i]] = (
-                    generation_config.condition_on_prev_tokens and temperature is not None and temperature < 0.5
+                    generation_config.condition_on_prev_tokens and is_low_temperature
                 )
 
                 if needs_fallback[i]:
@@ -803,6 +829,23 @@ class WhisperGenerationMixin:
                 kwargs["decoder_attention_mask"] = torch.stack(new_decoder_attention_mask)
 
         return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
+
+
+    @staticmethod
+    def _prepare_segments(prompt_ids, batch_size, prompt_condition_type, generation_config):
+        generation_config.prompt_condition_type = prompt_condition_type
+
+        if prompt_ids is not None and prompt_condition_type == "first-segment":
+            prompt_ids = prompt_ids[1:] if prompt_ids[0] == generation_config.prev_sot_token_id else prompt_ids
+            current_segments = [[{"tokens": prompt_ids}] for _ in range(batch_size)]
+        else:
+            current_segments = [[] for _ in range(batch_size)]
+
+        if generation_config.condition_on_prev_tokens is not True and prompt_condition_type == "all-segments":
+            raise ValueError("Make sure to set `condition_on_prev_tokens=True` when setting `prompt_condition_type='all-segments'`.")
+
+        return current_segments
+
 
     def _postprocess_outputs(self, seek_outputs, return_token_timestamps, generation_config):
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
@@ -1017,7 +1060,7 @@ class WhisperGenerationMixin:
             generation_config.task = task
 
     @staticmethod
-    def _set_forced_decoder_ids(task, language, prompt_ids, generation_config, config, kwargs):
+    def retrieve_init_tokens(generation_config, config, kwargs):
         forced_decoder_ids = None
         # Legacy code for backward compatibility
         if hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
@@ -1027,83 +1070,73 @@ class WhisperGenerationMixin:
         else:
             forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
 
-        if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
-            forced_decoder_ids = []
-            if hasattr(generation_config, "language"):
-                if generation_config.language in generation_config.lang_to_id.keys():
-                    language_token = generation_config.language
-                elif generation_config.language in TO_LANGUAGE_CODE.keys():
-                    language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
-                elif generation_config.language in TO_LANGUAGE_CODE.values():
-                    language_token = f"<|{generation_config.language}|>"
-                else:
-                    is_language_code = len(generation_config.language) == 2
-                    raise ValueError(
-                        f"Unsupported language: {generation_config.language}. Language should be one of:"
-                        f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
-                    )
-                if language_token not in generation_config.lang_to_id:
-                    raise ValueError(
-                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
-                        "(You should just add it to the generation config)"
-                    )
-                forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
-            else:
-                forced_decoder_ids.append((1, None))  # automatically detect the language
+        task = getattr(generation_config, "task", None)
+        language = getattr(generation_config, "language", None)
 
-            if hasattr(generation_config, "task"):
-                if generation_config.task in TASK_IDS:
-                    forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
-                else:
-                    raise ValueError(
-                        f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
-                    )
-            elif hasattr(generation_config, "task_to_id"):
-                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
-            if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
-                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
-                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+        if forced_decoder_ids is not None and task is not None:
+            logger.warn(f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. Make sure to either remove `forced_decoder_ids` from your `generation_config` or don't set `task`. `forced_decoder_ids` will be ignored in favor of task={task}.")
+            forced_decoder_ids = None
+        elif forced_decoder_ids is not None and language is not None:
+            logger.warn(f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. Make sure to either remove `forced_decoder_ids` from your `generation_config` or don't set `language`. `forced_decoder_ids` will be ignored in favor of language={language}.")
+            forced_decoder_ids = None
 
-        if forced_decoder_ids is not None:
-            generation_config.forced_decoder_ids = forced_decoder_ids
+        init_tokens = [generation_config.decoder_start_token_id]
+        if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
+            i = 1
+            while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
+                init_tokens += [forced_decoder_ids[0][1]]
+                forced_decoder_ids = forced_decoder_ids[1:]
+                i += 1
 
-        if prompt_ids is not None:
-            if kwargs.get("decoder_start_token_id") is not None:
-                raise ValueError(
-                    "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
+            if len(forced_decoder_ids) > 0:
+                warnings.warn(
+                    f"You are using token ids in `forced_decoder_ids` that do not seem to be part of the initial prompt ids: {forced_decoder_ids}. This functionality has been deprecated and will throw an error in v4.39.",
+                    FutureWarning,
                 )
-            prompt_ids = prompt_ids.tolist()
-            decoder_start_token_id, *text_prompt_ids = prompt_ids
-            # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
-            # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
-            text_prompt_ids = text_prompt_ids[-config.max_target_positions // 2 - 1 :]
-            # Set the decoder_start_token_id to <|startofprev|>
-            kwargs.update({"decoder_start_token_id": decoder_start_token_id})
 
-            # If the user passes `max_new_tokens`, increase its number to account for the prompt
-            if kwargs.get("max_new_tokens", None) is not None:
-                kwargs["max_new_tokens"] += len(text_prompt_ids)
-                if kwargs["max_new_tokens"] >= config.max_target_positions:
-                    raise ValueError(
-                        f"The length of the sliced `prompt_ids` is {len(text_prompt_ids)}, and the `max_new_tokens` "
-                        f"{kwargs['max_new_tokens'] - len(text_prompt_ids)}. Thus, the combined length of the sliced "
-                        f"`prompt_ids` and `max_new_tokens` is: {kwargs['max_new_tokens']}. This exceeds the "
-                        f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
-                        "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-                        f"so that their combined length is less that {config.max_target_positions}."
-                    )
+            # TODO(Sanchit): set generation_config.forced_decoder_ids to None for v4.39
+            generation_config.forced_decoder_ids = forced_decoder_ids if len(forced_decoder_ids) > 0 else None
 
-            # Reformat the forced_decoder_ids to incorporate the prompt
-            non_prompt_forced_decoder_ids = (
-                kwargs.pop("forced_decoder_ids", None) or generation_config.forced_decoder_ids
-            )
-            forced_decoder_ids = [
-                *text_prompt_ids,
-                generation_config.decoder_start_token_id,
-                *[token for _, token in non_prompt_forced_decoder_ids],
-            ]
-            forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
-            generation_config.forced_decoder_ids = forced_decoder_ids
+        if language is not None:
+            if language in generation_config.lang_to_id.keys():
+                language_token = language
+            elif language in TO_LANGUAGE_CODE.keys():
+                language_token = f"<|{TO_LANGUAGE_CODE[language]}|>"
+            elif language in TO_LANGUAGE_CODE.values():
+                language_token = f"<|{language}|>"
+            else:
+                is_language_code = len(language) == 2
+                raise ValueError(
+                    f"Unsupported language: {language}. Language should be one of:"
+                    f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+                )
+            if language_token not in generation_config.lang_to_id:
+                raise ValueError(
+                    f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                    "(You should just add it to the generation config)"
+                )
+        elif task is not None:
+            # if task was passed, but language was not set, default to English
+            language_token = f"<|en|>"
+
+        init_tokens.append(generation_config.lang_to_id[language_token])
+
+        if task is not None:
+            if task in TASK_IDS:
+                init_tokens.append(generation_config.task_to_id[generation_config.task])
+            else:
+                raise ValueError(
+                    f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`"
+                )
+        elif hasattr(generation_config, "task_to_id"):
+            init_tokens.append(generation_config.task_to_id["transcribe"])  # defaults to transcribe
+
+        if not generation_config.return_timestamps:
+            init_tokens.append(generation_config.no_timestamps_token_id)
+        elif generation_config.return_timestamps and init_tokens[-1] == generation_config.no_timestamps_token_id:
+            init_tokens = init_tokens[-1:]
+
+        return init_tokens
 
     @staticmethod
     def _set_token_ids(generation_config, config, kwargs):
@@ -1186,37 +1219,9 @@ class WhisperGenerationMixin:
 
         return max_frames, seek
 
-    @staticmethod
-    def _retrieve_init_tokens_from_forced_decoder_ids(generation_config):
-        init_tokens = [generation_config.decoder_start_token_id]
-        forced_decoder_ids = generation_config.forced_decoder_ids
-        if forced_decoder_ids is not None and forced_decoder_ids[0][0] == 1:
-            i = 1
-            while len(forced_decoder_ids) > 0 and forced_decoder_ids[0][0] == i:
-                init_tokens += [forced_decoder_ids[0][1]]
-                forced_decoder_ids = forced_decoder_ids[1:]
-                i += 1
-
-            forced_decoder_ids = forced_decoder_ids if len(forced_decoder_ids) > 0 else None
-            generation_config.forced_decoder_ids = forced_decoder_ids
-
-        return init_tokens
-
     def _retrieve_logit_processors(
-        self, generation_config, logits_processor, no_speech_threshold, is_shortform, num_beams
+        self, generation_config, logits_processor, begin_index, is_shortform, num_beams
     ):
-        forced_decoder_ids = generation_config.forced_decoder_ids
-        if generation_config.return_timestamps is True:
-            last_forced_decoder_ids = forced_decoder_ids[-1][-1] if forced_decoder_ids is not None else None
-            if last_forced_decoder_ids == generation_config.no_timestamps_token_id:
-                # remove no_timestamp to be forcefully generated if we want to return timestamps
-                # this is also important to make sure `WhisperTimeStampLogitsProcessor` functions correctly
-                forced_decoder_ids = forced_decoder_ids[:-1] if len(forced_decoder_ids) > 1 else None
-                # Make sure that if list is empty we set it to None
-                generation_config.forced_decoder_ids = forced_decoder_ids
-
-        begin_index = len(forced_decoder_ids) + 1 if forced_decoder_ids is not None else 1
-
         if generation_config.return_timestamps is True:
             timestamp_processor = WhisperTimeStampLogitsProcessor(generation_config, begin_index=begin_index)
             logits_processor = (
@@ -1243,7 +1248,7 @@ class WhisperGenerationMixin:
             )
             generation_config.begin_suppress_tokens = None
 
-        if no_speech_threshold is not None and not is_shortform:
+        if generation_config.no_speech_threshold is not None and not is_shortform:
             no_speech_detector = WhisperNoSpeechDetection(
                 no_speech_token=generation_config.no_timestamps_token_id - 1,
                 begin_index=begin_index,
@@ -1256,11 +1261,12 @@ class WhisperGenerationMixin:
 
         if is_shortform and generation_config.forced_decoder_ids is not None:
             forced_tokens_proc = ForceTokensLogitsProcessor(generation_config.forced_decoder_ids)
-            # TODO(Patrick): It's important that the `forced_tokens_proc` processor is appended after
+            # It's important that the `forced_tokens_proc` processor is appended after
             # the suppress_tokens processor or else it might happen that all token logits are suppressed to -inf
             # which would lead to unexpected behavior
             # The better approach here is to NOT make use of the `forced_tokens_proc` for Whisper and instead
             # initialize all of them as `decoder_input_ids`.
+            # TODO(Sanchit): Make sure to deprecate this in v4.39 as there will be no `forced_decoder_ids` anymore.
             logits_processor = (
                 [forced_tokens_proc] if logits_processor is None else logits_processor + [forced_tokens_proc]
             )
@@ -1310,6 +1316,7 @@ class WhisperGenerationMixin:
         current_segments,
         batch_idx_map,
         do_condition_on_prev_tokens,
+        prompt_ids,
         generation_config,
         config,
         device,
@@ -1328,19 +1335,27 @@ class WhisperGenerationMixin:
         if any(do_condition_on_prev_tokens) and len(current_segments[0]) > 0:
             # according to https://github.com/openai/whisper/blob/e58f28804528831904c3b6f2c0e473f346223433/whisper/decoding.py#L609
             active_segments = [current_segments[i] if do_condition_on_prev_tokens[i] else None for i in batch_idx_map]
-            prev_start_of_text = getattr(generation_config, "prev_bos_token_id", None) or prev_start_of_text
 
-            bos_token_tensor = prev_start_of_text * one_tensor[0]
+            if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
+                prev_ids = prompt_ids
+            else:
+                prev_ids = prev_start_of_text * one_tensor[0]
+
             prev_tokens = _pad_to_max_length(
                 active_segments,
                 generation_config.pad_token_id,
                 padding="left",
-                bos_token_tensor=bos_token_tensor,
+                bos_token_tensor=prev_ids,
                 cut_off_length=cut_off_length,
             )
             decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
 
             kwargs["decoder_attention_mask"] = decoder_input_ids != generation_config.pad_token_id
+        elif prompt_ids is not None:
+            prev_tokens = prompt_ids[None].repeat(decoder_input_ids.shape[0], 1) 
+            decoder_input_ids = torch.cat([prev_tokens, decoder_input_ids], dim=-1)
+            # make sure `"decoder_attention_mask"` is not passed to forward
+            kwargs.pop("decoder_attention_mask", None)
         else:
             # make sure `"decoder_attention_mask"` is not passed to forward
             kwargs.pop("decoder_attention_mask", None)
