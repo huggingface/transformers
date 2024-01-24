@@ -145,23 +145,15 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_R
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
-_NO_RETURN = object()
 
-
-def _return_cache_or_none_for_condition(
-    path_or_repo_id: str,
-    full_filename: str,
-    cache_dir: Union[str, Path, None] = None,
-    revision: Optional[str] = None,
-    condition: bool = False,
+def _get_cache_file_to_return(
+    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
 ):
     # We try to see if we have a cached version (not up to date):
     resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
     if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
         return resolved_file
-    if condition:
-        return None
-    return _NO_RETURN
+    return None
 
 
 def is_remote_url(url_or_filename):
@@ -418,10 +410,8 @@ def cached_file(
             local_files_only=local_files_only,
         )
     except GatedRepoError as e:
-        resolved_file = _return_cache_or_none_for_condition(
-            path_or_repo_id, full_filename, cache_dir, revision, not _raise_exceptions_for_gated_repo
-        )
-        if _NO_RETURN != resolved_file:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if resolved_file is not None or not _raise_exceptions_for_gated_repo:
             return resolved_file
         raise EnvironmentError(
             "You are trying to access a gated repo.\nMake sure to request access at "
@@ -442,14 +432,12 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
         ) from e
     except LocalEntryNotFoundError as e:
-        resolved_file = _return_cache_or_none_for_condition(
-            path_or_repo_id,
-            full_filename,
-            cache_dir,
-            revision,
-            not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors,
-        )
-        if _NO_RETURN != resolved_file:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if (
+            resolved_file is not None
+            or not _raise_exceptions_for_missing_entries
+            or not _raise_exceptions_for_connection_errors
+        ):
             return resolved_file
         raise EnvironmentError(
             f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
@@ -467,10 +455,8 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
         ) from e
     except HTTPError as err:
-        resolved_file = _return_cache_or_none_for_condition(
-            path_or_repo_id, full_filename, cache_dir, revision, not _raise_exceptions_for_connection_errors
-        )
-        if _NO_RETURN != resolved_file:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if resolved_file is not None or not _raise_exceptions_for_connection_errors:
             return resolved_file
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
     except HFValidationError as e:
