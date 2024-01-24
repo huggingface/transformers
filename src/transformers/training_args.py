@@ -532,6 +532,9 @@ class TrainingArguments:
             If True, the data loader will not shut down the worker processes after a dataset has been consumed once.
             This allows to maintain the workers Dataset instances alive. Can potentially speed up training, but will
             increase RAM usage. Will default to `False`.
+        dataloader_prefetch_factor (`int`, *optional*):
+            Number of batches loaded in advance by each worker.
+            2 means there will be a total of 2 * num_workers batches prefetched across all workers.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
             Whether to skip adding of memory profiler reports to metrics. This is skipped by default because it slows
             down the training and evaluation speed.
@@ -989,7 +992,16 @@ class TrainingArguments:
             )
         },
     )
-
+    dataloader_prefetch_factor: int = field(
+        default=None,
+        metadata={
+            "help": (
+                "Number of batches loaded in advance by each worker. "
+                "2 means there will be a total of 2 * num_workers batches prefetched across all workers. "
+                "Default is unset"
+            )
+        },
+    )
     past_index: int = field(
         default=-1,
         metadata={"help": "If >=0, uses the corresponding part of the output as the past state for next step."},
@@ -1736,6 +1748,12 @@ class TrainingArguments:
 
         if self.use_cpu:
             self.dataloader_pin_memory = False
+
+        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
+            raise ValueError(
+                "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
+                " when --dataloader_num_workers > 1."
+            )
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -2634,6 +2652,7 @@ class TrainingArguments:
         num_workers: int = 0,
         pin_memory: bool = True,
         persistent_workers: bool = False,
+        prefetch_factor: Optional[int] = None,
         auto_find_batch_size: bool = False,
         ignore_data_skip: bool = False,
         sampler_seed: Optional[int] = None,
@@ -2654,6 +2673,9 @@ class TrainingArguments:
                 If True, the data loader will not shut down the worker processes after a dataset has been consumed
                 once. This allows to maintain the workers Dataset instances alive. Can potentially speed up training,
                 but will increase RAM usage. Will default to `False`.
+            prefetch_factor (`int`, *optional*):
+                Number of batches loaded in advance by each worker.
+                2 means there will be a total of 2 * num_workers batches prefetched across all workers.
             auto_find_batch_size (`bool`, *optional*, defaults to `False`)
                 Whether to find a batch size that will fit into memory automatically through exponential decay,
                 avoiding CUDA Out-of-Memory errors. Requires accelerate to be installed (`pip install accelerate`)
@@ -2684,6 +2706,7 @@ class TrainingArguments:
         self.dataloader_num_workers = num_workers
         self.dataloader_pin_memory = pin_memory
         self.dataloader_persistent_workers = persistent_workers
+        self.dataloader_prefetch_factor = prefetch_factor
         self.auto_find_batch_size = auto_find_batch_size
         self.ignore_data_skip = ignore_data_skip
         self.data_seed = sampler_seed
