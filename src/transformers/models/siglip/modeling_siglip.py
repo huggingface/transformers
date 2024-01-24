@@ -171,8 +171,8 @@ class SiglipVisionModelOutput(ModelOutput):
 
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -201,8 +201,8 @@ class SiglipTextModelOutput(ModelOutput):
 
     text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -1123,7 +1123,8 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> texts = ["a photo of 2 cats", "a photo of 2 dogs"]
-        >>> inputs = processor(text=texts, images=image, return_tensors="pt")
+        >>> # important: we pass `padding=max_length` since the model was trained with this
+        >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

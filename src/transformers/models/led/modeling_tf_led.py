@@ -1471,9 +1471,9 @@ class TFLEDEncoderBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    global_attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1535,13 +1535,13 @@ class TFLEDSeq2SeqModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     past_key_values: List[tf.Tensor] | None = None
-    decoder_hidden_states: Tuple[tf.Tensor] | None = None
-    decoder_attentions: Tuple[tf.Tensor] | None = None
-    cross_attentions: Tuple[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    decoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    cross_attentions: Tuple[tf.Tensor, ...] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Tuple[tf.Tensor] | None = None
-    encoder_attentions: Tuple[tf.Tensor] | None = None
-    encoder_global_attentions: Tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    encoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    encoder_global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1602,13 +1602,13 @@ class TFLEDSeq2SeqLMOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     past_key_values: List[tf.Tensor] | None = None
-    decoder_hidden_states: Tuple[tf.Tensor] | None = None
-    decoder_attentions: Tuple[tf.Tensor] | None = None
-    cross_attentions: Tuple[tf.Tensor] | None = None
+    decoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    decoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    cross_attentions: Tuple[tf.Tensor, ...] | None = None
     encoder_last_hidden_state: tf.Tensor | None = None
-    encoder_hidden_states: Tuple[tf.Tensor] | None = None
-    encoder_attentions: Tuple[tf.Tensor] | None = None
-    encoder_global_attentions: Tuple[tf.Tensor] | None = None
+    encoder_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    encoder_attentions: Tuple[tf.Tensor, ...] | None = None
+    encoder_global_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 LED_START_DOCSTRING = r"""

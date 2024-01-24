@@ -234,8 +234,11 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
 
-        self.to_json_file(output_processor_file)
-        logger.info(f"processor saved in {output_processor_file}")
+        # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
+        # `auto_map` is not specified.
+        if set(self.to_dict().keys()) != {"processor_class"}:
+            self.to_json_file(output_processor_file)
+            logger.info(f"processor saved in {output_processor_file}")
 
         if push_to_hub:
             self._upload_modified_files(
@@ -246,6 +249,8 @@ class ProcessorMixin(PushToHubMixin):
                 token=kwargs.get("token"),
             )
 
+        if set(self.to_dict().keys()) == {"processor_class"}:
+            return []
         return [output_processor_file]
 
     @classmethod
