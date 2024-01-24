@@ -484,7 +484,7 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         padded_attention_mask = padded_input_ids.ne(1).to(torch_device)
 
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
-        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
 
         # We make sure that the loss of includding padding tokens != the loss without padding tokens
         # if attention_mask=None --> we don't exclude padding tokens
