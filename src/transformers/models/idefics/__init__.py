@@ -55,7 +55,6 @@ else:
         "TFIdeficsForVisionText2Text",
         "TFIdeficsModel",
         "TFIdeficsPreTrainedModel",
-        "TFIdeficsProcessor",
     ]
 
 if TYPE_CHECKING:
@@ -89,7 +88,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_tf_idefics import (
-            TFIDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFIdeficsForVisionText2Text,
             TFIdeficsModel,
             TFIdeficsPreTrainedModel,
