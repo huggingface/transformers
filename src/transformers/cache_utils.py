@@ -346,6 +346,7 @@ class StaticCache(Cache):
         
         # We cache a big mask that will be updated with the input mask
         self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
+        # self.causal_4d_mask = torch.triu(torch.full((self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
         # self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool,device = device))
     def update(
         self,
@@ -375,10 +376,6 @@ class StaticCache(Cache):
         position_ids = cache_kwargs.get("position_ids")[0]
         # position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
         # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
-        # place each cache on the correct layer device, not optimised?
-        # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
-        # self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device, non_blocking=True)
-        # self.causal_4d_mask = self.causal_4d_mask.to(value_states.device, non_blocking=True)
         
         k_out = self.key_cache
         v_out = self.value_cache
@@ -388,24 +385,12 @@ class StaticCache(Cache):
         v_out[:, :, position_ids] = value_states
 
 
-        # if attention_mask is not None:
-        #     # if the past length changes then we do have a problem
-        #     _, _, query_length, past_length = attention_mask.shape
-        #     # update the actual attention mask by masking padding tokens
-        #     self.causal_4d_mask[:,:,self.seen_tokens + 1,:past_length] = attention_mask
-        #     attention_mask = self.causal_4d_mask[:,:, self.seen_tokens,:]
+        if attention_mask is not None:
+            # update the actual attention mask by masking padding tokens
+            self.causal_4d_mask[:,:,position_ids,torch.arange(attention_mask.shape[-1])] = attention_mask
 
         self._seen_tokens += key_states.shape[-2]
-            
-        # # Update the number of seen tokens
-        # if layer_idx == self.num_layers - 1:
-            # # Update the cache. calling self.seen+tokens make the code break and adds guards
-            # if self.seen_tokens + key_states.shape[-2] > self.max_sequence_length:
-            #     self.seen_tokens = 1
-            #     # raise ValueError("Your are going outside the allocated cache")
-        # self.seen_tokens += key_states.shape[-2]
-            
-        return k_out, v_out, attention_mask
+        return k_out, v_out, self.causal_4d_mask[:,:, position_ids,:]
 
     @property
     def seen_tokens(self):

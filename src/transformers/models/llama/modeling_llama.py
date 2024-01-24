@@ -311,30 +311,12 @@ class LlamaAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-    
-        # total_head_dim = (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim
-        # self.wqkv = nn.Linear(self.hidden_size, total_head_dim, bias=False)
-        
+
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
-
-        
-        # cache_shape = (8,  self.num_heads, 4096, self.head_dim)
-        # self.register_buffer("key_cache",torch.zeros(cache_shape, dtype=torch.bfloat16, device = "cuda"), persistent=False)
-        # self.register_buffer("value_cache",torch.zeros(cache_shape, dtype=torch.bfloat16, device = "cuda"), persistent=False)
-
-    #     self._register_load_state_dict_pre_hook(self.load_hook)
-
-    # def load_hook(self, state_dict, prefix, *args):
-    #     if prefix + "q_proj.weight" in state_dict :
-    #         wq = state_dict.pop(prefix + "q_proj.weight")
-    #         wk = state_dict.pop(prefix + "k_proj.weight")
-    #         wv = state_dict.pop(prefix + "v_proj.weight")
-    #         state_dict[prefix + "wqkv.weight"] = torch.cat([wq, wk, wv])
-
 
     def _init_rope(self):
         if self.config.rope_scaling is None:
@@ -709,8 +691,7 @@ class LlamaSdpaAttention(LlamaAttention):
         #     )
 
         bsz, q_len, _ = hidden_states.size()
-        # kv_size = self.num_key_value_heads * self.head_dim
-        # query_states, key_states, value_states = self.wqkv(hidden_states).split([self.hidden_size, kv_size, kv_size], dim=-1)
+
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
@@ -755,7 +736,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask = None, #self.causal_mask[:query_states.shape[2]],
+            attn_mask = attention_mask, #self.causal_mask[:query_states.shape[2]],
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -891,14 +872,14 @@ class LlamaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _setup_cache(self, max_batch_size):
+    def _setup_cache(self, cache_cls, max_batch_size):
         # if self.config.max_position_embeddings >= max_seq_length:
         #     return
 
         # max_seq_length = find_multiple(max_seq_length, 8)
         self.max_batch_size = max_batch_size
         for b in self.model.layers:
-            b.self_attn.past_key_value = StaticCache(self.config, max_batch_size, device=b.self_attn.q_proj.weight.device)
+            b.self_attn.past_key_value = cache_cls(self.config, max_batch_size, device=b.self_attn.o_proj.weight.device)
 
 
 
