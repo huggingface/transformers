@@ -296,9 +296,6 @@ class LlamaAttention(nn.Module):
                 "when creating this class."
             )
 
-        self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool))
-
-
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -736,7 +733,7 @@ class LlamaSdpaAttention(LlamaAttention):
         if past_key_value is not None:
             cache_kwargs = {'position_ids':position_ids}
             # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
-            key_states, value_states, _ = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)

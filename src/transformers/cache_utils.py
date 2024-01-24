@@ -326,7 +326,7 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size, device = "mps") -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, device = "cuda:2") -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_sequence_length = config.max_position_embeddings # if config.max_sequence_length is None else config.max_sequence_length 
@@ -345,8 +345,8 @@ class StaticCache(Cache):
         self._seen_tokens = 0 
         
         # We cache a big mask that will be updated with the input mask
-        # self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
-        
+        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
+        # self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool,device = device))
     def update(
         self,
         key_states: torch.Tensor,
@@ -388,12 +388,12 @@ class StaticCache(Cache):
 
         self._seen_tokens += key_states.shape[-2]
 
-        # if attention_mask is not None:
-        #     # if the past length changes then we do have a problem
-        #     _, _, query_length, past_length = attention_mask.shape
-        #     # update the actual attention mask by masking padding tokens
-        #     # self.causal_4d_mask[:,:,self.seen_tokens + 1,:past_length] = attention_mask
-        #     attention_mask = self.causal_4d_mask[:,:, self.seen_tokens,:]
+        if attention_mask is not None:
+            # if the past length changes then we do have a problem
+            _, _, query_length, past_length = attention_mask.shape
+            # update the actual attention mask by masking padding tokens
+            self.causal_4d_mask[:,:,self.seen_tokens + 1,:past_length] = attention_mask
+            attention_mask = self.causal_4d_mask[:,:, self.seen_tokens,:]
             
         # # Update the number of seen tokens
         # if layer_idx == self.num_layers - 1:
