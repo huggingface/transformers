@@ -39,11 +39,14 @@ class HFQuantizer(ABC):
             The list of required pip packages to install prior to using the quantizer
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
+        requires_parameters_quantization (`bool`):
+            Whether the quantization method requires to create a new Parameter. For example, for bitsandbytes, it is
+            required to create a new xxxParameter in order to properly quantize the model.
     """
 
     requires_calibration = False
-
     required_packages = None
+    requires_parameters_quantization = False
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -87,7 +90,8 @@ class HFQuantizer(ABC):
     ) -> bool:
         """
         checks if a loaded state_dict component is part of quantized param + some validation; only defined if
-        requires_parameters_quantization == True
+        requires_parameters_quantization == True for quantization methods that require to create a new parameters
+        for quantization.
         """
         return False
 
@@ -98,7 +102,7 @@ class HFQuantizer(ABC):
         """
         if not self.requires_parameters_quantization:
             raise AttributeError(
-                "`.create_quantized_param()` method is not supported by quantizer class {self.__cls__}."
+                f"`.create_quantized_param()` method is not supported by quantizer class {self.__class__.__name__}."
             )
 
     def validate_environment(self, *args, **kwargs):

@@ -38,9 +38,6 @@ class GptqHFQuantizer(HFQuantizer):
     `auto_gptq` package. Quantization is done under the hood for users if they load a non-prequantized model.
     """
 
-    # TODO: what is this?
-    requires_parameters_quantization = False
-
     requires_calibration = False
     required_packages = ["optimum", "auto_gptq"]
 

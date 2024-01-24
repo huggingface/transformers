@@ -33,9 +33,6 @@ class AwqQuantizer(HFQuantizer):
     4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
     """
 
-    # TODO: what is this?
-    requires_parameters_quantization = False
-
     # AWQ requires data callibration - we support only inference
     requires_calibration = True
 

@@ -59,6 +59,12 @@ class BnbHFQuantizerMixin:
 
     required_packages = ["bitsandbytes", "accelerate"]
 
+    def __init__(self, quantization_config, **kwargs):
+        super().__init__(quantization_config, **kwargs)
+
+        if self.quantization_config.llm_int8_skip_modules is not None:
+            self.modules_to_not_convert = self.quantization_config.llm_int8_skip_modules
+
     def validate_environment(self, *args, **kwargs):
         if not (is_accelerate_available() and is_bitsandbytes_available()):
             raise ImportError(
@@ -76,7 +82,11 @@ class BnbHFQuantizerMixin:
             raise RuntimeError("No GPU found. A GPU is needed for quantization.")
 
         device_map = kwargs.get("device_map", None)
-        if device_map is not None and isinstance(device_map, dict):
+        if (
+            device_map is not None
+            and isinstance(device_map, dict)
+            and not self.quantization_config.llm_int8_enable_fp32_cpu_offload
+        ):
             device_map_without_lm_head = {
                 key: device_map[key] for key in device_map.keys() if key not in self.modules_to_not_convert
             }
@@ -200,7 +210,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
                     raise ValueError("Missing quantization component `SCB`")
                 if param_value.dtype != torch.int8:
                     raise ValueError(
-                        "Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
+                        f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
                     )
             return True
         return False
