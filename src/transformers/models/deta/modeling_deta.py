@@ -38,7 +38,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_torchvision_available, logging, requires_backends
+from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
 from ...utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
 

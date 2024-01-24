@@ -223,7 +223,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "use_pretrained_backbone",
         "backbone",
         "backbone_config",
-        "use_timm_backbone"
+        "use_timm_backbone",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
