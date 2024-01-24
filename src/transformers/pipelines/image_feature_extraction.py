@@ -10,7 +10,7 @@ if is_vision_available():
 
 class ImageFeatureExtractionPipeline(Pipeline):
     """
-    Image feature extraction pipeline using no model head. This pipeline extracts the hidden states from the base
+    Image feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
 
     Example:
@@ -20,7 +20,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
     >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
-    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input string.
+    >>> result.shape  # This is a tensor of shape [1, sequence_lenth, hidden_dimension] representing the input image.
     torch.Size([1, 197, 768])
     ```
 
@@ -59,19 +59,17 @@ class ImageFeatureExtractionPipeline(Pipeline):
     """
 
     def _sanitize_parameters(self, return_tensors=None, **kwargs):
-        preprocess_params = kwargs.pop("preprocess_kwargs", {})
-        postprocess_params = kwargs.pop("postprocess_kwargs", {})
+        preprocess_params = kwargs.pop("image_processor_kwargs", {})
+        postprocess_params = {"return_tensors": return_tensors} if return_tensors is not None else {}
 
         if "timeout" in kwargs:
             preprocess_params["timeout"] = kwargs["timeout"]
-        if return_tensors is not None:
-            postprocess_params["return_tensors"] = return_tensors
 
         return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, image, timeout=None, **preprocess_kwargs) -> Dict[str, GenericTensor]:
+    def preprocess(self, image, timeout=None, **image_processor_kwargs) -> Dict[str, GenericTensor]:
         image = load_image(image, timeout=timeout)
-        model_inputs = self.image_processor(image, return_tensors=self.framework, **preprocess_kwargs)
+        model_inputs = self.image_processor(image, return_tensors=self.framework, **image_processor_kwargs)
         return model_inputs
 
     def _forward(self, model_inputs):
