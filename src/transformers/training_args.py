@@ -28,7 +28,6 @@ from huggingface_hub import get_full_repo_name
 from packaging import version
 
 from .debug_utils import DebugOption
-from .trainer_pt_utils import AcceleratorConfig
 from .trainer_utils import (
     EvaluationStrategy,
     FSDPOption,
@@ -70,6 +69,7 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
+    from .trainer_pt_utils import AcceleratorConfig
 
 if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
