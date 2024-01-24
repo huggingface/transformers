@@ -3906,7 +3906,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ:
             if quantization_config.use_exllama:
-                print("Using exllama")
                 model = post_init_awq_exllama_modules(model, quantization_config.exllama_config)
                 model._awq_use_exllama = True
 
