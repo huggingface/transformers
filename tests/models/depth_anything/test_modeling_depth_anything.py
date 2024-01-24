@@ -221,7 +221,6 @@ def prepare_img():
 @slow
 class DepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
-        # TODO update organization
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
