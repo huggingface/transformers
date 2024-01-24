@@ -18,6 +18,7 @@
 import unittest
 
 from transformers import VMambaConfig
+from transformers.models.vmamba.modeling_vmamba import VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
     require_accelerate,
     require_torch,
@@ -39,7 +40,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import VMambaForImageClassification, VMambaModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -63,7 +63,7 @@ class VMambaModelTester:
         dims=[96, 192, 384, 768],
         d_state=16,
         drop_rate=0,
-        attn_drop_rate=0.,
+        attn_drop_rate=0.0,
         drop_path_rate=0.1,
         patch_norm=True,
         use_checkpoint=False,
@@ -110,7 +110,7 @@ class VMambaModelTester:
             attn_drop_rate=self.attn_drop_rate,
             drop_path_rate=self.drop_path_rate,
             patch_norm=self.patch_norm,
-            use_checkpoint = False
+            use_checkpoint=False,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -236,7 +236,7 @@ class VMambaModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
+        self.assertEqual(outputs.shape, expected_shape)
 
         expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
 

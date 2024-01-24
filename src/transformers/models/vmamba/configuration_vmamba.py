@@ -14,7 +14,6 @@
 # limitations under the License.
 """ VMamba model configuration """
 
-import torch
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -86,10 +85,9 @@ class VMambaConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
-    model_type = "vmamba"
+    ```"""
 
+    model_type = "vmamba"
 
     def __init__(
         self,
@@ -100,11 +98,11 @@ class VMambaConfig(PretrainedConfig):
         dims=[96, 192, 384, 768],
         d_state=16,
         drop_rate=0,
-        attn_drop_rate=0.,
+        attn_drop_rate=0.0,
         drop_path_rate=0.1,
         patch_norm=True,
         use_checkpoint=False,
-        **kwargs
+        **kwargs,
     ):
         self.patch_size = patch_size
         self.in_channels = in_channels

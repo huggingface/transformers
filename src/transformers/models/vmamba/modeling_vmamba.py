@@ -15,8 +15,6 @@
 """ PyTorch VMamba model. """
 
 
-
-
 import math
 import os
 from functools import partial
@@ -25,7 +23,7 @@ from typing import Callable
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-from mamba_ssm.ops.selective_scan_interface import selective_scan_ref # selective_scan_fn
+from mamba_ssm.ops.selective_scan_interface import selective_scan_ref  # selective_scan_fn
 from timm.models.layers import DropPath
 from torch import nn
 
@@ -129,13 +127,14 @@ def load_tf_weights_in_vmamba(model, config, tf_checkpoint_path):
 
 
 class PatchEmbed2D(nn.Module):
-    r""" Image to Patch Embedding
+    r"""Image to Patch Embedding
     Args:
         patch_size (int): Patch token size. Default: 4.
         in_chans (int): Number of input image channels. Default: 3.
         embed_dim (int): Number of linear projection output channels. Default: 96.
         norm_layer (nn.Module, optional): Normalization layer. Default: None
     """
+
     def __init__(self, patch_size=4, in_chans=3, embed_dim=96, norm_layer=None, **kwargs):
         super().__init__()
         if isinstance(patch_size, int):
@@ -154,7 +153,7 @@ class PatchEmbed2D(nn.Module):
 
 
 class PatchMerging2D(nn.Module):
-    r""" Patch Merging Layer.
+    r"""Patch Merging Layer.
     Args:
         input_resolution (tuple[int]): Resolution of input feature.
         dim (int): Number of input channels.
@@ -182,13 +181,13 @@ class PatchMerging2D(nn.Module):
         x3 = x[:, 1::2, 1::2, :]  # B H/2 W/2 C
 
         if SHAPE_FIX[0] > 0:
-            x0 = x0[:, :SHAPE_FIX[0], :SHAPE_FIX[1], :]
-            x1 = x1[:, :SHAPE_FIX[0], :SHAPE_FIX[1], :]
-            x2 = x2[:, :SHAPE_FIX[0], :SHAPE_FIX[1], :]
-            x3 = x3[:, :SHAPE_FIX[0], :SHAPE_FIX[1], :]
+            x0 = x0[:, : SHAPE_FIX[0], : SHAPE_FIX[1], :]
+            x1 = x1[:, : SHAPE_FIX[0], : SHAPE_FIX[1], :]
+            x2 = x2[:, : SHAPE_FIX[0], : SHAPE_FIX[1], :]
+            x3 = x3[:, : SHAPE_FIX[0], : SHAPE_FIX[1], :]
 
         x = torch.cat([x0, x1, x2, x3], -1)  # B H/2 W/2 4*C
-        x = x.view(B, H//2, W//2, 4 * C)  # B H/2*W/2 4*C
+        x = x.view(B, H // 2, W // 2, 4 * C)  # B H/2*W/2 4*C
 
         x = self.norm(x)
         x = self.reduction(x)
@@ -209,7 +208,7 @@ class SS2D(nn.Module):
         dt_init="random",
         dt_scale=1.0,
         dt_init_floor=1e-4,
-        dropout=0.,
+        dropout=0.0,
         conv_bias=True,
         bias=False,
         device=None,
@@ -244,30 +243,49 @@ class SS2D(nn.Module):
             nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
             nn.Linear(self.d_inner, (self.dt_rank + self.d_state * 2), bias=False, **factory_kwargs),
         )
-        self.x_proj_weight = nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0)) # (K=4, N, inner)
+        self.x_proj_weight = nn.Parameter(torch.stack([t.weight for t in self.x_proj], dim=0))  # (K=4, N, inner)
         del self.x_proj
 
         self.dt_projs = (
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs),
-            self.dt_init(self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
+            self.dt_init(
+                self.dt_rank, self.d_inner, dt_scale, dt_init, dt_min, dt_max, dt_init_floor, **factory_kwargs
+            ),
         )
-        self.dt_projs_weight = nn.Parameter(torch.stack([t.weight for t in self.dt_projs], dim=0)) # (K=4, inner, rank)
-        self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0)) # (K=4, inner)
+        self.dt_projs_weight = nn.Parameter(
+            torch.stack([t.weight for t in self.dt_projs], dim=0)
+        )  # (K=4, inner, rank)
+        self.dt_projs_bias = nn.Parameter(torch.stack([t.bias for t in self.dt_projs], dim=0))  # (K=4, inner)
         del self.dt_projs
 
-        self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True) # (K=4, D, N)
-        self.Ds = self.D_init(self.d_inner, copies=4, merge=True) # (K=4, D, N)
+        self.A_logs = self.A_log_init(self.d_state, self.d_inner, copies=4, merge=True)  # (K=4, D, N)
+        self.Ds = self.D_init(self.d_inner, copies=4, merge=True)  # (K=4, D, N)
 
         self.selective_scan = selective_scan_ref
 
         self.out_norm = nn.LayerNorm(self.d_inner)
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=bias, **factory_kwargs)
-        self.dropout = nn.Dropout(dropout) if dropout > 0. else None
+        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else None
 
     @staticmethod
-    def dt_init(dt_rank, d_inner, dt_scale=1.0, dt_init="random", dt_min=0.001, dt_max=0.1, dt_init_floor=1e-4, **factory_kwargs):
+    def dt_init(
+        dt_rank,
+        d_inner,
+        dt_scale=1.0,
+        dt_init="random",
+        dt_min=0.001,
+        dt_max=0.1,
+        dt_init_floor=1e-4,
+        **factory_kwargs,
+    ):
         dt_proj = nn.Linear(dt_rank, d_inner, bias=True, **factory_kwargs)
 
         # Initialize special dt projection to preserve variance at initialization
@@ -281,8 +299,7 @@ class SS2D(nn.Module):
 
         # Initialize dt bias so that F.softplus(dt_bias) is between dt_min and dt_max
         dt = torch.exp(
-            torch.rand(d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min))
-            + math.log(dt_min)
+            torch.rand(d_inner, **factory_kwargs) * (math.log(dt_max) - math.log(dt_min)) + math.log(dt_min)
         ).clamp(min=dt_init_floor)
         # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
         inv_dt = dt + torch.log(-torch.expm1(-dt))
@@ -331,8 +348,10 @@ class SS2D(nn.Module):
         L = H * W
         K = 4
 
-        x_hwwh = torch.stack([x.view(B, -1, L), torch.transpose(x, dim0=2, dim1=3).contiguous().view(B, -1, L)], dim=1).view(B, 2, -1, L)
-        xs = torch.cat([x_hwwh, torch.flip(x_hwwh, dims=[-1])], dim=1) # (b, k, d, l)
+        x_hwwh = torch.stack(
+            [x.view(B, -1, L), torch.transpose(x, dim0=2, dim1=3).contiguous().view(B, -1, L)], dim=1
+        ).view(B, 2, -1, L)
+        xs = torch.cat([x_hwwh, torch.flip(x_hwwh, dims=[-1])], dim=1)  # (b, k, d, l)
 
         x_dbl = torch.einsum("b k d l, k c d -> b k c l", xs.view(B, K, -1, L), self.x_proj_weight)
         # x_dbl = x_dbl + self.x_proj_bias.view(1, K, -1, 1)
@@ -340,17 +359,22 @@ class SS2D(nn.Module):
         dts = torch.einsum("b k r l, k d r -> b k d l", dts.view(B, K, -1, L), self.dt_projs_weight)
         # dts = dts + self.dt_projs_bias.view(1, K, -1, 1)
 
-        xs = xs.float().view(B, -1, L) # (b, k * d, l)
-        dts = dts.contiguous().float().view(B, -1, L) # (b, k * d, l)
-        Bs = Bs.float().view(B, K, -1, L) # (b, k, d_state, l)
-        Cs = Cs.float().view(B, K, -1, L) # (b, k, d_state, l)
-        Ds = self.Ds.float().view(-1) # (k * d)
+        xs = xs.float().view(B, -1, L)  # (b, k * d, l)
+        dts = dts.contiguous().float().view(B, -1, L)  # (b, k * d, l)
+        Bs = Bs.float().view(B, K, -1, L)  # (b, k, d_state, l)
+        Cs = Cs.float().view(B, K, -1, L)  # (b, k, d_state, l)
+        Ds = self.Ds.float().view(-1)  # (k * d)
         As = -torch.exp(self.A_logs.float()).view(-1, self.d_state)  # (k * d, d_state)
-        dt_projs_bias = self.dt_projs_bias.float().view(-1) # (k * d)
+        dt_projs_bias = self.dt_projs_bias.float().view(-1)  # (k * d)
 
         out_y = self.selective_scan(
-            xs, dts,
-            As, Bs, Cs, Ds, z=None,
+            xs,
+            dts,
+            As,
+            Bs,
+            Cs,
+            Ds,
+            z=None,
             delta_bias=dt_projs_bias,
             delta_softplus=True,
             return_last_state=False,
@@ -367,10 +391,10 @@ class SS2D(nn.Module):
         B, H, W, C = x.shape
 
         xz = self.in_proj(x)
-        x, z = xz.chunk(2, dim=-1) # (b, h, w, d)
+        x, z = xz.chunk(2, dim=-1)  # (b, h, w, d)
 
         x = x.permute(0, 3, 1, 2).contiguous()
-        x = self.act(self.conv2d(x)) # (b, d, h, w)
+        x = self.act(self.conv2d(x))  # (b, d, h, w)
         y1, y2, y3, y4 = self.forward_core(x)
         assert y1.dtype == torch.float32
         y = y1 + y2 + y3 + y4
@@ -404,7 +428,7 @@ class VSSBlock(nn.Module):
 
 
 class VSSLayer(nn.Module):
-    """ A basic Swin Transformer layer for one stage.
+    """A basic Swin Transformer layer for one stage.
     Args:
         dim (int): Number of input channels.
         depth (int): Number of blocks.
@@ -420,8 +444,8 @@ class VSSLayer(nn.Module):
         self,
         dim,
         depth,
-        attn_drop=0.,
-        drop_path=0.,
+        attn_drop=0.0,
+        drop_path=0.0,
         norm_layer=nn.LayerNorm,
         downsample=None,
         use_checkpoint=False,
@@ -432,29 +456,33 @@ class VSSLayer(nn.Module):
         self.dim = dim
         self.use_checkpoint = use_checkpoint
 
-        self.blocks = nn.ModuleList([
-            VSSBlock(
-                hidden_dim=dim,
-                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                norm_layer=norm_layer,
-                attn_drop_rate=attn_drop,
-                d_state=d_state,
-            )
-            for i in range(depth)])
+        self.blocks = nn.ModuleList(
+            [
+                VSSBlock(
+                    hidden_dim=dim,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                    norm_layer=norm_layer,
+                    attn_drop_rate=attn_drop,
+                    d_state=d_state,
+                )
+                for i in range(depth)
+            ]
+        )
 
-        if True: # is this really applied? Yes, but been overriden later in VSSM!
+        if True:  # is this really applied? Yes, but been overriden later in VSSM!
+
             def _init_weights(module: nn.Module):
                 for name, p in module.named_parameters():
                     if name in ["out_proj.weight"]:
-                        p = p.clone().detach_() # fake init, just to keep the seed ....
+                        p = p.clone().detach_()  # fake init, just to keep the seed ....
                         nn.init.kaiming_uniform_(p, a=math.sqrt(5))
+
             self.apply(_init_weights)
 
         if downsample is not None:
             self.downsample = downsample(dim=dim, norm_layer=norm_layer)
         else:
             self.downsample = None
-
 
     def forward(self, x):
         for block in self.blocks:
@@ -482,7 +510,7 @@ class VMambaPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -587,27 +615,33 @@ class VMambaModel(VMambaPreTrainedModel):
         self.num_layers = len(config.depths)
         dims = config.dims
         if isinstance(dims, int):
-            dims = [int(dims * 2 ** i_layer) for i_layer in range(self.num_layers)]
+            dims = [int(dims * 2**i_layer) for i_layer in range(self.num_layers)]
         self.embed_dim = dims[0]
         self.num_features = dims[-1]
         self.dims = dims
 
-        self.patch_embed = PatchEmbed2D(patch_size=config.patch_size, in_chans=config.in_channels, embed_dim=self.embed_dim,
-            norm_layer=torch.nn.LayerNorm)
+        self.patch_embed = PatchEmbed2D(
+            patch_size=config.patch_size,
+            in_chans=config.in_channels,
+            embed_dim=self.embed_dim,
+            norm_layer=torch.nn.LayerNorm,
+        )
 
         self.pos_drop = nn.Dropout(p=config.drop_rate)
 
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]  # stochastic depth decay rule
+        dpr = [
+            x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]  # stochastic depth decay rule
 
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
             layer = VSSLayer(
                 dim=dims[i_layer],
                 depth=config.depths[i_layer],
-                d_state=math.ceil(dims[0] / 6) if config.d_state is None else config.d_state, # 20240109
+                d_state=math.ceil(dims[0] / 6) if config.d_state is None else config.d_state,  # 20240109
                 drop=config.drop_rate,
                 attn_drop=config.attn_drop_rate,
-                drop_path=dpr[sum(config.depths[:i_layer]):sum(config.depths[:i_layer + 1])],
+                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                 norm_layer=torch.nn.LayerNorm,
                 downsample=PatchMerging2D if (i_layer < self.num_layers - 1) else None,
                 use_checkpoint=config.use_checkpoint,
@@ -618,7 +652,6 @@ class VMambaModel(VMambaPreTrainedModel):
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
         # self.apply(self._init_weights)
-
 
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -643,7 +676,7 @@ class VMambaModel(VMambaPreTrainedModel):
         for layer in self.layers:
             x = layer(x)
 
-        x = torch.flatten(x, 1, 2) # B H W C -> B L C
+        x = torch.flatten(x, 1, 2)  # B H W C -> B L C
         x = self.norm(x)  # B L C
         x = self.avgpool(x.transpose(1, 2))  # B C 1
         x = torch.flatten(x, 1)
@@ -656,8 +689,9 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
         super().__init__(config)
 
         self.vmamba = VMambaModel(config)
-        self.head = nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
-
+        self.head = (
+            nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
+        )
 
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -665,10 +699,7 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def forward(
-        self,
-        inputs
-    ):
+    def forward(self, inputs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.

@@ -19,14 +19,12 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import VMambaForImageClassification
-
 from transformers.models.vmamba.configuration_vmamba import VMambaConfig
 from transformers.models.vmamba.image_processing_vmamba import VMambaImageProcessor
 from transformers.utils import logging
@@ -64,7 +62,7 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
     # load parameters
     checkpoint = torch.load(pytorch_file)
 
-    state = None
+    # state = None
     # if isinstance(checkpoint, dict) and architecture in [
     #     "image_classification",
     #     "image_classification_fourier",
@@ -89,7 +87,7 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
     #         for param_name, param in parameters.items():
     #             state_dict[scope_name + "/" + param_name] = param
 
-    state_dict = checkpoint['model']
+    state_dict = checkpoint["model"]
 
     # # rename keys
     state_dict = rename_keys(state_dict, architecture=architecture)
@@ -98,11 +96,7 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
     config = VMambaConfig()
 
     repo_id = "huggingface/label-files"
-    if architecture == "MLM":
-        config.qk_channels = 8 * 32
-        config.v_channels = 1280
-        model = PerceiverForMaskedLM(config)
-    elif architecture == "image_classification" :
+    if architecture == "image_classification":
         config.num_latents = 512
         config.d_latents = 1024
         config.d_model = 512
@@ -122,15 +116,15 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
 
         config.image_size = 224
         model = VMambaForImageClassification(config)
-    elif architecture == "optical_flow":
-        config.num_latents = 2048
-        config.d_latents = 512
-        config.d_model = 322
-        config.num_blocks = 1
-        config.num_self_attends_per_block = 24
-        config.num_self_attention_heads = 16
-        config.num_cross_attention_heads = 1
-        model = PerceiverForOpticalFlow(config)
+    # elif architecture == "optical_flow":
+    #     config.num_latents = 2048
+    #     config.d_latents = 512
+    #     config.d_model = 322
+    #     config.num_blocks = 1
+    #     config.num_self_attends_per_block = 24
+    #     config.num_self_attention_heads = 16
+    #     config.num_cross_attention_heads = 1
+    #     model = PerceiverForOpticalFlow(config)
     else:
         raise ValueError(f"Architecture {architecture} not supported")
     model.eval()
@@ -139,7 +133,7 @@ def convert_vmamba_checkpoint(pytorch_file, pytorch_dump_folder_path, architectu
     model.load_state_dict(state_dict)
 
     # prepare dummy input
-    input_mask = None
+    # input_mask = None
     if architecture == "image_classification":
         image_processor = VMambaImageProcessor()
         image = prepare_img()

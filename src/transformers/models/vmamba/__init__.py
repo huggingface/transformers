@@ -44,8 +44,6 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_vmamba import VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, VMambaConfig
 
@@ -62,7 +60,6 @@ if TYPE_CHECKING:
             VMambaPreTrainedModel,
             load_tf_weights_in_vmamba,
         )
-
 
 
 else:

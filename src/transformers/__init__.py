@@ -130,7 +130,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.vmamba": ["VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "VMambaConfig"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -907,6 +906,7 @@ _import_structure = {
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
     ],
+    "models.vmamba": ["VMAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP", "VMambaConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -1401,16 +1401,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.vmamba"].extend(
-        [
-            "VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VMambaForImageClassification",
-            "VMambaModel",
-            "VMambaPreTrainedModel",
-            "load_tf_weights_in_vmamba",
-        ]
-    )
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1425,6 +1415,7 @@ else:
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.align"].extend(
         [
             "ALIGN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3516,6 +3507,15 @@ else:
             "VivitForVideoClassification",
             "VivitModel",
             "VivitPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vmamba"].extend(
+        [
+            "VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VMambaForImageClassification",
+            "VMambaModel",
+            "VMambaPreTrainedModel",
+            "load_tf_weights_in_vmamba",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
