@@ -16,10 +16,9 @@
 
 import unittest
 
-from transformers import BitsAndBytesConfig, IdeficsConfig, is_tf_available, is_vision_available
+from transformers import IdeficsConfig, is_tf_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    require_bitsandbytes,
     require_tf,
     require_vision,
     slow,
@@ -36,7 +35,7 @@ if is_tf_available():
 
     from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.idefics.modeling_tf_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -463,7 +462,6 @@ class TFIdeficsModelIntegrationTest(TestCasePlus):
             else None
         )
 
-    @require_bitsandbytes
     @slow
     def test_inference_natural_language_visual_reasoning(self):
         cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
@@ -490,10 +488,6 @@ class TFIdeficsModelIntegrationTest(TestCasePlus):
         ]
 
         # the CI gpu is small so using quantization to fit
-        quantization_config = BitsAndBytesConfig(
-            load_in_8bit=True,
-            bnb_4bit_compute_dtype="float16",
-        )
         model = TFIdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b", from_pt=True)
         processor = self.default_processor
         inputs = processor(prompts, return_tensors="tf")
