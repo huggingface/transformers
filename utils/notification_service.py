@@ -29,7 +29,7 @@ from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
 
-# client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
 
 NON_MODEL_TEST_MODULES = [
     "benchmark",
