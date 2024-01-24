@@ -69,6 +69,7 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
+
     from .trainer_pt_utils import AcceleratorConfig
 
 if is_torch_tpu_available(check_device=False):
