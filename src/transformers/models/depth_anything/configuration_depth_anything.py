@@ -38,11 +38,16 @@ class DepthAnythingConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `False`):
+            Whether to use pretrained weights for the backbone.
         patch_size (`int`, *optional*, defaults to 14):
             The size of the patches to extract from the backbone features.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -63,7 +68,7 @@ class DepthAnythingConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DepthAnythingForDepthEstimation, DepthAnythingConfig
+    >>> from transformers import DepthAnythingForDepthEstimation, DepthAnythingConfig, Dinov2Config
 
     >>> # Initializing a DepthAnything small style configuration
     >>> configuration = DepthAnythingConfig()
@@ -80,6 +85,8 @@ class DepthAnythingConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
         patch_size=14,
         initializer_range=0.02,
         reassemble_hidden_size=384,
@@ -92,12 +99,25 @@ class DepthAnythingConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
-        if isinstance(backbone_config, dict):
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
+            backbone_config = CONFIG_MAPPING["dinov2"](
+                out_indices=[9, 10, 11, 12], apply_layernorm=True, reshape_hidden_states=False
+            )
+        elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.reassemble_hidden_size = reassemble_hidden_size
         self.patch_size = patch_size
         self.initializer_range = initializer_range
