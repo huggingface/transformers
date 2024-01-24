@@ -75,7 +75,7 @@ jobs:
     needs: setup
     strategy:
       matrix:
-        slice_id: [0, 1, 2]
+        slice_id: [0, 1]
     uses: ./.github/workflows/self-scheduled-model-jobs.yml
     with:
       folders: ${{ needs.setup.outputs.matrix_2 }}
