@@ -197,7 +197,7 @@ class FlaxGoldenGateAttention(nn.Module):
         config = self.config
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.config.head_dim
+        self.head_dim = config.head_dim
         self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         self.num_key_value_heads = config.num_key_value_heads
@@ -220,7 +220,7 @@ class FlaxGoldenGateAttention(nn.Module):
             kernel_init=kernel,
         )
         self.o_proj = nn.Dense(
-            self.num_heads * self.head_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
+            self.embed_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
         )
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
@@ -230,7 +230,7 @@ class FlaxGoldenGateAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
 
     def _merge_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
+        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads * self.head_dim,))
 
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -707,7 +707,12 @@ class FlaxGoldenGateForCausalLMModule(nn.Module):
         )
 
         hidden_states = outputs[0]
-        lm_logits = self.lm_head(hidden_states)
+
+        if self.config.tie_word_embeddings:
+            shared_kernel = self.model.variables["params"]["embed_tokens"]["embedding"].T
+            lm_logits = self.lm_head.apply({"params": {"kernel": shared_kernel}}, hidden_states)
+        else:
+            lm_logits = self.lm_head(hidden_states)
 
         if not return_dict:
             return (lm_logits,) + outputs[1:]

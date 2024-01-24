@@ -17,7 +17,7 @@ import unittest
 
 import numpy as np
 
-from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, AutoModelForCausalLM, AutoTokenizer
+from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, FlaxGoldenGateForCausalLM, AutoTokenizer
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -207,7 +207,7 @@ class FlaxGoldenGateModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, u
 # @slow
 @require_flax
 class FlaxGoldenGateIntegrationTest(unittest.TestCase):
-    
+    input_text = ["Hello my name is", "Hi"]
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
@@ -216,7 +216,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -234,7 +234,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype = jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -252,7 +252,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with the following code:\n\n<code>\n    public static void main(",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -271,7 +271,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -289,7 +289,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with the new version of the plugin.\n\nI have a page with",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -307,7 +307,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             'Hi,\n\nI have a question about the "<strong><em><strong><em><strong><em><strong><em><strong><em><strong>',
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.bfloat16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
