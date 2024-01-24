@@ -35,7 +35,7 @@ if is_tf_available():
 
     from transformers import IdeficsProcessor, TFIdeficsForVisionText2Text, TFIdeficsModel
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.models.idefics.modeling_tf_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.idefics.modeling_tf_idefics import TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
@@ -422,7 +422,7 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFIdeficsModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 

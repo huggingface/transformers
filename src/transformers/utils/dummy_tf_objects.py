@@ -1614,7 +1614,7 @@ class TFHubertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
-TFIDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+TF_IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TFIdeficsForVisionText2Text(metaclass=DummyObject):
