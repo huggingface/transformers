@@ -24,7 +24,7 @@ import time
 from typing import Dict, List, Optional, Union
 
 import requests
-from get_ci_error_statistics import get_job_links, get_jobs
+from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports
 from slack_sdk import WebClient
 
@@ -947,7 +947,7 @@ if __name__ == "__main__":
     for job in github_actions_jobs:
         for step in job["steps"]:
             if step["name"].startswith("Test suite reports artifacts: "):
-                artifact_name = step["name"][len("Test suite reports artifacts: "):]
+                artifact_name = step["name"][len("Test suite reports artifacts: ") :]
                 artifact_name_to_job_map[artifact_name] = job
                 break
 
