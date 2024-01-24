@@ -61,6 +61,10 @@
     title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性
 - sections:
+  - local: contributing
+    title: 如何为 🤗 Transformers 做贡献？
+  title: 贡献
+- sections:
   - local: task_summary
     title: 🤗Transformers能做什么
   - local: tokenizer_summary
@@ -107,6 +111,26 @@
     - local: main_classes/image_processor
       title: Image Processor
     title: 主要类
+  - sections:
+    - local: internal/modeling_utils
+      title: 自定义层和工具
+    - local: internal/pipelines_utils
+      title: pipelines工具
+    - local: internal/tokenization_utils
+      title: Tokenizers工具
+    - local: internal/trainer_utils
+      title: 训练器工具
+    - local: internal/generation_utils
+      title: 生成工具
+    - local: internal/image_processing_utils
+      title: 图像处理工具
+    - local: internal/audio_utils
+      title: 音频处理工具
+    - local: internal/file_utils
+      title: 通用工具
+    - local: internal/time_series_utils
+      title: 时序数据工具
+    title: 内部辅助工具
   title: 应用程序接口 (API) 
 
 

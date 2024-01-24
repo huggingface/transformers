@@ -870,6 +870,7 @@ class CLIPVisionTransformer(nn.Module):
 class CLIPVisionModel(CLIPPreTrainedModel):
     config_class = CLIPVisionConfig
     main_input_name = "pixel_values"
+    _no_split_modules = ["CLIPEncoderLayer"]
 
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)

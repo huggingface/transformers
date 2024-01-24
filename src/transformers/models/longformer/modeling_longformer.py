@@ -1598,7 +1598,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
         # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
-            logger.info(
+            logger.warning_once(
                 f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
             )
@@ -1917,7 +1917,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:
-            logger.info("Initializing global attention on CLS token...")
+            logger.warning_once("Initializing global attention on CLS token...")
             global_attention_mask = torch.zeros_like(input_ids)
             # global attention on cls token
             global_attention_mask[:, 0] = 1
@@ -2270,7 +2270,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on multiple choice...")
+            logger.warning_once("Initializing global attention on multiple choice...")
             # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(
                 [

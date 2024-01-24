@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_torch_available, logging
+from ..utils import is_auto_awq_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -363,7 +363,7 @@ class GPTQConfig(QuantizationConfigMixin):
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
-            The transformers block name to quantize.
+            The transformers block name to quantize. If None, we will infer the block name using common patterns (e.g. model.layers)
         module_name_preceding_first_block (`List[str]`, *optional*):
             The layers that are preceding the first Transformer block.
         batch_size (`int`, *optional*, defaults to 1):
@@ -379,7 +379,14 @@ class GPTQConfig(QuantizationConfigMixin):
             The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
             to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
-                Whether to cache block outputs to reuse as inputs for the succeeding block.
+            Whether to cache block outputs to reuse as inputs for the succeeding block.
+        modules_in_block_to_quantize (`List[List[str]]`, *optional*):
+            List of list of module names to quantize in the specified block. This argument is useful to exclude certain linear modules from being quantized.
+            The block to quantize can be specified by setting `block_name_to_quantize`. We will quantize each list sequentially. If not set, we will quantize all linear layers.
+            Example: `modules_in_block_to_quantize =[["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"], ["self_attn.o_proj"]]`.
+            In this example, we will first quantize the q,k,v layers simultaneously since they are independent.
+            Then, we will quantize `self_attn.o_proj` layer with the q,k,v layers quantized. This way, we will get
+            better results since it reflects the real input `self_attn.o_proj` will get when the model is quantized.
     """
 
     def __init__(
@@ -402,6 +409,7 @@ class GPTQConfig(QuantizationConfigMixin):
         max_input_length: Optional[int] = None,
         exllama_config: Optional[Dict[str, Any]] = None,
         cache_block_outputs: bool = True,
+        modules_in_block_to_quantize: Optional[List[List[str]]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -424,6 +432,7 @@ class GPTQConfig(QuantizationConfigMixin):
         self.exllama_config = exllama_config
         self.disable_exllama = kwargs.pop("disable_exllama", None)
         self.cache_block_outputs = cache_block_outputs
+        self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
 
     def get_loading_attributes(self):
@@ -494,6 +503,12 @@ class GPTQConfig(QuantizationConfigMixin):
                     raise ValueError(
                         f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
                     )
+        if self.modules_in_block_to_quantize is not None:
+            optimum_version = version.parse(importlib.metadata.version("optimum"))
+            if optimum_version < version.parse("1.15.0"):
+                raise ValueError(
+                    "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
+                )
 
     def to_dict(self):
         config_dict = super().to_dict()
@@ -543,6 +558,16 @@ class AwqConfig(QuantizationConfigMixin):
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
+        do_fuse (`bool`, *optional*, defaults to `False`):
+            Whether to fuse attention and mlp layers together for faster inference
+        fuse_max_seq_len (`int`, *optional*):
+            The Maximum sequence length to generate when using fusing.
+        modules_to_fuse (`dict`, *optional*, default to `None`):
+            Overwrite the natively supported fusing scheme with the one specified by the users.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+            Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
     """
 
     def __init__(
@@ -552,6 +577,10 @@ class AwqConfig(QuantizationConfigMixin):
         zero_point: bool = True,
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
+        do_fuse: Optional[bool] = None,
+        fuse_max_seq_len: Optional[int] = None,
+        modules_to_fuse: Optional[dict] = None,
+        modules_to_not_convert: Optional[List] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -561,6 +590,15 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
+        self.fuse_max_seq_len = fuse_max_seq_len
+        self.modules_to_not_convert = modules_to_not_convert
+
+        self.modules_to_fuse = modules_to_fuse
+        if do_fuse is None:
+            self.do_fuse = modules_to_fuse is not None and len(modules_to_fuse) > 0
+        else:
+            self.do_fuse = do_fuse
+        self.fuse_max_seq_len = fuse_max_seq_len
 
         self.post_init()
 
@@ -587,3 +625,55 @@ class AwqConfig(QuantizationConfigMixin):
             major, minor = compute_capability
             if major < 8:
                 raise ValueError("LLM-AWQ backend is only supported on GPUs with compute capability >= 8.0")
+
+        if self.do_fuse and self.fuse_max_seq_len is None:
+            raise ValueError(
+                "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
+            )
+
+        if self.do_fuse:
+            awq_version_supports_fusing = False
+            MIN_AWQ_VERSION = "0.1.7"
+            if is_auto_awq_available():
+                awq_version_supports_fusing = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
+                    MIN_AWQ_VERSION
+                )
+
+            if not awq_version_supports_fusing:
+                raise ValueError(
+                    f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+        if self.modules_to_not_convert is not None:
+            awq_version_supports_non_conversion = False
+            MIN_AWQ_VERSION = "0.1.8"
+            if is_auto_awq_available():
+                awq_version_supports_non_conversion = version.parse(
+                    importlib.metadata.version("autoawq")
+                ) >= version.parse(MIN_AWQ_VERSION)
+
+            if not awq_version_supports_non_conversion:
+                raise ValueError(
+                    f"You current version of `autoawq` does not support module quantization skipping, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+        if self.do_fuse and self.modules_to_fuse is not None:
+            required_keys = [
+                "hidden_size",
+                "num_attention_heads",
+                "num_key_value_heads",
+                "mlp",
+                "attention",
+                "layernorm",
+                "use_alibi",
+            ]
+            if not all(key in self.modules_to_fuse for key in required_keys):
+                raise ValueError(
+                    f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
+                )
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict

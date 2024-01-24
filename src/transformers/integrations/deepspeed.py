@@ -129,7 +129,7 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
     fill_only = partialmethod(fill_match, must_match=False)
 
-    def trainer_config_process(self, args):
+    def trainer_config_process(self, args, auto_find_batch_size=False):
         """
         Adjust the config with `TrainingArguments` values. This stage is run during `TrainingArguments` object
         creation.
@@ -138,10 +138,15 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
         self.fill_match(
-            "train_micro_batch_size_per_gpu", args.per_device_train_batch_size, "per_device_train_batch_size"
+            "train_micro_batch_size_per_gpu",
+            args.per_device_train_batch_size,
+            "per_device_train_batch_size",
+            not auto_find_batch_size,
         )
         self.fill_match("gradient_accumulation_steps", args.gradient_accumulation_steps, "gradient_accumulation_steps")
-        self.fill_match("train_batch_size", train_batch_size, "train_batch_size (calculated)")
+        self.fill_match(
+            "train_batch_size", train_batch_size, "train_batch_size (calculated)", not auto_find_batch_size
+        )
         self.fill_match("gradient_clipping", args.max_grad_norm, "max_grad_norm")
 
         self.fill_match("optimizer.params.lr", args.learning_rate, "learning_rate")
@@ -275,14 +280,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
 
     config = hf_deepspeed_config.config
 
-    # Optimizer + Scheduler
-    # Currently supported combos:
-    # 1. DS scheduler + DS optimizer: Yes
-    # 2. HF scheduler + HF optimizer: Yes
-    # 3. DS scheduler + HF optimizer: Yes
-    # 4. HF scheduler + DS optimizer: No
-    #
-    # Unless Offload is enabled in which case it's:
+    # Mixing and matching DS schedulers and optimizers is supported unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
@@ -343,6 +341,8 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
         num_training_steps: per single gpu
         resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
         inference: launch in inference mode (no optimizer and no lr scheduler)
+        auto_find_batch_size: whether to ignore the `train_micro_batch_size_per_gpu` argument as it's being
+            set automatically by the auto batch size finder
 
     Returns: optimizer, lr_scheduler
 

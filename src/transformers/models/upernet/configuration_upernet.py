@@ -36,6 +36,12 @@ class UperNetConfig(PretrainedConfig):
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `False`):
+            Whether to use pretrained weights for the backbone.
         hidden_size (`int`, *optional*, defaults to 512):
             The number of hidden units in the convolutional layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -75,6 +81,8 @@ class UperNetConfig(PretrainedConfig):
     def __init__(
         self,
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
         hidden_size=512,
         initializer_range=0.02,
         pool_scales=[1, 2, 3, 6],
@@ -88,8 +96,13 @@ class UperNetConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
 
-        if backbone_config is None:
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
             backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
         elif isinstance(backbone_config, dict):
@@ -98,6 +111,8 @@ class UperNetConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
         self.pool_scales = pool_scales

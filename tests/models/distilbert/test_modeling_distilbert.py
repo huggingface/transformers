@@ -319,13 +319,11 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
-                )
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
                 model.to(torch_device)
 
                 logits = model(dummy_input, output_hidden_states=True).hidden_states[-1]
@@ -373,12 +371,13 @@ class DistilBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=True
+                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
                 )
                 model_fa.to(torch_device)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, use_flash_attention_2=False
+                    tmpdirname,
+                    torch_dtype=torch.bfloat16,
                 )
                 model.to(torch_device)
 

@@ -78,6 +78,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.c_proj = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_proj")
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
         self.resid_dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.n_state = n_state
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -153,6 +154,17 @@ class TFAttention(tf.keras.layers.Layer):
         outputs = [a] + attn_outputs[1:]
         return outputs  # a, (attentions)
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "c_attn", None) is not None:
+            with tf.name_scope(self.c_attn.name):
+                self.c_attn.build([None, None, self.n_state * 3])
+        if getattr(self, "c_proj", None) is not None:
+            with tf.name_scope(self.c_proj.name):
+                self.c_proj.build([None, None, self.n_state])
+
 
 class TFMLP(tf.keras.layers.Layer):
     def __init__(self, n_state, config, **kwargs):
@@ -162,12 +174,25 @@ class TFMLP(tf.keras.layers.Layer):
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
         self.act = get_tf_activation("gelu")
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
+        self.nx = nx
+        self.n_state = n_state
 
     def call(self, x, training=False):
         h = self.act(self.c_fc(x))
         h2 = self.c_proj(h)
         h2 = self.dropout(h2, training=training)
         return h2
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "c_fc", None) is not None:
+            with tf.name_scope(self.c_fc.name):
+                self.c_fc.build([None, None, self.n_state])
+        if getattr(self, "c_proj", None) is not None:
+            with tf.name_scope(self.c_proj.name):
+                self.c_proj.build([None, None, self.nx])
 
 
 class TFBlock(tf.keras.layers.Layer):
@@ -178,6 +203,7 @@ class TFBlock(tf.keras.layers.Layer):
         self.ln_1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_1")
         self.mlp = TFMLP(4 * nx, config, name="mlp")
         self.ln_2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_2")
+        self.nx = nx
 
     def call(self, x, attention_mask, head_mask, output_attentions, training=False):
         output_attn = self.attn(x, attention_mask, head_mask, output_attentions, training=training)
@@ -189,6 +215,23 @@ class TFBlock(tf.keras.layers.Layer):
 
         outputs = [h] + output_attn[1:]
         return outputs  # x, (attentions)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attn", None) is not None:
+            with tf.name_scope(self.attn.name):
+                self.attn.build(None)
+        if getattr(self, "ln_1", None) is not None:
+            with tf.name_scope(self.ln_1.name):
+                self.ln_1.build([None, None, self.nx])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "ln_2", None) is not None:
+            with tf.name_scope(self.ln_2.name):
+                self.ln_2.build([None, None, self.nx])
 
 
 @keras_serializable
@@ -213,7 +256,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         with tf.name_scope("positions_embed"):
             self.positions_embed = self.add_weight(
                 name="embeddings",
@@ -221,7 +264,16 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "tokens_embed", None) is not None:
+            with tf.name_scope(self.tokens_embed.name):
+                self.tokens_embed.build(None)
+        if getattr(self, "h", None) is not None:
+            for layer in self.h:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
 
     def get_input_embeddings(self):
         return self.tokens_embed
@@ -528,6 +580,14 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         )
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+
 
 @add_start_docstrings(
     """
@@ -612,6 +672,14 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         return {"input_ids": inputs}
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
 
 @add_start_docstrings(
@@ -734,6 +802,17 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
         }
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "multiple_choice_head", None) is not None:
+            with tf.name_scope(self.multiple_choice_head.name):
+                self.multiple_choice_head.build(None)
+
 
 @add_start_docstrings(
     """
@@ -761,6 +840,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             use_bias=False,
         )
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
@@ -848,3 +928,14 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "score", None) is not None:
+            with tf.name_scope(self.score.name):
+                self.score.build([None, None, self.config.n_embd])
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)

@@ -87,6 +87,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         )
         self.hidden_size = config.hidden_size
         self.num_patches = (config.input_size**2) // (patch_sizes[0] * patch_sizes[1])
+        self.config = config
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -96,6 +97,14 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         embeddings = self.proj(pixel_values)
         embeddings = tf.reshape(embeddings, (-1, self.num_patches, self.hidden_size))
         return embeddings
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "proj", None) is not None:
+            with tf.name_scope(self.proj.name):
+                self.proj.build([None, None, None, self.config.num_channels])
 
 
 class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
@@ -151,6 +160,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
             name="w_position_embeddings",
         )
         self.max_2d_positions = config.max_2d_position_embeddings
+        self.config = config
 
     def calculate_spatial_position_embeddings(self, bbox: tf.Tensor) -> tf.Tensor:
         try:
@@ -260,6 +270,35 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "word_embeddings", None) is not None:
+            with tf.name_scope(self.word_embeddings.name):
+                self.word_embeddings.build(None)
+        if getattr(self, "token_type_embeddings", None) is not None:
+            with tf.name_scope(self.token_type_embeddings.name):
+                self.token_type_embeddings.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "position_embeddings", None) is not None:
+            with tf.name_scope(self.position_embeddings.name):
+                self.position_embeddings.build(None)
+        if getattr(self, "x_position_embeddings", None) is not None:
+            with tf.name_scope(self.x_position_embeddings.name):
+                self.x_position_embeddings.build(None)
+        if getattr(self, "y_position_embeddings", None) is not None:
+            with tf.name_scope(self.y_position_embeddings.name):
+                self.y_position_embeddings.build(None)
+        if getattr(self, "h_position_embeddings", None) is not None:
+            with tf.name_scope(self.h_position_embeddings.name):
+                self.h_position_embeddings.build(None)
+        if getattr(self, "w_position_embeddings", None) is not None:
+            with tf.name_scope(self.w_position_embeddings.name):
+                self.w_position_embeddings.build(None)
+
 
 class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
@@ -294,6 +333,7 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.has_relative_attention_bias = config.has_relative_attention_bias
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
+        self.config = config
 
     def transpose_for_scores(self, x: tf.Tensor):
         shape = tf.shape(x)
@@ -372,6 +412,20 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+
 
 # Copied from models.roberta.modeling_tf_roberta.TFRobertaSelfOutput
 class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
@@ -383,6 +437,7 @@ class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -390,6 +445,17 @@ class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFLayoutLMv3Attention(tf.keras.layers.Layer):
@@ -421,6 +487,17 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "self_output", None) is not None:
+            with tf.name_scope(self.self_output.name):
+                self.self_output.build(None)
+
 
 # Copied from models.roberta.modeling_tf_bert.TFRobertaIntermediate
 class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
@@ -435,12 +512,21 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
 
 # Copied from models.roberta.modeling_tf_bert.TFRobertaOutput
@@ -453,6 +539,7 @@ class TFLayoutLMv3Output(tf.keras.layers.Layer):
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -460,6 +547,17 @@ class TFLayoutLMv3Output(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
 
 class TFLayoutLMv3Layer(tf.keras.layers.Layer):
@@ -494,6 +592,20 @@ class TFLayoutLMv3Layer(tf.keras.layers.Layer):
         layer_output = self.bert_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + outputs
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
 
 
 class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
@@ -650,6 +762,24 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
                 value for value in [hidden_states, all_hidden_states, all_self_attentions] if value is not None
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rel_pos_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_bias.name):
+                self.rel_pos_bias.build([None, None, self.rel_pos_bins])
+        if getattr(self, "rel_pos_x_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_x_bias.name):
+                self.rel_pos_x_bias.build([None, None, self.rel_2d_pos_bins])
+        if getattr(self, "rel_pos_y_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_y_bias.name):
+                self.rel_pos_y_bias.build([None, None, self.rel_2d_pos_bins])
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
 class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
@@ -676,7 +806,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         self.encoder = TFLayoutLMv3Encoder(config, name="encoder")
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         if self.config.visual_embed:
             image_size = self.config.input_size // self.config.patch_size
             self.cls_token = self.add_weight(
@@ -694,7 +824,27 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
                 name="pos_embed",
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "patch_embed", None) is not None:
+            with tf.name_scope(self.patch_embed.name):
+                self.patch_embed.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build([None, None, self.config.hidden_size])
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings.word_embeddings
@@ -1180,6 +1330,14 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+
 
 class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
     """
@@ -1206,6 +1364,7 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="out_proj",
         )
+        self.config = config
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         outputs = self.dropout(inputs, training=training)
@@ -1213,6 +1372,20 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         outputs = self.dropout(outputs, training=training)
         outputs = self.out_proj(outputs)
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1317,6 +1490,17 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1345,6 +1529,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             )
         else:
             self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
@@ -1439,6 +1624,20 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1567,3 +1766,14 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build(None)

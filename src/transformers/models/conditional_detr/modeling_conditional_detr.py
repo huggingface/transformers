@@ -1805,7 +1805,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
         ...     0
@@ -1874,8 +1874,8 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
                 outputs_class = self.class_labels_classifier(intermediate)
 
-                for lvl in range(hs.shape[0]):
-                    tmp = self.bbox_predictor(hs[lvl])
+                for lvl in range(intermediate.shape[0]):
+                    tmp = self.bbox_predictor(intermediate[lvl])
                     tmp[..., :2] += reference_before_sigmoid
                     outputs_coord = tmp.sigmoid()
                     outputs_coords.append(outputs_coord)
@@ -2118,9 +2118,9 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
             outputs_loss["pred_masks"] = pred_masks
             if self.config.auxiliary_loss:
                 intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
-                outputs_class = self.class_labels_classifier(intermediate)
-                outputs_coord = self.bbox_predictor(intermediate).sigmoid()
-                auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
+                outputs_class = self.conditional_detr.class_labels_classifier(intermediate)
+                outputs_coord = self.conditional_detr.bbox_predictor(intermediate).sigmoid()
+                auxiliary_outputs = self.conditional_detr._set_aux_loss(outputs_class, outputs_coord)
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)

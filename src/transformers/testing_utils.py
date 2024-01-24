@@ -67,6 +67,7 @@ from .utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -107,6 +108,7 @@ from .utils import (
     is_torch_fp16_available_on_device,
     is_torch_neuroncore_available,
     is_torch_npu_available,
+    is_torch_sdpa_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -364,6 +366,13 @@ def require_fsdp(test_case, min_version: str = "1.12.0"):
     )
 
 
+def require_g2p_en(test_case):
+    """
+    Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
+
+
 def require_safetensors(test_case):
     """
     Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
@@ -438,6 +447,15 @@ def require_flash_attn(test_case):
 
     """
     return unittest.skipUnless(is_flash_attn_2_available(), "test requires Flash Attention")(test_case)
+
+
+def require_torch_sdpa(test_case):
+    """
+    Decorator marking a test that requires PyTorch's SDPA.
+
+    These tests are skipped when requirements are not met (torch version).
+    """
+    return unittest.skipUnless(is_torch_sdpa_available(), "test requires PyTorch SDPA")(test_case)
 
 
 def require_peft(test_case):

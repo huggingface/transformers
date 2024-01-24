@@ -306,7 +306,7 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            _torch_pytree._register_pytree_node(
+            torch_pytree_register_pytree_node(
                 cls,
                 _model_output_flatten,
                 _model_output_unflatten,
@@ -438,7 +438,11 @@ if is_torch_available():
         output_type, keys = context
         return output_type(**dict(zip(keys, values)))
 
-    _torch_pytree._register_pytree_node(
+    if hasattr(_torch_pytree, "register_pytree_node"):
+        torch_pytree_register_pytree_node = _torch_pytree.register_pytree_node
+    else:
+        torch_pytree_register_pytree_node = _torch_pytree._register_pytree_node
+    torch_pytree_register_pytree_node(
         ModelOutput,
         _model_output_flatten,
         _model_output_unflatten,
@@ -656,7 +660,7 @@ def tensor_size(array):
     elif is_jax_tensor(array):
         return array.size
     else:
-        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+        raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
 
 
 def add_model_info_to_auto_map(auto_map, repo_id):

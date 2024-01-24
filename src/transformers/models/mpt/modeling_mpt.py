@@ -70,10 +70,10 @@ def build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max=8, device=
     base = base * (alibi_bias_max / num_heads_power_of_2)
 
     slopes = 1.0 / torch.pow(2, base)
-    slopes = slopes.view(1, num_heads, 1, 1)
+    slopes = slopes.view(1, num_heads_power_of_2, 1, 1)
 
     if num_heads_power_of_2 != num_heads:
-        slopes = torch.concat([slopes[1::2], slopes[::2]])[:num_heads]
+        slopes = torch.concat([slopes[:, 1::2, ...], slopes[:, ::2, ...]], dim=1)[:, :num_heads, ...]
 
     alibi = alibi * slopes
     return alibi.squeeze(0)
@@ -265,7 +265,7 @@ class MptPreTrainedModel(PreTrainedModel):
 
     @staticmethod
     def _convert_to_mpt_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
+        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]],
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
         """
         Converts the cache to the format expected by Mpt, i.e. to tuple(tuple([batch_size * num_heads, ...]))
@@ -729,7 +729,10 @@ class MptForSequenceClassification(MptPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

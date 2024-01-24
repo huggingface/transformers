@@ -126,6 +126,7 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more effic
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
@@ -133,6 +134,7 @@ Now create a batch of examples using [`DataCollatorForSeq2Seq`]. It's more effic
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 

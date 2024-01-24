@@ -21,20 +21,21 @@ import unittest
 
 import pytest
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available
+from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -107,7 +108,7 @@ class MistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -387,9 +388,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=False, low_cpu_mem_usage=True
-                ).to(torch_device)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
+                    torch_device
+                )
 
                 dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
                 dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
@@ -397,7 +398,10 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
 
                 model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, use_flash_attention_2=True, low_cpu_mem_usage=True
+                    tmpdirname,
+                    torch_dtype=torch.float16,
+                    attn_implementation="flash_attention_2",
+                    low_cpu_mem_usage=True,
                 ).to(torch_device)
 
                 with self.assertRaises(ValueError):
@@ -437,7 +441,7 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 model = model_class.from_pretrained(
                     tmpdirname,
                     torch_dtype=torch.float16,
-                    use_flash_attention_2=True,
+                    attn_implementation="flash_attention_2",
                     low_cpu_mem_usage=True,
                 ).to(torch_device)
 
@@ -507,7 +511,7 @@ class MistralIntegrationTest(unittest.TestCase):
             "mistralai/Mistral-7B-v0.1",
             device_map="auto",
             load_in_4bit=True,
-            use_flash_attention_2=True,
+            attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
@@ -521,6 +525,68 @@ class MistralIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
         del assistant_model
+        del model
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+    @slow
+    @require_torch_sdpa
+    def test_model_7b_long_prompt_sdpa(self):
+        EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
+        # An input with 4097 tokens that is above the size of the sliding window
+        input_ids = [1] + [306, 338] * 2048
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1",
+            device_map="auto",
+            attn_implementation="sdpa",
+        )
+        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        # Assisted generation
+        assistant_model = model
+        assistant_model.generation_config.num_assistant_tokens = 2
+        assistant_model.generation_config.num_assistant_tokens_schedule = "constant"
+        generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
+        self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
+
+        del assistant_model
+
+        backend_empty_cache(torch_device)
+        gc.collect()
+
+        EXPECTED_TEXT_COMPLETION = """My favourite condiment is 100% ketchup. I love it on everything. I’m not a big"""
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+    @slow
+    def test_speculative_generation(self):
+        EXPECTED_TEXT_COMPLETION = (
+            "My favourite condiment is 100% Sriracha. I love the heat, the tang and the fact costs"
+        )
+        prompt = "My favourite condiment is "
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
+        model = MistralForCausalLM.from_pretrained(
+            "mistralai/Mistral-7B-v0.1", device_map="auto", torch_dtype=torch.float16
+        )
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+
+        # greedy generation outputs
+        set_seed(0)
+        generated_ids = model.generate(
+            input_ids, max_new_tokens=20, do_sample=True, temperature=0.3, assistant_model=model
+        )
+        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
         del model
         backend_empty_cache(torch_device)
         gc.collect()

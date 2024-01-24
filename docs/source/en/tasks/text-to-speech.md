@@ -44,10 +44,8 @@ Here's a code snippet you can use to listen to the resulting audio in a notebook
 For more examples on what Bark and other pretrained TTS models can do, refer to our 
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models). 
 
-If you are looking to fine-tune a TTS model, you can currently fine-tune SpeechT5 only. SpeechT5 is pre-trained on a combination of 
-speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text 
-and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 
-supports multiple speakers through x-vector speaker embeddings. 
+If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers 
+are [SpeechT5](model_doc/speecht5) and [FastSpeech2Conformer](model_doc/fastspeech2_conformer), though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings. 
 
 The remainder of this guide illustrates how to:
 

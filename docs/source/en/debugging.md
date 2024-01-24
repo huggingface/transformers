@@ -16,6 +16,74 @@ rendered properly in your Markdown viewer.
 
 # Debugging
 
+Training on multiple GPUs can be a tricky endeavor whether you're running into installation issues or communication problems between your GPUs. This debugging guide covers some issues you may run into and how to resolve them.
+
+## DeepSpeed CUDA installation
+
+If you're using DeepSpeed, you've probably already installed it with the following command.
+
+```bash
+pip install deepspeed
+```
+
+DeepSpeed compiles CUDA C++ code and it can be a potential source of errors when building PyTorch extensions that require CUDA. These errors depend on how CUDA is installed on your system, and this section focuses on PyTorch built with *CUDA 10.2*.
+
+<Tip>
+
+For any other installation issues, please [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
+
+</Tip>
+
+### Non-identical CUDA toolkits
+
+PyTorch comes with its own CUDA toolkit, but to use DeepSpeed with PyTorch, you need to have an identical version of CUDA installed system-wide. For example, if you installed PyTorch with `cudatoolkit==10.2` in your Python environment, then you'll also need to have CUDA 10.2 installed system-wide. If you don't have CUDA installed system-wide, you should install it first.
+
+The exact location may vary from system to system, but `usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly setup and added to your `PATH` environment variable, you can find the installation location with the following command:
+
+```bash
+which nvcc
+```
+
+### Multiple CUDA toolkits
+
+You may also have more than one CUDA toolkit installed system-wide.
+
+```bash
+/usr/local/cuda-10.2
+/usr/local/cuda-11.0
+```
+
+Typically, package installers set the paths to whatever the last version was installed. If the package build fails because it can't find the right CUDA version (despite it being installed system-wide already), then you need to configure the `PATH` and `LD_LIBRARY_PATH` environment variables to point to the correct path.
+
+Take a look at the contents of these environment variables first:
+
+```bash
+echo $PATH
+echo $LD_LIBRARY_PATH
+```
+
+`PATH` lists the locations of the executables and `LD_LIBRARY_PATH` lists where to look for shared libraries. Earlier entries are prioritized over later ones, and `:` is used to separate multiple entries. To tell the build program where to find the specific CUDA toolkit you want, insert the correct path to list first. This command prepends rather than overwrites the existing values.
+
+```bash
+# adjust the version and full path if needed
+export PATH=/usr/local/cuda-10.2/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
+```
+
+In addition, you should also check the directories you assign actually exist. The `lib64` sub-directory contains various CUDA `.so` objects (like `libcudart.so`) and while it is unlikely your system names them differently, you should check the actual names and change them accordingly.
+
+### Older CUDA versions
+
+Sometimes, older CUDA versions may refuse to build with newer compilers. For example, if you have `gcc-9` but CUDA wants `gcc-7`. Usually, installing the latest CUDA toolkit enables support for the newer compiler.
+
+You could also install an older version of the compiler in addition to the one you're currently using (or it may already be installed but it's not used by default and the build system can't see it). To resolve this, you can create a symlink to give the build system visibility to the older compiler.
+
+```bash
+# adapt the path to your system
+sudo ln -s /usr/bin/gcc-7  /usr/local/cuda-10.2/bin/gcc
+sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
+```
+
 ## Multi-GPU Network Issues Debug
 
 When training or inferencing with `DistributedDataParallel` and multiple GPU, if you run into issue of inter-communication between processes and/or nodes, you can use the following script to diagnose network issues.

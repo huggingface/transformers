@@ -1900,7 +1900,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
         ...     0
