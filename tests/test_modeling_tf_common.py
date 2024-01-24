@@ -1853,8 +1853,8 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
 
 def random_attention_mask(shape, rng=None, name=None, dtype=None):
     attn_mask = ids_tensor(shape, vocab_size=2, rng=None, name=None, dtype=dtype)
-    # make sure that at least one token is attended to for each batch
-    attn_mask = tf.concat([attn_mask[:, :-1], tf.ones_like(attn_mask[:, -1:], dtype=dtype)], axis=-1)
+    # Mark the first token as 1 (matches behaviour of PyTorch/Flax function)
+    attn_mask = tf.concat([attn_mask[:, :1], tf.ones_like(attn_mask[:, 1:], dtype=dtype)], axis=1)
     return attn_mask
 
 
