@@ -895,8 +895,6 @@ if __name__ == "__main__":
     with open(os.path.join(info_dir, "artifact_name_to_job_map.json"), "w", encoding="UTF-8") as fp:
         json.dump(artifact_name_to_job_map, fp, ensure_ascii=False, indent=4)
 
-    exit(0)
-
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
@@ -1019,32 +1017,34 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
-    # This prefix is used to get job links below. For past CI, we use `workflow_call`, which changes the job names from
-    # `Model tests (...)` to `PyTorch 1.5 / Model tests (...)` for example.
-    job_name_prefix = ""
-    if ci_event.startswith("Past CI - "):
-        framework, version = ci_event.replace("Past CI - ", "").split("-")
-        framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
-        job_name_prefix = f"{framework} {version}"
-    elif ci_event.startswith("Nightly CI"):
-        job_name_prefix = "Nightly CI"
-    elif ci_event.startswith("Push CI (AMD) - "):
-        flavor = ci_event.replace("Push CI (AMD) - ", "")
-        job_name_prefix = f"AMD {flavor}"
-    elif ci_event.startswith("Scheduled CI (AMD) - "):
-        flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
-        job_name_prefix = f"AMD {flavor}"
+    # # This prefix is used to get job links below. For past CI, we use `workflow_call`, which changes the job names from
+    # # `Model tests (...)` to `PyTorch 1.5 / Model tests (...)` for example.
+    # job_name_prefix = ""
+    # if ci_event.startswith("Past CI - "):
+    #     framework, version = ci_event.replace("Past CI - ", "").split("-")
+    #     framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
+    #     job_name_prefix = f"{framework} {version}"
+    # elif ci_event.startswith("Nightly CI"):
+    #     job_name_prefix = "Nightly CI"
+    # elif ci_event.startswith("Push CI (AMD) - "):
+    #     flavor = ci_event.replace("Push CI (AMD) - ", "")
+    #     job_name_prefix = f"AMD {flavor}"
+    # elif ci_event.startswith("Scheduled CI (AMD) - "):
+    #     flavor = ci_event.replace("Scheduled CI (AMD) - ", "")
+    #     job_name_prefix = f"AMD {flavor}"
 
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                if job_name_prefix:
-                    job_name = f"{job_name_prefix} / {job_name}"
-                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+
+                # # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                # job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
+                # if job_name_prefix:
+                #     job_name = f"{job_name_prefix} / {job_name}"
+                job = artifact_name_to_job_map[artifact_path["path"]]
+                model_results[model]["job_link"][artifact_path["gpu"]] = job["html_url"]
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
@@ -1129,12 +1129,13 @@ if __name__ == "__main__":
 
         for artifact_path in available_artifacts[additional_files[key]].paths:
             # Link to the GitHub Action job
-            job_name = key
-            if artifact_path["gpu"] is not None:
-                job_name = f"{key} ({artifact_path['gpu']}-gpu)"
-            if job_name_prefix:
-                job_name = f"{job_name_prefix} / {job_name}"
-            additional_results[key]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
+            # job_name = key
+            # if artifact_path["gpu"] is not None:
+            #     job_name = f"{key} ({artifact_path['gpu']}-gpu)"
+            # if job_name_prefix:
+            #     job_name = f"{job_name_prefix} / {job_name}"
+            job = artifact_name_to_job_map[artifact_path["path"]]
+            additional_results[key]["job_link"][artifact_path["gpu"]] = job["html_url"]
 
             artifact = retrieve_artifact(artifact_path["path"], artifact_path["gpu"])
             stacktraces = handle_stacktraces(artifact["failures_line"])
