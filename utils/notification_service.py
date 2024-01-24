@@ -941,7 +941,7 @@ if __name__ == "__main__":
     github_actions_jobs = get_jobs(
         workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
     )
-    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs["jobs"]}
+    github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
 
     artifact_name_to_job_map = {}
     for job in github_actions_jobs:
