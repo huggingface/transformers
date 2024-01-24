@@ -21,6 +21,7 @@ class ReturnType(enum.Enum):
 
 # List of models that support FIM
 SUPPORTED_MODELS = [
+    "bigcode/starcoder",
     "codellama/CodeLlama-7b-hf",
     "codellama/CodeLlama-13b-hf",
     "codellama/CodeLlama-34b-hf",
@@ -57,6 +58,7 @@ class FIMPipeline(Pipeline):
     on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
     """
 
+    DEFAULT_MODE = "psm"
     DEFAULT_INFILL_TOKEN = "<FILL_ME>"
     DEFAULT_PREFIX_TOKEN = "<fim_prefix>"
     DEFAULT_SUFFIX_TOKEN = "<fim_suffix>"
@@ -112,6 +114,7 @@ class FIMPipeline(Pipeline):
     def _sanitize_parameters(
         self,
         infill_token=None,
+        mode=None,
         return_full_text=None,
         return_tensors=None,
         return_text=None,
@@ -125,6 +128,9 @@ class FIMPipeline(Pipeline):
     ):
         preprocess_params = {"add_special_tokens": add_special_tokens}
         preprocess_params["infill_token"] = infill_token or self.DEFAULT_INFILL_TOKEN
+        preprocess_params["mode"] = (
+            mode.lower() if mode.lower() in ["psm", "spm"] else self.DEFAULT_MODE
+        )
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
@@ -192,6 +198,7 @@ class FIMPipeline(Pipeline):
         self,
         prompt_text,
         infill_token,
+        mode,
         prefix="",
         handle_long_generation=None,
         add_special_tokens=False,
@@ -208,13 +215,22 @@ class FIMPipeline(Pipeline):
                 prompt_text, infill_token
             )
 
-            prompt_text = (
-                self.DEFAULT_PREFIX_TOKEN
-                + input_prefix
-                + self.DEFAULT_SUFFIX_TOKEN
-                + input_suffix
-                + self.DEFAULT_MIDDLE_TOKEN
-            )
+            if mode == "psm":
+                prompt_text = (
+                    self.DEFAULT_PREFIX_TOKEN
+                    + input_prefix
+                    + self.DEFAULT_SUFFIX_TOKEN
+                    + input_suffix
+                    + self.DEFAULT_MIDDLE_TOKEN
+                )
+            else:
+                prompt_text = (
+                    self.DEFAULT_SUFFIX_TOKEN
+                    + input_suffix
+                    + self.DEFAULT_PREFIX_TOKEN
+                    + input_prefix
+                    + self.DEFAULT_MIDDLE_TOKEN
+                )
 
         inputs = self.tokenizer(
             prefix + prompt_text,
