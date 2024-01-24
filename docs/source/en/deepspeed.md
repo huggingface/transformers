@@ -956,6 +956,8 @@ engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 </hfoption>
 <hfoption id="non-pretrained model">
 
+[`HfDeepSpeedConfig`] is not required for ZeRO-1 or ZeRO-2.
+
 ```py
 from transformers.integrations import HfDeepSpeedConfig
 from transformers import AutoModel, AutoConfig
@@ -969,7 +971,8 @@ model = AutoModel.from_config(config)
 engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
-[`HfDeepSpeedConfig`] is not required for ZeRO-1 or ZeRO-2.
+</hfoption>
+</hfoptions>
 
 ### Non-Trainer ZeRO Inference
 
