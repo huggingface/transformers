@@ -137,7 +137,7 @@ If you own or use a project that you believe should be part of the list, please 
 
 ## Quick tour
 
-To immediately use a model on a given input (text, image, audio, ...), we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model's training. Here is how to quickly use a pipeline to classify positive versus negative texts:
+To immediately use a model on a given input (text, image, audio,...), we provide the `pipeline` API. Pipelines group together a pretrained model with the preprocessing that was used during that model's training. Here is how to quickly use a pipeline to classify positive versus negative texts:
 
 ```python
 >>> from transformers import pipeline
