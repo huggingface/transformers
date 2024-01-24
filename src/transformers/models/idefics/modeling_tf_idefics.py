@@ -29,7 +29,13 @@ import tensorflow as tf
 from ... import TFPreTrainedModel
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import ModelOutput
-from ...modeling_tf_utils import TFModelInputType, keras_serializable, shape_list, unpack_inputs
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    keras_serializable,
+    shape_list,
+    unpack_inputs,
+)
 from ...tf_utils import invert_attention_mask
 from ...utils import (
     add_start_docstrings,
@@ -1585,7 +1591,7 @@ class TFIdeficsModel(TFIdeficsPreTrainedModel):
                 self.model.build(None)
 
 
-class TFIdeficsForVisionText2Text(TFPreTrainedModel):
+class TFIdeficsForVisionText2Text(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
     config_class = IdeficsConfig
@@ -1728,12 +1734,9 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
                 shift_logits = logits[..., :-1, :]
                 shift_labels = labels[..., 1:]
             # Flatten the tokens
-            loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            loss = loss_fct(
-                y_true=tf.reshape(shift_labels, [-1]), y_pred=tf.reshape(shift_logits, [-1, shift_logits.shape[-1]])
+            loss = self.hf_compute_loss(
+                labels=tf.reshape(shift_labels, [-1]), logits=tf.reshape(shift_logits, [-1, shift_logits.shape[-1]])
             )
-            if loss.shape.rank == 0:
-                loss = tf.reshape(loss, (1,))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
