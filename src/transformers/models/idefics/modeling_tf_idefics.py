@@ -312,6 +312,7 @@ class TFIdeficsDecoupledEmbedding(tf.keras.layers.Embedding):
                 input_dim=self.num_additional_embeddings,
                 output_dim=embedding_dim,
                 dtype=dtype,
+                name="additional_embedding"
             )
 
     def call(self, input_ids):
@@ -401,6 +402,7 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
             self.additional_fc = tf.keras.layers.Dense(
                 units=out_additional_features, use_bias=bias, name="additional_fc"
             )
+        self.bias = bias
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         output = tf.linalg.matmul(inputs, self.weight)
@@ -412,6 +414,13 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
             output = tf.concat([output, additional_features], axis=-1)
 
         return output
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(shape=(self.in_features, self.out_features), trainable=not self.partially_freeze, name="weight")
+        if self.bias:
+            self.bias = self.add_weight(shape=(self.out_features,), trainable=not self.partially_freeze, name="bias")
+        else:
+            self.bias = None
 
     def get_config(self):
         config = super().get_config()
@@ -635,13 +644,12 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
             use_bias=False,
             name="o_proj",
         )
-        self.rotary_emb = TFIdeficsEmbedding(self.head_dim)
+        self.rotary_emb = TFIdeficsEmbedding(self.head_dim, name="rotary_emb")
 
         self.qk_layer_norms = qk_layer_norms
         if self.qk_layer_norms:
-            self.q_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.config = config
+            self.q_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps, name="q_layer_norm")
+            self.k_layer_norm = TFIdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps, name="k_layer_norm")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), perm=[0, 2, 1, 3])
@@ -850,14 +858,16 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
             dropout=config.dropout,
             config=config,
             qk_layer_norms=config.qk_layer_norms,
+            name="cross_attn"
         )
         self.mlp = TFIdeficsMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
+            name="mlp"
         )
-        self.input_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="input_layernorm")
+        self.post_attention_layernorm = TFIdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps, name="post_attention_layernorm")
         self.config = config.dropout
 
         self.act_cross_attn = tf.keras.activations.tanh
@@ -871,24 +881,24 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         if self.alpha_initializer == "zeros":
             if self.alpha_type == "vector":
                 self.alpha_cross_attn = self.add_weight(
-                    shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True
+                    shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True, name="alpha_cross_attn"
                 )
-                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True)
+                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="zeros", trainable=True, name="alpha_dense")
             elif self.alpha_type == "float":
-                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
-                self.alpha_dense = self.add_weight(shape=(1,), initializer="zeros", trainable=True)
+                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="zeros", trainable=True, name="alpha_cross_attn")
+                self.alpha_dense = self.add_weight(shape=(1,), initializer="zeros", trainable=True, name="alpha_dense")
             else:
                 raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
 
         elif self.alpha_initializer == "ones":
             if self.alpha_type == "vector":
                 self.alpha_cross_attn = self.add_weight(
-                    shape=(1, 1, self.hidden_size), initializer="ones", trainable=True
+                    shape=(1, 1, self.hidden_size), initializer="ones", trainable=True, name="alpha_cross_attn"
                 )
-                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="ones", trainable=True)
+                self.alpha_dense = self.add_weight(shape=(1, 1, self.hidden_size), initializer="ones", trainable=True, name="alpha_dense")
             elif self.alpha_type == "float":
-                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="ones", trainable=True)
-                self.alpha_dense = self.add_weight(shape=(1,), initializer="ones", trainable=True)
+                self.alpha_cross_attn = self.add_weight(shape=(1,), initializer="ones", trainable=True, name="alpha_cross_attn")
+                self.alpha_dense = self.add_weight(shape=(1,), initializer="ones", trainable=True, name="alpha_dense")
             else:
                 raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
 
@@ -898,22 +908,26 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
                     shape=(1, 1, self.hidden_size),
                     initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
                     trainable=True,
+                    name="alpha_cross_attn"
                 )
                 self.alpha_dense = self.add_weight(
                     shape=(1, 1, self.hidden_size),
                     initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
                     trainable=True,
+                    name="alpha_dense"
                 )
             elif self.alpha_type == "float":
                 self.alpha_cross_attn = self.add_weight(
                     shape=(1,),
                     initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
                     trainable=True,
+                    name="alpha_type"
                 )
                 self.alpha_dense = self.add_weight(
                     shape=(1,),
                     initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.alphas_initializer_range),
                     trainable=True,
+                    name="alpha_dense"
                 )
             else:
                 raise ValueError(f"Unknown value for `alpha_type` ({self.alpha_type})")
@@ -1020,7 +1034,6 @@ class TFIdeficsPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TFIdeficsDecoderLayer", "TFIdeficsGatedCrossAttentionLayer"]
-
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
         # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
@@ -1145,12 +1158,12 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
                 name="perceiver_resampler",
             )
 
-        self.decoder_layers = [TFIdeficsDecoderLayer(config, name=f"layers_{i}") for i in range(config.num_hidden_layers)]
+        self.decoder_layers = [TFIdeficsDecoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)]
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
         self.gated_cross_attn_layers = [
-            TFIdeficsGatedCrossAttentionLayer(config, name=f"gated_cross_attn_layers_{i}")
+            TFIdeficsGatedCrossAttentionLayer(config, name=f"gated_cross_attn_layers.{i}")
             for i in range(num_cross_layers)
         ]
         self.gradient_checkpointing = False
@@ -1265,8 +1278,17 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         elif pixel_values is not None:
             no_images = tf.reduce_sum(tf.cast(pixel_values, dtype=tf.int32)) == 0
             pixel_values = tf.cast(pixel_values, dtype=self.dtype)  # fp16 compatibility
-            batch_size, num_images = shape_list(pixel_values)[:2]
-            pixel_values = tf.reshape(pixel_values, [batch_size * num_images, *pixel_values.shape[2:]])
+            # TODO Alazar: nasty hack below because when cross-loading pytorch weights, there is an
+            # initial forward pass with dummy input and code below is here to handle that
+            # but I want to come up with a cleaner fix if possible
+            if len(pixel_values.shape) == 4:
+                batch_size = shape_list(pixel_values)[0]
+                num_images = shape_list(pixel_values)[0]
+                #pixel_values = tf.reshape(pixel_values, [batch_size * num_images, *pixel_values.shape[1:]])
+            elif len(pixel_values.shape) == 5:
+                batch_size, num_images = shape_list(pixel_values)[:2]
+                pixel_values = tf.reshape(pixel_values, [batch_size * num_images, *pixel_values.shape[2:]])
+
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(
@@ -1298,10 +1320,11 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         # # Hack to use the model in full language modeling mode
         # image_attention_mask = tf.zeros((batch_size, seq_length, 1), dtype=tf.int32)
         # Make image_attention_mask compatible with hidden states
-        text_seq_len = shape_list(image_attention_mask)[1]
-        image_attention_mask = tf.expand_dims(image_attention_mask, -1)
-        image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
-        image_attention_mask = tf.reshape(image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len))
+        if image_attention_mask is not None and pixel_values is not None:
+            text_seq_len = shape_list(image_attention_mask)[1]
+            image_attention_mask = tf.expand_dims(image_attention_mask, -1)
+            image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
+            image_attention_mask = tf.reshape(image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len))
 
         if image_hidden_states is not None:
             image_batch_size, image_sequence_length, _ = shape_list(image_hidden_states)
@@ -1312,6 +1335,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         else:
             image_attention_mask = None
 
+        #TODO: Alazar, we are missing cross_attention_gate and it is also not being passed to gated cross attention layer
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
@@ -1537,13 +1561,13 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
     def __init__(self, config, vision_model=None, **kwargs):
         super().__init__(config, **kwargs)
         self.model = TFIdeficsMainLayer(config, name="model")
-
         self.lm_head = TFIdeficsDecoupledLinear(
             config.hidden_size,
             config.vocab_size,
             config.additional_vocab_size,
             bias=False,
             partially_freeze=config.freeze_lm_head,
+            name="lm_head"
         )
 
 

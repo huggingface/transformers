@@ -23,8 +23,8 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, shape_list
-from ...tf_utils import flatten
+
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list, get_initializer
 from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 
@@ -69,10 +69,6 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.class_embedding = self.add_weight(
-            shape=(self.embed_dim,), initializer="random_normal", name="class_embedding"
-        )
-
         self.patch_embedding = tf.keras.layers.Conv2D(
             filters=self.embed_dim,
             kernel_size=self.patch_size,
@@ -80,7 +76,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             use_bias=False,
             padding="valid",
             data_format="channels_last",
-            name="patch_embedding",
+            name="patch_embedding"
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -88,7 +84,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         self.position_embedding = tf.keras.layers.Embedding(
             self.num_positions, self.embed_dim, name="position_embedding"
         )
-        self.position_ids = tf.range(self.num_positions)[tf.newaxis, :]
+        #self.position_ids = tf.range(self.num_positions)[tf.newaxis, :]
 
     def interpolate_pos_encoding(self, embeddings: tf.Tensor, height: int, width: int) -> tf.Tensor:
         num_patches = shape_list(embeddings)[1] - 1
@@ -144,7 +140,8 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
                 )
 
         patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
-        # flatten from 2D to a 1D
+        # Change the 2D spatial dimensions to a single temporal dimension.
+        # shape = (batch_size, num_patches, out_channels=embed_dim)
         patch_embeds = tf.reshape(tensor=patch_embeds, shape=(batch_size, self.num_patches, -1))
 
         class_embeds = tf.broadcast_to(
@@ -170,6 +167,14 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         if getattr(self, "position_embedding", None) is not None:
             with tf.name_scope(self.position_embedding.name):
                 self.position_embedding.build(None)
+
+    def build(self, input_shape):
+        factor = self.config.initializer_factor
+        self.position_ids = tf.range(self.num_positions, name="self.position_ids")[tf.newaxis, :]
+        self.class_embedding = self.add_weight(
+            shape=(self.embed_dim,),
+            name="class_embedding"
+        )
 
 
 class TFIdeficsVisionAttention(tf.keras.layers.Layer):
@@ -319,9 +324,9 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: IdeficsVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.hidden_size
-        self.self_attn = TFIdeficsVisionAttention(config)
+        self.self_attn = TFIdeficsVisionAttention(config, name="self_attn")
         self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
-        self.mlp = TFIdeficsVisionMLP(config)
+        self.mlp = TFIdeficsVisionMLP(config, name="mlp")
         self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
 
     def call(
@@ -388,7 +393,7 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.layers = [
-            TFIdeficsVisionEncoderLayer(config, name=f"layers_{i}") for i in range(config.num_hidden_layers)
+            TFIdeficsVisionEncoderLayer(config, name=f"layers.{i}") for i in range(config.num_hidden_layers)
         ]
         self.gradient_checkpointing = False
 
@@ -525,7 +530,6 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         hidden_states = self.pre_layrnorm(hidden_states)
-
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
