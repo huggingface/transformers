@@ -24,7 +24,7 @@ from ..auto.configuration_auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "tiktok/depth-anything-small": "https://huggingface.co/tiktok/depth-anything-small/resolve/main/config.json",
+    "LiheYoung/depth-anything-small-hf": "https://huggingface.co/LiheYoung/depth-anything-small-hf/resolve/main/config.json",
 }
 
 
@@ -33,7 +33,7 @@ class DepthAnythingConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DepthAnythingModel`]. It is used to instantiate an DepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DepthAnything
-    [tiktok/depth-anything-small](https://huggingface.co/tiktok/depth-anything-small) architecture.
+    [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -63,13 +63,13 @@ class DepthAnythingConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DepthAnythingModel, DepthAnythingConfig
+    >>> from transformers import DepthAnythingForDepthEstimation, DepthAnythingConfig
 
-    >>> # Initializing a DepthAnything depth_anything-large style configuration
+    >>> # Initializing a DepthAnything small style configuration
     >>> configuration = DepthAnythingConfig()
 
-    >>> # Initializing a model from the depth_anything-large style configuration
-    >>> model = DepthAnythingModel(configuration)
+    >>> # Initializing a model from the DepthAnything small style configuration
+    >>> model = DepthAnythingForDepthEstimation(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

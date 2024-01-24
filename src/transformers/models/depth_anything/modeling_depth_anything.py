@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DepthAnythingConfig"
 
 DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tiktok/depth-anything-small",
+    "LiheYoung/depth-anything-small-hf",
     # See all Depth Anything models at https://huggingface.co/models?filter=depth_anything
 ]
 
@@ -398,8 +398,8 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("nielsr/depth-anything-small")
-        >>> model = AutoModelForDepthEstimation.from_pretrained("nielsr/depth-anything-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
+        >>> model = AutoModelForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt")
