@@ -1294,7 +1294,11 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(position_ids, 0)
 
         no_images = False
-        if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
+        if sum((
+                int(pixel_values is None),
+                int(image_encoder_embeddings is None),
+                int(perceiver_embeddings is None)
+        )) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
@@ -1729,6 +1733,8 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
             loss = loss_fct(
                 y_true=tf.reshape(shift_labels, [-1]), y_pred=tf.reshape(shift_logits, [-1, shift_logits.shape[-1]])
             )
+            if loss.shape.rank == 0:
+                loss = tf.reshape(loss, (1,))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1774,3 +1780,14 @@ class TFIdeficsForVisionText2Text(TFPreTrainedModel):
         for layer_past in past:
             reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
