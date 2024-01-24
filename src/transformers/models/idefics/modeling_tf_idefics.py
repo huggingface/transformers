@@ -1294,11 +1294,10 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(position_ids, 0)
 
         no_images = False
-        if sum((
-                int(pixel_values is None),
-                int(image_encoder_embeddings is None),
-                int(perceiver_embeddings is None)
-        )) != 2:
+        if (
+            sum((int(pixel_values is None), int(image_encoder_embeddings is None), int(perceiver_embeddings is None)))
+            != 2
+        ):
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
