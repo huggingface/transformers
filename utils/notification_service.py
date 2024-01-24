@@ -889,7 +889,7 @@ if __name__ == "__main__":
         for step in job["steps"]:
             if step["name"].startswith("Test suite reports artifacts: "):
                 artifact_name = step["name"][len("Test suite reports artifacts: "):]
-                artifact_name_to_job_map[artifact_name_to_job_map] = job
+                artifact_name_to_job_map[artifact_name] = job
                 break
 
     with open(os.path.join(info_dir, "artifact_name_to_job_map.json"), "w", encoding="UTF-8") as fp:
