@@ -333,6 +333,10 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_retain_grad_hidden_states_attentions(self):
         return
 
+    @unittest.skip(reason="IDEFICS uses out-of-bounds embeddings deliberately.")
+    def test_embeddings_out_of_bounds_raise_exception(self):
+        pass
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
