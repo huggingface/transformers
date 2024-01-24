@@ -372,7 +372,7 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         attention_mask = cache_kwargs.get("attention_mask")
-        position_ids = torch.arange(self.seen_tokens, self.seen_tokens+ key_states.shape[-2], device=key_states.device)
+        position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
         # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         # place each cache on the correct layer device, not optimised?
         # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
@@ -386,7 +386,6 @@ class StaticCache(Cache):
         k_out[:, :, position_ids] = key_states
         v_out[:, :, position_ids] = value_states
 
-        self._seen_tokens += key_states.shape[-2]
 
         if attention_mask is not None:
             # if the past length changes then we do have a problem
@@ -394,6 +393,8 @@ class StaticCache(Cache):
             # update the actual attention mask by masking padding tokens
             self.causal_4d_mask[:,:,self.seen_tokens + 1,:past_length] = attention_mask
             attention_mask = self.causal_4d_mask[:,:, self.seen_tokens,:]
+
+        self._seen_tokens += key_states.shape[-2]
             
         # # Update the number of seen tokens
         # if layer_idx == self.num_layers - 1:
