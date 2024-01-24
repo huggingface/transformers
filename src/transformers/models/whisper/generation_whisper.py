@@ -1008,15 +1008,6 @@ class WhisperGenerationMixin:
                     "requires the model to predict timestamp tokens. Please either pass `return_timestamps=True` or make sure to pass no more than 3000 mel input features."
                 )
 
-            if not hasattr(generation_config, "no_timestamps_token_id"):
-                raise ValueError(
-                    "You have passed more than 3000 mel input features (> 30 seconds) which automatically enables long-form generation which "
-                    "requires the generation config to have `no_timestamps_token_id` correctly. "
-                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
-                    "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
-                    "or make sure to pass no more than 3000 mel input features."
-                )
-
             logger.info("Setting `return_timestamps=True` for long-form generation.")
             generation_config.return_timestamps = True
         else:
@@ -1115,11 +1106,11 @@ class WhisperGenerationMixin:
                     f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
                     "(You should just add it to the generation config)"
                 )
+            init_tokens.append(generation_config.lang_to_id[language_token])
         elif task is not None:
-            # if task was passed, but language was not set, default to English
-            language_token = f"<|en|>"
+            # if task was passed, but language was not set, default to English (first lang token)
+            language_token = generation_config.decoder_start_token_id + 1
 
-        init_tokens.append(generation_config.lang_to_id[language_token])
 
         if task is not None:
             if task in TASK_IDS:
@@ -1131,7 +1122,7 @@ class WhisperGenerationMixin:
         elif hasattr(generation_config, "task_to_id"):
             init_tokens.append(generation_config.task_to_id["transcribe"])  # defaults to transcribe
 
-        if not generation_config.return_timestamps:
+        if not generation_config.return_timestamps and hasattr(generation_config, "no_timestamps_token_id"):
             init_tokens.append(generation_config.no_timestamps_token_id)
         elif generation_config.return_timestamps and init_tokens[-1] == generation_config.no_timestamps_token_id:
             init_tokens = init_tokens[-1:]
