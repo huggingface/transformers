@@ -441,6 +441,8 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
       - name: Send message to Slack
+        env:
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
         run: |
           sudo apt-get install -y curl
           pip install slack_sdk
