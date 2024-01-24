@@ -98,8 +98,8 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     logits: Optional[Tuple[torch.FloatTensor]] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
     @property
     def decoder_logits(self):
@@ -140,8 +140,8 @@ class BlipTextVisionModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -181,9 +181,9 @@ class BlipImageTextMatchingModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     vision_pooler_output: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     question_embeds: Optional[Tuple[torch.FloatTensor]] = None
 
 
