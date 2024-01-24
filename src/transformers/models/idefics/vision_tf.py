@@ -23,8 +23,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-
-from ...modeling_tf_utils import TFPreTrainedModel, shape_list, get_initializer
+from ...modeling_tf_utils import TFPreTrainedModel, shape_list
 from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 
@@ -76,7 +75,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             use_bias=False,
             padding="valid",
             data_format="channels_last",
-            name="patch_embedding"
+            name="patch_embedding",
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -84,7 +83,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         self.position_embedding = tf.keras.layers.Embedding(
             self.num_positions, self.embed_dim, name="position_embedding"
         )
-        #self.position_ids = tf.range(self.num_positions)[tf.newaxis, :]
+        # self.position_ids = tf.range(self.num_positions)[tf.newaxis, :]
 
     def interpolate_pos_encoding(self, embeddings: tf.Tensor, height: int, width: int) -> tf.Tensor:
         num_patches = shape_list(embeddings)[1] - 1
@@ -111,8 +110,7 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         new_width = tf.cast(original_width * scale_width, tf.int32)
 
         patch_pos_embed = tf.image.resize(
-            patch_pos_embed, size=[new_height, new_width],
-            method=tf.image.ResizeMethod.BICUBIC
+            patch_pos_embed, size=[new_height, new_width], method=tf.image.ResizeMethod.BICUBIC
         )
 
         if (
@@ -149,7 +147,6 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
         )
         embeddings = tf.concat([class_embeds, patch_embeds], axis=1)
 
-
         # add positional encoding to each token
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
@@ -157,24 +154,19 @@ class TFIdeficsVisionEmbeddings(tf.keras.layers.Layer):
             embeddings = embeddings + self.position_embedding(self.position_ids)
 
         return embeddings
+
     def build(self, input_shape=None):
         if self.built:
             return
         self.built = True
+        self.position_ids = tf.range(self.num_positions, name="self.position_ids")[tf.newaxis, :]
+        self.class_embedding = self.add_weight(shape=(self.embed_dim,), name="class_embedding")
         if getattr(self, "patch_embedding", None) is not None:
             with tf.name_scope(self.patch_embedding.name):
                 self.patch_embedding.build([None, None, None, self.config.num_channels])
         if getattr(self, "position_embedding", None) is not None:
             with tf.name_scope(self.position_embedding.name):
                 self.position_embedding.build(None)
-
-    def build(self, input_shape):
-        factor = self.config.initializer_factor
-        self.position_ids = tf.range(self.num_positions, name="self.position_ids")[tf.newaxis, :]
-        self.class_embedding = self.add_weight(
-            shape=(self.embed_dim,),
-            name="class_embedding"
-        )
 
 
 class TFIdeficsVisionAttention(tf.keras.layers.Layer):
@@ -279,6 +271,7 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped
+
     def build(self, input_shape=None):
         if self.built:
             return
@@ -296,6 +289,7 @@ class TFIdeficsVisionAttention(tf.keras.layers.Layer):
             with tf.name_scope(self.out_proj.name):
                 self.out_proj.build((self.embed_dim, self.embed_dim))
 
+
 class TFIdeficsVisionMLP(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -309,6 +303,7 @@ class TFIdeficsVisionMLP(tf.keras.layers.Layer):
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
+
     def build(self, input_shape=None):
         if self.built:
             return
@@ -319,6 +314,7 @@ class TFIdeficsVisionMLP(tf.keras.layers.Layer):
         if getattr(self, "fc2", None) is not None:
             with tf.name_scope(self.fc2.name):
                 self.fc2.build(self.config.intermediate_size)
+
 
 class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: IdeficsVisionConfig, **kwargs):
@@ -368,6 +364,7 @@ class TFIdeficsVisionEncoderLayer(tf.keras.layers.Layer):
             outputs += (attn_weights,)
 
         return outputs
+
     def build(self, input_shape=None):
         if self.built:
             return
@@ -484,6 +481,7 @@ class TFIdeficsVisionEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
     def build(self, input_shape=None):
         if self.built:
             return
@@ -551,6 +549,7 @@ class TFIdeficsVisionTransformer(TFPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
     def build(self, input_shape=None):
         if self.built:
             return

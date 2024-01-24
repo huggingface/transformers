@@ -57,7 +57,7 @@ else:
         "TFIdeficsForVisionText2Text",
         "TFIdeficsModel",
         "TFIdeficsPreTrainedModel",
-        "TFIdeficsProcessor"
+        "TFIdeficsProcessor",
     ]
 
 if TYPE_CHECKING:

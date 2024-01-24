@@ -59,6 +59,7 @@ def incremental_to_binary_attention_mask(incremental_mask, return_tensors, num_c
 
     return attn_mask
 
+
 # copied from m4.training.packing
 def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tensors):
     image_token_id = tokenizer.additional_special_tokens_ids[0]
@@ -91,7 +92,9 @@ def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tenso
                     indices = [[batch_idx, idx]]
                     updates = [count]
                     image_attention_mask = tf.tensor_scatter_nd_update(image_attention_mask, indices, updates)
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+                    next_image_attention_mask = tf.tensor_scatter_nd_update(
+                        next_image_attention_mask, indices, updates
+                    )
 
             elif token_id == eod_token_id and not seen_eod:
                 seen_eod = True
@@ -101,7 +104,9 @@ def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tenso
                 elif return_tensors == "tf":
                     indices = [[batch_idx, idx]]
                     updates = [count]
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
+                    next_image_attention_mask = tf.tensor_scatter_nd_update(
+                        next_image_attention_mask, indices, updates
+                    )
 
             if seen_eod and token_id != eod_token_id:
                 if return_tensors == "pt":
@@ -109,10 +114,12 @@ def image_attention_mask_for_packed_input_ids(input_ids, tokenizer, return_tenso
                 elif return_tensors == "tf":
                     indices = [[batch_idx, idx]]
                     updates = [-1]
-                    next_image_attention_mask = tf.tensor_scatter_nd_update(next_image_attention_mask, indices, updates)
-
+                    next_image_attention_mask = tf.tensor_scatter_nd_update(
+                        next_image_attention_mask, indices, updates
+                    )
 
     return image_attention_mask, next_image_attention_mask
+
 
 def is_url(string):
     """Checks if the passed string contains a valid url and nothing else. e.g. if space is included it's immediately
@@ -417,29 +424,32 @@ class IdeficsProcessor(ProcessorMixin):
                 output_input_ids.append(tf.convert_to_tensor(padded_input_ids, dtype=tf.int32))
                 output_attention_masks.append(attention_mask)
 
-
         if return_tensors == "pt":
-           output_input_ids = torch.stack(output_input_ids)
-           output_images = torch.stack(output_images)
-           output_attention_masks = torch.stack(output_attention_masks)
+            output_input_ids = torch.stack(output_input_ids)
+            output_images = torch.stack(output_images)
+            output_attention_masks = torch.stack(output_attention_masks)
         elif return_tensors == "tf":
-           output_input_ids = tf.stack(output_input_ids)
-           output_images = tf.stack(output_images)
-           output_attention_masks = tf.stack(output_attention_masks)
+            output_input_ids = tf.stack(output_input_ids)
+            output_images = tf.stack(output_images)
+            output_attention_masks = tf.stack(output_attention_masks)
 
         if at_least_one_image:
-            image_attention_mask, _ = image_attention_mask_for_packed_input_ids(output_input_ids, self.tokenizer, return_tensors)
+            image_attention_mask, _ = image_attention_mask_for_packed_input_ids(
+                output_input_ids, self.tokenizer, return_tensors
+            )
             image_attention_mask = incremental_to_binary_attention_mask(
                 image_attention_mask, return_tensors, num_classes=max_num_images
             )
         else:
             # in full language mode we set the image mask to all-0s
             if return_tensors == "pt":
-                image_attention_mask = torch.zeros(output_input_ids.shape[0],
-                                                  output_input_ids.shape[1], 1, dtype=torch.bool)
+                image_attention_mask = torch.zeros(
+                    output_input_ids.shape[0], output_input_ids.shape[1], 1, dtype=torch.bool
+                )
             elif return_tensors == "tf":
-                image_attention_mask = tf.zeros((output_input_ids.shape[0],
-                                               output_input_ids.shape[1], 1), dtype=tf.bool)
+                image_attention_mask = tf.zeros(
+                    (output_input_ids.shape[0], output_input_ids.shape[1], 1), dtype=tf.bool
+                )
         return BatchFeature(
             data={
                 "input_ids": output_input_ids,

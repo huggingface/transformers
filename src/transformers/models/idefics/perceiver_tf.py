@@ -77,8 +77,14 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
         # Create Transformer Blocks
         self.blocks = []
         for i in range(depth):
-            self.blocks.append([TFIdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms, name=f"blocks.{i}.0"),
-                                TFIdeficsMLP(self.intermediate_dim, config, name=f"blocks.{i}.1")])
+            self.blocks.append(
+                [
+                    TFIdeficsPerceiverAttention(
+                        self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms, name=f"blocks.{i}.0"
+                    ),
+                    TFIdeficsMLP(self.intermediate_dim, config, name=f"blocks.{i}.1"),
+                ]
+            )
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
