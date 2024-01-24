@@ -326,20 +326,18 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size) -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, device = "mps") -> None:
         super().__init__()
-        self.num_layers = config.num_hidden_layers
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = config.max_position_embedding if config.max_sequence_length is None else config.max_sequence_length 
+        self.max_sequence_length = config.max_position_embeddings # if config.max_sequence_length is None else config.max_sequence_length 
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
         
-        # TODO device meta? 
         cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
 
-        self.key_cache: List[torch.Tensor] = [torch.zeros(cache_shape, dtype=self.dtype, device = "cuda:2") for _ in range(self.num_layers)]
-        self.value_cache: List[torch.Tensor] = [torch.zeros(cache_shape, dtype=self.dtype, device = "cuda:2") for _ in range(self.num_layers)]
+        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device = device)
+        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype,  device = device)
         
         # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
@@ -374,21 +372,21 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         attention_mask = cache_kwargs.get("attention_mask")
-        position_ids = cache_kwargs.get("position_ids")
+        position_ids = torch.arange(self.seen_tokens, self.seen_tokens+ key_states.shape[-2], device=key_states.device)
         # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         # place each cache on the correct layer device, not optimised?
-        self._seen_tokens = key_states.shape[-2] * (position_ids+1)
         # self.key_cache[layer_idx] = self.key_cache[layer_idx].to(key_states.device, non_blocking=True)
         # self.value_cache[layer_idx] = self.value_cache[layer_idx].to(value_states.device, non_blocking=True)
         # self.causal_4d_mask = self.causal_4d_mask.to(value_states.device, non_blocking=True)
         
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
+        k_out = self.key_cache
+        v_out = self.value_cache
         # prev_pos = self.seen_tokens//self.num_layers => faster already
         # try to use the same memory sapce to make sure graph is called
         k_out[:, :, position_ids] = key_states
         v_out[:, :, position_ids] = value_states
 
+        self._seen_tokens += key_states.shape[-2]
 
         # if attention_mask is not None:
         #     # if the past length changes then we do have a problem

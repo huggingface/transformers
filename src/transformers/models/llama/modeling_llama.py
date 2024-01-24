@@ -296,6 +296,9 @@ class LlamaAttention(nn.Module):
                 "when creating this class."
             )
 
+        self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool))
+
+
         self.attention_dropout = config.attention_dropout
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -320,6 +323,7 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
+
         
         # cache_shape = (8,  self.num_heads, 4096, self.head_dim)
         # self.register_buffer("key_cache",torch.zeros(cache_shape, dtype=torch.bfloat16, device = "cuda"), persistent=False)
@@ -417,6 +421,8 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
+        
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
             key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -724,7 +730,8 @@ class LlamaSdpaAttention(LlamaAttention):
             kv_seq_len += past_key_value.get_seq_length()
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)# 
+        past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
 
         if past_key_value is not None:
             cache_kwargs = {'position_ids':position_ids}
@@ -751,7 +758,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask= None, #self.causal_mask[:query_states.shape[2]],
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -887,6 +894,16 @@ class LlamaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
+    def _setup_cache(self, max_batch_size):
+        # if self.config.max_position_embeddings >= max_seq_length:
+        #     return
+
+        # max_seq_length = find_multiple(max_seq_length, 8)
+        self.max_batch_size = max_batch_size
+        for b in self.model.layers:
+            b.self_attn.past_key_values = StaticCache(self.config, max_batch_size, device=b.self_attn.q_proj.weight.device)
+
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -986,6 +1003,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
+
 
     def get_input_embeddings(self):
         return self.embed_tokens
