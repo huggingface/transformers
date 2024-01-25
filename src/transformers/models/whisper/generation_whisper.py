@@ -530,7 +530,7 @@ class WhisperGenerationMixin:
         )
         # TODO(Sanchit) - passing `decoder_input_ids` is deprecated. One should use `prompt_ids` instead
         # This function should be be removed in v4.39
-        self._check_decoder_input_ids(prompt_ids=prompt_ids, is_shortform=is_shortform, kwargs=kwargs)
+        self._check_decoder_input_ids(prompt_ids=prompt_ids, init_tokens=init_tokens, is_shortform=is_shortform, kwargs=kwargs)
 
         # 3. Retrieve logits processors
         begin_index = len(init_tokens)
@@ -1143,7 +1143,7 @@ class WhisperGenerationMixin:
         return init_tokens
 
     @staticmethod
-    def _check_decoder_input_ids(prompt_ids, is_shortform, kwargs):
+    def _check_decoder_input_ids(prompt_ids, init_tokens, is_shortform, kwargs):
         decoder_input_ids = kwargs.get("decoder_input_ids", None)
         if prompt_ids is not None and decoder_input_ids is not None:
             raise ValueError(f"Cannot pass both `prompt_ids`: {prompt_ids} and `decoder_input_ids`: {decoder_input_ids}. Passing `decoder_input_ids` is deprecated, consider not passing it.")
@@ -1353,7 +1353,7 @@ class WhisperGenerationMixin:
             if prompt_ids is not None and generation_config.prompt_condition_type == "all-segments":
                 prev_ids = prompt_ids
             else:
-                prev_ids = prev_start_of_text * one_tensor[0]
+                prev_ids = prev_start_of_text * one_tensor[0] if prev_start_of_text is not None else None
 
             prev_tokens = _pad_to_max_length(
                 active_segments,

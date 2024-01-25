@@ -1258,7 +1258,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.arange(5)
+        prompt_ids = torch.arange(5).to(torch_device)
         language = "<|de|>"
         task = "translate"
         lang_id = 6
@@ -1281,7 +1281,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.asarray(range(5))
+        prompt_ids = torch.arange(5).to("cuda")
         forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
 
         output = model.generate(
@@ -1986,7 +1986,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         language = "de"
         expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
         prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt")
 
         output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
         text = processor.decode(output[0])
