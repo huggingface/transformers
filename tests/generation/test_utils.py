@@ -88,6 +88,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
+    from transformers.generation.utils import _speculative_sampling
 
 
 class GenerationTesterMixin:
@@ -1539,6 +1540,39 @@ class GenerationTesterMixin:
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
+    def test_beam_search_low_memory(self):
+        # Check that choosing 'low_memory' does not change the model output
+        for model_class in self.all_generative_model_classes:
+            if any(model_name in model_class.__name__.lower() for model_name in ["fsmt", "reformer"]):
+                self.skipTest("Won't fix: old model with different cache format")
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in [
+                    "bloom",
+                    "ctrl",
+                    "gptbigcode",
+                    "transo_xl",
+                    "xlnet",
+                    "cpm",
+                ]
+            ):
+                self.skipTest("May fix in the future: need model-specific fixes")
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=2)
+            # batch_size=1 is ok, but batch_size>1 will cause non-identical output
+
+            config.use_cache = True
+            config.is_decoder = True
+
+            # test output equality of low versus high memory
+            model = model_class(config).to(torch_device).eval()
+
+            low_output = model.generate(input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=True)
+
+            high_output = model.generate(
+                input_ids, max_new_tokens=8, num_beams=5, early_stopping=True, low_memory=False
+            )
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
+
     @is_flaky()  # Read NOTE (1) below. If there are API issues, all attempts will fail.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
@@ -2391,6 +2425,43 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(expected_output, output, atol=1e-12))
 
+    def test_speculative_sampling(self):
+        # assume vocab size 10, input length 5 + 3 generated candidates
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
+                ]
+            ]
+        )
+        last_assistant_token_is_eos = False
+        max_matches = 5
+        validated_tokens, n_matches = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            last_assistant_token_is_eos,
+            max_matches,
+        )
+        self.assertTrue(n_matches.item() == 2)
+        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
+
 
 @require_torch
 class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMixin):
@@ -2765,6 +2836,19 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores_sum = transition_scores.sum(-1)
 
         self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
+
+    def test_beam_search_low_memory(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = AutoModelForCausalLM.from_pretrained("gpt2")
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        model_inputs = tokenizer("I", return_tensors="pt")["input_ids"]
+
+        low_output = model.generate(model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=True)
+
+        high_output = model.generate(
+            model_inputs, max_new_tokens=40, num_beams=5, early_stopping=True, low_memory=False
+        )
+        self.assertListEqual(low_output.tolist(), high_output.tolist())
 
     @slow
     def test_beam_search_example_integration(self):

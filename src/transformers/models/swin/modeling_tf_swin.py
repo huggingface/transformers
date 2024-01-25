@@ -97,9 +97,9 @@ class TFSwinEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    reshaped_hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -133,9 +133,9 @@ class TFSwinModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    reshaped_hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -169,9 +169,9 @@ class TFSwinMaskedImageModelingOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     reconstruction: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    reshaped_hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
 
     @property
     def logits(self):
@@ -214,9 +214,9 @@ class TFSwinImageClassifierOutput(ModelOutput):
 
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
-    reshaped_hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
+    reshaped_hidden_states: Tuple[tf.Tensor, ...] | None = None
 
 
 def window_partition(input_feature: tf.Tensor, window_size: int) -> tf.Tensor:
