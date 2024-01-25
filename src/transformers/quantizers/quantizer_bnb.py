@@ -201,7 +201,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
         return torch.int8
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
+        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
     ):
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters[tensor_name], bnb.nn.Int8Params):
@@ -218,9 +218,9 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
-        param_value: torch.Tensor,
+        param_value: "torch.Tensor",
         param_name: str,
-        target_device: torch.device,
+        target_device: "torch.device",
         state_dict: Dict[str, Any],
         unexpected_keys: List[str],
     ):
@@ -330,7 +330,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
             )
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
+        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
     ) -> bool:
         module, tensor_name = get_module_from_name(model, param_name)
         if isinstance(module._parameters[tensor_name], bnb.nn.Params4bit):
@@ -346,9 +346,9 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
     def create_quantized_param(
         self,
         model: "PreTrainedModel",
-        param_value: torch.Tensor,
+        param_value: "torch.Tensor",
         param_name: str,
-        target_device: torch.device,
+        target_device: "torch.device",
         state_dict: Dict[str, Any],
         unexpected_keys: List[str],
     ):

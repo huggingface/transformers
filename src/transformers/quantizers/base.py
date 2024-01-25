@@ -66,16 +66,16 @@ class HFQuantizer(ABC):
 
         self.check_packages_compatibility()
 
-    def set_torch_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
+    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch_dtype
 
     def set_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return device_map
 
-    def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> torch.dtype:
+    def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         return torch_dtype
 
-    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, torch.dtype]:
+    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
         """returns dtypes for modules that are not quantized"""
         return {
             name: torch_dtype
@@ -88,7 +88,7 @@ class HFQuantizer(ABC):
         return max_memory
 
     def check_quantized_param(
-        self, model: "PreTrainedModel", param_value: torch.Tensor, param_name: str, state_dict: Dict[str, Any]
+        self, model: "PreTrainedModel", param_value: "torch.Tensor", param_name: str, state_dict: Dict[str, Any]
     ) -> bool:
         """
         checks if a loaded state_dict component is part of quantized param + some validation; only defined if
@@ -97,7 +97,7 @@ class HFQuantizer(ABC):
         """
         return False
 
-    def create_quantized_param(self, *args, **kwargs) -> torch.nn.Parameter:
+    def create_quantized_param(self, *args, **kwargs) -> "torch.nn.Parameter":
         """
         takes needed components from state_dict and creates quantized param; only applicable if
         requires_parameters_quantization == True
@@ -139,6 +139,10 @@ class HFQuantizer(ABC):
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
         model._is_quantized_training_enabled = self.is_trainable
         return self._process_model_after_weight_loading(model, **kwargs)
+
+    @abstractmethod
+    def validate_environment(self, *args, **kwargs):
+        ...
 
     @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs):
