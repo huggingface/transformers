@@ -2479,6 +2479,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
+    def test_accelerator_config_from_partial(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves one option as something *not* basic
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                accelerator_config={
+                    "split_batches": True,
+                },
+            )
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.dispatch_batches, None)
+            self.assertEqual(trainer.accelerator.even_batches, True)
+            self.assertEqual(trainer.accelerator.use_seedable_sampler, True)
+
     def test_accelerator_config_from_dict_with_deprecated_args(self):
         # Checks that accelerator kwargs can be passed through
         # and the accelerator is initialized respectively

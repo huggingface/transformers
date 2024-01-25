@@ -4036,7 +4036,11 @@ class Trainer:
             # dict and AcceleratorConfigs are parseable, json files are not
             if isinstance(accelerator_kwargs, AcceleratorConfig):
                 accelerator_kwargs = accelerator_kwargs.to_dict()
-            elif not isinstance(accelerator_kwargs, dict):
+            elif isinstance(accelerator_kwargs, dict):
+                # Some values may need to go through non-accelerate aligned defaults
+                # and we need to run the `__post_init__` to set them
+                accelerator_kwargs = AcceleratorConfig(**accelerator_kwargs).to_dict()
+            else:
                 accelerator_kwargs = AcceleratorConfig.from_json_file(accelerator_kwargs).to_dict()
 
         self.accelerator = Accelerator(

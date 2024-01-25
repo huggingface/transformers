@@ -1200,7 +1200,7 @@ class AcceleratorConfig:
         },
     )
     use_seedable_sampler: bool = field(
-        default=True,
+        default=None,
         metadata={
             "help": "Whether or not use a fully seedable random sampler ([`accelerate.data_loader.SeedableRandomSampler`])."
             "Ensures training results are fully reproducable using a different sampling technique. "
@@ -1208,6 +1208,10 @@ class AcceleratorConfig:
             "multiple different seeds to compare. Should also be ran with [`~utils.set_seed`] for the best results."
         },
     )
+
+    def __post_init__(self):
+        if self.use_seedable_sampler is None:
+            self.use_seedable_sampler = True
 
     @classmethod
     def from_json_file(cls, json_file):
