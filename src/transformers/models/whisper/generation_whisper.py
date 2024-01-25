@@ -159,7 +159,7 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
 
 
 class WhisperGenerationMixin:
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, input_length=0):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
@@ -200,7 +200,9 @@ class WhisperGenerationMixin:
                 dim=2,
             )
 
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, input_length:]
+        # make sure timestamps are as long as cross_attention
+        input_length = cross_attentions[0].shape[2] + 1
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, :input_length]
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
@@ -579,7 +581,7 @@ class WhisperGenerationMixin:
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
                 outputs["token_timestamps"] = self._extract_token_timestamps(
-                    outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames, input_length=decoder_input_ids.shape[-1] - 1
+                    outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames
                 )
 
             return outputs
@@ -865,7 +867,7 @@ class WhisperGenerationMixin:
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                seek_outputs, generation_config.alignment_heads, num_frames=num_frames, input_length=decoder_input_ids.shape[-1] - 1
+                seek_outputs, generation_config.alignment_heads, num_frames=num_frames
             )
 
         seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
@@ -1086,10 +1088,10 @@ class WhisperGenerationMixin:
         language = getattr(generation_config, "language", None)
 
         if forced_decoder_ids is not None and task is not None:
-            logger.warn(f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. Make sure to either remove `forced_decoder_ids` from your `generation_config` or don't set `task`. `forced_decoder_ids` will be ignored in favor of task={task}.")
+            logger.info(f"You have passed task={task}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of task={task}.")
             forced_decoder_ids = None
         elif forced_decoder_ids is not None and language is not None:
-            logger.warn(f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. Make sure to either remove `forced_decoder_ids` from your `generation_config` or don't set `language`. `forced_decoder_ids` will be ignored in favor of language={language}.")
+            logger.info(f"You have passed language={language}, but also have set `forced_decoder_ids` to {forced_decoder_ids} which creates a conflict. `forced_decoder_ids` will be ignored in favor of language={language}.")
             forced_decoder_ids = None
 
         init_tokens = [generation_config.decoder_start_token_id]
@@ -1131,6 +1133,10 @@ class WhisperGenerationMixin:
             lang_id = generation_config.lang_to_id[language_token]
 
             # if language is defined it'll overwrite language ids that might have already been defined via the generation_config
+            replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
+        elif task is not None and hasattr(generation_config, "lang_to_id"):
+            # default to English
+            lang_id = generation_config.decoder_start_token_id + 1  # start_token_id + 1 is <en>
             replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
 
         if task is not None:
