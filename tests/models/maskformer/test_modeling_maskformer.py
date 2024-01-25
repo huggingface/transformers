@@ -102,6 +102,7 @@ class MaskFormerModelTester:
                 hidden_size=32,
                 num_heads=[1, 1, 2, 2],
             ),
+            backbone=None,
             decoder_config=DetrConfig(
                 decoder_ffn_dim=64,
                 decoder_layers=self.num_hidden_layers,
