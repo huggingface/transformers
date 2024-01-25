@@ -65,7 +65,7 @@ Start by loading the first 5000 examples from the [ELI5-Category](https://huggin
 >>> eli5 = load_dataset("eli5_category", split="train[:5000]")
 ```
 
-Split the dataset's `train_asks` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
+Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
 >>> eli5 = eli5.train_test_split(test_size=0.2)
