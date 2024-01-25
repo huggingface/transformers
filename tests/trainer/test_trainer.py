@@ -2479,6 +2479,41 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.accelerator.even_batches, False)
             self.assertEqual(trainer.accelerator.use_seedable_sampler, False)
 
+    def test_accelerator_config_from_dict_with_deprecated_args(self):
+        # Checks that accelerator kwargs can be passed through
+        # and the accelerator is initialized respectively
+        # and maintains the deprecated args if passed in
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=1.5, b=2.5)
+            model = RegressionPreTrainedModel(config)
+            eval_dataset = SampleIterableDataset()
+
+            # Leaves all options as something *not* basic
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config={
+                        "split_batches": True,
+                    },
+                    dispatch_batches=False,
+                )
+                self.assertIn("dispatch_batches", str(cm.warnings[0].message))
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.dispatch_batches, False)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            with self.assertWarns(FutureWarning) as cm:
+                args = RegressionTrainingArguments(
+                    output_dir=tmp_dir,
+                    accelerator_config={
+                        "even_batches": False,
+                    },
+                    split_batches=True,
+                )
+                self.assertIn("split_batches", str(cm.warnings[0].message))
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
+            self.assertEqual(trainer.accelerator.split_batches, True)
+            self.assertEqual(trainer.accelerator.even_batches, False)
+
 
 @require_torch
 @is_staging_test
