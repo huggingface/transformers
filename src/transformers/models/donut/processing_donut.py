@@ -18,13 +18,13 @@ Processor class for Donut.
 import re
 import warnings
 from contextlib import contextmanager
-
 from typing import Dict, List, Optional, Union
 
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
 from ...processing_utils import ProcessorMixin
 from ...utils import PaddingStrategy, TensorType
+
 
 class DonutProcessor(ProcessorMixin):
     r"""
@@ -66,7 +66,8 @@ class DonutProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self._in_target_context_manager = False
 
-    def __call__(self,
+    def __call__(
+        self,
         text=None,
         images=None,
         do_crop_margin: bool = None,
@@ -103,7 +104,7 @@ class DonutProcessor(ProcessorMixin):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        ):
+    ):
         """
         When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
         [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
@@ -113,7 +114,7 @@ class DonutProcessor(ProcessorMixin):
         # For backward compatibility
         if self._in_target_context_manager:
             return self.current_processor(
-                                images,
+                images,
                 do_crop_margin=do_crop_margin,
                 do_resize=do_resize,
                 size=size,
@@ -128,15 +129,15 @@ class DonutProcessor(ProcessorMixin):
                 image_std=image_std,
                 return_tensors=return_tensors,
                 data_format=data_format,
-                input_data_format=input_data_format
+                input_data_format=input_data_format,
             )
-
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.image_processor(images,
+            inputs = self.image_processor(
+                images,
                 do_crop_margin=do_crop_margin,
                 do_resize=do_resize,
                 size=size,
@@ -151,9 +152,11 @@ class DonutProcessor(ProcessorMixin):
                 image_std=image_std,
                 return_tensors=return_tensors,
                 data_format=data_format,
-                input_data_format=input_data_format,)
+                input_data_format=input_data_format,
+            )
         if text is not None:
-            encodings = self.tokenizer(text,
+            encodings = self.tokenizer(
+                text,
                 text_pair=text_pair,
                 text_target=text_target,
                 text_pair_target=text_pair_target,
@@ -171,7 +174,8 @@ class DonutProcessor(ProcessorMixin):
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_offsets_mapping=return_offsets_mapping,
                 return_length=return_length,
-                verbose=verbose,)
+                verbose=verbose,
+            )
 
         if text is None:
             return inputs

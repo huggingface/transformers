@@ -109,8 +109,7 @@ class DonutImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
-        
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
