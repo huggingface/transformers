@@ -19,15 +19,16 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
 from ...modeling_outputs import (
-    CausalLMOutputWithCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -47,6 +48,7 @@ from ...utils import (
 )
 from .configuration_xlm_roberta import XLMRobertaConfig
 
+
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
@@ -65,6 +67,19 @@ XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "xlm-roberta-large-finetuned-conll03-german",
     # See all XLM-RoBERTa models at https://huggingface.co/models?filter=xlm-roberta
 ]
+
+
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->XLMRoberta
@@ -355,7 +370,8 @@ class XLMRobertaAttention(nn.Module):
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
-    
+
+
 # Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->XLMRoberta
 class XLMRobertaFlashAttention2(XLMRobertaAttention):
     """
@@ -574,11 +590,13 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
             (cu_seqlens_q, cu_seqlens_k),
             (max_seqlen_in_batch_q, max_seqlen_in_batch_k),
         )
-    
+
+
 XLM_ROBERTA_ATTENTION_CLASSES = {
     "eager": XLMRobertaAttention,
     "flash": XLMRobertaFlashAttention2,
 }
+
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->XLMRoberta
 class XLMRobertaIntermediate(nn.Module):
@@ -623,7 +641,9 @@ class XLMRobertaLayer(nn.Module):
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = XLM_ROBERTA_ATTENTION_CLASSES[config._attn_implementation](config, position_embedding_type="absolute")
+            self.crossattention = XLM_ROBERTA_ATTENTION_CLASSES[config._attn_implementation](
+                config, position_embedding_type="absolute"
+            )
         self.intermediate = XLMRobertaIntermediate(config)
         self.output = XLMRobertaOutput(config)
 
