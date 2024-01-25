@@ -133,7 +133,10 @@ class FillMaskPipeline(Pipeline):
         if target_ids is not None and target_ids.shape[0] < top_k:
             top_k = target_ids.shape[0]
         input_ids = model_outputs["input_ids"][0]
-        outputs = model_outputs["logits"]
+        if model_outputs.get("logits") is not None:
+            outputs = model_outputs["logits"]
+        elif model_outputs.get("prediction_logits") is not None:
+            outputs = model_outputs["prediction_logits"]
 
         if self.framework == "tf":
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[:, 0]
