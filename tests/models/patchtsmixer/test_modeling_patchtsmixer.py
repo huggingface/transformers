@@ -407,29 +407,37 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names_with_target = [
-                "past_values",
-                "observed_mask",
-                "future_values",
-                "output_hidden_states",
-                "return_loss",
-            ]
-            expected_arg_names_without_target = [
-                "past_values",
-                "observed_mask",
-                "output_hidden_states",
-            ]
-
-            expected_arg_names = expected_arg_names_with_target
             if model_class == PatchTSMixerForPretraining:
-                expected_arg_names = expected_arg_names_without_target + ["return_loss"]
-            if model_class == PatchTSMixerModel:
-                expected_arg_names = expected_arg_names_without_target
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
+            elif model_class == PatchTSMixerModel:
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "output_hidden_states",
+                ]
+            elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
                 MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
             ):
-                expected_arg_names[expected_arg_names.index("future_values")] = "target_values"
-                expected_arg_names.remove("observed_mask")
+                expected_arg_names = [
+                    "past_values",
+                    "target_values",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
+            else:
+                # PatchTSMixerForPrediction
+                expected_arg_names = [
+                    "past_values",
+                    "observed_mask",
+                    "future_values",
+                    "output_hidden_states",
+                    "return_loss",
+                ]
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -716,7 +724,10 @@ class PatchTSMixerFunctionalTests(unittest.TestCase):
         else:
             output = mdl(
                 self.__class__.data,
-                **{ground_truth_arg: target_input, "output_hidden_states": output_hidden_states},
+                **{
+                    ground_truth_arg: target_input,
+                    "output_hidden_states": output_hidden_states,
+                },
             )
 
         prediction_outputs = getattr(output, output_predictions_arg)
