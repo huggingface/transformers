@@ -41,11 +41,6 @@ from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 logger = logging.get_logger(__name__)
 
 
-from transformers import AutoTokenizer
-
-tok = AutoTokenizer.from_pretrained("openai/whisper-medium.en")
-
-
 def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
     """
     Applies a median filter of width `filter_width` along the last dimension of the input.
@@ -755,10 +750,6 @@ class WhisperGenerationMixin:
 
             generation_config.temperature = temperature if generation_config.do_sample else 1.0
             generation_config.num_beams = kwargs.pop("num_beams", 1) if not generation_config.do_sample else 1
-
-            # print(decoder_input_ids)
-            print(tok.batch_decode(decoder_input_ids, skip_special_tokens=False))
-            print(temperature)
 
             seek_outputs = super().generate(
                 segment_input,

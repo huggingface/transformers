@@ -2369,10 +2369,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         result = model.generate(**inputs, **gen_kwargs)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
 
-        with open(f"file_all.txt", "w") as f:
-            for line in decoded_all:
-                f.write(line + "\n")
-
         for i in range(num_samples):
             assert decoded_all[i] == EXPECTED_TEXT[i]
 
