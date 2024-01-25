@@ -694,7 +694,7 @@ def _load_state_dict_into_meta_model(
     state_dict_folder=None,
     state_dict_index=None,
     dtype=None,
-    quantizer=None,
+    hf_quantizer=None,
     is_safetensors=False,
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
@@ -799,14 +799,14 @@ def _load_state_dict_into_meta_model(
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
         elif (
-            quantizer is None
-            or (not quantizer.requires_parameters_quantization)
-            or (not quantizer.check_quantized_param(model, param, param_name, state_dict))
+            hf_quantizer is None
+            or (not hf_quantizer.requires_parameters_quantization)
+            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
         ):
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
         else:
-            quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
             # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
@@ -1131,9 +1131,9 @@ class ModuleUtilsMixin:
         Optionally return the quantization type of the model. Returns None if the
         model has not been quantized
         """
-        quantizer = getattr(self, "quantizer", None) is not None
-        if isinstance(quantizer, HFQuantizer):
-            return quantizer.quantization_config.quant_method
+        hf_quantizer = getattr(self, "hf_quantizer", None) is not None
+        if isinstance(hf_quantizer, HFQuantizer):
+            return hf_quantizer.quantization_config.quant_method
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
@@ -2260,14 +2260,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
 
-        quantizer = getattr(self, "quantizer", None)
+        hf_quantizer = getattr(self, "hf_quantizer", None)
         quantization_serializable = (
-            quantizer is not None and isinstance(quantizer, HFQuantizer) and quantizer.is_serializable
+            hf_quantizer is not None and isinstance(hf_quantizer, HFQuantizer) and hf_quantizer.is_serializable
         )
 
-        if quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+        if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
             raise ValueError(
-                f"The model is quantized with {quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
 
@@ -3025,16 +3025,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 config.quantization_config = quantization_config
-            quantizer = AutoHFQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+            hf_quantizer = AutoHFQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
         else:
-            quantizer = None
+            hf_quantizer = None
 
-        if quantizer is not None:
-            quantizer.validate_environment(
+        if hf_quantizer is not None:
+            hf_quantizer.validate_environment(
                 torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax, device_map=device_map
             )
-            torch_dtype = quantizer.set_torch_dtype(torch_dtype)
-            device_map = quantizer.set_device_map(device_map)
+            torch_dtype = hf_quantizer.set_torch_dtype(torch_dtype)
+            device_map = hf_quantizer.set_device_map(device_map)
 
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
@@ -3347,7 +3347,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
-                (torch_dtype == torch.float16) or hasattr(quantizer, "use_keep_in_fp32_modules")
+                (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
             if is_sharded:
@@ -3393,8 +3393,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             keep_in_fp32_modules = []
 
-        if quantizer is not None:
-            quantizer.preprocess_model(model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules)
+        if hf_quantizer is not None:
+            hf_quantizer.preprocess_model(
+                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
+            )
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
@@ -3405,8 +3407,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if isinstance(device_map, str):
             special_dtypes = {}
 
-            if quantizer is not None:
-                special_dtypes.update(quantizer.get_special_dtypes_update(model, torch_dtype))
+            if hf_quantizer is not None:
+                special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
 
             special_dtypes.update(
                 {
@@ -3417,8 +3419,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             target_dtype = torch_dtype
-            if quantizer is not None:
-                target_dtype = quantizer.adjust_target_dtype(target_dtype)
+            if hf_quantizer is not None:
+                target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
 
             no_split_modules = model._get_no_split_modules(device_map)
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
@@ -3445,16 +3447,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 max_memory = get_max_memory(max_memory)
-            if quantizer is not None:
-                max_memory = quantizer.adjust_max_memory(max_memory)
+            if hf_quantizer is not None:
+                max_memory = hf_quantizer.adjust_max_memory(max_memory)
             device_map_kwargs["max_memory"] = max_memory
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
-            if quantizer is not None:
-                quantizer.validate_environment(device_map=device_map)
+            if hf_quantizer is not None:
+                hf_quantizer.validate_environment(device_map=device_map)
 
         elif device_map is not None:
             model.tie_weights()
@@ -3518,7 +3520,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                quantizer=quantizer,
+                hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
@@ -3562,10 +3564,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **device_map_kwargs)
 
-        if quantizer is not None:
-            quantizer.postprocess_model(model)
-            model.quantizer = quantizer
-            # model.config.quantization_config = quantizer.quantization_config
+        if hf_quantizer is not None:
+            hf_quantizer.postprocess_model(model)
+            model.hf_quantizer = hf_quantizer
+            # model.config.quantization_config = hf_quantizer.quantization_config
 
         if _adapter_model_path is not None:
             model.load_adapter(
@@ -3603,7 +3605,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder=None,
         offload_state_dict=None,
         dtype=None,
-        quantizer=None,
+        hf_quantizer=None,
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
@@ -3732,11 +3734,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if param.device == torch.device("meta"):
                     value = torch.empty(*param.size(), dtype=target_dtype)
                     if getattr(
-                        quantizer, "requires_parameters_quantization", False
-                    ) or not quantizer.check_quantized_param(model, param_value=value, param_name=key, state_dict={}):
+                        hf_quantizer, "requires_parameters_quantization", False
+                    ) or not hf_quantizer.check_quantized_param(
+                        model, param_value=value, param_name=key, state_dict={}
+                    ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
 
         # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -3911,12 +3915,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
-                                if quantizer is None:
+                                if hf_quantizer is None:
                                     set_module_tensor_to_device(
                                         model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
-                                    quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
+                                    hf_quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
@@ -3930,7 +3934,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             state_dict_folder=state_dict_folder,
                             state_dict_index=state_dict_index,
                             dtype=dtype,
-                            quantizer=quantizer,
+                            hf_quantizer=hf_quantizer,
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
@@ -4039,7 +4043,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @staticmethod
     def _load_pretrained_model_low_mem(
-        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", quantizer=None
+        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", hf_quantizer=None
     ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
@@ -4056,14 +4060,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         5. replace the params/buffers from the state_dict
 
         Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed. To
-        handle bitsandbytes, needs non-empty quantizer argument.
+        handle bitsandbytes, needs non-empty hf_quantizer argument.
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
         state_dict = load_state_dict(resolved_archive_file)
         expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
         error_msgs = _load_state_dict_into_meta_model(
-            model, state_dict, loaded_state_dict_keys, start_prefix, expected_keys=expected_keys, quantizer=quantizer
+            model,
+            state_dict,
+            loaded_state_dict_keys,
+            start_prefix,
+            expected_keys=expected_keys,
+            hf_quantizer=hf_quantizer,
         )
         return error_msgs
 
