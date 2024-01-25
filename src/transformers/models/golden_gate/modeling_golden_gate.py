@@ -114,7 +114,6 @@ class GoldenGateRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        self.inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2) [: (self.dim // 2)].to(device) / self.dim))
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(t, self.inv_freq).float()
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -643,13 +642,14 @@ class GoldenGateSdpaAttention(GoldenGateAttention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         
         # for now we always reset the rotary embedding to make sure the dtype is correct.
+        self.rotary_emb.inv_freq = 1.0 / (10000 ** (torch.arange(0, self.head_dim, 2) [: (self.head_dim // 2)].to(hidden_states.device) / self.head_dim))
         self.rotary_emb._set_cos_sin_cache(kv_seq_len, dtype = torch.float32, device=hidden_states.device)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         
         # t2 = apply_rotary_pos_emb(query_states, key_states, cos.to(torch.bfloat16), sin.to(torch.bfloat16), position_ids)[0].transpose(1,2)
         # t1 = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin, position_ids)[0].transpose(1,2)
         # torch.testing.assert_allclose(t2,t1)
-        query_states, key_states = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin, position_ids)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
         query_states = query_states.to(hidden_states.dtype)
         key_states = key_states.to(hidden_states.dtype)
         if past_key_value is not None:
