@@ -111,6 +111,12 @@ class DPTConfig(PretrainedConfig):
         backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
             leverage the [`AutoBackbone`] API.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
 
     Example:
 
@@ -161,6 +167,8 @@ class DPTConfig(PretrainedConfig):
         backbone_featmap_shape=[1, 1024, 24, 24],
         neck_ignore_stages=[0, 1],
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -168,9 +176,15 @@ class DPTConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.is_hybrid = is_hybrid
 
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
         use_autobackbone = False
         if self.is_hybrid:
-            if backbone_config is None:
+            if backbone_config is None and backbone is None:
                 logger.info("Initializing the config with a `BiT` backbone.")
                 backbone_config = {
                     "global_padding": "same",
@@ -213,6 +227,8 @@ class DPTConfig(PretrainedConfig):
             self.backbone_featmap_shape = None
             self.neck_ignore_stages = []
 
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.num_hidden_layers = None if use_autobackbone else num_hidden_layers
         self.num_attention_heads = None if use_autobackbone else num_attention_heads
         self.intermediate_size = None if use_autobackbone else intermediate_size
