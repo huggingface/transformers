@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_auto_gptq_available, is_optimum_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
+from ..utils.quantization_config import GPTQConfig, QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -45,7 +45,7 @@ class GptqHFQuantizer(HFQuantizer):
         super().__init__(quantization_config, **kwargs)
         from optimum.gptq import GPTQQuantizer
 
-        self.quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict())
+        self.quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
         gptq_supports_cpu = version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
@@ -82,7 +82,7 @@ class GptqHFQuantizer(HFQuantizer):
                 self.quantization_config.tokenizer = model.name_or_path
 
             self.quantizer.quantize_model(model, self.quantization_config.tokenizer)
-            # model.config.quantization_config = GPTQConfig.from_dict(self.quantizer.to_dict())
+            model.config.quantization_config = GPTQConfig.from_dict(self.quantizer.to_dict())
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

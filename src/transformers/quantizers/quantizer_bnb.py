@@ -270,6 +270,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         super()._process_model_after_weight_loading(model, **kwargs)
+        # TODO: deprecate these attributes in the future
         model.is_8bit_serializable = self.is_serializable
         model.is_loaded_in_8bit = True
 
@@ -427,6 +428,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         super()._process_model_after_weight_loading(model, **kwargs)
         model.is_loaded_in_4bit = True
+        model.is_4bit_serializable = self.is_serializable
         return model
 
     @property

@@ -53,7 +53,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
-from .quantizers import AutoHFQuantizer
+from .quantizers import AutoHFQuantizer, HFQuantizer
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -1056,7 +1056,8 @@ class ModuleUtilsMixin:
             total_parameters = list(self.parameters())
 
         total_numel = []
-        is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
+        is_loaded_in_4bit = self.quant_method is not None and self.quant_method == "bitsandbytes_4bit"
+
         if is_loaded_in_4bit:
             if is_bitsandbytes_available():
                 import bitsandbytes as bnb
@@ -1123,6 +1124,16 @@ class ModuleUtilsMixin:
         """
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
+
+    @property
+    def quant_method(self) -> Optional[str]:
+        """
+        Optionally return the quantization type of the model. Returns None if the
+        model has not been quantized
+        """
+        quantizer = getattr(self, "quantizer", None) is not None
+        if isinstance(quantizer, HFQuantizer):
+            return quantizer.quantization_config.quant_method
 
 
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
@@ -2250,7 +2261,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
 
         quantizer = getattr(self, "quantizer", None)
-        quantization_serializable = quantizer is not None and quantizer.is_serializable
+        quantization_serializable = (
+            quantizer is not None and isinstance(quantizer, HFQuantizer) and quantizer.is_serializable
+        )
 
         if quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
             raise ValueError(
@@ -3552,6 +3565,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantizer is not None:
             quantizer.postprocess_model(model)
             model.quantizer = quantizer
+            # model.config.quantization_config = quantizer.quantization_config
 
         if _adapter_model_path is not None:
             model.load_adapter(
