@@ -1312,3 +1312,19 @@ You can vote for this feature and see where it is at these CI-specific threads:
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
+
+## DeepSpeed integration
+
+For a PR that involves the DeepSpeed integration, keep in mind our CircleCI PR CI setup doesn't have GPUs. Tests requiring GPUs are run on a different CI nightly. This means if you get a passing CI report in your PR, it doesn’t mean the DeepSpeed tests pass.
+
+To run DeepSpeed tests:
+
+```bash
+RUN_SLOW=1 pytest tests/deepspeed/test_deepspeed.py
+```
+
+Any changes to the modeling or PyTorch examples code requires running the model zoo tests as well.
+
+```bash
+RUN_SLOW=1 pytest tests/deepspeed
+```
