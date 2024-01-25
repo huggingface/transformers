@@ -161,6 +161,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
+        pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
+            Deprecated. Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Sets do_pad.
     """
 
     model_input_names = ["pixel_values"]
@@ -178,12 +181,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_center_crop: bool = True,
         do_pad: bool = True,
-        **kwargs,
+        pad_and_return_pixel_mask: bool = None,
+        max_text_len: int = 512 # TODO (Molbap): find original values in model config 
     ) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
+        if pad_and_return_pixel_mask:
+            do_pad = pad_and_return_pixel_mask
 
-        super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 288}
         size = get_size_dict(size, default_to_square=False)
 
@@ -381,7 +384,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
