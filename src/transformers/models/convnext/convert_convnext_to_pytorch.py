@@ -25,9 +25,10 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torchvision import transforms
 
-from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
-from transformers.utils import logging
+from transformers import BitImageProcessor, ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
+from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, logging
 
 
 logging.set_verbosity_info()
@@ -148,6 +149,31 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     size = 224 if "224" in checkpoint_url else 384
     image_processor = ConvNextImageProcessor(size=size)
     pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
+
+    # preprocess image
+    transformations = transforms.Compose(
+        [
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
+                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
+            ),
+        ]
+    )
+
+    original_pixel_values = transformations(pixel_values).unsqueeze(0)  # insert batch dimension
+
+    processor = BitImageProcessor(
+        size={"shortest_edge": 256},
+        resample=PILImageResampling.BICUBIC,
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+    )
+    pixel_values = processor(pixel_values, return_tensors="pt").pixel_values
+
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     logits = model(pixel_values).logits
 
