@@ -1734,7 +1734,7 @@ class TrainingArguments:
 
         if isinstance(self.accelerator_config, str):
             self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-        if self.dispatch_batches:
+        if self.dispatch_batches is not None:
             warnings.warn(
                 "Using `--dispatch_batches` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                 " `--accelerator_config {'dispatch_batches':VALUE} instead",
@@ -1742,7 +1742,7 @@ class TrainingArguments:
             )
             self.accelerator_config["dispatch_batches"] = self.dispatch_batches
 
-        if self.split_batches:
+        if self.split_batches is not None:
             warnings.warn(
                 "Using `--split_batches` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
                 " `--accelerator_config {'split_batches':VALUE} instead",
