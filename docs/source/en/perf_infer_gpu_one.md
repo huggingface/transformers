@@ -54,6 +54,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
+* [XLMRoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 

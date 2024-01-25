@@ -113,6 +113,35 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 This implementation is the same as RoBERTa. Refer to the [documentation of RoBERTa](roberta) for usage examples as well as the information relative to the inputs and outputs.
 </Tip>
 
+## Combining XLMRoBERTa and Flash Attention 2
+
+First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
+
+```bash
+pip install -U flash-attn --no-build-isolation
+```
+
+Make also sure that you have a hardware that is compatible with Flash-Attention 2. Read more about it in the official documentation of flash-attn repository. Make also sure to load your model in half-precision (e.g. `torch.float16`)
+
+To load and run a model using Flash Attention 2, refer to the snippet below:
+
+```python
+>>> import torch
+>>> from transformers import AutoTokenizer, AutoModel
+
+>>> device = "cuda" # the device to load the model onto
+
+>>> tokenizer = AutoTokenizer.from_pretrained('XLM-RoBERTa-base')
+>>> model = AutoModel.from_pretrained("XLM-RoBERTa-base", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
+
+>>> text = "Replace me by any text you'd like."
+
+>>> encoded_input = tokenizer(text, return_tensors='pt').to(device)
+>>> model.to(device)
+
+>>> output = model(**encoded_input)
+```
+
 ## XLMRobertaConfig
 
 [[autodoc]] XLMRobertaConfig
