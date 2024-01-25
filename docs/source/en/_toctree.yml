@@ -573,6 +573,8 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rt_detr
+        title: RTDetr
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/swiftformer

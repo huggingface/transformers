@@ -188,6 +188,7 @@ from . import (
     roberta_prelayernorm,
     roc_bert,
     roformer,
+    rt_detr,
     rwkv,
     sam,
     seamless_m4t,

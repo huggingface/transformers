@@ -245,6 +245,7 @@ Flax), PyTorch, and/or TensorFlow.
 |          [RoBERTa-PreLayerNorm](model_doc/roberta-prelayernorm)          |       ✅        |         ✅         |      ✅      |
 |                      [RoCBert](model_doc/roc_bert)                       |       ✅        |         ❌         |      ❌      |
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
+|                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
