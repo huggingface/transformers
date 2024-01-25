@@ -266,7 +266,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
-            # inputs_dict["labels"] = labels
             inputs_dict["target_values"] = labels
             inputs_dict.pop("future_values")
         elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
