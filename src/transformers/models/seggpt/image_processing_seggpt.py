@@ -41,6 +41,44 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+# See https://arxiv.org/pdf/2212.02499.pdf  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
+# Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
+def build_palette(num_classes: int) -> List[Tuple[int, int]]:
+    base = int(num_classes ** (1 / 3)) + 1  # 19
+    margin = 256 // base
+
+    # we assume that class_idx 0 is the background which is mapped to black
+    color_list = [(0,0,0)] 
+    for location in range(num_classes):
+        num_seq_r = location // base ** 2
+        num_seq_g = (location % base ** 2) // base
+        num_seq_b = location % base
+
+        R = 255 - num_seq_r * margin
+        G = 255 - num_seq_g * margin
+        B = 255 - num_seq_b * margin
+
+        color_list.append((R, G, B))
+
+    return color_list
+
+def mask_to_rgb(mask: np.ndarray, palette: List[Tuple[int, int]]) -> np.ndarray:
+    height, width = mask.shape
+
+    rgb_mask = np.zeros((height, width, 3), dtype=np.uint8)
+    classes_in_mask = np.unique(mask)
+
+    for class_idx in classes_in_mask:
+        rgb_value = palette[class_idx]
+        class_mask = (mask == class_idx).astype(np.uint8)
+        class_mask = np.expand_dims(class_mask, axis=-1)
+        class_rgb_mask = class_mask * np.array(rgb_value)
+        rgb_mask += class_rgb_mask.astype(np.uint8)
+
+    rgb_mask = np.clip(rgb_mask, 0, 255).astype(np.uint8)
+
+
+    return rgb_mask
 
 class SegGptImageProcessor(BaseImageProcessor):
     r"""
@@ -71,6 +109,10 @@ class SegGptImageProcessor(BaseImageProcessor):
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        num_classes (`int`, *optional*, defaults to `None`):
+            Number of classes in the segmentation task (excluding the background). If specified, a palette will be built, 
+            assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx channel to a 3 channel RGB.
+            Not specifying this will result in the prompt mask being passed through as is.
     """
 
     model_input_names = ["pixel_values"]
@@ -85,6 +127,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        num_classes: Optional[int] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -98,6 +141,8 @@ class SegGptImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.num_classes = num_classes
+        self.palette = build_palette(self.num_classes) if num_classes is not None else None
 
     def resize(
         self,
@@ -150,6 +195,7 @@ class SegGptImageProcessor(BaseImageProcessor):
     def _preprocess_step(
         self,
         images: ImageInput,
+        is_mask: bool = False,
         do_resize: Optional[bool] = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -169,6 +215,9 @@ class SegGptImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to _preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            is_mask (`bool`, *optional*, defaults to `False`):
+                Whether the image is a mask. If True, the image is converted to RGB using the palette if
+                `self.num_classes` is specified otherwise RGB is achieved by duplicating the channel.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -233,6 +282,12 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if is_mask:
+            if self.num_classes is not None:
+                images = [mask_to_rgb(image, self.palette) for image in images]
+            else:
+                images = [np.repeat(image[..., None], 3, axis=-1) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
@@ -344,6 +399,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         if images is not None:
             images = self._preprocess_step(
                 images,
+                is_mask=False,
                 do_resize=do_resize,
                 size=size,
                 resample=resample,
@@ -362,6 +418,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         if prompt_images is not None:
             prompt_images = self._preprocess_step(
                 prompt_images,
+                is_mask=False,
                 do_resize=do_resize,
                 size=size,
                 resample=resample,
@@ -380,6 +437,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         if prompt_masks is not None:
             prompt_masks = self._preprocess_step(
                 prompt_masks,
+                is_mask=True,
                 do_resize=do_resize,
                 size=size,
                 resample=PILImageResampling.NEAREST,
@@ -433,8 +491,70 @@ class SegGptImageProcessor(BaseImageProcessor):
                     mask.unsqueeze(0),
                     size=target_sizes[idx],
                     mode="nearest",
-                )
+                )[0]
 
             results.append({"mask": mask})
+
+        return results
+    
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+    ):
+        """
+        Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`SegGptImageSegmentationOutput`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+        Returns:
+            `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
+            in the batch as predicted by the model.
+        """
+        requires_backends(self, ["torch"])
+        # batch_size x num_channels x 2*height x width
+        masks = outputs.pred_masks
+
+        # Take predicted mask as input and prompt are concatenated in the height dimension
+        # batch_size x num_channels x height x width
+        masks = masks[:, :, masks.shape[2] // 2 :, :] 
+
+        # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
+        # batch_size x height x width x num_channels
+        std = torch.tensor(self.image_std).to(masks.device)
+        mean =  torch.tensor(self.image_mean).to(masks.device)
+
+        masks = masks.permute(0, 2, 3, 1) * std + mean
+
+        # batch_size x num_channels x height x width
+        masks = masks.permute(0, 3, 1, 2)
+
+        # Clip to match with palette if specified
+        masks = torch.clip(masks*255, 0, 255)
+
+        results = []
+        palette_tensor = torch.tensor(self.palette).float().to(masks.device) if self.palette is not None else None
+
+        for idx, mask in enumerate(masks):
+            if target_sizes is not None:
+                mask = torch.nn.functional.interpolate(
+                    mask.unsqueeze(0),
+                    size=target_sizes[idx],
+                    mode="nearest",
+                )[0]
+
+            if self.num_classes is not None:
+                height, width = mask.shape
+                dist = torch.pow(mask.view(height, width, 1, 3) - palette_tensor.view(1, 1, self.num_classes, 3), 2)
+                dist = torch.sum(dist, dim=-1)
+                pred = dist.argmin(dim=-1)
+
+            else:
+                pred = mask
+
+            results.append({"mask": pred})
 
         return results
