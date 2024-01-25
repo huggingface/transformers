@@ -271,7 +271,7 @@ Then you can load DistilBERT with [`TFAutoModelForQuestionAnswering`]:
 ```py
 >>> from transformers import TFAutoModelForQuestionAnswering
 
->>> model = TFAutoModelForQuestionAnswering("distilbert-base-uncased")
+>>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
