@@ -889,7 +889,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
-            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.1)
+            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=0.0)
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
             if reduction == "none":
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
