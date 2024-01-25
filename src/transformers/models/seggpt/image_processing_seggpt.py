@@ -547,7 +547,7 @@ class SegGptImageProcessor(BaseImageProcessor):
                 )[0]
 
             if self.num_classes is not None:
-                height, width = mask.shape
+                _, height, width = mask.shape
                 dist = torch.pow(mask.view(height, width, 1, 3) - palette_tensor.view(1, 1, self.num_classes, 3), 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
