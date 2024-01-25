@@ -20,6 +20,10 @@ Quantization techniques focus on representing data with less information while a
 
 Transformers supports several quantization schemes to help you run inference with large language models (LLMs) and finetune adapters on quantized models. This guide will show you how to use Activation-aware Weight Quantization (AWQ), AutoGPTQ, and bitsandbytes.
 
+## Adding new quatization methods
+
+You are interested in adding a new quantization method in transformers? Read out the [HFQuantizer](./hf_quantizer) guide to learn more about it.
+
 ## AWQ
 
 <Tip>
