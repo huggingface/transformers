@@ -528,8 +528,11 @@ class WhisperGenerationMixin:
             config=self.config,
             kwargs=kwargs,
         )
+        # TODO(Sanchit) - passing `decoder_input_ids` is deprecated. One should use `prompt_ids` instead
+        # This function should be be removed in v4.39
+        self._check_decoder_input_ids(prompt_ids=prompt_ids, is_shortform=is_shortform, kwargs=kwargs)
 
-        # 4. Retrieve logits processors
+        # 3. Retrieve logits processors
         begin_index = len(init_tokens)
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
@@ -545,12 +548,23 @@ class WhisperGenerationMixin:
                 kwargs["temperature"] = temperature
 
             decoder_input_ids = kwargs.pop("decoder_input_ids", None)
-
-            if decoder_input_ids is not None and len(init_tokens) > 0:
-                logger.warn(f"You have provided `decoder_input_ids` which will overwrite the `init_tokens` {init_tokens}. This might lead to unexpected behavior.")
-            elif len(init_tokens) > 0:
+            if decoder_input_ids is None:
                 one_tensor = torch.ones((input_features.shape[0], 1), device=input_features.device, dtype=torch.long)
                 decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
+
+            if prompt_ids is not None:
+                decoder_input_ids = torch.cat([prompt_ids[None].repeat(input_features.shape[0], 1), decoder_input_ids], dim=-1)
+
+            if kwargs.get("max_new_tokens", 0) + decoder_input_ids.shape[-1] > self.config.max_target_positions:
+                max_new_tokens = kwargs.get("max_new_tokens", 0)
+                raise ValueError(
+                    f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+                    f"is {max_new_tokens}. Thus, the combined length of "
+                    f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+                    f"`max_target_positions` of the Whisper model: {self.config.max_target_positions}. "
+                    "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+                    f"so that their combined length is less than {self.config.max_target_positions}."
+                )
 
             outputs = super().generate(
                 input_features,
@@ -1127,6 +1141,16 @@ class WhisperGenerationMixin:
             init_tokens = init_tokens[-1:]
 
         return init_tokens
+
+    @staticmethod
+    def _check_decoder_input_ids(prompt_ids, is_shortform, kwargs):
+        decoder_input_ids = kwargs.get("decoder_input_ids", None)
+        if prompt_ids is not None and decoder_input_ids is not None:
+            raise ValueError(f"Cannot pass both `prompt_ids`: {prompt_ids} and `decoder_input_ids`: {decoder_input_ids}. Passing `decoder_input_ids` is deprecated, consider not passing it.")
+        elif decoder_input_ids is not None and not is_shortform:
+            raise ValueError(f"Cannot pass both `decoder_input_ids`: {decoder_input_ids} for long-form generation. Consider passing `prompt_ids` instead.")
+        elif decoder_input_ids is not None and is_shortform:
+            warnings.warn(f"You have provided `decoder_input_ids` which will overwrite the `init_tokens` {init_tokens}. This might lead to unexpected behavior. Passing `decoder_input_ids` is deprecated and will be removed in v4.39. Consider passing `prompt_ids` instead.", FutureWarning)
 
     @staticmethod
     def _set_token_ids(generation_config, config, kwargs):

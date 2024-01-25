@@ -1298,22 +1298,22 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.max_target_positions = 5
+        config.max_target_positions = 7
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.asarray(range(4))
-        sliced_prompt_ids = prompt_ids[1:]
-        sliced_prompt_ids = sliced_prompt_ids[-config.max_target_positions // 2 - 1 :]
-        max_new_tokens = 5
+        decoder_input_ids = torch.arange(5).to("cuda")
+        prompt_ids = decoder_input_ids[:4]
+        max_new_tokens = 8
 
         with self.assertRaisesRegex(
             ValueError,
-            f"The length of the sliced `prompt_ids` is {len(sliced_prompt_ids)}, and the `max_new_tokens` "
-            f"{max_new_tokens}. Thus, the combined length of the sliced `prompt_ids` and `max_new_tokens` is: "
-            f"{len(sliced_prompt_ids) + max_new_tokens}. This exceeds the `max_target_positions` of the Whisper model: "
-            f"{config.max_target_positions}. You should either reduce the length of your prompt, or reduce the "
-            f"value of `max_new_tokens`, so that their combined length is less that {config.max_target_positions}.",
+            f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+            f"is {max_new_tokens}. Thus, the combined length of "
+            f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+            f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
+            "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+            f"so that their combined length is less than {config.max_target_positions}."
         ):
             model.generate(input_features, max_new_tokens=max_new_tokens, prompt_ids=prompt_ids)
 
