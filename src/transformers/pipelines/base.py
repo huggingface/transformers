@@ -763,6 +763,11 @@ def build_pipeline_init_args(
     return docstring
 
 
+PIPELINE_INIT_ARGS = build_pipeline_init_args(
+    has_tokenizer=True, has_feature_extractor=True, has_image_processor=True, supports_binary_output=True
+)
+
+
 if is_torch_available():
     from transformers.pipelines.pt_utils import (
         PipelineChunkIterator,
