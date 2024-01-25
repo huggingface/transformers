@@ -2304,6 +2304,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if getattr(self, "_awq_is_fused", False):
             raise ValueError("You cannot save an AWQ model that uses fused modules!")
 
+        if getattr(self, "_awq_uses_exllama", False):
+            raise ValueError("You cannot save an AWQ model that uses Exllama kernels for inference!")
+
         if "save_config" in kwargs:
             warnings.warn(
                 "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
@@ -3689,6 +3692,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and "modules_to_not_convert" in config.quantization_config
             ):
                 quantization_config.modules_to_not_convert = config.quantization_config["modules_to_not_convert"]
+            # In case a user passes a `AwqConfig` with `version=exllama` or `version=gemm` for models that have
+            # `gemv` as their original packing version, an error should be raised.
+            elif (
+                getattr(quantization_config, "version", None) in ["gemm", "exllama"]
+                and config.quantization_config["version"] == "gemv"
+            ):
+                raise ValueError(
+                    "A model that was quantized with `gemv` packing method can't be used with `gemm` or `exllama` backend."
+                )
 
             if quantization_config.modules_to_not_convert is not None:
                 modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
@@ -3905,9 +3917,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 pass
 
         if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ:
-            if quantization_config.use_exllama:
-                model = post_init_awq_exllama_modules(model, quantization_config.exllama_config)
-                model._awq_use_exllama = True
+            if quantization_config.version == "exllama":
+                model = post_init_awq_exllama_modules(model)
+                model._awq_uses_exllama = True
 
             if quantization_config.do_fuse:
                 model = fuse_awq_modules(model, quantization_config)

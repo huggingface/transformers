@@ -43,6 +43,7 @@ class QuantizationMethod(str, Enum):
 class AWQLinearVersion(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
+    EXLLAMA = "exllama"
 
     @staticmethod
     def from_str(version: str):
@@ -51,6 +52,8 @@ class AWQLinearVersion(str, Enum):
             return AWQLinearVersion.GEMM
         elif version == "gemv":
             return AWQLinearVersion.GEMV
+        elif version == "exllama":
+            return AWQLinearVersion.EXLLAMA
         else:
             raise ValueError(f"Unknown AWQLinearVersion {version}")
 
@@ -560,11 +563,6 @@ class AwqConfig(QuantizationConfigMixin):
             that quantize their own models using `llm-awq` library.
         do_fuse (`bool`, *optional*, defaults to `False`):
             Whether to fuse attention and mlp layers together for faster inference
-        use_exllama (`Optional`, *optional*):
-            Whether to use exllama kernels. Defaults to `False` if unset. Only works with `bits` = 4.
-        exllama_config (`Optional`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
-            to `{"version": 1}` if unset.
         fuse_max_seq_len (`int`, *optional*):
             The Maximum sequence length to generate when using fusing.
         modules_to_fuse (`dict`, *optional*, default to `None`):
@@ -583,8 +581,6 @@ class AwqConfig(QuantizationConfigMixin):
         version: AWQLinearVersion = AWQLinearVersion.GEMM,
         backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
         do_fuse: Optional[bool] = None,
-        use_exllama: Optional[bool] = None,
-        exllama_config: Optional[Dict[str, Any]] = None,
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
         modules_to_not_convert: Optional[List] = None,
@@ -597,8 +593,6 @@ class AwqConfig(QuantizationConfigMixin):
         self.zero_point = zero_point
         self.version = version
         self.backend = backend
-        self.use_exllama = use_exllama
-        self.exllama_config = exllama_config
         self.fuse_max_seq_len = fuse_max_seq_len
         self.modules_to_not_convert = modules_to_not_convert
 
@@ -624,9 +618,9 @@ class AwqConfig(QuantizationConfigMixin):
             )
 
         self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV]:
+        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA]:
             raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV] - not recognized version {self.version}"
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA] - not recognized version {self.version}"
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
@@ -681,27 +675,9 @@ class AwqConfig(QuantizationConfigMixin):
                     f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
                 )
 
-        if self.use_exllama is None:
-            # Default behaviour
-            self.use_exllama = False
-
-        if self.exllama_config is None:
-            self.exllama_config = {"version": ExllamaVersion.ONE}
-        else:
-            if "version" not in self.exllama_config:
-                raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [
-                ExllamaVersion.ONE,
-                ExllamaVersion.TWO,
-            ]:
-                exllama_version = self.exllama_config["version"]
-                raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                )
-
-        if self.use_exllama:
+        if self.version == AWQLinearVersion.EXLLAMA:
             awq_version_supports_exllama = False
-            MIN_AWQ_VERSION = "0.1.8"
+            MIN_AWQ_VERSION = "0.1.9"
             if is_auto_awq_available():
                 awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
                     MIN_AWQ_VERSION
@@ -709,17 +685,12 @@ class AwqConfig(QuantizationConfigMixin):
 
             if not awq_version_supports_exllama:
                 raise ValueError(
-                    f"You current version of `autoawq` does not support exllama backend, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
-                )
-
-            if self.exllama_config["version"] == ExllamaVersion.ONE:
-                logger.info(
-                    "You have activated exllama backend. Note that you can get better inference "
-                    "speed using exllamav2 kernel by setting `exllama_config`."
+                    f"You current version of `autoawq` does not support exllama backend, "
+                    f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
                 )
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
+        loading_attibutes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict

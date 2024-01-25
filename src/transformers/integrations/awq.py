@@ -19,7 +19,6 @@ from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
     AWQLinearVersion,
-    ExllamaVersion,
 )
 
 
@@ -96,22 +95,18 @@ def replace_with_awq_linear(
         )
 
     if backend == AwqBackendPackingMethod.AUTOAWQ:
-        if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
-            from awq.modules.exllama import WQLinear_Exllama
-
-            target_cls = WQLinear_Exllama
-        elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
-            from awq.modules.exllamav2 import WQLinear_ExllamaV2
-
-            target_cls = WQLinear_ExllamaV2
-        elif quantization_config.version == AWQLinearVersion.GEMM:
-            from awq.modules.linear import WQLinear_GEMM
+        if quantization_config.version == AWQLinearVersion.GEMM:
+            from awq.modules.linear.gemm import WQLinear_GEMM
 
             target_cls = WQLinear_GEMM
         elif quantization_config.version == AWQLinearVersion.GEMV:
-            from awq.modules.linear import WQLinear_GEMV
+            from awq.modules.linear.gemv import WQLinear_GEMV
 
             target_cls = WQLinear_GEMV
+        elif quantization_config.version == AWQLinearVersion.EXLLAMA:
+            from awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+
+            target_cls = WQLinear_ExllamaV2
         else:
             raise ValueError(f"Unsupported AWQLinearVersion: {quantization_config.version}")
     else:
@@ -392,19 +387,16 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         del q_proj, k_proj, v_proj, o_proj
 
 
-def post_init_awq_exllama_modules(model, exllama_config):
-    if exllama_config["version"] == ExllamaVersion.ONE:
-        from awq.modules.exllama import exllama_post_init
+def post_init_awq_exllama_modules(model):
+    """
+    Runs post init for Exllama layers which performs:
+        - Weights unpacking, reordering and repacking
+        - Devices scratch space allocation
+    """
+    from awq.modules.linear.exllamav2 import exllamav2_post_init
 
-        model = exllama_post_init(model)
-    elif exllama_config["version"] == ExllamaVersion.TWO:
-        from awq.modules.exllamav2 import exllamav2_post_init
-
-        # Using default values from
-        # https://github.com/AutoGPTQ/AutoGPTQ/blob/6ba14f17ef73c161c2c4707cbf0b41e569a9c6dd/auto_gptq/nn_modules/qlinear/qlinear_exllamav2.py#L171
-        # TODO: Add max_input_len and max_batch_size to the config ?
-        model = exllamav2_post_init(model, max_input_len=2048, max_batch_size=8)
-    else:
-        raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
+    # default values for exllamav2 from
+    # https://github.com/AutoGPTQ/AutoGPTQ/blob/6ba14f17ef73c161c2c4707cbf0b41e569a9c6dd/auto_gptq/nn_modules/qlinear/qlinear_exllamav2.py#L171
+    model = exllamav2_post_init(model, max_input_len=2048, max_batch_size=8)
 
     return model
