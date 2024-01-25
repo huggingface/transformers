@@ -1216,15 +1216,7 @@ class AcceleratorConfig:
         with open_file(json_file, "r", encoding="utf-8") as f:
             config_dict = json.load(f)
         # Check for keys and load sensible defaults
-        if "split_batches" not in config_dict:
-            config_dict["split_batches"] = False
-        if "dispatch_batches" not in config_dict:
-            config_dict["dispatch_batches"] = None
-        if "even_batches" not in config_dict:
-            config_dict["even_batches"] = True
-        if "use_seedable_sampler" not in config_dict:
-            config_dict["use_seedable_sampler"] = True
-        extra_keys = sorted(set(config_dict.keys()) - set(cls.__dataclass_fields__.keys()))
+        extra_keys = sorted(key for key in config_dict.keys() if key not in cls.__dataclass_fields__.keys())
         if len(extra_keys) > 0:
             raise ValueError(
                 f"The config file at {json_file} had unknown keys ({extra_keys}), please try upgrading your `transformers`"
