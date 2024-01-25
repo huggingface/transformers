@@ -412,7 +412,6 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len) and not isinstance(past_key_value, StaticCache):
-            # TODO should not relyo n the static cache 
             raise ValueError(
                 f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
                 f" {attn_weights.size()}"
@@ -423,8 +422,6 @@ class LlamaAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
-            # TODO with static cache the attention mask should be 4d with the correct max_length
-            # which is 4096. But this might only work well for sdpa
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
@@ -675,20 +672,20 @@ class LlamaSdpaAttention(LlamaAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # if output_attentions:
-        #     # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-        #     logger.warning_once(
-        #         "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-        #         'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-        #     )
-        #     return super().forward(
-        #         hidden_states=hidden_states,
-        #         attention_mask=attention_mask,
-        #         position_ids=position_ids,
-        #         past_key_value=past_key_value,
-        #         output_attentions=output_attentions,
-        #         use_cache=use_cache,
-        #     )
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+                use_cache=use_cache,
+            )
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -712,18 +709,18 @@ class LlamaSdpaAttention(LlamaAttention):
         past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
 
         if past_key_value is not None:
-            cache_kwargs = {"attention_mask":attention_mask, "position_ids":position_ids}
+            cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask, "position_ids":position_ids}
             # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
             key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        # if attention_mask is not None:
-        #     if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
-        #         )
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
+                )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -736,7 +733,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask = attention_mask, #self.causal_mask[:query_states.shape[2]],
+            attn_mask=attention_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -981,7 +978,6 @@ class LlamaModel(LlamaPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def get_input_embeddings(self):
         return self.embed_tokens
