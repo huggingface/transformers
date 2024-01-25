@@ -1460,7 +1460,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         self.assertEqual(
             out,
-            {'text': 'मिर्ची में कितने विभिन्न प्रजातियां हैं', 'chunks': [{'timestamp': (0.26, None), 'text': 'मिर्ची में कितने विभिन्न प्रजातियां हैं'}]},
+            {
+                "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+                "chunks": [{"timestamp": (0.26, None), "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं"}],
+            },
         )
 
 

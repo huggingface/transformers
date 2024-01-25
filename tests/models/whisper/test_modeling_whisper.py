@@ -1313,7 +1313,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
             f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
             "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
-            f"so that their combined length is less than {config.max_target_positions}."
+            f"so that their combined length is less than {config.max_target_positions}.",
         ):
             model.generate(input_features, max_new_tokens=max_new_tokens, prompt_ids=prompt_ids)
 
