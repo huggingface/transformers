@@ -1171,7 +1171,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
             labels=labels,
-            return_dict=None,
+            return_dict=False,
             training=training,
         )
 
