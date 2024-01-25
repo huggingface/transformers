@@ -548,12 +548,14 @@ class SegGptImageProcessor(BaseImageProcessor):
 
             if self.num_classes is not None:
                 channels, height, width = mask.shape
-                dist = torch.pow(mask.view(height, width, 1, channels) - palette_tensor.view(1, 1, self.num_classes+1, channels), 2)
+                dist = mask.permute(1, 2, 0).view(height, width, 1, channels) - palette_tensor.view(1, 1, self.num_classes+1, channels)
+                dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
 
             else:
-                pred = mask
+                # If no palette is specified SegGpt will try to paint using the mask class idx as RGB
+                pred = mask.mean(dim=0).int()
 
             results.append({"mask": pred})
 
