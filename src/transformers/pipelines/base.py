@@ -702,42 +702,6 @@ class _ScikitCompat(ABC):
         raise NotImplementedError()
 
 
-PIPELINE_INIT_ARGS = r"""
-    Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed.
-
-            If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
-            provided.
-        task (`str`, defaults to `""`):
-            A task-identifier for the pipeline.
-        num_workers (`int`, *optional*, defaults to 8):
-            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the number of
-            workers to be used.
-        batch_size (`int`, *optional*, defaults to 1):
-            When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the size of
-            the batch to use, for inference this is not always beneficial, please read [Batching with
-            pipelines](https://huggingface.co/transformers/main_classes/pipelines.html#pipeline-batching) .
-        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
-            Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
-        binary_output (`bool`, *optional*, defaults to `False`):
-            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
-"""
-
-
 def build_pipeline_init_args(
     has_tokenizer: bool = False,
     has_feature_extractor: bool = False,
@@ -774,6 +738,8 @@ def build_pipeline_init_args(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
             provided.
+        task (`str`, defaults to `""`):
+            A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
             When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the number of
             workers to be used.
@@ -785,11 +751,14 @@ def build_pipeline_init_args(
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too"""
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too
+        torch_dtype (`str` or `torch.dtype`, *optional*):
+            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
+            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`)"""
     if supports_binary_output:
         docstring += r"""
         binary_output (`bool`, *optional*, defaults to `False`):
-            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text."""
+            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as the raw format e.g. text."""
     return docstring
 
 
@@ -802,7 +771,7 @@ if is_torch_available():
     )
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
 class Pipeline(_ScikitCompat):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across

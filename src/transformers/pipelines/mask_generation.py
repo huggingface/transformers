@@ -19,7 +19,17 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(
+    build_pipeline_init_args(has_image_processor=True),
+    r"""
+        points_per_batch (*optional*, int, default to 64):
+            Sets the number of points run simultaneously by the model. Higher numbers may be faster but use more GPU
+            memory.
+        output_bboxes_mask (`bool`, *optional*, default to `False`):
+            Whether or not to output the bounding box predictions.
+        output_rle_masks (`bool`, *optional*, default to `False`):
+            Whether or not to output the masks in `RLE` format""",
+)
 class MaskGenerationPipeline(ChunkPipeline):
     """
     Automatic mask generation for images using `SamForMaskGeneration`. This pipeline predicts binary masks for an
@@ -49,22 +59,7 @@ class MaskGenerationPipeline(ChunkPipeline):
                 - image_processor.postprocess_masks_for_amg applies the NSM on the mask to only keep relevant ones.
 
     Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedTokenizer`].
-        image_processor ([`BaseImageProcessor`]):
-            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
-            [`BaseImageProcessor`].
-        points_per_batch (*optional*, int, default to 64):
-            Sets the number of points run simultaneously by the model. Higher numbers may be faster but use more GPU
-            memory.
-        output_bboxes_mask (`bool`, *optional*, default to `False`):
-           Whether or not to output the bounding box predictions.
-        output_rle_masks (`bool`, *optional*, default to `False`):
-            Whether or not to output the masks in `RLE` format
+
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):

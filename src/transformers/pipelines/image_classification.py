@@ -57,8 +57,7 @@ class ClassificationFunction(ExplicitEnum):
               has several labels, will apply the softmax function on the output.
             - `"sigmoid"`: Applies the sigmoid function on the output.
             - `"softmax"`: Applies the softmax function on the output.
-            - `"none"`: Does not apply any function on the output.
-    """,
+            - `"none"`: Does not apply any function on the output.""",
 )
 class ImageClassificationPipeline(Pipeline):
     """
