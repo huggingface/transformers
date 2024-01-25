@@ -141,10 +141,6 @@ class HFQuantizer(ABC):
         return self._process_model_after_weight_loading(model, **kwargs)
 
     @abstractmethod
-    def validate_environment(self, *args, **kwargs):
-        ...
-
-    @abstractmethod
     def _process_model_before_weight_loading(self, model, **kwargs):
         ...
 
