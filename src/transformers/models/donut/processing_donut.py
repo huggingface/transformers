@@ -112,16 +112,66 @@ class DonutProcessor(ProcessorMixin):
         """
         # For backward compatibility
         if self._in_target_context_manager:
-            return self.current_processor(*args)
+            return self.current_processor(
+                                images,
+                do_crop_margin=do_crop_margin,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_thumbnail=do_thumbnail,
+                do_align_long_axis=do_align_long_axis,
+                do_pad=do_pad,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                return_tensors=return_tensors,
+                data_format=data_format,
+                input_data_format=input_data_format
+            )
 
 
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
-            inputs = self.image_processor(images, *args, **kwargs)
+            inputs = self.image_processor(images,
+                do_crop_margin=do_crop_margin,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_thumbnail=do_thumbnail,
+                do_align_long_axis=do_align_long_axis,
+                do_pad=do_pad,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                return_tensors=return_tensors,
+                data_format=data_format,
+                input_data_format=input_data_format,)
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
+            encodings = self.tokenizer(text,
+                text_pair=text_pair,
+                text_target=text_target,
+                text_pair_target=text_pair_target,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                is_split_into_words=is_split_into_words,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_tensors=return_tensors,
+                return_token_type_ids=return_token_type_ids,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_length=return_length,
+                verbose=verbose,)
 
         if text is None:
             return inputs
