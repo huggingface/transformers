@@ -22,7 +22,7 @@ import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...utils import is_sentencepiece_available, logging
+from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
 
 
 if is_sentencepiece_available():
@@ -594,7 +594,11 @@ class SudachiTokenizer:
         sudachi_dictionary = dictionary.Dictionary(
             config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
         )
-        self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
+        if is_sudachi_projection_available():
+            self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
+        else:
+            assert projection is None, "You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs."
+            self.sudachi = sudachi_dictionary.create(self.split_mode)
 
     def tokenize(self, text, never_split=None, **kwargs):
         """Tokenizes a piece of text."""
