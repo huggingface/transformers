@@ -464,6 +464,23 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    def test_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # only test for SwinForImageClassification, and SwinForMaskedImageModeling
+        for model_class in self.all_model_classes[2:]:
+            model = model_class(config)
+            model.gradient_checkpointing_enable()
+            model.train()
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.loss)
+            self.assertIsNotNone(outputs.logits)
+
 
 @require_vision
 @require_torch
