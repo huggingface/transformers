@@ -909,6 +909,16 @@ class GenerationConfig(PushToHubMixin):
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
 
+        def convert_keys_to_string(obj):
+            if isinstance(obj, dict):
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys_to_string(item) for item in obj]
+            else:
+                return obj
+
+        config_dict = convert_keys_to_string(config_dict)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike], use_diff: bool = True):
