@@ -102,7 +102,7 @@ class BnbHFQuantizerMixin:
                     """
                 )
 
-    def set_torch_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
+    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
@@ -195,7 +195,7 @@ class Bnb8BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
 
-    def adjust_target_dtype(self, target_dtype: torch.dtype) -> torch.dtype:
+    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         if target_dtype != torch.int8:
             logger.info("target_dtype {target_dtype} is replaced by `torch.int8` for 8-bit BnB quantization")
         return torch.int8
@@ -314,7 +314,7 @@ class Bnb4BitHFQuantizer(BnbHFQuantizerMixin, HFQuantizer):
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
 
-    def adjust_target_dtype(self, target_dtype: torch.dtype) -> torch.dtype:
+    def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
         if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
             from accelerate.utils import CustomDtype
 

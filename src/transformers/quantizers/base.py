@@ -72,10 +72,10 @@ class HFQuantizer(ABC):
     def set_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return device_map
 
-    def adjust_target_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
+    def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> torch.dtype:
         return torch_dtype
 
-    def get_special_dtypes_update(self, model, torch_dtype: torch.dtype) -> Dict[str, torch.dtype]:
+    def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, torch.dtype]:
         """returns dtypes for modules that are not quantized"""
         return {
             name: torch_dtype

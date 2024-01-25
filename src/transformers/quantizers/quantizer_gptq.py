@@ -60,7 +60,7 @@ class GptqHFQuantizer(HFQuantizer):
                 "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq`"
             )
 
-    def set_torch_dtype(self, torch_dtype: torch.dtype) -> torch.dtype:
+    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
