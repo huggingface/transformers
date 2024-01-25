@@ -477,7 +477,7 @@ class WhisperGenerationMixin:
         # 2. set global generate variables
         input_stride = self.model.encoder.conv1.stride[0] * self.model.encoder.conv2.stride[0]
         num_segment_frames = input_stride * self.config.max_source_positions
-        total_input_frames = self._retrieve_total_input_frames(
+        batch_size, total_input_frames = self._retrieve_total_input_frames(
             input_features=input_features, input_stride=input_stride, kwargs=kwargs
         )
         is_shortform = total_input_frames <= num_segment_frames
@@ -546,11 +546,11 @@ class WhisperGenerationMixin:
 
             decoder_input_ids = kwargs.pop("decoder_input_ids", None)
             if decoder_input_ids is None:
-                one_tensor = torch.ones((input_features.shape[0], 1), device=input_features.device, dtype=torch.long)
+                one_tensor = torch.ones((batch_size, 1), device=self.device, dtype=torch.long)
                 decoder_input_ids = torch.cat([t * one_tensor for t in init_tokens], dim=-1)
 
             if prompt_ids is not None:
-                decoder_input_ids = torch.cat([prompt_ids[None].repeat(input_features.shape[0], 1), decoder_input_ids], dim=-1)
+                decoder_input_ids = torch.cat([prompt_ids[None].repeat(decoder_input_ids.shape[0], 1), decoder_input_ids], dim=-1)
 
             if kwargs.get("max_new_tokens", 0) + decoder_input_ids.shape[-1] > self.config.max_target_positions:
                 max_new_tokens = kwargs.get("max_new_tokens", 0)
@@ -932,7 +932,7 @@ class WhisperGenerationMixin:
     @staticmethod
     def _retrieve_total_input_frames(input_features, input_stride, kwargs):
         if input_features is not None:
-            return input_features.shape[-1]
+            return input_features.shape[0], input_features.shape[-1]
 
         if "encoder_outputs" in kwargs:
             encoder_outputs_shape = (
@@ -940,7 +940,7 @@ class WhisperGenerationMixin:
                 if isinstance(kwargs["encoder_outputs"], BaseModelOutput)
                 else kwargs["encoder_outputs"].shape
             )
-            return encoder_outputs_shape[1] * input_stride
+            return encoder_outputs_shape[0], encoder_outputs_shape[1] * input_stride
 
         raise ValueError("Make sure to provide either `input_features` or `encoder_outputs` to `generate`.")
 
@@ -1150,6 +1150,9 @@ class WhisperGenerationMixin:
             init_tokens.append(generation_config.no_timestamps_token_id)
         elif generation_config.return_timestamps and init_tokens[-1] == generation_config.no_timestamps_token_id:
             init_tokens = init_tokens[:-1]
+
+        # let's make sure we don't pass `None` tokens as prompt tokens
+        init_tokens = [t for t in init_tokens if t is not None]
 
         return init_tokens
 
