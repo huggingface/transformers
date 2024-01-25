@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import BitImageProcessor, ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
+from transformers import ConvNextConfig, ConvNextForImageClassification, ConvNextImageProcessor
 from transformers.utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling, logging
 
 
@@ -165,7 +165,7 @@ def convert_convnext_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     original_pixel_values = transformations(pixel_values).unsqueeze(0)  # insert batch dimension
 
-    processor = BitImageProcessor(
+    processor = ConvNextImageProcessor(
         size={"shortest_edge": 256},
         resample=PILImageResampling.BICUBIC,
         image_mean=IMAGENET_DEFAULT_MEAN,
