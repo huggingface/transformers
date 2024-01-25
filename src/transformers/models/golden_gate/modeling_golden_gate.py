@@ -97,7 +97,6 @@ class GoldenGateRMSNorm(nn.Module):
 ALL_LAYERNORM_LAYERS.append(GoldenGateRMSNorm)
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GoldenGate
 class GoldenGateRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -105,18 +104,18 @@ class GoldenGateRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2) [: (self.dim // 2)].to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.float32
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
+        self.inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2) [: (self.dim // 2)].to(device) / self.dim))
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
-
         freqs = torch.outer(t, self.inv_freq).float()
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
@@ -177,8 +176,8 @@ class GoldenGateDynamicNTKScalingRotaryEmbedding(GoldenGateRotaryEmbedding):
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.register_buffer("cos_cached", emb.cos(), persistent=False)
+        self.register_buffer("sin_cached", emb.sin(), persistent=False)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -642,10 +641,17 @@ class GoldenGateSdpaAttention(GoldenGateAttention):
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+        
+        # for now we always reset the rotary embedding to make sure the dtype is correct.
+        self.rotary_emb._set_cos_sin_cache(kv_seq_len, dtype = torch.float32, device=hidden_states.device)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
+        
+        # t2 = apply_rotary_pos_emb(query_states, key_states, cos.to(torch.bfloat16), sin.to(torch.bfloat16), position_ids)[0].transpose(1,2)
+        # t1 = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin, position_ids)[0].transpose(1,2)
+        # torch.testing.assert_allclose(t2,t1)
+        query_states, key_states = apply_rotary_pos_emb(query_states.float(), key_states.float(), cos, sin, position_ids)
+        query_states = query_states.to(hidden_states.dtype)
+        key_states = key_states.to(hidden_states.dtype)
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -791,6 +797,7 @@ class GoldenGatePreTrainedModel(PreTrainedModel):
     config_class = GoldenGateConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _keep_in_fp32_modules = ["inv_freq", "rotary_emb", "cos_cached", "sin_cached"]
     _no_split_modules = ["GoldenGateDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
@@ -1144,7 +1151,7 @@ class GoldenGateForCausalLM(GoldenGatePreTrainedModel):
         hidden_states = outputs[0]
 
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
+        # logits = logits.float()
 
         loss = None
         if labels is not None:

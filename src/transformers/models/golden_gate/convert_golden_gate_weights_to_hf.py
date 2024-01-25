@@ -71,12 +71,6 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     num_kv_heads = config.num_key_value_heads
     head_dim = config.head_dim
 
-    # permute for sliced rotary
-    def permute(w, n_heads=num_attn_heads, dim1=hidden_size, dim2=hidden_size):
-        return w.view(n_heads, dim1, 2, dim2 // n_heads // 2).reshape(dim1, dim2)
-        # Vs slicing for llama:
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
-
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
     model_state_dict.pop("freqs_cis")
@@ -90,18 +84,13 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(q_proj.contiguous())
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(k_proj, dim1=k_proj.shape[1])
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads*head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads*head_dim, hidden_size)
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
-
-                state_dict[k.replace("qkv_proj", "q_proj")] = permute(
-                    q_proj.contiguous(), n_heads=16, dim1=q_proj.shape[0], dim2=q_proj.shape[1]
-                )
-                state_dict[k.replace("qkv_proj", "k_proj")] = permute(
-                    k_proj.contiguous(), n_heads=16, dim1=k_proj.shape[0], dim2=k_proj.shape[1]
-                )
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads*head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads*head_dim, hidden_size)
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
 
         elif k == "embedder.weight":
@@ -113,19 +102,9 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     print("Loading the checkpoint in a GoldenGate model.")
     with torch.device("meta"):
         model = GoldenGateForCausalLM(config)
+    model.load_state_dict(state_dict, assign=True, strict=False)
 
     model.config.torch_dtype = torch.float32
-    import contextlib
-
-    @contextlib.contextmanager
-    def _set_default_tensor_type(dtype: torch.dtype):
-        """Sets the default torch dtype to the given dtype."""
-        torch.set_default_dtype(dtype)
-        yield
-        torch.set_default_dtype(torch.float)
-
-    with _set_default_tensor_type(torch.float32):
-        model.load_state_dict(state_dict, assign=True, strict=True)
     del model.config._name_or_path
     print("Saving in the Transformers format.")
     model.save_pretrained(save_path, safe_serialization=safe_serialization)
@@ -181,14 +160,15 @@ def main():
     tokenizer = GoldenGateTokenizerFast.from_pretrained(
         args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens="<bos>"
     )
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2)
-    model = model.to(torch.bfloat16).eval()
-
+    tokenizer.padding_side = "left"
+    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype = torch.bfloat16) #, low_cpu_mem_usage = True)
+    device = "cpu"
+    model = model.to(device)
     model.generation_config.temperature = 1
     model.generation_config.top_p = 1
 
     outputs = model.generate(
-        torch.tensor([[2, 651, 6037, 576, 6081, 603]], device="cpu"), do_sample=False, max_new_tokens=30
+        torch.tensor([[2, 651, 6037, 576, 6081, 603]], device=device), do_sample=False, max_new_tokens=100
     )
     print(outputs)
     print(tokenizer.batch_decode(outputs))
@@ -206,41 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
-    EXPECTED_IDS = [
-        2,
-        6750,
-        1,
-        235265,
-        235248,
-        255969,
-        235248,
-        109,
-        4747,
-        139,
-        235335,
-        139,
-        216311,
-        241316,
-        139,
-        239880,
-        235341,
-        144,
-        235269,
-        235248,
-        235274,
-        235284,
-        235304,
-        235310,
-        235248,
-        235274,
-        235308,
-        235248,
-        235308,
-        235269,
-        235318,
-        235274,
-    ]
-
-    input_text = "\t\t\t\t \n\n61"
