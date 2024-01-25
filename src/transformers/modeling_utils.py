@@ -3517,6 +3517,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if quantizer is not None:
             quantizer.postprocess_model(model)
+            model.quantizer = quantizer
 
         if _adapter_model_path is not None:
             model.load_adapter(

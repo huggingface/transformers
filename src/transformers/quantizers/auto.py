@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
@@ -117,16 +117,23 @@ class AutoHFQuantizer:
         return cls.from_config(quantization_config)
 
     @classmethod
-    def merge_quantization_configs(cls, quantization_config, quantization_config_from_args):
+    def merge_quantization_configs(
+        cls,
+        quantization_config: Union[dict, QuantizationConfigMixin],
+        quantization_config_from_args: Optional[QuantizationConfigMixin],
+    ):
         """
-        handles situations where both quantization_config from args and quantization_config from model config are present
+        handles situations where both quantization_config from args and quantization_config from model config are present.
         """
         warning_msg = (
             "You passed `quantization_config` or equivalent parameters to `from_pretrained` but the model you're loading"
             " already has a `quantization_config` attribute. The `quantization_config` from the model will be prevail."
         )
 
-        if isinstance(quantization_config, (GPTQConfig, AwqConfig)):
+        if isinstance(quantization_config, dict):
+            quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+
+        if isinstance(quantization_config, (GPTQConfig, AwqConfig)) and quantization_config_from_args is not None:
             # special case for GPTQ / AWQ config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
@@ -134,4 +141,4 @@ class AutoHFQuantizer:
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         warnings.warn(warning_msg)
-        return AutoQuantizationConfig.from_dict(quantization_config)
+        return quantization_config
