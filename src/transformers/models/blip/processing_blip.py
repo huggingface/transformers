@@ -76,13 +76,10 @@ class BlipProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
-        # Get only text
-        if images is None:
-            self.current_processor = self.tokenizer
-        if text is None: 
-            text_encoding = None
+        text_encoding = None
 
-        if images is None or text is not None:
+        if text is not None:
+            self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,
@@ -101,15 +98,16 @@ class BlipProcessor(ProcessorMixin):
                 return_tensors=return_tensors,
                 **kwargs,
             )
-            return text_encoding
 
-        # add pixel_values
-        encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
-
-        if text_encoding is not None:
-            encoding_image_processor.update(text_encoding)
-
-        return encoding_image_processor
+        # add pixel_values encoding. If we also have text_encoding, update image encoding and return it.
+        # else, return the text encoding.
+        if images is not None:
+            encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
+            if text_encoding is not None:
+                encoding_image_processor.update(text_encoding)
+            return encoding_image_processor
+        
+        return text_encoding
 
     def batch_decode(self, *args, **kwargs):
         """
