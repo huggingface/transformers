@@ -463,7 +463,7 @@ class ProcessorMixin(PushToHubMixin):
         try:
             processor_dict, kwargs = cls.get_processor_dict(pretrained_model_name_or_path, **kwargs)
         except EnvironmentError as e:
-            if "does not appear to have a file named processor_config.json." in str(e):
+            if "a file named processor_config.json" in str(e):
                 processor_dict, kwargs = {}, kwargs
             else:
                 raise
