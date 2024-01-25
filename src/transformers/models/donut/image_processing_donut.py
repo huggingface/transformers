@@ -84,6 +84,13 @@ class DonutImageProcessor(BaseImageProcessor):
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
         image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
             Image standard deviation.
+        return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
     """
 
     model_input_names = ["pixel_values"]
@@ -101,7 +108,9 @@ class DonutImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        **kwargs,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+        
     ) -> None:
         super().__init__(**kwargs)
 
@@ -122,6 +131,7 @@ class DonutImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        self.return_tensors = return_tensors
 
     def align_long_axis(
         self,
