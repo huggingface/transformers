@@ -758,7 +758,8 @@ def build_pipeline_init_args(
     if supports_binary_output:
         docstring += r"""
         binary_output (`bool`, *optional*, defaults to `False`):
-            Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as the raw format e.g. text."""
+            Flag indicating if the output the pipeline should happen in a serialized format (i.e., pickle) or as
+            the raw output data e.g. text."""
     return docstring
 
 
