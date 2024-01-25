@@ -73,6 +73,7 @@ checkpoint: जाँच बिंदु
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <b>हिन्दी</b> |
         <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
+        <a href="https://github.com/huggingface/transformers//blob/main/README_fr.md">Français</a> |
     </p>
 </h4>
 
