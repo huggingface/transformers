@@ -1197,18 +1197,14 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+                    - [`~generation.GenerateDecoderOnlyOutput`],
+                    - [`~generation.GenerateBeamDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+                    - [`~generation.GenerateEncoderDecoderOutput`],
+                    - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         if generation_config is None:
@@ -2244,18 +2240,14 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+                    - [`~generation.GenerateDecoderOnlyOutput`],
+                    - [`~generation.GenerateBeamDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+                    - [`~generation.GenerateEncoderDecoderOutput`],
+                    - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         if generation_config is None:

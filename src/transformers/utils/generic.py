@@ -660,7 +660,7 @@ def tensor_size(array):
     elif is_jax_tensor(array):
         return array.size
     else:
-        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+        raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
 
 
 def add_model_info_to_auto_map(auto_map, repo_id):

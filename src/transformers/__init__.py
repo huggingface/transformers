@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.37.0.dev0"
+__version__ = "4.38.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -373,6 +373,7 @@ _import_structure = {
         "TransfoXLTokenizer",
     ],
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
+    "models.depth_anything": ["DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP", "DepthAnythingConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -711,6 +712,11 @@ _import_structure = {
     ],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
+    "models.qwen2": [
+        "QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Qwen2Config",
+        "Qwen2Tokenizer",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": [
         "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -908,6 +914,11 @@ _import_structure = {
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
         "Wav2Vec2Tokenizer",
+    ],
+    "models.wav2vec2_bert": [
+        "WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2BertConfig",
+        "Wav2Vec2BertProcessor",
     ],
     "models.wav2vec2_conformer": [
         "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1185,6 +1196,7 @@ else:
     _import_structure["models.nougat"].append("NougatTokenizerFast")
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
+    _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
     _import_structure["models.realm"].append("RealmTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
@@ -1972,6 +1984,13 @@ else:
             "VanForImageClassification",
             "VanModel",
             "VanPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_anything"].extend(
+        [
+            "DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DepthAnythingForDepthEstimation",
+            "DepthAnythingPreTrainedModel",
         ]
     )
     _import_structure["models.deta"].extend(
@@ -2971,6 +2990,14 @@ else:
             "load_tf_weights_in_qdqbert",
         ]
     )
+    _import_structure["models.qwen2"].extend(
+        [
+            "Qwen2ForCausalLM",
+            "Qwen2ForSequenceClassification",
+            "Qwen2Model",
+            "Qwen2PreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "RagModel",
@@ -3499,6 +3526,17 @@ else:
             "Wav2Vec2ForXVector",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.wav2vec2_bert"].extend(
+        [
+            "WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2BertForAudioFrameClassification",
+            "Wav2Vec2BertForCTC",
+            "Wav2Vec2BertForSequenceClassification",
+            "Wav2Vec2BertForXVector",
+            "Wav2Vec2BertModel",
+            "Wav2Vec2BertPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2_conformer"].extend(
@@ -5067,6 +5105,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
+    from .models.depth_anything import DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP, DepthAnythingConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -5404,6 +5443,7 @@ if TYPE_CHECKING:
     )
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
+    from .models.qwen2 import QWEN2_PRETRAINED_CONFIG_ARCHIVE_MAP, Qwen2Config, Qwen2Tokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import (
         REALM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5601,6 +5641,11 @@ if TYPE_CHECKING:
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
+    )
+    from .models.wav2vec2_bert import (
+        WAV2VEC2_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2BertConfig,
+        Wav2Vec2BertProcessor,
     )
     from .models.wav2vec2_conformer import (
         WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5871,6 +5916,7 @@ if TYPE_CHECKING:
         from .models.nougat import NougatTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
+        from .models.qwen2 import Qwen2TokenizerFast
         from .models.realm import RealmTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
@@ -6562,6 +6608,11 @@ if TYPE_CHECKING:
             VanForImageClassification,
             VanModel,
             VanPreTrainedModel,
+        )
+        from .models.depth_anything import (
+            DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DepthAnythingForDepthEstimation,
+            DepthAnythingPreTrainedModel,
         )
         from .models.deta import (
             DETA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7373,6 +7424,12 @@ if TYPE_CHECKING:
             QDQBertPreTrainedModel,
             load_tf_weights_in_qdqbert,
         )
+        from .models.qwen2 import (
+            Qwen2ForCausalLM,
+            Qwen2ForSequenceClassification,
+            Qwen2Model,
+            Qwen2PreTrainedModel,
+        )
         from .models.rag import (
             RagModel,
             RagPreTrainedModel,
@@ -7798,6 +7855,15 @@ if TYPE_CHECKING:
             Wav2Vec2ForXVector,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
+        )
+        from .models.wav2vec2_bert import (
+            WAV2VEC2_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2BertForAudioFrameClassification,
+            Wav2Vec2BertForCTC,
+            Wav2Vec2BertForSequenceClassification,
+            Wav2Vec2BertForXVector,
+            Wav2Vec2BertModel,
+            Wav2Vec2BertPreTrainedModel,
         )
         from .models.wav2vec2_conformer import (
             WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
