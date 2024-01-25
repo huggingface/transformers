@@ -12,3 +12,4 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from .auto import AutoHFQuantizer, AutoQuantizationConfig
+from .base import HFQuantizer
