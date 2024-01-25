@@ -1226,11 +1226,3 @@ class AcceleratorConfig:
 
     def to_dict(self):
         return copy.deepcopy(self.__dict__)
-
-    def to_kwargs(self):
-        """
-        Returns a dictionary containing the attributes with values different from the default of this class.
-        """
-        default_dict = self.__class__().to_dict()
-        this_dict = self.to_dict()
-        return {k: v for k, v in this_dict.items() if default_dict[k] != v}

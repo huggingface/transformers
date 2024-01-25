@@ -4035,9 +4035,9 @@ class Trainer:
             accelerator_kwargs = self.args.accelerator_config
             # dict and AcceleratorConfigs are parseable, json files are not
             if isinstance(accelerator_kwargs, AcceleratorConfig):
-                accelerator_kwargs = accelerator_kwargs.to_kwargs()
+                accelerator_kwargs = accelerator_kwargs.to_dict()
             elif not isinstance(accelerator_kwargs, dict):
-                accelerator_kwargs = AcceleratorConfig.from_json_file(accelerator_kwargs).to_kwargs()
+                accelerator_kwargs = AcceleratorConfig.from_json_file(accelerator_kwargs).to_dict()
 
         self.accelerator = Accelerator(
             deepspeed_plugin=self.args.deepspeed_plugin,
