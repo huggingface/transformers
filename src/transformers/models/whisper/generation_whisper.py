@@ -16,7 +16,7 @@ import copy
 import math
 import warnings
 import zlib
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union, Iterator
 
 import numpy as np
 import torch
@@ -159,7 +159,7 @@ def _pad_to_max_length(current_segments, pad_token_id, padding="right", bos_toke
 
 
 class WhisperGenerationMixin:
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None, input_length=0):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
@@ -200,7 +200,7 @@ class WhisperGenerationMixin:
                 dim=2,
             )
 
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, input_length:]
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
@@ -579,7 +579,7 @@ class WhisperGenerationMixin:
 
             if generation_config.return_token_timestamps and hasattr(generation_config, "alignment_heads"):
                 outputs["token_timestamps"] = self._extract_token_timestamps(
-                    outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames
+                    outputs, generation_config.alignment_heads, num_frames=generation_config.num_frames, input_length=decoder_input_ids.shape[-1] - 1
                 )
 
             return outputs
@@ -751,12 +751,7 @@ class WhisperGenerationMixin:
         for fallback_idx, temperature in enumerate(temperatures):
             generation_config.do_sample = temperature is not None and temperature > 0.0
 
-            if generation_config.do_sample:
-                generation_config.temperature = temperature
-            else:
-                # default
-                generation_config.temperature = 1.0
-
+            generation_config.temperature = temperature if generation_config.do_sample else 1.0
             generation_config.num_beams = kwargs.pop("num_beams", 1) if not generation_config.do_sample else 1
 
             # print(decoder_input_ids)
@@ -775,12 +770,12 @@ class WhisperGenerationMixin:
             )
 
             # post-process sequence tokens and outputs to be in list form
-            sequence_tokens, seek_outputs = self._postprocess_outputs(
-                seek_outputs, return_token_timestamps, generation_config
+            seek_sequences, seek_outputs = self._postprocess_outputs(
+                seek_outputs=seek_outputs,
+                decoder_input_ids=decoder_input_ids,
+                return_token_timestamps=return_token_timestamps,
+                generation_config=generation_config,
             )
-
-            # remove all previously passed decoder input ids
-            seek_sequences = sequence_tokens[:, decoder_input_ids.shape[-1] :]
 
             # 6.7 Extract cut sequences from every sequence and check if fallback should be applied
             # Loop over each decoded audio individually as each decoding can be of a different length
@@ -861,30 +856,33 @@ class WhisperGenerationMixin:
         return current_segments
 
 
-    def _postprocess_outputs(self, seek_outputs, return_token_timestamps, generation_config):
+    def _postprocess_outputs(self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config):
+        # remove all previously passed decoder input ids
+        if isinstance(seek_outputs, torch.Tensor):
+            seek_outputs = seek_outputs[:, decoder_input_ids.shape[-1] :]
+            return seek_outputs, seek_outputs
+
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
             seek_outputs["token_timestamps"] = self._extract_token_timestamps(
-                seek_outputs, generation_config.alignment_heads, num_frames=num_frames
+                seek_outputs, generation_config.alignment_heads, num_frames=num_frames, input_length=decoder_input_ids.shape[-1] - 1
             )
 
-        if generation_config.return_dict_in_generate:
+        seek_outputs["sequences"] = seek_outputs["sequences"][:, decoder_input_ids.shape[-1] :]
 
-            def split_by_batch_index(values, key, batch_idx):
-                if key == "scores":
-                    return [v[batch_idx].cpu() for v in values]
-                if key == "past_key_values":
-                    # we don't save `past_key_values` as this is too costly
-                    return None
-                return values[batch_idx].cpu()
+        def split_by_batch_index(values, key, batch_idx):
+            if key == "scores":
+                return [v[batch_idx].cpu() for v in values]
+            if key == "past_key_values":
+                # we don't save `past_key_values` as this is too costly
+                return None
+            return values[batch_idx].cpu()
 
-            sequence_tokens = seek_outputs["sequences"]
-            seek_outputs = [
-                {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
-                for i in range(sequence_tokens.shape[0])
+        sequence_tokens = seek_outputs["sequences"]
+        seek_outputs = [
+            {k: split_by_batch_index(v, k, i) for k, v in seek_outputs.items()}
+            for i in range(sequence_tokens.shape[0])
             ]
-        else:
-            sequence_tokens = seek_outputs
 
         return sequence_tokens, seek_outputs
 
@@ -1065,6 +1063,16 @@ class WhisperGenerationMixin:
 
     @staticmethod
     def retrieve_init_tokens(generation_config, config, kwargs):
+
+        def replace_or_add(lst: List[int], num: int, itr: Iterator[int]):
+            """ short function to replace num with a itr in lst """
+            found = any(i in lst for i in itr)
+            if found:
+                lst = [num if i in itr else i for i in lst]
+            else:
+                lst.append(num)
+            return lst
+
         forced_decoder_ids = None
         # Legacy code for backward compatibility
         if hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
@@ -1119,26 +1127,32 @@ class WhisperGenerationMixin:
                     f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
                     "(You should just add it to the generation config)"
                 )
-            init_tokens.append(generation_config.lang_to_id[language_token])
-        elif task is not None:
-            # if task was passed, but language was not set, default to English (first lang token)
-            language_token = generation_config.decoder_start_token_id + 1
 
+            lang_id = generation_config.lang_to_id[language_token]
+
+            # if language is defined it'll overwrite language ids that might have already been defined via the generation_config
+            replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
 
         if task is not None:
             if task in TASK_IDS:
                 init_tokens.append(generation_config.task_to_id[generation_config.task])
+                task_id = generation_config.task_to_id[generation_config.task]
+
+                # if task is defined it'll overwrite task ids that might have already been defined via the generation_config
+                replace_or_add(init_tokens, task_id, generation_config.task_to_id.values())
             else:
                 raise ValueError(
                     f"The `{task}`task is not supported. The task should be one of `{TASK_IDS}`"
                 )
-        elif hasattr(generation_config, "task_to_id"):
-            init_tokens.append(generation_config.task_to_id["transcribe"])  # defaults to transcribe
+        elif language is not None and hasattr(generation_config, "task_to_id"):
+            # if language is defined, but no task id is in `init_tokens`, default to transcribe
+            if not any(i in init_tokens for i in generation_config.task_to_id.values()):
+                init_tokens.append(generation_config.task_to_id["transcribe"])
 
-        if not generation_config.return_timestamps and hasattr(generation_config, "no_timestamps_token_id"):
+        if not generation_config.return_timestamps and hasattr(generation_config, "no_timestamps_token_id") and init_tokens[-1] != generation_config.no_timestamps_token_id:
             init_tokens.append(generation_config.no_timestamps_token_id)
         elif generation_config.return_timestamps and init_tokens[-1] == generation_config.no_timestamps_token_id:
-            init_tokens = init_tokens[-1:]
+            init_tokens = init_tokens[:-1]
 
         return init_tokens
 
