@@ -107,4 +107,4 @@ class AwqQuantizer(HFQuantizer):
     def is_trainable(self):
         # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
         # TODO: if this is supported in the future, do a version check here.
-        return True
+        return False

@@ -2924,7 +2924,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             logger.warning(
                 "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
-                "Please, use `quantization_config` argument instead."
+                "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
             )
 
         from_pt = not (from_tf | from_flax)
