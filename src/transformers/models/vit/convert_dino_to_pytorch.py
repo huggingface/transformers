@@ -23,8 +23,10 @@ import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
+from torchvision import transforms
 
 from transformers import ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.utils import logging
 
 
@@ -179,6 +181,23 @@ def convert_vit_checkpoint(model_name, pytorch_dump_folder_path, base_model=True
     image_processor = ViTImageProcessor()
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
+
+    # preprocess image
+    transformations = transforms.Compose(
+        [
+            transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=IMAGENET_DEFAULT_MEAN,  # these are RGB mean+std values
+                std=IMAGENET_DEFAULT_STD,  # across a large photo dataset.
+            ),
+        ]
+    )
+
+    original_pixel_values = transformations(prepare_img()).unsqueeze(0)  # insert batch dimension
+    assert torch.allclose(original_pixel_values, pixel_values)
+
     outputs = model(pixel_values)
 
     if base_model:
