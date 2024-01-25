@@ -965,7 +965,6 @@ src/transformers/trainer.py
 src/transformers/trainer_callback.py
 src/transformers/trainer_pt_utils.py
 src/transformers/trainer_seq2seq.py
-src/transformers/trainer_tf.py
 src/transformers/trainer_utils.py
 src/transformers/training_args.py
 src/transformers/training_args_seq2seq.py

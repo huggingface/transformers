@@ -539,7 +539,7 @@ def main():
     data_collator = DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
 
     # Metrics
-    metric = evaluate.load("seqeval")
+    metric = evaluate.load("seqeval", cache_dir=model_args.cache_dir)
 
     def compute_metrics(p):
         predictions, labels = p

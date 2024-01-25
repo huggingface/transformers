@@ -1132,8 +1132,8 @@ class MistralForCausalLM(MistralPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, MistralForCausalLM
 
-        >>> model = MistralForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
+        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

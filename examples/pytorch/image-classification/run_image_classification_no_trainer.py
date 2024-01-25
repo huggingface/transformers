@@ -282,7 +282,6 @@ def main():
         dataset = load_dataset(
             "imagefolder",
             data_files=data_files,
-            cache_dir=args.cache_dir,
             task="image-classification",
         )
         # See more about loading custom images at

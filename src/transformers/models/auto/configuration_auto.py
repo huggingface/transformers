@@ -201,6 +201,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("seggpt", "SegGptConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
+        ("siglip", "SiglipConfig"),
+        ("siglip_vision_model", "SiglipVisionConfig"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("speech_to_text", "Speech2TextConfig"),
         ("speech_to_text_2", "Speech2Text2Config"),
@@ -421,6 +423,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("seggpt", "SEGGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("siglip", "SIGLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text", "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speech_to_text_2", "SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("speecht5", "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -667,6 +670,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("seggpt", "SegGPT"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),
+        ("siglip", "SigLIP"),
+        ("siglip_vision_model", "SiglipVisionModel"),
         ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("speech_to_text", "Speech2Text"),
         ("speech_to_text_2", "Speech2Text2"),
@@ -758,6 +763,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
+        ("siglip_vision_model", "siglip"),
     ]
 )
 

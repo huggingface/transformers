@@ -530,7 +530,7 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Instantiate metric
-    metric = evaluate.load("mean_iou")
+    metric = evaluate.load("mean_iou", cache_dir=args.cache_dir)
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.

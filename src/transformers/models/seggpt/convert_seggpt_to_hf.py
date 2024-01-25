@@ -109,6 +109,7 @@ def prepare_input():
 def convert_seggpt_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
+    verify_logits = args.verify_logits
     push_to_hub = args.push_to_hub
 
     # Define default GroundingDINO configuation
@@ -168,17 +169,18 @@ def convert_seggpt_checkpoint(args):
     outputs = model(**inputs)
     print(outputs)
 
-    expected_output = torch.tensor(
-        [
-            [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
-            [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
-            [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
-        ]
-    )
-
-    assert torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_output, atol=1e-4)
-
-    print("Looks good!")
+    if verify_logits:
+        expected_output = torch.tensor(
+            [
+                [[-2.1208, -2.1190, -2.1198], [-2.1237, -2.1228, -2.1227], [-2.1232, -2.1226, -2.1228]],
+                [[-2.0405, -2.0396, -2.0403], [-2.0434, -2.0434, -2.0433], [-2.0428, -2.0432, -2.0434]],
+                [[-1.8102, -1.8088, -1.8099], [-1.8131, -1.8126, -1.8129], [-1.8130, -1.8128, -1.8131]],
+            ]
+        )
+        assert torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_output, atol=1e-4)
+        print("Looks good!")
+    else:
+        print("Converted without verifying logits")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
@@ -203,6 +205,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+    )
+    parser.add_argument(
+        "--verify_logits",
+        action="store_false",
+        help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."

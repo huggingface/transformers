@@ -379,8 +379,6 @@ class TrainingArguments:
             set to warn or lower (default), `False` otherwise.
         remove_unused_columns (`bool`, *optional*, defaults to `True`):
             Whether or not to automatically remove the columns unused by the model forward method.
-
-            (Note that this behavior is not implemented for [`TFTrainer`] yet.)
         label_names (`List[str]`, *optional*):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
@@ -1439,15 +1437,6 @@ class TrainingArguments:
                         raise ValueError(
                             "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
                         )
-                    elif is_torch_npu_available():
-                        # npu
-                        from .pytorch_utils import is_torch_greater_or_equal_than_1_11
-
-                        if not is_torch_greater_or_equal_than_1_11:
-                            raise ValueError(
-                                "Your setup doesn't support bf16/npu. You need torch>=1.11, using Ascend NPU with "
-                                "`torch_npu` installed"
-                            )
                     elif not is_torch_xpu_available():
                         # xpu
                         from .pytorch_utils import is_torch_greater_or_equal_than_1_12
