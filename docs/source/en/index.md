@@ -112,6 +112,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [Deformable DETR](model_doc/deformable_detr)               |       ✅        |         ❌         |      ❌      |
 |                          [DeiT](model_doc/deit)                          |       ✅        |         ✅         |      ❌      |
 |                        [DePlot](model_doc/deplot)                        |       ✅        |         ❌         |      ❌      |
+|                [Depth Anything](model_doc/depth_anything)                |       ✅        |         ❌         |      ❌      |
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
