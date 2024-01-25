@@ -1049,6 +1049,7 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     _no_split_modules = [r"DeformableDetrConvEncoder", r"DeformableDetrEncoderLayer", r"DeformableDetrDecoderLayer"]
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1368,9 +1369,13 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    position_embeddings,
+                    reference_points_input,
+                    spatial_shapes,
+                    level_start_index,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    None,
+                    output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(
