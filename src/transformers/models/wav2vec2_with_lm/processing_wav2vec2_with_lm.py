@@ -70,15 +70,15 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     with language model support into a single processor for language model boosted speech recognition decoding.
 
     Args:
-        feature_extractor ([`Wav2Vec2FeatureExtractor`]):
-            An instance of [`Wav2Vec2FeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor ([`AutoFeatureExtractor`]):
+            An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
         tokenizer ([`Wav2Vec2CTCTokenizer`]):
             An instance of [`Wav2Vec2CTCTokenizer`]. The tokenizer is a required input.
         decoder (`pyctcdecode.BeamSearchDecoderCTC`):
             An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
     """
 
-    feature_extractor_class = "Wav2Vec2FeatureExtractor"
+    feature_extractor_class = "AutoFeatureExtractor"
     tokenizer_class = "Wav2Vec2CTCTokenizer"
 
     def __init__(
@@ -117,7 +117,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         <Tip>
 
-        This class method is simply calling Wav2Vec2FeatureExtractor's
+        This class method is simply calling AutoFeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], Wav2Vec2CTCTokenizer's
         [`~tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`], and
         [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
@@ -214,8 +214,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
+        [`~AutoFeatureExtractor.__call__`] and returns its output. If used in the context
         [`~Wav2Vec2ProcessorWithLM.as_target_processor`] this method forwards all its arguments to
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
         methods for more information.
@@ -253,8 +253,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
-        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to AutoFeatureExtractor's
+        [`~AutoFeatureExtractor.pad`] and returns its output. If used in the context
         [`~Wav2Vec2ProcessorWithLM.as_target_processor`] this method forwards all its arguments to
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the above two methods
         for more information.
