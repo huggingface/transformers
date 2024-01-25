@@ -81,6 +81,10 @@ class Blip2Processor(ProcessorMixin):
         # Get only text
         if images is None:
             self.current_processor = self.tokenizer
+        if text is None: 
+            text_encoding = None
+            
+        if images is None or text is not None:
             text_encoding = self.tokenizer(
                 text=text,
                 add_special_tokens=add_special_tokens,
@@ -103,28 +107,6 @@ class Blip2Processor(ProcessorMixin):
 
         # add pixel_values
         encoding_image_processor = self.image_processor(images, return_tensors=return_tensors)
-
-        if text is not None:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-        else:
-            text_encoding = None
 
         if text_encoding is not None:
             encoding_image_processor.update(text_encoding)
