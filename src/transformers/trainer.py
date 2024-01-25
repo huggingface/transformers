@@ -2370,7 +2370,7 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         if os.path.exists(output_dir) and len(os.listdir(output_dir)) > 0:
             logger.warning(
-                f"Checkpoint destination directory {output_dir} already exists and is non-empty."
+                f"Checkpoint destination directory {output_dir} already exists and is non-empty. "
                 "Saving will proceed but saved results may be invalid."
             )
             staging_output_dir = output_dir
