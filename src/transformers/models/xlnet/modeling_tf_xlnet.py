@@ -871,8 +871,8 @@ class TFXLNetModelOutput(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -908,8 +908,8 @@ class TFXLNetLMHeadModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -942,8 +942,8 @@ class TFXLNetForSequenceClassificationOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -976,8 +976,8 @@ class TFXLNetForTokenClassificationOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1012,8 +1012,8 @@ class TFXLNetForMultipleChoiceOutput(ModelOutput):
     loss: tf.Tensor | None = None
     logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -1049,8 +1049,8 @@ class TFXLNetForQuestionAnsweringSimpleOutput(ModelOutput):
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     mems: List[tf.Tensor] | None = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 XLNET_START_DOCSTRING = r"""

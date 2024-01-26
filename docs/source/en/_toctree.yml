@@ -144,6 +144,8 @@
       title: Multiple GPUs and parallelism
     - local: fsdp
       title: Fully Sharded Data Parallel
+    - local: deepspeed
+      title: DeepSpeed
     - local: perf_train_cpu
       title: Efficient training on CPU
     - local: perf_train_cpu_many
@@ -253,7 +255,7 @@
     - local: main_classes/trainer
       title: Trainer
     - local: main_classes/deepspeed
-      title: DeepSpeed Integration
+      title: DeepSpeed
     - local: main_classes/feature_extractor
       title: Feature Extractor
     - local: main_classes/image_processor
@@ -523,6 +525,8 @@
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
