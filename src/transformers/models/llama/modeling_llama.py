@@ -1079,8 +1079,13 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
-
+                if hasattr(layer_outputs[2 if output_attentions else 1], 'to_legacy_cache'):
+                    next_decoder_cache = layer_outputs[2 if output_attentions else 1]
+                else:
+                    if next_decoder_cache is None:
+                        next_decoder_cache = [layer_outputs[2 if output_attentions else 1]]
+                    else:
+                        next_decoder_cache.append(layer_outputs[2 if output_attentions else 1])
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
@@ -1092,7 +1097,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache  and hasattr(next_decoder_cache, 'to_legacy_cache') else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
