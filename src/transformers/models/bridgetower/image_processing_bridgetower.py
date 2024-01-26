@@ -179,7 +179,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_center_crop: bool = True,
+        do_center_crop: Optional[bool] = None,
         do_pad: Optional[bool] = True,
         pad_and_return_pixel_mask: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
@@ -187,7 +187,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
-        print('DEBUG', kwargs)
 
         valid_processor_keys = {
             "do_resize",
@@ -488,24 +487,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
 
         size = get_size_dict(size, default_to_square=False)
-
-        print('DEBUG')
-        print(f'images: {images}')
-        print(f'do_resize: {do_resize}')
-        print(f'size: {size}')
-        print(f'size_divisor: {size_divisor}')
-        print(f'resample: {resample}')
-        print(f'do_rescale: {do_rescale}')
-        print(f'rescale_factor: {rescale_factor}')
-        print(f'do_normalize: {do_normalize}')
-        print(f'image_mean: {image_mean}')
-        print(f'image_std: {image_std}')
-        print(f'do_pad: {do_pad}')
-        print(f'do_center_crop: {do_center_crop}')
-        print(f'return_tensors: {return_tensors}')
-        print(f'data_format: {data_format}')
-        print(f'input_data_format: {input_data_format}')
-        print(f'pad_and_return_pixel_mask: {pad_and_return_pixel_mask}')
 
         if not is_batched(images):
             images = [images]
