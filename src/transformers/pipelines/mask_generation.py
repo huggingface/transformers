@@ -58,14 +58,6 @@ class MaskGenerationPipeline(ChunkPipeline):
                 applies a variety of filters based on non maximum suppression to remove bad masks.
                 - image_processor.postprocess_masks_for_amg applies the NSM on the mask to only keep relevant ones.
 
-    Arguments:
-
-        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
-            Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too
-
     Example:
 
     ```python
