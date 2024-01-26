@@ -397,7 +397,7 @@ width are expected, for others only the `shortest_edge` is defined.
 >>> _transforms = Compose([RandomResizedCrop(size), ColorJitter(brightness=0.5, hue=0.5)])
 ```
 
-2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
+2. The model accepts [`pixel_values`](model_doc/vision-encoder-decoder#transformers.VisionEncoderDecoderModel.forward.pixel_values)
 as its input. `ImageProcessor` can take care of normalizing the images, and generating appropriate tensors.
 Create a function that combines image augmentation and image preprocessing for a batch of images and generates `pixel_values`:
 
