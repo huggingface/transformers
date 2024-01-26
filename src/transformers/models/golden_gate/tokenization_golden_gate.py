@@ -236,7 +236,7 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         spaces_between_special_tokens: bool = False,
-        **kwargs
+        **kwargs,
     ) -> str:
         sub_texts = []
         current_sub_text = []
@@ -252,12 +252,12 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
                 current_sub_text.append(ids)
         if current_sub_text:
             sub_texts.append(self.sp_model.decode(current_sub_text))
-            
+
         if spaces_between_special_tokens:
             sub_texts = " ".join(sub_texts)
         else:
             sub_texts = "".join(sub_texts)
-            
+
         return sub_texts
 
     def convert_tokens_to_string(self, tokens):
@@ -273,8 +273,6 @@ class GoldenGateTokenizer(PreTrainedTokenizer):
                 current_sub_tokens.append(token)
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
-
-
 
     def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """

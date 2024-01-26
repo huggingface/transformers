@@ -127,7 +127,7 @@ GOLDEN_GATE_INPUTS_DOCSTRING = r"""
 
 
 def create_sinusoidal_positions(num_pos, dim):
-    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) [: (dim // 2)] / dim))
+    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2)[: (dim // 2)] / dim))
     freqs = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
 
     emb = np.concatenate((freqs, freqs), axis=-1)
@@ -219,9 +219,7 @@ class FlaxGoldenGateAttention(nn.Module):
             dtype=self.dtype,
             kernel_init=kernel,
         )
-        self.o_proj = nn.Dense(
-            self.embed_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel
-        )
+        self.o_proj = nn.Dense(self.embed_dim, use_bias=config.attention_bias, dtype=self.dtype, kernel_init=kernel)
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxGoldenGateRotaryEmbedding(config, dtype=self.dtype)

@@ -15,10 +15,16 @@
 
 import unittest
 
-import numpy as np
 import jax
+import numpy as np
 
-from transformers import GoldenGateConfig, is_flax_available, is_tokenizers_available, FlaxGoldenGateForCausalLM, AutoTokenizer
+from transformers import (
+    AutoTokenizer,
+    FlaxGoldenGateForCausalLM,
+    GoldenGateConfig,
+    is_flax_available,
+    is_tokenizers_available,
+)
 from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -35,7 +41,7 @@ if is_flax_available():
 
 
 if is_tokenizers_available():
-    from transformers import LlamaTokenizerFast
+    pass
 
 
 class FlaxGoldenGateModelTester:
@@ -209,6 +215,7 @@ class FlaxGoldenGateModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, u
 @require_flax
 class FlaxGoldenGateIntegrationTest(unittest.TestCase):
     input_text = ["Hello my name is", "Hi"]
+
     def test_model_2b_fp32(self):
         # TODO: change it to the new repo after the release
         model_id = "gg-hf/golden-gate-2b"
@@ -226,7 +233,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -240,7 +247,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
             "Hi,\n\nI have a problem with my 2005 1.6 16",
         ]
 
-        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype = jnp.float16)
+        model = FlaxGoldenGateForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, dtype=jnp.float16)
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="np", padding=True)
@@ -249,7 +256,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -272,7 +279,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -296,7 +303,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -319,7 +326,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
@@ -342,7 +349,7 @@ class FlaxGoldenGateIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
-        
+
         jit_generate = jax.jit(model.generate)
         output_sequences = jit_generate(**inputs).sequences
         output_text = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)

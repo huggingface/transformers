@@ -84,13 +84,13 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
                 k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads*head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads*head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size)
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj[0]
             else:
                 q_proj, k_proj, v_proj = torch.split(v, v.shape[0] // 3, 0)
-                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads*head_dim, hidden_size)
-                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads*head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(num_attn_heads * head_dim, hidden_size)
+                state_dict[k.replace("qkv_proj", "k_proj")] = k_proj.reshape(num_kv_heads * head_dim, hidden_size)
                 state_dict[k.replace("qkv_proj", "v_proj")] = v_proj
 
         elif k == "embedder.weight":
@@ -161,7 +161,9 @@ def main():
         args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens="<bos>"
     )
     tokenizer.padding_side = "left"
-    model = GoldenGateForCausalLM.from_pretrained(args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype = torch.bfloat16) #, low_cpu_mem_usage = True)
+    model = GoldenGateForCausalLM.from_pretrained(
+        args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype=torch.bfloat16
+    )  # , low_cpu_mem_usage = True)
     device = "cpu"
     model = model.to(device)
     model.generation_config.temperature = 1
