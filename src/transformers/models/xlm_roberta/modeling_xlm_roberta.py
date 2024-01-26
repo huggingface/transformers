@@ -594,7 +594,7 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
 
 XLM_ROBERTA_ATTENTION_CLASSES = {
     "eager": XLMRobertaAttention,
-    "flash": XLMRobertaFlashAttention2,
+    "flash_attention_2": XLMRobertaFlashAttention2,
 }
 
 
