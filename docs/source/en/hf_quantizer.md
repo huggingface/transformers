@@ -58,7 +58,7 @@ For some quantization methods, they may require "pre-quantizing" the models thro
 * `is_trainable`:  A property method to determine whether you can fine-tune models on top of the quantization method (with or without PEFT approaches).
 
 
-4- 🪛 Write the `validate_environment` and `set_torch_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. You can have a look at how this is done on other quantizers.
+4- 🪛 Write the `validate_environment` and `update_torch_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. You can have a look at how this is done on other quantizers.
 
 5- 🖋 Write the `_process_model_before_weight_loading` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. This means the `_process_model_before_weight_loading` method takes care of manipulating the model skeleton to replace some modules (e.g., `nn.Linear`) with the target modules (quantization modules). You can define a module replacement logic or any other utility method by creating a new file in `transformers/src/integrations/` and exposing the relevant methods in that folder's `__init__.py` file. The best starting point would be to have a look at another quantization methods such as `quantizer_awq.py`
 
