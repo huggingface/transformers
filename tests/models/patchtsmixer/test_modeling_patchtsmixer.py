@@ -191,11 +191,8 @@ class PatchTSMixerModelTester:
         # [bs x context_length x n_vars]
         past_values = floats_tensor([self.batch_size, _past_length, self.num_input_channels])
 
-        future_values = floats_tensor([self.batch_size, config.prediction_length, self.num_input_channels])
-
         inputs_dict = {
             "past_values": past_values,
-            "future_values": future_values,
         }
         return inputs_dict
 
@@ -256,19 +253,25 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # if classification model:
-        if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
+        if model_class == PatchTSMixerForPrediction:
+            rng = random.Random(self.model_tester.seed_number)
+            labels = floats_tensor(
+                [
+                    self.model_tester.batch_size,
+                    self.model_tester.prediction_length,
+                    self.model_tester.num_input_channels,
+                ],
+                rng=rng,
+            )
+            inputs_dict["future_values"] = labels
+        elif model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_targets, rng=rng)
             inputs_dict["target_values"] = labels
-            inputs_dict.pop("future_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
             labels = floats_tensor([self.model_tester.batch_size, self.model_tester.num_targets], rng=rng)
             inputs_dict["target_values"] = labels
-            inputs_dict.pop("future_values")
-        elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
-            inputs_dict.pop("future_values")
 
         inputs_dict["output_hidden_states"] = True
         return inputs_dict
