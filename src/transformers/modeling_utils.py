@@ -482,11 +482,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = (
-        safe_load_file
-        if load_safe
-        else partial(torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
-    )
+    weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", **weights_only_kwarg)
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -530,10 +527,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
-            weights_only=is_torch_greater_or_equal_than_1_13,
+            **weights_only_kwarg,
             **extra_args,
         )
     except Exception as e:
