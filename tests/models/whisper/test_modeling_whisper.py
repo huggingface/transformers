@@ -1281,7 +1281,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = torch.arange(5).to("cuda")
+        prompt_ids = torch.arange(5).to(torch_device)
         forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
 
         output = model.generate(
