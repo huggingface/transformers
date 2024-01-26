@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Union
 
 from packaging import version
 
@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..utils import is_accelerate_available, is_bitsandbytes_available, is_torch_available, logging
-
 from .quantizers_utils import get_module_from_name
+
 
 if is_torch_available():
     import torch
@@ -44,6 +44,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
     loading:
         need to locate SCB component and pass to the Linear8bitLt object
     """
+
     use_keep_in_fp32_modules = True
     requires_parameters_quantization = True
     requires_calibration = False
@@ -99,12 +100,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 " make sure you have the latest version of `bitsandbytes` installed"
             )
 
-
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
 
     def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -149,7 +148,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                         f"Incompatible dtype `{param_value.dtype}` when loading 8-bit prequantized weight. Expected `torch.int8`."
                     )
             return True
-        return False     
+        return False
 
     def create_quantized_param(
         self,
@@ -251,7 +250,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
-
 
     @property
     def is_serializable(self):

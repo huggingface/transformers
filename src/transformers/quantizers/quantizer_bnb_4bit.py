@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Union
 
 from packaging import version
 
@@ -44,6 +44,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         loading:
             need to locate `quant_state` components and pass to Param4bit constructor
     """
+
     use_keep_in_fp32_modules = True
     requires_parameters_quantization = True
     requires_calibration = False
@@ -213,7 +214,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
 
         module._parameters[tensor_name] = new_value
 
-
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.adjust_max_memory
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         # need more space for buffers that are created during quantization
@@ -286,7 +286,6 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
-
 
     # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer._process_model_after_weight_loading with 8bit->4bit
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
