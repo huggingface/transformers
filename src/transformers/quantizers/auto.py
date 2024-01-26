@@ -23,15 +23,16 @@ from ..utils.quantization_config import (
     QuantizationMethod,
 )
 from .quantizer_awq import AwqQuantizer
-from .quantizer_bnb import Bnb4BitHFQuantizer, Bnb8BitHFQuantizer
-from .quantizer_gptq import GptqHFQuantizer
+from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
+from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
+from .quantizer_gptq import GptqHfQuantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
     "awq": AwqQuantizer,
-    "bitsandbytes_4bit": Bnb4BitHFQuantizer,
-    "bitsandbytes_8bit": Bnb8BitHFQuantizer,
-    "gptq": GptqHFQuantizer,
+    "bitsandbytes_4bit": Bnb4BitHfQuantizer,
+    "bitsandbytes_8bit": Bnb8BitHfQuantizer,
+    "gptq": GptqHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -80,7 +81,7 @@ class AutoQuantizationConfig:
         return cls.from_dict(quantization_config_dict)
 
 
-class AutoHFQuantizer:
+class AutoHfQuantizer:
     """
     The Auto-HF quantizer class that takes care of automatically dispatching to the correct
     quantizer given a quantization config.

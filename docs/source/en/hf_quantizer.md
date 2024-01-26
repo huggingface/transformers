@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Build a new `HFQuantizer` class to add quantization support for a new quantization method.
+# Build a new `HfQuantizer` class to add quantization support for a new quantization method.
 
-Through this document, you will learn how to work on a transformers integration of a new quantization method. Note that currently the `HFQuantizer` is not meant to be used for any PyTorch module, but you should rather see it as an internal utility class that is used in the core modeling code to easily quantize transformers models with different SoTA approaches (e.g. QLoRA, GPTQ, LLM.int8, AWQ, ...). 
+Through this document, you will learn how to work on a transformers integration of a new quantization method. Note that currently the `HfQuantizer` is not meant to be used for any PyTorch module, but you should rather see it as an internal utility class that is used in the core modeling code to easily quantize transformers models with different SoTA approaches (e.g. QLoRA, GPTQ, LLM.int8, AWQ, ...). 
 
 
 ## Pre-requisities 
@@ -44,7 +44,7 @@ Note that for some quantization methods it is a strong requirement to "pre-quant
 
 0- 📕 Create a new quantization config class inside `src/transformers/utils/quantization_config.py`, and make sure to expose that new quantization config inside transformers main init, by adding it on the `_import_structure` object of `src/transformers/__init__.py`.
 
-1-  🗃 Create a new file inside `src/transformers/quantizers/` named `quantizer_your_method.py` and make it inherit from `src/transformers/quantizers/base.py::HFQuantizer`. Make sure to add the new quantizer and quantization config in the quantization auto-mapping in `src/transformers/quantizers/auto.py`
+1-  🗃 Create a new file inside `src/transformers/quantizers/` named `quantizer_your_method.py` and make it inherit from `src/transformers/quantizers/base.py::HfQuantizer`. Make sure to add the new quantizer and quantization config in the quantization auto-mapping in `src/transformers/quantizers/auto.py`
 
 2- 🔩 Define the following class attributes / property methods:
 

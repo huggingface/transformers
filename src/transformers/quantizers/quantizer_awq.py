@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from .base import HFQuantizer
+from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
@@ -28,7 +28,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class AwqQuantizer(HFQuantizer):
+class AwqQuantizer(HfQuantizer):
     """
     4-bit quantization for Activation-aware Weight Quantization(AWQ) (https://arxiv.org/abs/2306.00978)
     """

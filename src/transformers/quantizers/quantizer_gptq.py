@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Optional
 
 from packaging import version
 
-from .base import HFQuantizer
+from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class GptqHFQuantizer(HFQuantizer):
+class GptqHfQuantizer(HfQuantizer):
     """
     Quantizer of the GPTQ method - for GPTQ the quantizer support calibration of the model through
     `auto_gptq` package. Quantization is done under the hood for users if they load a non-prequantized model.

@@ -22,7 +22,7 @@ Transformers supports several quantization schemes to help you run inference wit
 
 ## Adding new quatization methods
 
-You are interested in adding a new quantization method in transformers? Read out the [HFQuantizer](./hf_quantizer) guide to learn more about it.
+You are interested in adding a new quantization method in transformers? Read out the [HfQuantizer](./hf_quantizer) guide to learn more about it.
 
 ## AWQ
 

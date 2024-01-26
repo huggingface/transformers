@@ -26,7 +26,7 @@ if is_torch_available():
     import torch
 
 
-class HFQuantizer(ABC):
+class HfQuantizer(ABC):
     """
     Abstract class of the HuggingFace quantizer. Supports for now quantizing HF transformers models for inference and/or quantization.
     This class is used only for transformers.PreTrainedModel.from_pretrained and cannot be easily used outside the scope of that method
@@ -67,16 +67,53 @@ class HFQuantizer(ABC):
         self.check_packages_compatibility()
 
     def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        """
+        Some quantization methods require to explicitly set the dtype of the model to a
+        target dtype. You need to override this method in case you want to make sure that behavior is
+        preserved
+
+        Args:
+            torch_dtype (`torch.dtype`):
+                The input dtype that is passed in `from_pretrained`
+        """
         return torch_dtype
 
     def set_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Override this method if you want to pass a override the existing device map with a new
+        one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
+        passed, the device_map is set to `"auto"``
+
+        Args:
+            device_map (`Union[dict, str]`, *optional*):
+                The device_map that is passed through the `from_pretrained` method.
+        """
         return device_map
 
     def adjust_target_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        """
+        Override this method if you want to adjust the `target_dtype` variable used in `from_pretrained`
+        to compute the device_map in case the device_map is a `str`. E.g. for bitsandbytes we force-set `target_dtype`
+        to `torch.int8` and for 4-bit we pass a custom enum `accelerate.CustomDtype.int4`.
+
+        Args:
+            torch_dtype (`torch.dtype`, *optional*):
+                The torch_dtype that is used to compute the device_map.
+        """
         return torch_dtype
 
     def get_special_dtypes_update(self, model, torch_dtype: "torch.dtype") -> Dict[str, "torch.dtype"]:
-        """returns dtypes for modules that are not quantized"""
+        """
+        returns dtypes for modules that are not quantized - used for the computation of the device_map in case
+        one passes a str as a device_map. The method will use the `modules_to_not_convert` that is modified
+        in `_process_model_before_weight_loading`.
+
+        Args:
+            model (`~transformers.PreTrainedModel`):
+                The model to quantize
+            torch_dtype (`torch.dtype`):
+                The dtype passed in `from_pretrained` method.
+        """
         return {
             name: torch_dtype
             for name, _ in model.named_parameters()
@@ -116,6 +153,10 @@ class HFQuantizer(ABC):
         return
 
     def check_packages_compatibility(self):
+        """
+        Check the compatibility of the quantizer with respect to the current environment. Loops over all packages
+        name under `self.required_packages` and checks if that package is available.
+        """
         if self.required_packages is not None:
             non_available_packages = []
             for package_name in self.required_packages:
@@ -131,12 +172,32 @@ class HFQuantizer(ABC):
                 )
 
     def preprocess_model(self, model: "PreTrainedModel", **kwargs):
-        """setting model attributes and/or converting model BEFORE weights loading"""
+        """
+        Setting model attributes and/or converting model before weights loading. At this point
+        the model should be initialized on the meta device so you can freely manipulate the skeleton
+        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
+
+        Args:
+            model (`~transformers.PreTrainedModel`):
+                The model to quantize
+            kwargs (`dict`, *optional*):
+                The keyword arguments that are passed along `_process_model_before_weight_loading`.
+        """
         model.is_quantized = True
         model.quantization_method = self.quantization_config.quant_method
         return self._process_model_before_weight_loading(model, **kwargs)
 
     def postprocess_model(self, model: "PreTrainedModel", **kwargs):
+        """
+        Post-process the model post weights loading.
+        Make sure to override the abstract method `_process_model_after_weight_loading`.
+
+        Args:
+            model (`~transformers.PreTrainedModel`):
+                The model to quantize
+            kwargs (`dict`, *optional*):
+                The keyword arguments that are passed along `_process_model_after_weight_loading`.
+        """
         model._is_quantized_training_enabled = self.is_trainable
         return self._process_model_after_weight_loading(model, **kwargs)
 
