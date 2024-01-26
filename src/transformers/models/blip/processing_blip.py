@@ -106,7 +106,7 @@ class BlipProcessor(ProcessorMixin):
             if text_encoding is not None:
                 encoding_image_processor.update(text_encoding)
             return encoding_image_processor
-        
+
         return text_encoding
 
     def batch_decode(self, *args, **kwargs):
