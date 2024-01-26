@@ -41,6 +41,7 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 # See https://arxiv.org/pdf/2212.02499.pdf  at 3.1 Redefining Output Spaces as "Images" - Semantic Segmentation from PAINTER paper
 # Taken from https://github.com/Abdullah-Meda/Painter/blob/main/Painter/data/coco_semseg/gen_color_coco_panoptic_segm.py#L31
 def build_palette(num_classes: int) -> List[Tuple[int, int]]:
@@ -48,10 +49,10 @@ def build_palette(num_classes: int) -> List[Tuple[int, int]]:
     margin = 256 // base
 
     # we assume that class_idx 0 is the background which is mapped to black
-    color_list = [(0,0,0)] 
+    color_list = [(0, 0, 0)]
     for location in range(num_classes):
-        num_seq_r = location // base ** 2
-        num_seq_g = (location % base ** 2) // base
+        num_seq_r = location // base**2
+        num_seq_g = (location % base**2) // base
         num_seq_b = location % base
 
         R = 255 - num_seq_r * margin
@@ -61,6 +62,7 @@ def build_palette(num_classes: int) -> List[Tuple[int, int]]:
         color_list.append((R, G, B))
 
     return color_list
+
 
 def mask_to_rgb(mask: np.ndarray, palette: List[Tuple[int, int]]) -> np.ndarray:
     height, width = mask.shape
@@ -77,8 +79,8 @@ def mask_to_rgb(mask: np.ndarray, palette: List[Tuple[int, int]]) -> np.ndarray:
 
     rgb_mask = np.clip(rgb_mask, 0, 255).astype(np.uint8)
 
-
     return rgb_mask
+
 
 class SegGptImageProcessor(BaseImageProcessor):
     r"""
@@ -110,7 +112,7 @@ class SegGptImageProcessor(BaseImageProcessor):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
         num_classes (`int`, *optional*, defaults to `None`):
-            Number of classes in the segmentation task (excluding the background). If specified, a palette will be built, 
+            Number of classes in the segmentation task (excluding the background). If specified, a palette will be built,
             assuming that class_idx 0 is the background, to map the prompt mask from a single class_idx channel to a 3 channel RGB.
             Not specifying this will result in the prompt mask being passed through as is.
     """
@@ -496,10 +498,8 @@ class SegGptImageProcessor(BaseImageProcessor):
             results.append({"mask": mask})
 
         return results
-    
-    def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
-    ):
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None):
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports
         PyTorch.
@@ -520,12 +520,12 @@ class SegGptImageProcessor(BaseImageProcessor):
 
         # Take predicted mask as input and prompt are concatenated in the height dimension
         # batch_size x num_channels x height x width
-        masks = masks[:, :, masks.shape[2] // 2 :, :] 
+        masks = masks[:, :, masks.shape[2] // 2 :, :]
 
         # To unnormalize since we have channel first we need to permute to channel last and then unnormalize
         # batch_size x height x width x num_channels
         std = torch.tensor(self.image_std).to(masks.device)
-        mean =  torch.tensor(self.image_mean).to(masks.device)
+        mean = torch.tensor(self.image_mean).to(masks.device)
 
         masks = masks.permute(0, 2, 3, 1) * std + mean
 
@@ -533,7 +533,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         masks = masks.permute(0, 3, 1, 2)
 
         # Clip to match with palette if specified
-        masks = torch.clip(masks*255, 0, 255)
+        masks = torch.clip(masks * 255, 0, 255)
 
         results = []
         palette_tensor = torch.tensor(self.palette).float().to(masks.device) if self.palette is not None else None
@@ -548,7 +548,9 @@ class SegGptImageProcessor(BaseImageProcessor):
 
             if self.num_classes is not None:
                 channels, height, width = mask.shape
-                dist = mask.permute(1, 2, 0).view(height, width, 1, channels) - palette_tensor.view(1, 1, self.num_classes+1, channels)
+                dist = mask.permute(1, 2, 0).view(height, width, 1, channels) - palette_tensor.view(
+                    1, 1, self.num_classes + 1, channels
+                )
                 dist = torch.pow(dist, 2)
                 dist = torch.sum(dist, dim=-1)
                 pred = dist.argmin(dim=-1)
