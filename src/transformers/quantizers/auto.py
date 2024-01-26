@@ -83,8 +83,8 @@ class AutoQuantizationConfig:
 
 class AutoHfQuantizer:
     """
-    The Auto-HF quantizer class that takes care of automatically dispatching to the correct
-    quantizer given a quantization config.
+    The Auto-HF quantizer class that takes care of automatically instantiating to the correct
+   `HfQuantizer` given the `QuantizationConfig`.
     """
 
     @classmethod
