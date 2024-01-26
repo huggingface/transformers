@@ -63,7 +63,7 @@ class AwqQuantizer(HfQuantizer):
                     " This is not supported. Please remove the CPU or disk device from the device_map."
                 )
 
-    def set_torch_dtype(self, torch_dtype):
+    def update_torch_dtype(self, torch_dtype):
         if torch_dtype is None:
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:

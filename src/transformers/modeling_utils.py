@@ -3023,8 +3023,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             hf_quantizer.validate_environment(
                 torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax, device_map=device_map
             )
-            torch_dtype = hf_quantizer.set_torch_dtype(torch_dtype)
-            device_map = hf_quantizer.set_device_map(device_map)
+            torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
+            device_map = hf_quantizer.update_device_map(device_map)
 
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:

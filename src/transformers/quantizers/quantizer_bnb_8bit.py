@@ -105,7 +105,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
@@ -118,7 +118,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    def set_device_map(self, device_map):
+    def update_device_map(self, device_map):
         if device_map is None:
             device_map = {"": torch.cuda.current_device()}
             logger.info(

@@ -220,8 +220,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.set_torch_dtype
-    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_torch_dtype
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
             logger.info(
@@ -234,8 +234,8 @@ class Bnb4BitHfQuantizer(HfQuantizer):
             torch_dtype = torch.float16
         return torch_dtype
 
-    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.set_device_map
-    def set_device_map(self, device_map):
+    # Copied from transformers.quantizers.quantizer_bnb_8bit.Bnb8BitHfQuantizer.update_device_map
+    def update_device_map(self, device_map):
         if device_map is None:
             device_map = {"": torch.cuda.current_device()}
             logger.info(

@@ -66,7 +66,7 @@ class HfQuantizer(ABC):
 
         self.check_packages_compatibility()
 
-    def set_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         """
         Some quantization methods require to explicitly set the dtype of the model to a
         target dtype. You need to override this method in case you want to make sure that behavior is
@@ -78,7 +78,7 @@ class HfQuantizer(ABC):
         """
         return torch_dtype
 
-    def set_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    def update_device_map(self, device_map: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
         Override this method if you want to pass a override the existing device map with a new
         one. E.g. for bitsandbytes, since `accelerate` is a hard requirement, if no device_map is
