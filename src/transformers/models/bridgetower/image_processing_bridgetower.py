@@ -204,7 +204,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         unused_keys = set(kwargs.keys()) - valid_processor_keys
         if unused_keys:
             unused_key_str = ", ".join(unused_keys)
-            logger.warning_once(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
+            logger.info(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
 
         if pad_and_return_pixel_mask:
             do_pad = pad_and_return_pixel_mask
