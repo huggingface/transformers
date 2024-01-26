@@ -47,9 +47,9 @@ For some quantization methods, they may require "pre-quantizing" the models thro
 
 1. 📕 Create a new quantization config class inside `src/transformers/utils/quantization_config.py` and make sure to expose the new quantization config inside Transformers main `init` by adding it to the `_import_structure` object of `src/transformers/__init__.py`.
 
-1-  🗃 Create a new file inside `src/transformers/quantizers/` named `quantizer_your_method.py`, and make it inherit from `src/transformers/quantizers/base.py::HFQuantizer`. Make sure to add the new quantizer and quantization config in the quantization auto-mapping in `src/transformers/quantizers/auto.py`
+2-  🗃 Create a new file inside `src/transformers/quantizers/` named `quantizer_your_method.py`, and make it inherit from `src/transformers/quantizers/base.py::HFQuantizer`. Make sure to add the new quantizer and quantization config in the quantization auto-mapping in `src/transformers/quantizers/auto.py`
 
-2- 🔩 Define the following class attributes/property methods for your quantization method:
+3- 🔩 Define the following class attributes/property methods for your quantization method:
 
 * `requires_calibration`: Whether the quantization method requires a data calibration process. If set to `True`, you can only support inference (with quantized weights) and not inference and quantization.
 * `required_packages`: A list of strings of the required packages to use the quantized weights. You might need to define some new utility methods such as `is_auto_awq_available` in `transformers/src/utils/import_utils.py`.
@@ -58,13 +58,13 @@ For some quantization methods, they may require "pre-quantizing" the models thro
 * `is_trainable`:  A property method to determine whether you can fine-tune models on top of the quantization method (with or without PEFT approaches).
 
 
-3- 🪛 Write the `validate_environment` and `set_torch_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. You can have a look at how this is done on other quantizers.
+4- 🪛 Write the `validate_environment` and `set_torch_dtype` methods. These methods are called before creating the quantized model to ensure users use the right configuration. You can have a look at how this is done on other quantizers.
 
-4- 🖋 Write the `_process_model_before_weight_loading` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. This means the `_process_model_before_weight_loading` method takes care of manipulating the model skeleton to replace some modules (e.g., `nn.Linear`) with the target modules (quantization modules). You can define a module replacement logic or any other utility method by creating a new file in `transformers/src/integrations/` and exposing the relevant methods in that folder's `__init__.py` file. The best starting point would be to have a look at another quantization methods such as `quantizer_awq.py`
+5- 🖋 Write the `_process_model_before_weight_loading` method. In Transformers, the quantized models are initialized first on the `"meta"` device before loading the weights. This means the `_process_model_before_weight_loading` method takes care of manipulating the model skeleton to replace some modules (e.g., `nn.Linear`) with the target modules (quantization modules). You can define a module replacement logic or any other utility method by creating a new file in `transformers/src/integrations/` and exposing the relevant methods in that folder's `__init__.py` file. The best starting point would be to have a look at another quantization methods such as `quantizer_awq.py`
 
-5- 🖊 Write the `_process_model_after_weight_loading` method. This method enables implementing additional features that require manipulating the model after loading the weights.
+6- 🖊 Write the `_process_model_after_weight_loading` method. This method enables implementing additional features that require manipulating the model after loading the weights.
 
-6- 📖 Document everything! Make sure your quantization method is documented in the `docs/source/en/quantization.md` file.
+7- 📖 Document everything! Make sure your quantization method is documented in the `docs/source/en/quantization.md` file.
 
-7- 🟢 Add tests! You should add tests by first adding the package in our nightly Dockerfile inside `docker/transformers-all-latest-gpu` and then adding a new test file in `tests/quantization/xxx`. Feel free to check out how it is implemented for other quantization methods.
+8- 🟢 Add tests! You should add tests by first adding the package in our nightly Dockerfile inside `docker/transformers-all-latest-gpu` and then adding a new test file in `tests/quantization/xxx`. Feel free to check out how it is implemented for other quantization methods.
 
