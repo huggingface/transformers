@@ -278,7 +278,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         images, masks = prepare_img()
         input_image = images[1]
         prompt_image = images[0]
-        prompt_mask = masks[0]
+        prompt_mask = masks[0].convert("L")
 
         inputs = image_processor(
             images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
@@ -334,11 +334,11 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_slice, atol=1e-4))
 
-        result = image_processor.post_process_masks(outputs, [input_image.size[::-1]])[0]["mask"]
+        result = image_processor.post_process_semantic_segmentation(outputs, [input_image.size[::-1]])[0]["mask"]
 
-        result_expected_shape = torch.Size((1, 3, 170, 297))
-        expected_area = 26654
-        area = (torch.clip(result * 255, 0, 255).mean(dim=1) > 0).sum().item()
+        result_expected_shape = torch.Size((170, 297))
+        expected_area = 1082
+        area = (result > 0).sum().item()
         self.assertEqual(result.shape, result_expected_shape)
         self.assertEqual(area, expected_area)
 
@@ -350,7 +350,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         images, masks = prepare_img()
         input_images = [images[1]] * 2
         prompt_images = [images[0], images[2]]
-        prompt_masks = [masks[0], masks[2]]
+        prompt_masks = [masks[0].convert("L"), masks[2].convert("L")]
 
         inputs = image_processor(
             images=input_images, prompt_images=prompt_images, prompt_masks=prompt_masks, return_tensors="pt"

@@ -26,6 +26,8 @@ The abstract from the paper is the following:
 
 Tips:
 - One can use [`SegGptImageProcessor`] to prepare image input, prompt and mask to the model.
+- It's highly adivisable to instantiate your own [`SegGptImageProcessor`] with the appropriate `num_labels` (not considering background) for your use case.
+- When doing infenrece with [`SegGptForImageSegmentation`] if your `batch_size` is greater than 1 you can use feature ensemble across your images by passing `feature_ensemble=True` in the forward method.
 
 This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco).
 The original code can be found [here]([(https://github.com/baaivision/Painter/tree/main)).
