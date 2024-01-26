@@ -38,8 +38,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
+from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -49,7 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_phi import PhiConfig
+from transformers.models.phi.configuration_phi import PhiConfig
 
 
 if is_flash_attn_2_available():
