@@ -43,7 +43,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         return sequence_pairs, sequences
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class ZeroShotClassificationPipeline(ChunkPipeline):
     """
     NLI-based zero-shot classification pipeline using a `ModelForSequenceClassification` trained on NLI (natural
