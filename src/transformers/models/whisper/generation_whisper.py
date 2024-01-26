@@ -199,7 +199,7 @@ class WhisperGenerationMixin:
 
         # make sure timestamps are as long as weights
         input_length = weight_length or cross_attentions[0].shape[2]
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, :input_length + 1]
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, : input_length + 1]
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
