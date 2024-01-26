@@ -144,7 +144,7 @@ _deps = [
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic<2",
+    "pydantic",
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
