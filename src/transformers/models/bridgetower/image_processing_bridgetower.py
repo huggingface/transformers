@@ -182,7 +182,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_center_crop: bool = True,
         do_pad: bool = True,
         pad_and_return_pixel_mask: bool = None,
-        max_text_len: int = 512 # TODO (Molbap): find original values in model config 
+        max_text_len: int = 50, # From here on, kwargs are kept for backwards compatibility to load existing processors.
+        cache_dir: str = "/tmp",
+        downstream_fusion: bool = False,
+        downstream_fusion_layers: int = 1,
+        downstream_fusion_method: str = "elmo",
+        
     ) -> None:
         if pad_and_return_pixel_mask:
             do_pad = pad_and_return_pixel_mask
@@ -384,6 +389,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_and_return_pixel_mask: Optional[bool] = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
