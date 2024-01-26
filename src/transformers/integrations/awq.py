@@ -193,7 +193,7 @@ def fuse_awq_modules(model, quantization_config):
     # We need to convert it from dict in order to get an AwqConfig object
     # otherwise the fields `backend` etc. will not be available
     # https://github.com/huggingface/transformers/pull/27411#discussion_r1414044495
-    if not isinstance(quantization_config, AwqConfig):
+    if isinstance(quantization_config, dict):
         quantization_config = AwqConfig.from_dict(quantization_config)
     backend = quantization_config.backend
 
