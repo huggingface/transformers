@@ -516,6 +516,10 @@ class UMT5PreTrainedModel(PreTrainedModel):
             if hasattr(module, "qa_outputs"):
                 module.qa_outputs.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
                 module.qa_outputs.bias.data.zero_()
+        elif isinstance(module, UMT5ForTokenClassification):
+            if hasattr(module, "classifier"):
+                module.classifier.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                module.classifier.bias.data.zero_()
         elif isinstance(module, UMT5ClassificationHead):
             module.dense.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.dense, "bias") and module.dense.bias is not None:
@@ -1599,8 +1603,6 @@ class UMT5ForSequenceClassification(UMT5PreTrainedModel):
 )
 class UMT5ForTokenClassification(UMT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = ["decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight"]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
-
     _tied_weights_keys = ["transformer.encoder.embed_tokens.weight"]
 
     # Copied from transformers.models.t5.modeling_t5.T5ForTokenClassification.__init__ with T5->UMT5
