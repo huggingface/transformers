@@ -138,7 +138,7 @@
   - local: quantization
     title: Quantization
   - local: hf_quantizer
-    title: Build a new HFQuantizer class
+    title: Build a new HfQuantizer class
   - sections:
     - local: perf_train_gpu_one
       title: Methods and tools for efficient training on a single GPU
