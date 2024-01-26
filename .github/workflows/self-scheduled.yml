@@ -33,8 +33,8 @@ jobs:
         machine_type: [single-gpu, multi-gpu]
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, past-ci]
     container:
-      image: huggingface/transformers-all-latest-gpu
-      # image: huggingface/transformers-all-latest-torch-nightly-gpu
+      # image: huggingface/transformers-all-latest-gpu
+      image: huggingface/transformers-all-latest-torch-nightly-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
