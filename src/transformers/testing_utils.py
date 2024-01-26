@@ -67,6 +67,7 @@ from .utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
+    is_g2p_en_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -363,6 +364,13 @@ def require_fsdp(test_case, min_version: str = "1.12.0"):
     return unittest.skipUnless(is_fsdp_available(min_version), f"test requires torch version >= {min_version}")(
         test_case
     )
+
+
+def require_g2p_en(test_case):
+    """
+    Decorator marking a test that requires g2p_en. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_g2p_en_available(), "test requires g2p_en")(test_case)
 
 
 def require_safetensors(test_case):

@@ -36,7 +36,7 @@ jobs:
           pip install --upgrade pip
           python -m pip install -U .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video,tf-cpu]
           pip install tensorflow_probability
-          python -m pip install -U natten
+          python -m pip install -U 'natten<0.15.0'
 
       - name: Create all tiny models (locally)
         run: |
@@ -62,7 +62,7 @@ jobs:
           path: reports/tests_pipelines
 
       - name: Create + Upload tiny models for new model architecture(s)
-        run: | 
+        run: |
           python utils/update_tiny_models.py --num_workers 2
 
       - name: Full report

@@ -84,6 +84,8 @@ from transformers.utils import (
     is_accelerate_available,
     is_flax_available,
     is_tf_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
@@ -101,7 +103,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.modeling_utils import no_init_weights
+    from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -118,7 +120,7 @@ if is_flax_available():
     )
 
 if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
 
 def _config_zero_init(config):
@@ -535,6 +537,54 @@ class ModelTesterMixin:
                             torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
                         ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_torch_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.__class__ not in MODEL_MAPPING:
+            return
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            base_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class_copy._init_weights = _mock_init_weights
+            base_class_copy.init_weights = _mock_all_init_weights
+
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            def check_equal(loaded):
+                for key in state_dict.keys():
+                    max_diff = torch.max(
+                        state_dict()[key] ^ loaded[key]
+                        if isinstance(state_dict[key], torch.BoolTensor)
+                        else torch.abs(state_dict[key] - loaded[key])
+                    ).item()
+                    self.assertLessEqual(max_diff, 1e-6, msg=f"{key} not identical")
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pytorch_model.bin")
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=True)
+                check_equal(load_state_dict(pt_checkpoint_path))
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
+                check_equal(load_state_dict(pt_checkpoint_path))
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -956,7 +1006,9 @@ class ModelTesterMixin:
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
-            return
+            self.skipTest(
+                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
+            )
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -1012,6 +1064,26 @@ class ModelTesterMixin:
                     if end_positions is not None:
                         input_names.append("end_positions")
 
+                    if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                        input_names.append("past_key_values")
+
+                        # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
+                        if "past_key_values" not in inputs:
+                            batch_size = inputs[next(iter(inputs))].shape[0]
+                            num_heads = model.config.num_attention_heads
+                            head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+                            cache_shape = (batch_size, num_heads, 0, head_dim)
+                            pkv = tuple(
+                                (
+                                    torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                    torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                )
+                                for i in range(model.config.num_hidden_layers)
+                            )
+
+                            inputs["past_key_values"] = pkv
+
                     filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
                     input_names = list(filtered_inputs.keys())
 
@@ -1021,8 +1093,10 @@ class ModelTesterMixin:
                         model.config.problem_type = "single_label_classification"
 
                     traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                    model_output = model(**filtered_inputs)
+
+                    with torch.no_grad():
+                        traced_output = traced_model(**filtered_inputs)
+                        model_output = model(**filtered_inputs)
 
             except Exception as e:
                 self.fail(f"Couldn't trace module: {e}")
@@ -3310,8 +3384,13 @@ class ModelTesterMixin:
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_device == "cpu" and torch_dtype == "float16":
-            self.skipTest("float16 not supported on cpu")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(
+                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+            )
 
         # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
         if torch_dtype == "float16":
@@ -3328,7 +3407,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-6,
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
@@ -3340,7 +3419,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-4,
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
