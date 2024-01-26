@@ -50,7 +50,7 @@ class HfQuantizer(ABC):
     required_packages = None
     requires_parameters_quantization = False
 
-    def __init__(self, quantization_config: QuantizationConfigMixin):
+    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
 
         # -- Handle extra kwargs below --
