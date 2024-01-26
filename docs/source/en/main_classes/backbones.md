@@ -45,16 +45,16 @@ Backbones are supported for the following models:
 
 ## BackboneMixin
 
-[[autodoc]] BackboneMixin
+[[autodoc]] utils.backbone_utils.BackboneMixin
 
 ## BackboneConfigMixin
 
-[[autodoc]] BackboneConfigMixin
+[[autodoc]] utils.backbone_utils.BackboneConfigMixin
 
 ## TimmBackbone
 
-[[autodoc]] TimmBackbone
+[[autodoc]] models.timm_backbone.TimmBackbone
 
 ## TimmBackboneConfig
 
-[[autodoc]] TimmBackboneConfig
+[[autodoc]] models.timm_backbone.TimmBackboneConfig
