@@ -171,7 +171,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = 288,
+        size: Dict[str, int] = {"shortest_edge": 288},
         size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
@@ -183,8 +183,12 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad: Optional[bool] = True,
         pad_and_return_pixel_mask: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
+        data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
+        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
+        print('DEBUG', kwargs)
+
         valid_processor_keys = {
             "do_resize",
             "size",
@@ -224,6 +228,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
         self.return_tensors = return_tensors
+        self.data_format = data_format
+        self.input_data_format = input_data_format
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -476,9 +482,30 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad = do_pad if (do_pad is not None or pad_and_return_pixel_mask) else self.do_pad
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         return_tensors = return_tensors if return_tensors is not None else self.return_tensors
-
+        input_data_format = input_data_format if input_data_format is not None else self.input_data_format
+        data_format = data_format if data_format is not None else self.data_format
+        
         size = size if size is not None else self.size
+
         size = get_size_dict(size, default_to_square=False)
+
+        print('DEBUG')
+        print(f'images: {images}')
+        print(f'do_resize: {do_resize}')
+        print(f'size: {size}')
+        print(f'size_divisor: {size_divisor}')
+        print(f'resample: {resample}')
+        print(f'do_rescale: {do_rescale}')
+        print(f'rescale_factor: {rescale_factor}')
+        print(f'do_normalize: {do_normalize}')
+        print(f'image_mean: {image_mean}')
+        print(f'image_std: {image_std}')
+        print(f'do_pad: {do_pad}')
+        print(f'do_center_crop: {do_center_crop}')
+        print(f'return_tensors: {return_tensors}')
+        print(f'data_format: {data_format}')
+        print(f'input_data_format: {input_data_format}')
+        print(f'pad_and_return_pixel_mask: {pad_and_return_pixel_mask}')
 
         if not is_batched(images):
             images = [images]
