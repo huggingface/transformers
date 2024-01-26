@@ -2091,6 +2091,7 @@ class Trainer:
                 )
 
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2109,7 +2110,7 @@ class Trainer:
                     state_dict = torch.load(
                         weights_file,
                         map_location="cpu",
-                        weights_only=is_torch_greater_or_equal_than_1_13,
+                        **weights_only_kwarg,
                     )
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
@@ -2126,7 +2127,7 @@ class Trainer:
                     state_dict = torch.load(
                         weights_file,
                         map_location="cpu",
-                        weights_only=is_torch_greater_or_equal_than_1_13,
+                        **weights_only_kwarg,
                     )
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2179,6 +2180,7 @@ class Trainer:
             or os.path.exists(best_safe_adapter_model_path)
         ):
             has_been_loaded = True
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                     # If the 'user_content.pt' file exists, load with the new smp api.
@@ -2198,7 +2200,7 @@ class Trainer:
                         state_dict = torch.load(
                             best_model_path,
                             map_location="cpu",
-                            weights_only=is_torch_greater_or_equal_than_1_13,
+                            **weights_only_kwarg,
                         )
 
                     state_dict["_smp_is_partial"] = False
@@ -2231,7 +2233,7 @@ class Trainer:
                         state_dict = torch.load(
                             best_model_path,
                             map_location="cpu",
-                            weights_only=is_torch_greater_or_equal_than_1_13,
+                            **weights_only_kwarg,
                         )
 
                     # If the model is on the GPU, it still works!
