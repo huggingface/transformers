@@ -27,9 +27,12 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 
 import transformers
 
-from . import is_safetensors_available
+from . import is_safetensors_available, is_torch_available
 from .utils import logging
 
+
+if is_torch_available():
+    import torch
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -48,17 +51,6 @@ def load_pytorch_checkpoint_in_flax_state_dict(
     flax_model, pytorch_checkpoint_path, is_sharded, allow_missing_keys=False
 ):
     """Load pytorch checkpoints in a flax model"""
-    try:
-        import torch  # noqa: F401
-
-        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
-    except (ImportError, ModuleNotFoundError):
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
 
     if not is_sharded:
         pt_path = os.path.abspath(pytorch_checkpoint_path)
@@ -66,12 +58,25 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
         if pt_path.endswith(".safetensors"):
             pt_state_dict = {}
-            with safe_open(pt_path, framework="pt") as f:
+            with safe_open(pt_path, framework="flax") as f:
                 for k in f.keys():
                     pt_state_dict[k] = f.get_tensor(k)
         else:
-            pt_state_dict = torch.load(pt_path, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
-        logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
+            try:
+                import torch  # noqa: F401
+
+                from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
+            except (ImportError, ModuleNotFoundError):
+                logger.error(
+                    "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
+                    " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
+                    " instructions."
+                )
+                raise
+
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            pt_state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
+            logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
     else:
@@ -149,21 +154,17 @@ def rename_key_and_reshape_tensor(
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # convert pytorch tensor to numpy
-    # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
-    try:
-        import torch  # noqa: F401
-    except (ImportError, ModuleNotFoundError):
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
+    from_bin = is_torch_available() and isinstance(next(iter(pt_state_dict.values())), torch.Tensor)
+    bfloat16 = torch.bfloat16 if from_bin else "bfloat16"
 
     weight_dtypes = {k: v.dtype for k, v in pt_state_dict.items()}
-    pt_state_dict = {
-        k: v.numpy() if not v.dtype == torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()
-    }
+
+    if from_bin:
+        for k, v in pt_state_dict.items():
+            # numpy currently does not support bfloat16, need to go over float32 in this case to not lose precision
+            if v.dtype == bfloat16:
+                v = v.float()
+            pt_state_dict[k] = v.numpy()
 
     model_prefix = flax_model.base_model_prefix
 
@@ -191,7 +192,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     # Need to change some parameters name to match Flax names
     for pt_key, pt_tensor in pt_state_dict.items():
         pt_tuple_key = tuple(pt_key.split("."))
-        is_bfloat_16 = weight_dtypes[pt_key] == torch.bfloat16
+        is_bfloat_16 = weight_dtypes[pt_key] == bfloat16
 
         # remove base model prefix if necessary
         has_base_model_prefix = pt_tuple_key[0] == model_prefix
@@ -229,7 +230,6 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             flax_state_dict[("params",) + flax_key] = (
                 jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
             )
-
         else:
             # also add unexpected weight so that warning is thrown
             flax_state_dict[flax_key] = (
@@ -253,7 +253,8 @@ def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
     flax_state_dict = {}
     for shard_file in shard_filenames:
         # load using msgpack utils
-        pt_state_dict = torch.load(shard_file, weights_only=is_torch_greater_or_equal_than_1_13)
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+        pt_state_dict = torch.load(shard_file, **weights_only_kwarg)
         pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
 
         model_prefix = flax_model.base_model_prefix

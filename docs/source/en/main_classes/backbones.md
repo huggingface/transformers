@@ -66,7 +66,13 @@ We can get the feature maps of first and second stages like below.
 
 ## Initializing Backbone Configuration
 
-In computer vision, models consist of backbone, neck, and a head. Backbone extracts the features, neck transforms the output of the backbone and head is used for the main task (e.g. object detection). You can initialize neck and head with model backbones by passing a model configuration to `backbone_config`. For example, below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with instance segmentation head with [ResNet](../model_doc/resnet) backbone.
+In computer vision, models consist of backbone, neck, and a head. Backbone extracts the features, neck enhances the extracted features and head is used for the main task (e.g. object detection). 
+
+<div style="text-align: center">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png">
+</div>
+
+You can initialize such multiple-stage model with Backbone API. Initialize the config of the backbone of your choice first. Initialize the neck config by passing the backbone config in. Then, initialize the head with the neck's config. To illustrate this, below you can see how to initialize the [MaskFormer](../model_doc/maskformer) model with instance segmentation head with [ResNet](../model_doc/resnet) backbone.
 
 ```py
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig

@@ -108,8 +108,8 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
     @property
     def decoder_logits(self):
@@ -150,8 +150,8 @@ class TFBlipTextVisionModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -191,9 +191,9 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_pooler_output: tf.Tensor | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
     question_embeds: Tuple[tf.Tensor] | None = None
 
 
@@ -1171,7 +1171,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=image_embeds,
             labels=labels,
-            return_dict=return_dict,
+            return_dict=False,
             training=training,
         )
 
@@ -1179,12 +1179,19 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
             outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
-        if outputs.loss is not None and outputs.loss.shape.rank == 0:
-            outputs.loss = tf.reshape(outputs.loss, (1,))
+        if labels is not None:
+            loss = outputs[0]
+            logits = outputs[1]
+        else:
+            loss = None
+            logits = outputs[0]
+
+        if loss is not None and loss.shape.rank == 0:
+            loss = tf.reshape(loss, (1,))
 
         return TFBlipForConditionalGenerationModelOutput(
-            loss=outputs.loss,
-            logits=outputs.logits,
+            loss=loss,
+            logits=logits,
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,

@@ -59,15 +59,15 @@ limitations under the License.
     <a href="https://hf.co/course"><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/course_banner.png"></a>
 </h3>
 
-🤗 Transformers aporta miles de modelos preentrenados Para realizar tareas en diferentes modalidades como texto, vision, y audio.
+🤗 Transformers aporta miles de modelos preentrenados para realizar tareas en diferentes modalidades como texto, visión, y audio.
 
 Estos modelos pueden ser aplicados en:
 
-* 📝 Texto, Para tareas como clasificación de texto, extracción de información, responder preguntas, resumir, traducir, generación de texto, en más de 100 idiomas.
+* 📝 Texto, para tareas como clasificación de texto, extracción de información, responder preguntas, resumir, traducir, generación de texto, en más de 100 idiomas.
 * 🖼️ Imágenes, para tareas como clasificación de imágenes, detección the objetos, y segmentación.
 * 🗣️ Audio, para tareas como reconocimiento de voz y clasificación de audio.
 
-Los modelos de Transformer también pueden realizar tareas en **muchas modalidades combinadas**, como responder pregunstas, reconocimiento de carácteres ópticos,extracción de información de documentos escaneados, clasificación de video, y respuesta de preguntas visuales.
+Los modelos de Transformer también pueden realizar tareas en **muchas modalidades combinadas**, como responder preguntas, reconocimiento de carácteres ópticos,extracción de información de documentos escaneados, clasificación de video, y respuesta de preguntas visuales.
 
 🤗 Transformers aporta APIs para descargar rápidamente y usar estos modelos preentrenados en un texto dado, afinarlos en tus propios sets de datos y compartirlos con la comunidad en nuestro [centro de modelos](https://huggingface.co/models). Al mismo tiempo, cada módulo de Python que define una arquitectura es completamente independiente y se puede modificar para permitir experimentos de investigación rápidos.
 
@@ -188,7 +188,7 @@ Y aquí está el código equivalente para TensorFlow:
 >>> outputs = model(**inputs)
 ```
 
-El tokenizador es responsable de todo el preprocesamiento que espera el modelo preentrenado y se puede llamar directamente en una sola cadena (como en los ejemplos anteriores) o en una lista. Dará como resultado un diccionario que puedes usar en el código descendente o simplemente pasarlo directamente a su modelo usando el operador de desempaquetado de argumento **.
+El tokenizador es responsable de todo el preprocesamiento que espera el modelo preentrenado y se puede llamar directamente en una sola cadena (como en los ejemplos anteriores) o en una lista. Este dará como resultado un diccionario que puedes usar en el código descendente o simplemente pasarlo directamente a su modelo usando el operador de desempaquetado de argumento **.
 
 El modelo en si es un [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) normal o un [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (dependiendo De tu backend) que puedes usar de forma habitual. [Este tutorial](https://huggingface.co/docs/transformers/training) explica cómo integrar un modelo de este tipo en un ciclo de entrenamiento PyTorch o TensorFlow clásico, o como usar nuestra API `Trainer` para ajustar rápidamente un nuevo conjunto de datos.
 
@@ -227,11 +227,11 @@ El modelo en si es un [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.h
 
 Este repositorio está probado en Python 3.8+, Flax 0.4.1+, PyTorch 1.11+ y TensorFlow 2.6+.
 
-Deberías instalar 🤗 Transformers en un [ambiente virtual](https://docs.python.org/3/library/venv.html). Si no estas familiarizado con los entornos virtuales de Python, consulta la [guía de usuario](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
+Deberías instalar 🤗 Transformers en un [entorno virtual](https://docs.python.org/3/library/venv.html). Si no estas familiarizado con los entornos virtuales de Python, consulta la [guía de usuario](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
 Primero, crea un entorno virtual con la versión de Python que vas a usar y actívalo.
 
-Luego, deberás instalar al menos uno de Flax, PyTorch o TensorFlow.
+Luego, deberás instalar al menos uno entre Flax, PyTorch o TensorFlow.
 Por favor, ve a la [página de instalación de TensorFlow](https://www.tensorflow.org/install/), [página de instalación de PyTorch](https://pytorch.org/get-started/locally/#start-locally) y/o las páginas de instalación de [Flax](https://github.com/google/flax#quick-install) y [Jax](https://github.com/google/jax#installation) con respecto al comando de instalación específico para tu plataforma.
 
 Cuando se ha instalado uno de esos backends, los 🤗 Transformers se pueden instalar usando pip de la siguiente manera:
@@ -314,6 +314,7 @@ Número actual de puntos de control: ![](https://img.shields.io/endpoint?url=htt
 1. **[Deformable DETR](https://huggingface.co/docs/transformers/model_doc/deformable_detr)** (from SenseTime Research) released with the paper [Deformable DETR: Deformable Transformers for End-to-End Object Detection](https://arxiv.org/abs/2010.04159) by Xizhou Zhu, Weijie Su, Lewei Lu, Bin Li, Xiaogang Wang, Jifeng Dai.
 1. **[DeiT](https://huggingface.co/docs/transformers/model_doc/deit)** (from Facebook) released with the paper [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre Sablayrolles, Hervé Jégou.
 1. **[DePlot](https://huggingface.co/docs/transformers/model_doc/deplot)** (from Google AI) released with the paper [DePlot: One-shot visual language reasoning by plot-to-table translation](https://arxiv.org/abs/2212.10505) by Fangyu Liu, Julian Martin Eisenschlos, Francesco Piccinno, Syrine Krichene, Chenxi Pang, Kenton Lee, Mandar Joshi, Wenhu Chen, Nigel Collier, Yasemin Altun.
+1. **[Depth Anything](https://huggingface.co/docs/transformers/main/model_doc/depth_anything)** (from University of Hong Kong and TikTok) released with the paper [Depth Anything: Unleashing the Power of Large-Scale Unlabeled Data](https://arxiv.org/abs/2401.10891) by Lihe Yang, Bingyi Kang, Zilong Huang, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao.
 1. **[DETA](https://huggingface.co/docs/transformers/model_doc/deta)** (from The University of Texas at Austin) released with the paper [NMS Strikes Back](https://arxiv.org/abs/2212.06137) by Jeffrey Ouyang-Zhang, Jang Hyun Cho, Xingyi Zhou, Philipp Krähenbühl.
 1. **[DETR](https://huggingface.co/docs/transformers/model_doc/detr)** (from Facebook) released with the paper [End-to-End Object Detection with Transformers](https://arxiv.org/abs/2005.12872) by Nicolas Carion, Francisco Massa, Gabriel Synnaeve, Nicolas Usunier, Alexander Kirillov, Sergey Zagoruyko.
 1. **[DialoGPT](https://huggingface.co/docs/transformers/model_doc/dialogpt)** (from Microsoft Research) released with the paper [DialoGPT: Large-Scale Generative Pre-training for Conversational Response Generation](https://arxiv.org/abs/1911.00536) by Yizhe Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
@@ -514,7 +515,7 @@ Número actual de puntos de control: ![](https://img.shields.io/endpoint?url=htt
 1. **[YOSO](https://huggingface.co/docs/transformers/model_doc/yoso)** (from the University of Wisconsin - Madison) released with the paper [You Only Sample (Almost) Once: Linear Cost Self-Attention Via Bernoulli Sampling](https://arxiv.org/abs/2111.09714) by Zhanpeng Zeng, Yunyang Xiong, Sathya N. Ravi, Shailesh Acharya, Glenn Fung, Vikas Singh.
 1. ¿Quieres aportar un nuevo modelo? Hemos agregado una **guía detallada y plantillas** para guiarte en el proceso de agregar un nuevo modelo. Puedes encontrarlos en la carpeta de [`templates`](./templates) del repositorio. Asegúrate de revisar las [pautas de contribución](./CONTRIBUTING.md) y comunícate con los mantenedores o abra un problema para recopilar comentarios antes de comenzar su PR.
 
-Para comprobar si cada modelo tiene una implementación en Flax, PyTorch o TensorFlow, o tiene un tokenizador asociado respaldado por la librería 🤗 Tokenizers , ve a [esta tabla](https://huggingface.co/docs/transformers/index#supported-frameworks).
+Para comprobar si cada modelo tiene una implementación en Flax, PyTorch o TensorFlow, o tiene un tokenizador asociado respaldado por la librería 🤗 Tokenizers, ve a [esta tabla](https://huggingface.co/docs/transformers/index#supported-frameworks).
 
 Estas implementaciones se han probado en varios conjuntos de datos (consulte los scripts de ejemplo) y deberían coincidir con el rendimiento de las implementaciones originales. Puede encontrar más detalles sobre el rendimiento en la sección Examples de la [documentación](https://github.com/huggingface/transformers/tree/main/examples).
 
@@ -525,7 +526,7 @@ Estas implementaciones se han probado en varios conjuntos de datos (consulte los
 |-|-|
 | [Documentación](https://huggingface.co/docs/transformers/) | Toda la documentación de la API y tutoriales |
 | [Resumen de tareas](https://huggingface.co/docs/transformers/task_summary) | Tareas soportadas 🤗 Transformers |
-| [Tutorial de preprocesAmiento](https://huggingface.co/docs/transformers/preprocessing) | Usando la clase `Tokenizer` para preparar datos para los modelos |
+| [Tutorial de preprocesamiento](https://huggingface.co/docs/transformers/preprocessing) | Usando la clase `Tokenizer` para preparar datos para los modelos |
 | [Entrenamiento y puesta a punto](https://huggingface.co/docs/transformers/training) | Usando los modelos aportados por 🤗 Transformers en un bucle de entreno de PyTorch/TensorFlow y la API de `Trainer` |
 | [Recorrido rápido: secuencias de comandos de ajuste/uso](https://github.com/huggingface/transformers/tree/main/examples) | Scripts de ejemplo para ajustar modelos en una amplia gama de tareas |
 | [Compartir y subir modelos](https://huggingface.co/docs/transformers/model_sharing) | Carga y comparte tus modelos perfeccionados con la comunidad |
@@ -533,7 +534,7 @@ Estas implementaciones se han probado en varios conjuntos de datos (consulte los
 
 ## Citación
 
-Ahora nosotros tenemos un [papel](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que puedes citar para la librería de  🤗 Transformers:
+Ahora nosotros tenemos un [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) que puedes citar para la librería de 🤗 Transformers:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
