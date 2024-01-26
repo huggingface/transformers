@@ -174,6 +174,8 @@ class WhisperGenerationMixin:
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
 
+        weight_length = None
+
         if "beam_indices" in generate_outputs:
             # If beam search has been used, the output sequences may have been generated for more timesteps than their sequence_lengths
             # since the beam search strategy chooses the most probable sequences at the end of the search.
@@ -195,9 +197,9 @@ class WhisperGenerationMixin:
                 dim=2,
             )
 
-        # make sure timestamps are as long as cross_attention
-        input_length = cross_attentions[0].shape[2] + 1
-        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, :input_length]
+        # make sure timestamps are as long as weights
+        input_length = weight_length or cross_attentions[0].shape[2]
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)[:, :input_length + 1]
         batch_size = timestamps.shape[0]
 
         if num_frames is not None:
