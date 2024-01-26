@@ -946,7 +946,7 @@ class UMT5Model(UMT5PreTrainedModel):
     >>> hidden_states = outputs.last_hidden_state
     ```"""
 
-    model_type = "uumt5"
+    model_type = "umt5"
     config_class = UMT5Config
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
