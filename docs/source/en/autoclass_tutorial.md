@@ -104,7 +104,7 @@ For example, in the above diagram, to return the feature map from the first stag
 Now you can access the `feature_maps` object from the first stage of the backbone:
 
 ```py
->>> list(feature_maps[1].shape)
+>>> list(feature_maps[0].shape)
 [1, 96, 56, 56]
 ```
 
