@@ -16,10 +16,11 @@
 Processor class for BridgeTower.
 """
 
-from typing import List, Optional, Union, Dict
+from typing import Dict, List, Optional, Union
 
+from ...image_utils import ChannelDimension
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy, TextInput, PreTokenizedInput
 from ...utils import TensorType
 
 
@@ -48,8 +49,8 @@ class BridgeTowerProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images=None,
-        text=None,
+        images,
+        text:Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]=None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
@@ -63,6 +64,8 @@ class BridgeTowerProcessor(ProcessorMixin):
         pad_and_return_pixel_mask: Optional[bool] = None,
         do_center_crop: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -99,11 +102,11 @@ class BridgeTowerProcessor(ProcessorMixin):
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
-            verbose=verbose,
             return_tensors=return_tensors,
+            verbose=verbose,
         )
         # add pixel_values + pixel_mask
-
+        print(size)
         encoding_image_processor = self.image_processor(
             images,
             do_resize=do_resize,
@@ -116,8 +119,11 @@ class BridgeTowerProcessor(ProcessorMixin):
             image_mean=image_mean,
             image_std=image_std,
             do_center_crop=do_center_crop,
+            data_format=data_format,
+            input_data_format=input_data_format,
             do_pad=do_pad,
-            pad_and_return_pixel_mask=pad_and_return_pixel_mask
+            pad_and_return_pixel_mask=pad_and_return_pixel_mask,
+            return_tensors=return_tensors,
         )
         encoding.update(encoding_image_processor)
 

@@ -180,15 +180,32 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_center_crop: bool = True,
-        do_pad: bool = True,
-        pad_and_return_pixel_mask: bool = None,
-        max_text_len: int = 50, # From here on, kwargs are kept for backwards compatibility to load existing processors.
-        cache_dir: str = "/tmp",
-        downstream_fusion: bool = False,
-        downstream_fusion_layers: int = 1,
-        downstream_fusion_method: str = "elmo",
-        
+        do_pad: Optional[bool] = True,
+        pad_and_return_pixel_mask: Optional[bool] = None,
+        return_tensors: Optional[bool] = None,
+        **kwargs,
     ) -> None:
+        valid_processor_keys = {
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_center_crop",
+            "do_pad",
+            "pad_and_return_pixel_mask",
+            "return_tensors"
+        }
+
+        unused_keys = set(kwargs.keys()) - valid_processor_keys
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
+            logger.warning_once(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
+
         if pad_and_return_pixel_mask:
             do_pad = pad_and_return_pixel_mask
 
@@ -206,6 +223,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_pad = do_pad
         self.do_center_crop = do_center_crop
+        self.return_tensors = return_tensors
 
     # Copied from transformers.models.vilt.image_processing_vilt.ViltImageProcessor.resize
     def resize(
@@ -371,7 +389,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             data["pixel_mask"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
+    
     def preprocess(
         self,
         images: ImageInput,
@@ -443,6 +461,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            pad_and_return_pixel_mask (`bool`, *optional*, deprecated, defaults to `self.do_pad`):
+                Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
+                created and returned. Deprecated version of do_pad.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
@@ -452,8 +473,9 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_pad = do_pad if (do_pad is not None or pad_and_return_pixel_mask) else self.do_pad
+        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        return_tensors = return_tensors if return_tensors is not None else self.return_tensors
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
