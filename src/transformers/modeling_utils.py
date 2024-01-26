@@ -2255,7 +2255,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
         )
 
-        if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+        if not _hf_peft_config_loaded and not quantization_serializable:
             raise ValueError(
                 f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
