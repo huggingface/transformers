@@ -79,8 +79,8 @@ class DepthEstimationPipeline(Pipeline):
 
             The dictionaries contain the following keys:
 
-            - **label** (`str`) -- The label identified by the model.
-            - **score** (`int`) -- The score attributed by the model for that label.
+            - **predicted_depth** (`str`) -- The predicted depth by the model as a `torch.Tensor`.
+            - **depth** (`PIL.Image`) -- The predicted depth by the model as a `PIL.Image`.
         """
         return super().__call__(images, **kwargs)
 
