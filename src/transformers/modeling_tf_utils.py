@@ -41,12 +41,12 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import (
+    convert_batch_encoding,
     expand_1d,
     load_attributes_from_hdf5_group,
     save_attributes_to_hdf5_group,
     shape_list,
 )
-from .tokenization_utils_base import BatchEncoding
 from .utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
@@ -1160,62 +1160,32 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
     #            Do not merge this before that PR is in!
     @functools.wraps(tf.keras.Model.fit)
     def fit(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().fit(*args, **kwargs)
 
     @functools.wraps(tf.keras.Model.train_on_batch)
     def train_on_batch(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().train_on_batch(*args, **kwargs)
 
     @functools.wraps(tf.keras.Model.test_on_batch)
     def test_on_batch(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().test_on_batch(*args, **kwargs)
 
     @functools.wraps(tf.keras.Model.predict_on_batch)
     def predict_on_batch(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().predict_on_batch(*args, **kwargs)
 
     @functools.wraps(tf.keras.Model.predict)
     def predict(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().predict(*args, **kwargs)
 
     @functools.wraps(tf.keras.Model.evaluate)
     def evaluate(self, *args, **kwargs):
-        # Convert HF BatchEncoding objects to dicts that Keras understands
-        if args and isinstance(args[0], BatchEncoding):
-            args = list(args)
-            args[0] = dict(args[0])
-        elif "x" in kwargs and isinstance(kwargs["x"], BatchEncoding):
-            kwargs["x"] = dict(kwargs["x"])
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
         return super().evaluate(*args, **kwargs)
 
     @classmethod
