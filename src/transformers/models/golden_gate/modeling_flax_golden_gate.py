@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Meta AI, EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Google Inc., EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -134,7 +134,7 @@ def create_sinusoidal_positions(num_pos, dim):
     out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
     return jnp.array(out[:, :, :num_pos])
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.rotate_half
 def rotate_half(tensor):
     """Rotates half the hidden dims of the input."""
     rotate_half_tensor = jnp.concatenate(
@@ -142,7 +142,7 @@ def rotate_half(tensor):
     )
     return rotate_half_tensor
 
-
+# Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
@@ -169,7 +169,7 @@ class FlaxGoldenGateRMSNorm(nn.Module):
 class FlaxGoldenGateRotaryEmbedding(nn.Module):
     config: GoldenGateConfig
     dtype: jnp.dtype = jnp.float32
-
+    # Ignore copy
     def setup(self):
         head_dim = self.config.head_dim
         self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
@@ -233,6 +233,7 @@ class FlaxGoldenGateAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads * self.head_dim,))
 
     @nn.compact
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
