@@ -1302,7 +1302,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        decoder_input_ids = torch.arange(5).to("cuda")
+        decoder_input_ids = torch.arange(5).to(torch_device)
         prompt_ids = decoder_input_ids[:4]
         max_new_tokens = 8
 
@@ -2008,7 +2008,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
         output_without_prompt = model.generate(input_features)
-        prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to("cuda")
+        prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to(torch_device)
         output_with_prompt = model.generate(input_features, prompt_ids=prompt_ids)
 
         expected_without_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
@@ -2031,7 +2031,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         language = "de"
         expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
         prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to("cuda")
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
         text = processor.decode(output[0])
@@ -2047,7 +2047,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
         prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to("cuda")
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
         model.generation_config.forced_decoder_ids = None
         model.config.forced_decoder_ids = None
@@ -2078,7 +2078,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
-        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+        input_features = (
+            processor(sample["array"], return_tensors="pt").input_features.to(torch_device).to(torch.float16)
+        )
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2126,7 +2128,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
-        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+        input_features = (
+            processor(sample["array"], return_tensors="pt").input_features.to(torch_device).to(torch.float16)
+        )
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2161,7 +2165,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2169,7 +2173,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
             "input_features"
         ]
-        input_features = input_features.to(device="cuda")
+        input_features = input_features.to(device=torch_device)
 
         result = model.generate(input_features, return_timestamps=True)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
@@ -2194,10 +2198,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_whisper_longform_prompt_ids(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         prompt = "Mr. Kilter, Ruggedo."  # let's force Mr. Quilter -> Mr. Kilter
-        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to("cuda")
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2208,7 +2212,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
             "input_features"
         ]
-        input_features = input_features.to(device="cuda")
+        input_features = input_features.to(device=torch_device)
 
         result = model.generate(
             input_features,
@@ -2248,7 +2252,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2256,7 +2260,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
             "input_features"
         ]
-        input_features = input_features.to(device="cuda")
+        input_features = input_features.to(device=torch_device)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2284,7 +2288,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2297,7 +2301,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2305,7 +2309,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2333,7 +2337,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2355,7 +2359,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, **gen_kwargs)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2383,7 +2387,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
@@ -2396,7 +2400,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single += processor.batch_decode(result, skip_special_tokens=True)
@@ -2404,7 +2408,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2430,7 +2434,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
@@ -2443,7 +2447,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         gen_kwargs = {
             "return_timestamps": True,
