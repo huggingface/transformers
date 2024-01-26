@@ -1319,6 +1319,46 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
 
+    def test_generate_longform_with_prompt_ids(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+
+        prompt_ids = torch.arange(5).to(torch_device)
+        model.generation_config.no_timestamps_token_id = 11
+        model.generation_config.pad_token_id = 10
+
+        # make sure prompt token ids [0-9] can't be generated
+        model.generation_config.suppress_tokens = list(range(10))
+
+        input_features = input_dict["input_features"]
+
+        language = "<|de|>"
+        lang_id = 6
+
+        input_features = input_features.repeat(1, 1, 50)
+        attention_mask = torch.ones_like(input_features, dtype=torch.long)[:, 0]
+
+        for prompt_type in ["first-segment", "all-segments"]:
+            for task_id, task in enumerate(["translate", "transcribe"]):
+                task_id = 7 + task_id
+
+                model.generation_config.__setattr__("lang_to_id", {language: lang_id})
+                model.generation_config.__setattr__("task_to_id", {task: task_id})
+
+                output = model.generate(
+                    input_features,
+                    attention_mask=attention_mask,
+                    prompt_condition_type=prompt_type,
+                    max_new_tokens=5,
+                    task=task,
+                    language=language,
+                    prompt_ids=prompt_ids,
+                    condition_on_prev_tokens=True,
+                )
+                for row in output.tolist():
+                    # make sure no token below 10 is in generated output => this means for long-form prompt ids should NOT be returned
+                    assert not any(i in row for i in model.generation_config.suppress_tokens)
+
     def _check_longform_generate_single_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -2149,6 +2189,56 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         is_increasing = all(timestamp_floats[i] <= timestamp_floats[i + 1] for i in range(len(timestamp_floats) - 1))
 
         assert is_increasing
+
+    @slow
+    def test_whisper_longform_prompt_ids(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to("cuda")
+
+        prompt = "Mr. Kilter, Ruggedo."  # let's force Mr. Quilter -> Mr. Kilter
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to("cuda")
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
+        one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
+
+        first_text = ds["validation"][0]["text"].lower()
+        last_text = ds["validation"][-1]["text"].lower()
+
+        input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
+            "input_features"
+        ]
+        input_features = input_features.to(device="cuda")
+
+        result = model.generate(
+            input_features,
+            prompt_ids=prompt_ids,
+            return_timestamps=True,
+            prompt_condition_type="first-segment",
+            condition_on_prev_tokens=True,
+        )
+        decoded_first_segment = processor.batch_decode(result, skip_special_tokens=True)
+
+        result = model.generate(
+            input_features,
+            prompt_ids=prompt_ids,
+            return_timestamps=True,
+            prompt_condition_type="all-segments",
+            condition_on_prev_tokens=True,
+        )
+        decoded_all_segments = processor.batch_decode(result, skip_special_tokens=True)
+
+        # show that first segment has quilter and last segment has ruggedo
+        assert "quilter" in first_text
+        assert "ruggedo" in last_text
+
+        # condition on first segment correctly changes to kilter in first segment, but does not transcribe "ruggedo" correctly
+        assert "kilter" in decoded_first_segment[0][: len(first_text)].lower()
+        assert "ruggedo" not in decoded_first_segment[0][-len(last_text) :].lower()
+
+        # condition on all-segment correctly changes to kilter in first segment and correctly transcribes "ruggedo"
+        assert "kilter" in decoded_all_segments[0][: len(first_text)].lower()
+        assert "ruggedo" in decoded_all_segments[0][-len(last_text) :].lower()
 
     @slow
     def test_whisper_longform_single_batch_prev_cond(self):

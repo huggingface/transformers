@@ -264,7 +264,7 @@ class WhisperGenerationMixin:
         language: Optional[str] = None,
         is_multilingual: Optional[bool] = None,
         prompt_ids: Optional[torch.Tensor] = None,
-        prompt_condition_type: str = "first-segment",  # first-segment, all-segments
+        prompt_condition_type: Optional[str] = None,  # first-segment, all-segments
         condition_on_prev_tokens: Optional[bool] = None,
         temperature: Optional[Union[float, Tuple[float, ...]]] = None,
         compression_ratio_threshold: Optional[float] = None,
@@ -338,6 +338,9 @@ class WhisperGenerationMixin:
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+            prompt_condition_type (`str`, *optional*):
+                Only relevant for long-form transcription. Condition type of `prompt_ids`. 'first-segment' means only the first segment is conditioned on `prompt_ids`. 'all-segments' means each segment is conditioned on `prompt_ids`. Make sure to enable `condition_on_prev_tokens` for 'all-segments'.
+                Defaults to 'first-segment'. For short-term transcription only 'first-segment' is possible.
             condition_on_prev_tokens (`bool`, *optional*):
                 Only relevant for long-form transcription. Whether to condition each segment on the previous segment.
                 As shown in the [the Whisper paper](https://cdn.openai.com/papers/whisper.pdf), this can help to improve
@@ -521,6 +524,11 @@ class WhisperGenerationMixin:
             no_speech_threshold=no_speech_threshold,
             condition_on_prev_tokens=condition_on_prev_tokens,
         )
+        self._set_prompt_condition_type(
+            generation_config=generation_config,
+            prompt_condition_type=prompt_condition_type,
+        )
+
         # pass self.config for backward compatibility
         init_tokens = self.retrieve_init_tokens(
             generation_config=generation_config,
@@ -609,7 +617,6 @@ class WhisperGenerationMixin:
         current_segments = self._prepare_segments(
             prompt_ids=prompt_ids,
             batch_size=batch_size,
-            prompt_condition_type=prompt_condition_type,
             generation_config=generation_config,
         )
 
@@ -720,7 +727,7 @@ class WhisperGenerationMixin:
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
         final_segments = (
             [x[1:] for x in current_segments]
-            if (prompt_ids is not None and prompt_condition_type == "first-segment")
+            if (prompt_ids is not None and generation_config.prompt_condition_type == "first-segment")
             else current_segments
         )
         sequences = _pad_to_max_length(final_segments, generation_config.pad_token_id, padding="right")
@@ -848,19 +855,13 @@ class WhisperGenerationMixin:
         return seek_sequences, seek_outputs, should_skip, do_condition_on_prev_tokens
 
     @staticmethod
-    def _prepare_segments(prompt_ids, batch_size, prompt_condition_type, generation_config):
-        generation_config.prompt_condition_type = prompt_condition_type
-
-        if prompt_ids is not None and prompt_condition_type == "first-segment":
-            prompt_ids = prompt_ids[1:] if prompt_ids[0] == generation_config.prev_sot_token_id else prompt_ids
+    def _prepare_segments(prompt_ids, batch_size, generation_config):
+        if prompt_ids is not None and generation_config.prompt_condition_type == "first-segment":
+            prev_sot_token_id = getattr(generation_config, "prev_sot_token_id", None)
+            prompt_ids = prompt_ids[1:] if prompt_ids[0] == prev_sot_token_id else prompt_ids
             current_segments = [[{"tokens": prompt_ids}] for _ in range(batch_size)]
         else:
             current_segments = [[] for _ in range(batch_size)]
-
-        if generation_config.condition_on_prev_tokens is not True and prompt_condition_type == "all-segments":
-            raise ValueError(
-                "Make sure to set `condition_on_prev_tokens=True` when setting `prompt_condition_type='all-segments'`."
-            )
 
         return current_segments
 
@@ -1251,6 +1252,25 @@ class WhisperGenerationMixin:
         )
 
     @staticmethod
+    def _set_prompt_condition_type(generation_config, prompt_condition_type):
+        allowed_cond_types = ["first-segment", "all-segments"]
+
+        # default to "first-segment"
+        prompt_condition_type = prompt_condition_type or allowed_cond_types[0]
+
+        if prompt_condition_type not in allowed_cond_types:
+            raise ValueError(
+                f"`prompt_condition_type={prompt_condition_type} does not exist. Make sure to set `prompt_condition_type` to one of {', '.join(allowed_cond_types)}"
+            )
+
+        if generation_config.condition_on_prev_tokens is not True and prompt_condition_type == "all-segments":
+            raise ValueError(
+                "Make sure to set `condition_on_prev_tokens=True` when setting `prompt_condition_type='all-segments'`."
+            )
+
+        generation_config.prompt_condition_type = prompt_condition_type
+
+    @staticmethod
     def _set_condition_on_prev_tokens(condition_on_prev_tokens, generation_config):
         condition_on_prev_tokens = (
             condition_on_prev_tokens
@@ -1263,7 +1283,7 @@ class WhisperGenerationMixin:
     def _retrieve_max_frames_and_seek(batch_size, attention_mask, total_input_frames):
         if batch_size > 1 and attention_mask is None:
             raise ValueError(
-                "When doing long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
+                "When doing batched long-form audio transcription, make sure to pass an `attention_mask`. You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True)` "
             )
         elif batch_size > 1:
             max_frames = attention_mask.sum(-1).cpu().to(torch.long)
