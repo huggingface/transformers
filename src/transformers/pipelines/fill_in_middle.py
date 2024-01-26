@@ -39,13 +39,13 @@ class FIMPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
     >>> PROMPT = '''
-        def fibonacci(x: int) -> int:
+        def fib(x: int) -> int:
             <FILL_ME>
             return fib(x-1) + fib(x-2)
     '''
     >>> generator = pipeline(model="codellama/CodeLlama-7b-hf")
     >>> generator(PROMPT, do_sample=False)
-    [{'generated_text': "\ndef fibonacci(x: int) -> int:\n\tif x == 0:\n\t\treturn 0\n\tif x == 1:\n\t\treturn 1\n\telse:\n\t\treturn fib(x-1) + fib(x-2)\n"}]
+    [{'generated_text': "\ndef fib(x: int) -> int:\n\tif x == 0:\n\t\treturn 0\n\tif x == 1:\n\t\treturn 1\n\telse:\n\t\treturn fib(x-1) + fib(x-2)\n"}]
     ```
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
     generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
@@ -250,9 +250,7 @@ class FIMPipeline(Pipeline):
         if input_ids.shape[1] == 0:
             input_ids = None
             attention_mask = None
-            batch_size = 1
-        else:
-            batch_size = input_ids.shape[0]
+
         prompt_text = model_inputs.pop("prompt_text")
 
         # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
