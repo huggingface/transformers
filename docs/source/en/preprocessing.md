@@ -22,7 +22,7 @@ Before you can train a model on a dataset, it needs to be preprocessed into the 
 
 * Text, use a [Tokenizer](./main_classes/tokenizer) to convert text into a sequence of tokens, create a numerical representation of the tokens, and assemble them into tensors.
 * Speech and audio, use a [Feature extractor](./main_classes/feature_extractor) to extract sequential features from audio waveforms and convert them into tensors.
-* Image inputs use a [ImageProcessor](./main_classes/image) to convert images into tensors.
+* Image inputs use a [ImageProcessor](./main_classes/image_processor) to convert images into tensors.
 * Multimodal inputs, use a [Processor](./main_classes/processors) to combine a tokenizer and a feature extractor or image processor.
 
 <Tip>
