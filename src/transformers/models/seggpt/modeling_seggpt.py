@@ -934,7 +934,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
         >>> image_input = Image.open(requests.get(image_input_url, stream=True).raw)
         >>> image_prompt = Image.open(requests.get(image_prompt_url, stream=True).raw)
-        >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw)
+        >>> mask_prompt = Image.open(requests.get(mask_prompt_url, stream=True).raw).convert("L")
 
         >>> checkpoint = "EduardoPacheco/seggpt-vit-large"
         >>> model = SegGptForImageSegmentation.from_pretrained(checkpoint)
