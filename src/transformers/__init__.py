@@ -373,6 +373,7 @@ _import_structure = {
         "TransfoXLTokenizer",
     ],
     "models.deprecated.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
+    "models.depth_anything": ["DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP", "DepthAnythingConfig"],
     "models.deta": ["DETA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetaConfig"],
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
@@ -1983,6 +1984,13 @@ else:
             "VanForImageClassification",
             "VanModel",
             "VanPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_anything"].extend(
+        [
+            "DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DepthAnythingForDepthEstimation",
+            "DepthAnythingPreTrainedModel",
         ]
     )
     _import_structure["models.deta"].extend(
@@ -5097,6 +5105,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.deprecated.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
+    from .models.depth_anything import DEPTH_ANYTHING_PRETRAINED_CONFIG_ARCHIVE_MAP, DepthAnythingConfig
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
@@ -6599,6 +6608,11 @@ if TYPE_CHECKING:
             VanForImageClassification,
             VanModel,
             VanPreTrainedModel,
+        )
+        from .models.depth_anything import (
+            DEPTH_ANYTHING_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DepthAnythingForDepthEstimation,
+            DepthAnythingPreTrainedModel,
         )
         from .models.deta import (
             DETA_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -285,10 +285,19 @@ following diagram shows an 8-layer model split vertically into two slices, placi
 GPU0 and 4-7 to GPU1:
 
 ```
-===================  ===================
-|  0 | 1 | 2 | 3  |  |  4 | 5 | 6 | 7  |
-===================  ===================
-        GPU0                 GPU1
+================
+| Layer |      |
+|   0   |      |
+|   1   | GPU0 |
+|   2   |      |
+|   3   |      |
+================
+| Layer |      |
+|   4   |      |
+|   5   | GPU1 |
+|   6   |      |
+|   7   |      |
+================
 ```
 
 In this example, when data moves from layer 0 to 3, it's no different from regular forward pass. However, passing data 

@@ -482,11 +482,8 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
-    loader = (
-        safe_load_file
-        if load_safe
-        else partial(torch.load, map_location="cpu", weights_only=is_torch_greater_or_equal_than_1_13)
-    )
+    weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+    loader = safe_load_file if load_safe else partial(torch.load, map_location="cpu", **weights_only_kwarg)
 
     for shard_file in shard_files:
         state_dict = loader(os.path.join(folder, shard_file))
@@ -530,10 +527,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             and is_zipfile(checkpoint_file)
         ):
             extra_args = {"mmap": True}
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         return torch.load(
             checkpoint_file,
             map_location=map_location,
-            weights_only=is_torch_greater_or_equal_than_1_13,
+            **weights_only_kwarg,
             **extra_args,
         )
     except Exception as e:
@@ -1321,7 +1319,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
         config._attn_implementation = kwargs.pop("attn_implementation", None)
         config = cls._autoset_attn_implementation(
-            config, use_flash_attention_2=use_flash_attention_2, check_device_map=False
+            config,
+            use_flash_attention_2=use_flash_attention_2,
+            check_device_map=False,
+            torch_dtype=torch_dtype,
         )
 
         if is_deepspeed_zero3_enabled():
@@ -1396,7 +1397,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif requested_attn_implementation in [None, "sdpa"]:
             # use_flash_attention_2 takes priority over SDPA, hence SDPA treated in this elif.
             config = cls._check_and_enable_sdpa(
-                config, hard_check_only=False if requested_attn_implementation is None else True
+                config,
+                hard_check_only=False if requested_attn_implementation is None else True,
             )
         else:
             config._attn_implementation = "eager"
@@ -1503,20 +1505,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if torch_dtype is None:
-            logger.warning(
+            logger.warning_once(
                 "You are attempting to use Flash Attention 2.0 without specifying a torch dtype. This might lead to unexpected behaviour"
             )
         elif torch_dtype is not None and torch_dtype not in [torch.float16, torch.bfloat16]:
-            logger.warning(
-                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes. "
-                "No dtype was provided, you should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator."
+            logger.warning_once(
+                "Flash Attention 2.0 only supports torch.float16 and torch.bfloat16 dtypes, but"
+                f" the current dype in {cls.__name__} is {torch_dtype}. You should run training or inference using Automatic Mixed-Precision via the `with torch.autocast(device_type='torch_device'):` decorator,"
+                ' or load the model with the `torch_dtype` argument. Example: `model = AutoModel.from_pretrained("openai/whisper-tiny", attn_implementation="flash_attention_2", torch_dtype=torch.float16)`'
             )
 
         # The check `torch.empty(0).device.type != "cuda"` is needed as the model may be initialized after `torch.set_default_device` has been called,
         # or the model may be initialized under the context manager `with torch.device("cuda"):`.
         if check_device_map and device_map is None and torch.empty(0).device.type != "cuda":
             if torch.cuda.is_available():
-                logger.warning(
+                logger.warning_once(
                     "You are attempting to use Flash Attention 2.0 with a model not initialized on GPU. Make sure to move the model to GPU"
                     " after initializing it on CPU with `model.to('cuda')`."
                 )
@@ -2490,8 +2493,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 save_function(shard, os.path.join(save_directory, shard_file))
 
         if index is None:
-            weights_file_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
-            path_to_weights = os.path.join(save_directory, _add_variant(weights_file_name, variant))
+            path_to_weights = os.path.join(save_directory, weights_name)
             logger.info(f"Model weights saved in {path_to_weights}")
         else:
             save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
@@ -2936,6 +2938,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     token=token,
                     revision=revision,
                     subfolder=subfolder,
+                    _raise_exceptions_for_gated_repo=False,
                     _raise_exceptions_for_missing_entries=False,
                     _raise_exceptions_for_connection_errors=False,
                 )
@@ -3379,6 +3382,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
+                        "_raise_exceptions_for_gated_repo": False,
                         "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }
