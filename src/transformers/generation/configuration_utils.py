@@ -200,7 +200,8 @@ class GenerationConfig(PushToHubMixin):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
         low_memory (`bool`, *optional*):
-            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
+            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
+            Used with beam search and contrastive search.
 
 
         > Parameters that define the output variables of `generate`
@@ -907,6 +908,16 @@ class GenerationConfig(PushToHubMixin):
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
+
+        def convert_keys_to_string(obj):
+            if isinstance(obj, dict):
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys_to_string(item) for item in obj]
+            else:
+                return obj
+
+        config_dict = convert_keys_to_string(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 

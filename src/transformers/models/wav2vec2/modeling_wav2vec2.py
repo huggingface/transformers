@@ -1334,10 +1334,11 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
+                weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
-                    weights_only=is_torch_greater_or_equal_than_1_13,
+                    **weights_only_kwarg,
                 )
 
             except EnvironmentError:

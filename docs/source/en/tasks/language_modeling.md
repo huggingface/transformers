@@ -61,16 +61,15 @@ We encourage you to log in to your Hugging Face account so you can upload and sh
 
 ## Load ELI5 dataset
 
-Start by loading a smaller subset of the r/askscience subset of the ELI5 dataset from the 🤗 Datasets library.
- This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
+Start by loading the first 5000 examples from the [ELI5-Category](https://huggingface.co/datasets/eli5_category) dataset with the 🤗 Datasets library. This'll give you a chance to experiment and make sure everything works before spending more time training on the full dataset.
 
 ```py
 >>> from datasets import load_dataset
 
->>> eli5 = load_dataset("eli5", split="train_asks[:5000]")
+>>> eli5 = load_dataset("eli5_category", split="train[:5000]")
 ```
 
-Split the dataset's `train_asks` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
+Split the dataset's `train` split into a train and test set with the [`~datasets.Dataset.train_test_split`] method:
 
 ```py
 >>> eli5 = eli5.train_test_split(test_size=0.2)
@@ -80,18 +79,23 @@ Then take a look at an example:
 
 ```py
 >>> eli5["train"][0]
-{'answers': {'a_id': ['c3d1aib', 'c3d4lya'],
-  'score': [6, 3],
-  'text': ["The velocity needed to remain in orbit is equal to the square root of Newton's constant times the mass of earth divided by the distance from the center of the earth. I don't know the altitude of that specific mission, but they're usually around 300 km. That means he's going 7-8 km/s.\n\nIn space there are no other forces acting on either the shuttle or the guy, so they stay in the same position relative to each other. If he were to become unable to return to the ship, he would presumably run out of oxygen, or slowly fall into the atmosphere and burn up.",
-   "Hope you don't mind me asking another question, but why aren't there any stars visible in this photo?"]},
- 'answers_urls': {'url': []},
- 'document': '',
- 'q_id': 'nyxfp',
- 'selftext': '_URL_0_\n\nThis was on the front page earlier and I have a few questions about it. Is it possible to calculate how fast the astronaut would be orbiting the earth? Also how does he stay close to the shuttle so that he can return safely, i.e is he orbiting at the same speed and can therefore stay next to it? And finally if his propulsion system failed, would he eventually re-enter the atmosphere and presumably die?',
- 'selftext_urls': {'url': ['http://apod.nasa.gov/apod/image/1201/freeflyer_nasa_3000.jpg']},
- 'subreddit': 'askscience',
- 'title': 'Few questions about this space walk photograph.',
- 'title_urls': {'url': []}}
+{'q_id': '7h191n',
+ 'title': 'What does the tax bill that was passed today mean? How will it affect Americans in each tax bracket?',
+ 'selftext': '',
+ 'category': 'Economics',
+ 'subreddit': 'explainlikeimfive',
+ 'answers': {'a_id': ['dqnds8l', 'dqnd1jl', 'dqng3i1', 'dqnku5x'],
+  'text': ["The tax bill is 500 pages long and there were a lot of changes still going on right to the end. It's not just an adjustment to the income tax brackets, it's a whole bunch of changes. As such there is no good answer to your question. The big take aways are: - Big reduction in corporate income tax rate will make large companies very happy. - Pass through rate change will make certain styles of business (law firms, hedge funds) extremely happy - Income tax changes are moderate, and are set to expire (though it's the kind of thing that might just always get re-applied without being made permanent) - People in high tax states (California, New York) lose out, and many of them will end up with their taxes raised.",
+   'None yet. It has to be reconciled with a vastly different house bill and then passed again.',
+   'Also: does this apply to 2017 taxes? Or does it start with 2018 taxes?',
+   'This article explains both the House and senate bills, including the proposed changes to your income taxes based on your income level. URL_0'],
+  'score': [21, 19, 5, 3],
+  'text_urls': [[],
+   [],
+   [],
+   ['https://www.investopedia.com/news/trumps-tax-reform-what-can-be-done/']]},
+ 'title_urls': ['url'],
+ 'selftext_urls': ['url']}
 ```
 
 While this may look like a lot, you're only really interested in the `text` field. What's cool about language modeling
@@ -115,18 +119,23 @@ extract the `text` subfield from its nested structure with the [`flatten`](https
 ```py
 >>> eli5 = eli5.flatten()
 >>> eli5["train"][0]
-{'answers.a_id': ['c3d1aib', 'c3d4lya'],
- 'answers.score': [6, 3],
- 'answers.text': ["The velocity needed to remain in orbit is equal to the square root of Newton's constant times the mass of earth divided by the distance from the center of the earth. I don't know the altitude of that specific mission, but they're usually around 300 km. That means he's going 7-8 km/s.\n\nIn space there are no other forces acting on either the shuttle or the guy, so they stay in the same position relative to each other. If he were to become unable to return to the ship, he would presumably run out of oxygen, or slowly fall into the atmosphere and burn up.",
-  "Hope you don't mind me asking another question, but why aren't there any stars visible in this photo?"],
- 'answers_urls.url': [],
- 'document': '',
- 'q_id': 'nyxfp',
- 'selftext': '_URL_0_\n\nThis was on the front page earlier and I have a few questions about it. Is it possible to calculate how fast the astronaut would be orbiting the earth? Also how does he stay close to the shuttle so that he can return safely, i.e is he orbiting at the same speed and can therefore stay next to it? And finally if his propulsion system failed, would he eventually re-enter the atmosphere and presumably die?',
- 'selftext_urls.url': ['http://apod.nasa.gov/apod/image/1201/freeflyer_nasa_3000.jpg'],
- 'subreddit': 'askscience',
- 'title': 'Few questions about this space walk photograph.',
- 'title_urls.url': []}
+{'q_id': '7h191n',
+ 'title': 'What does the tax bill that was passed today mean? How will it affect Americans in each tax bracket?',
+ 'selftext': '',
+ 'category': 'Economics',
+ 'subreddit': 'explainlikeimfive',
+ 'answers.a_id': ['dqnds8l', 'dqnd1jl', 'dqng3i1', 'dqnku5x'],
+ 'answers.text': ["The tax bill is 500 pages long and there were a lot of changes still going on right to the end. It's not just an adjustment to the income tax brackets, it's a whole bunch of changes. As such there is no good answer to your question. The big take aways are: - Big reduction in corporate income tax rate will make large companies very happy. - Pass through rate change will make certain styles of business (law firms, hedge funds) extremely happy - Income tax changes are moderate, and are set to expire (though it's the kind of thing that might just always get re-applied without being made permanent) - People in high tax states (California, New York) lose out, and many of them will end up with their taxes raised.",
+  'None yet. It has to be reconciled with a vastly different house bill and then passed again.',
+  'Also: does this apply to 2017 taxes? Or does it start with 2018 taxes?',
+  'This article explains both the House and senate bills, including the proposed changes to your income taxes based on your income level. URL_0'],
+ 'answers.score': [21, 19, 5, 3],
+ 'answers.text_urls': [[],
+  [],
+  [],
+  ['https://www.investopedia.com/news/trumps-tax-reform-what-can-be-done/']],
+ 'title_urls': ['url'],
+ 'selftext_urls': ['url']}
 ```
 
 Each subfield is now a separate column as indicated by the `answers` prefix, and the `text` field is a list now. Instead
@@ -153,6 +162,7 @@ To apply this preprocessing function over the entire dataset, use the 🤗 Datas
 This dataset contains the token sequences, but some of these are longer than the maximum input length for the model.
 
 You can now use a second preprocessing function to
+
 - concatenate all the sequences
 - split the concatenated sequences into shorter chunks defined by `block_size`, which should be both shorter than the maximum input length and short enough for your GPU RAM.
 
@@ -363,7 +373,7 @@ The simplest way to try out your finetuned model for inference is to use it in a
 ```py
 >>> from transformers import pipeline
 
->>> generator = pipeline("text-generation", model="my_awesome_eli5_clm-model")
+>>> generator = pipeline("text-generation", model="username/my_awesome_eli5_clm-model")
 >>> generator(prompt)
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
@@ -375,7 +385,7 @@ Tokenize the text and return the `input_ids` as PyTorch tensors:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_clm-model")
+>>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_clm-model")
 >>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
 ```
 
@@ -385,7 +395,7 @@ For more details about the different text generation strategies and parameters f
 ```py
 >>> from transformers import AutoModelForCausalLM
 
->>> model = AutoModelForCausalLM.from_pretrained("my_awesome_eli5_clm-model")
+>>> model = AutoModelForCausalLM.from_pretrained("username/my_awesome_eli5_clm-model")
 >>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
 ```
 
@@ -402,7 +412,7 @@ Tokenize the text and return the `input_ids` as TensorFlow tensors:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_eli5_clm-model")
+>>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_clm-model")
 >>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
 ```
 
@@ -411,7 +421,7 @@ Use the [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] method 
 ```py
 >>> from transformers import TFAutoModelForCausalLM
 
->>> model = TFAutoModelForCausalLM.from_pretrained("my_awesome_eli5_clm-model")
+>>> model = TFAutoModelForCausalLM.from_pretrained("username/my_awesome_eli5_clm-model")
 >>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
 ```
 
