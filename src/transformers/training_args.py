@@ -661,6 +661,10 @@ class TrainingArguments:
             for instruction fine-tuning. Check out the [original paper](https://arxiv.org/abs/2310.05914) and the
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft.
+
+        batch_eval_metrics (`Optional[bool]`):
+            If set to True, evaluation will call compute_metrics at the end of each batch to accumulate statistics
+            rather than saving all eval logits in memory.
     """
 
     framework = "pt"
@@ -1314,6 +1318,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Activates neftune noise embeddings into the model. NEFTune has been proven to drastically improve model performances for instrcution fine-tuning. Check out the original paper here: https://arxiv.org/abs/2310.05914 and the original code here: https://github.com/neelsjain/NEFTune. Only supported for `PreTrainedModel` and `PeftModel` classes."
+        },
+    )
+
+    batch_eval_metrics: bool = field(
+        default=False,
+        metadata={
+            "help": "Break eval metrics calculation into batches to save memory."
         },
     )
 

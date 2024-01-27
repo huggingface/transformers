@@ -3286,6 +3286,7 @@ class Trainer:
         all_inputs = None
         # Will be useful when we have an iterable dataset so don't know its length.
 
+        metrics = None
         observed_num_examples = 0
         # Main evaluation loop
         for step, inputs in enumerate(dataloader):
@@ -3403,7 +3404,7 @@ class Trainer:
                 )
             else:
                 metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
-        else:
+        elif metrics is None:
             metrics = {}
 
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
@@ -3843,6 +3844,7 @@ class Trainer:
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
         inputs_host: Union[torch.Tensor, List[torch.Tensor]] = None
+        metrics: Optional[dict] = None
 
         world_size = max(1, args.world_size)
 
@@ -3884,8 +3886,25 @@ class Trainer:
                 )
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
-            # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
-            if args.eval_accumulation_steps is not None and (step + 1) % args.eval_accumulation_steps == 0:
+            if self.args.batch_eval_metrics:
+                if self.compute_metrics is not None and preds_host is not None and labels_host is not None:
+                    if args.include_inputs_for_metrics:
+                        metrics = self.compute_metrics(
+                            EvalPrediction(predictions=preds_host, label_ids=labels_host, inputs=inputs_host),
+                            compute_result=step == len(dataloader) - 1,
+                        )
+                    else:
+                        metrics = self.compute_metrics(EvalPrediction(predictions=preds_host, label_ids=labels_host))
+                del losses_host, preds_host, inputs_host, labels_host
+                torch.cuda.empty_cache()
+                losses_host, preds_host, inputs_host, labels_host = None, None, None, None
+
+            elif (
+                args.eval_accumulation_steps is not None
+                and (step + 1) % args.eval_accumulation_steps == 0
+                and self.accelerator.sync_gradients
+            ):
+                # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
                 if not prediction_loss_only:
                     preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
@@ -3920,7 +3939,7 @@ class Trainer:
                 )
             else:
                 metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
-        else:
+        elif metrics is None:
             metrics = {}
 
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
