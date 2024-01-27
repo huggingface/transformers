@@ -47,6 +47,12 @@ class Mask2FormerConfig(PretrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model. If unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `False`):
+            Whether to use pretrained weights for the backbone.
         feature_size (`int`, *optional*, defaults to 256):
             The features (channels) of the resulting feature maps.
         mask_feature_size (`int`, *optional*, defaults to 256):
@@ -154,9 +160,17 @@ class Mask2FormerConfig(PretrainedConfig):
         use_auxiliary_loss: bool = True,
         feature_strides: List[int] = [4, 8, 16, 32],
         output_auxiliary_logits: bool = None,
+        backbone=None,
+        use_pretrained_backbone=False,
         **kwargs,
     ):
-        if backbone_config is None:
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
@@ -177,7 +191,7 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         # verify that the backbone is supported
-        if backbone_config.model_type not in self.backbones_supported:
+        if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
                 f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
@@ -212,6 +226,8 @@ class Mask2FormerConfig(PretrainedConfig):
         self.feature_strides = feature_strides
         self.output_auxiliary_logits = output_auxiliary_logits
         self.num_hidden_layers = decoder_layers
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
 
         super().__init__(**kwargs)
 

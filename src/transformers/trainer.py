@@ -64,7 +64,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -806,6 +806,7 @@ class Trainer:
             dataloader_params["sampler"] = self._get_train_sampler()
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
             dataloader_params["worker_init_fn"] = seed_worker
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(train_dataset, **dataloader_params))
 
@@ -863,6 +864,7 @@ class Trainer:
         if not isinstance(eval_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_eval_sampler(eval_dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         return self.accelerator.prepare(DataLoader(eval_dataset, **dataloader_params))
 
@@ -895,6 +897,7 @@ class Trainer:
         if not isinstance(test_dataset, torch.utils.data.IterableDataset):
             dataloader_params["sampler"] = self._get_eval_sampler(test_dataset)
             dataloader_params["drop_last"] = self.args.dataloader_drop_last
+            dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
 
         # We use the same batch_size as for eval.
         return self.accelerator.prepare(DataLoader(test_dataset, **dataloader_params))
@@ -2103,7 +2106,11 @@ class Trainer:
                         logger.warning(
                             "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
                         )
-                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+                    state_dict = torch.load(
+                        weights_file,
+                        map_location="cpu",
+                        weights_only=is_torch_greater_or_equal_than_1_13,
+                    )
                     # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
@@ -2116,7 +2123,11 @@ class Trainer:
                 if self.args.save_safetensors and os.path.isfile(safe_weights_file):
                     state_dict = safetensors.torch.load_file(safe_weights_file, device="cpu")
                 else:
-                    state_dict = torch.load(weights_file, map_location="cpu", weights_only=True)
+                    state_dict = torch.load(
+                        weights_file,
+                        map_location="cpu",
+                        weights_only=is_torch_greater_or_equal_than_1_13,
+                    )
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
@@ -2184,7 +2195,11 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
-                        state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
+                        state_dict = torch.load(
+                            best_model_path,
+                            map_location="cpu",
+                            weights_only=is_torch_greater_or_equal_than_1_13,
+                        )
 
                     state_dict["_smp_is_partial"] = False
                     load_result = model.load_state_dict(state_dict, strict=True)
@@ -2213,7 +2228,11 @@ class Trainer:
                     if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
                         state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
                     else:
-                        state_dict = torch.load(best_model_path, map_location="cpu", weights_only=True)
+                        state_dict = torch.load(
+                            best_model_path,
+                            map_location="cpu",
+                            weights_only=is_torch_greater_or_equal_than_1_13,
+                        )
 
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
@@ -2399,9 +2418,11 @@ class Trainer:
                     os.rename(staging_output_dir, output_dir)
 
                     # Ensure rename completed in cases where os.rename is not atomic
-                    fd = os.open(output_dir, os.O_RDONLY)
-                    os.fsync(fd)
-                    os.close(fd)
+                    # And can only happen on non-windows based systems
+                    if os.name != "nt":
+                        fd = os.open(output_dir, os.O_RDONLY)
+                        os.fsync(fd)
+                        os.close(fd)
 
             # Maybe delete some older checkpoints.
             if self.args.should_save:
@@ -2889,13 +2910,19 @@ class Trainer:
                     is_main_process=self.args.should_save,
                     state_dict=model.state_dict(),
                     save_function=xm.save,
+                    safe_serialization=self.args.save_safetensors,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 state_dict = model.state_dict()
                 xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            model.save_pretrained(output_dir, is_main_process=self.args.should_save, save_function=xm.save)
+            model.save_pretrained(
+                output_dir,
+                is_main_process=self.args.should_save,
+                save_function=xm.save,
+                safe_serialization=self.args.save_safetensors,
+            )
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
@@ -3581,6 +3608,15 @@ class Trainer:
             library_name = ModelCard.load(model_card_filepath).data.get("library_name")
             is_peft_library = library_name == "peft"
 
+            # Append existing tags in `tags`
+            existing_tags = ModelCard.load(model_card_filepath).data.tags
+            if tags is not None and existing_tags is not None:
+                if isinstance(tags, str):
+                    tags = [tags]
+                for tag in existing_tags:
+                    if tag not in tags:
+                        tags.append(tag)
+
         training_summary = TrainingSummary.from_trainer(
             self,
             language=language,
@@ -3698,6 +3734,18 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero():
             return
+
+        # Add additional tags in the case the model has already some tags and users pass
+        # "tags" argument to `push_to_hub` so that trainer automatically handles internal tags
+        # from all models since Trainer does not call `model.push_to_hub`.
+        if "tags" in kwargs and getattr(self.model, "model_tags", None) is not None:
+            # If it is a string, convert it to a list
+            if isinstance(kwargs["tags"], str):
+                kwargs["tags"] = [kwargs["tags"]]
+
+            for model_tag in self.model.model_tags:
+                if model_tag not in kwargs["tags"]:
+                    kwargs["tags"].append(model_tag)
 
         self.create_model_card(model_name=model_name, **kwargs)
 

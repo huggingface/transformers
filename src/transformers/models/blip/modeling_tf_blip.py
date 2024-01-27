@@ -108,8 +108,8 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
     @property
     def decoder_logits(self):
@@ -150,8 +150,8 @@ class TFBlipTextVisionModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -191,9 +191,9 @@ class TFBlipImageTextMatchingModelOutput(ModelOutput):
     loss: tf.Tensor | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
     vision_pooler_output: tf.Tensor | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
     question_embeds: Tuple[tf.Tensor] | None = None
 
 

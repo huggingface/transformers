@@ -186,11 +186,11 @@ def get_base_command(args, output_dir):
     args.base_cmd = re.sub(r"[\\\n]+", " ", args.base_cmd)
 
     # remove --output_dir if any and set our own
-    args.base_cmd = re.sub(r"--output_dir\s+[^\s]+", "", args.base_cmd)
+    args.base_cmd = re.sub("--output_dir\s+[^\s]+", "", args.base_cmd)
     args.base_cmd += f" --output_dir {output_dir}"
 
     # ensure we have --overwrite_output_dir
-    args.base_cmd = re.sub(r"--overwrite_output_dir\s+", "", args.base_cmd)
+    args.base_cmd = re.sub("--overwrite_output_dir\s+", "", args.base_cmd)
     args.base_cmd += " --overwrite_output_dir"
 
     return [sys.executable] + shlex.split(args.base_cmd)
