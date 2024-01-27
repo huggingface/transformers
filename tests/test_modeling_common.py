@@ -1983,11 +1983,13 @@ class ModelTesterMixin:
                 }
                 missed_missing = missed_missing - nonpersistent_buffers
 
-                if model_reloaded._keys_to_ignore_on_load_missing is not None:
-                    missed_missing = missed_missing - set(model_reloaded._keys_to_ignore_on_load_missing)
+                if model_reloaded._keys_to_ignore_on_load_missing is None:
+                    expected_missing = set()
+                else:
+                    expected_missing = set(model_reloaded._keys_to_ignore_on_load_missing)
                 self.assertEqual(
                     missed_missing,
-                    set(),
+                    expected_missing,
                     f"This model {model_class.__name__} ignores keys {missed_missing} but they look like real"
                     " parameters. If they are non persistent buffers make sure to instantiate them with"
                     " `persistent=False`",
