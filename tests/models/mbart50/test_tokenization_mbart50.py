@@ -304,7 +304,7 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
                 "forced_bos_token_id": 250001,
             },
         )
-    
+
     def test_inconsistent_decoding(self):
         tokenizer = MBart50Tokenizer.from_pretrained('facebook/mbart-large-50')
         text = "This is my example sentence with a special <unk> token"
