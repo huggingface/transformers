@@ -2785,6 +2785,9 @@ class Trainer:
         with self.compute_loss_context_manager():
             loss = self.compute_loss(model, inputs)
 
+        del inputs
+        torch.cuda.empty_cache()
+
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
@@ -3350,6 +3353,8 @@ class Trainer:
                         labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
                     )
 
+                del losses_host, preds_host, inputs_host, labels_host
+                torch.cuda.empty_cache()
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, inputs_host, labels_host = None, None, None, None
 
