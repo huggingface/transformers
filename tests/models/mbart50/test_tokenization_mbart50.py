@@ -306,9 +306,8 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
         )
 
     def test_inconsistent_decoding(self):
-        tokenizer = MBart50Tokenizer.from_pretrained('facebook/mbart-large-50')
+        tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-large-50")
         text = "This is my example sentence with a special <unk> token"
         tokens = tokenizer(text)["input_ids"]
-        decode= tokenizer.decode(tokens)
+        decode = tokenizer.decode(tokens)
         assert decode == "en_XX This is my example sentence with a special<unk> token</s>"
-
