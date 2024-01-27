@@ -3893,6 +3893,8 @@ class Trainer:
                     inputs_gatherer.add_arrays(self._gather_and_numpify(inputs_host, "eval_inputs_ids"))
 
                 # Set back to None to begin a new accumulation
+                del losses_host, preds_host, labels_host, inputs_host
+                torch.cuda.empty_cache()
                 losses_host, preds_host, labels_host, inputs_host = None, None, None, None
 
         if args.past_index and hasattr(self, "_past"):
