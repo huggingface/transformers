@@ -30,6 +30,7 @@ import transformers
 from . import is_safetensors_available, is_torch_available
 from .utils import logging
 
+
 if is_torch_available():
     import torch
 
@@ -64,8 +65,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
             try:
                 import torch  # noqa: F401
 
-                from .pytorch_utils import \
-                    is_torch_greater_or_equal_than_1_13  # noqa: F401
+                from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
             except (ImportError, ModuleNotFoundError):
                 logger.error(
                     "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
