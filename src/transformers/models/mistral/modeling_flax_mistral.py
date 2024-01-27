@@ -215,19 +215,6 @@ def rotate_half(tensor):
     return rotate_half_tensor
 
 
-def flax_repeat_kv(hidden_states: jnp.ndarray, n_rep: int) -> jnp.ndarray:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, slen, num_key_value_heads, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = jnp.repeat(hidden_states[:, :, None, :, :], n_rep, axis=3)
-    new_size = (batch, slen, num_key_value_heads * n_rep, head_dim)
-    return jax.lax.reshape(hidden_states, new_size)
-
-
 class FlaxMistralAttention(nn.Module):
     config: MistralConfig
     dtype: jnp.dtype = jnp.float32
@@ -333,9 +320,11 @@ class FlaxMistralAttention(nn.Module):
             key_states, value_states, attention_mask = self._concatenate_to_cache(
                 key_states, value_states, query_states, attention_mask
             )
-
-        key_states = flax_repeat_kv(key_states, self.num_key_value_groups)
-        value_states = flax_repeat_kv(value_states, self.num_key_value_groups)
+        batch_size, seq_length, num_heads, head_dim = key_states.shape
+        key_states = jnp.tile(key_states[:, :, :, None, :], (1, 1, 1, self.num_key_value_groups, 1))
+        key_states = key_states.reshape(batch_size, seq_length, num_heads * self.num_key_value_heads, head_dim)
+        value_states = jnp.tile(value_states[:, :, :, None, :], (1, 1, 1, self.num_key_value_groups, 1))
+        value_states = value_states.reshape(batch_size, seq_length, num_heads * self.num_key_value_heads, head_dim)
 
         attention_bias = lax.select(
             attention_mask > 0,
