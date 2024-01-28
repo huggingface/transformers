@@ -132,8 +132,8 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
                 self.patch_embedding.build(None)
 
 
-# TODO: I think this is available in the KerasCV package, should we use that?
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+# Adapted from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: tf.Tensor, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -144,7 +144,7 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
     argument.
     """
     if drop_prob == 0.0 or not training:
-        return input  # FIXME: shouldn't this be x?
+        return input
     keep_prob = 1 - drop_prob
     shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
     random_tensor = keep_prob + tf.rand(shape, dtype=input.dtype, device=input.device)
