@@ -24,7 +24,6 @@ from einops import rearrange, repeat
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-# from mamba_ssm.ops.selective_scan_interface import selective_scan_ref  # selective_scan_fn
 from timm.models.layers import DropPath
 from torch import nn
 
@@ -493,7 +492,7 @@ class VMambaVSSBlock(nn.Module):
     ):
         super().__init__()
         self.ln_1 = norm_layer(hidden_dim)
-        self.self_attention = SS2D(d_model=hidden_dim, dropout=attn_drop_rate, d_state=d_state, **kwargs)
+        self.self_attention = VMambaSS2D(d_model=hidden_dim, dropout=attn_drop_rate, d_state=d_state, **kwargs)
         self.drop_path = DropPath(drop_path)
 
     def forward(self, input: torch.Tensor):
