@@ -102,7 +102,6 @@ class TFSwiftFormerModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFSwiftFormerModel(config=config)
         result = model(pixel_values)
-        # FIXME: channels_first or last?
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.embed_dims[-1], 7, 7))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
