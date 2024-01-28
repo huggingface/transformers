@@ -2182,7 +2182,9 @@ class Trainer:
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if self.is_deepspeed_enabled:
             deepspeed_load_checkpoint(
-                self.model_wrapped, self.state.best_model_checkpoint, load_module_strict=not _is_peft_model(self.model),
+                self.model_wrapped,
+                self.state.best_model_checkpoint,
+                load_module_strict=not _is_peft_model(self.model),
             )
         elif self.is_fsdp_enabled:
             load_result = load_fsdp_model(
