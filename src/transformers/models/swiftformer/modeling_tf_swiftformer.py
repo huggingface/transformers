@@ -290,7 +290,7 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer
         self.fc2 = tf.keras.layers.Conv2D(in_features, 1, name="fc2")
-        self.drop = tf.keras.layers.Dropout(rate=config.drop_path_rate)
+        self.drop = tf.keras.layers.Dropout(rate=config.drop_mlp_rate)
         self.hidden_features = hidden_features
         self.in_features = in_features
 
@@ -403,7 +403,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
         self.point_wise_conv1 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
         self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = tf.keras.layers.Identity(name="drop_path")  # FIXME: is this correct?
+        self.drop_path = tf.keras.layers.Dropout(name="drop_path")
 
     def build(self, input_shape=None):
         self.layer_scale = self.add_weight(
