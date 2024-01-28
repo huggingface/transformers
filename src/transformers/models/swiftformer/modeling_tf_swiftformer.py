@@ -230,7 +230,7 @@ class TFSwiftFormerConvEncoder(tf.keras.layers.Layer):
         self.point_wise_conv1 = tf.keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
         self.act = get_tf_activation("gelu")
         self.point_wise_conv2 = tf.keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = tf.keras.layers.Identity(name="drop_path")  # FIXME: is this supposed to be like this?
+        self.drop_path = tf.keras.layers.Dropout(name="drop_path", rate=config.drop_conv_encoder_rate)
         self.hidden_dim = int(config.mlp_ratio * self.dim)
 
     def build(self, input_shape=None):
