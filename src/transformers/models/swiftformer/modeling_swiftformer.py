@@ -107,9 +107,9 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class SwiftFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, config: SwiftFormerConfig) -> None:
         super().__init__()
-        self.drop_prob = drop_prob
+        self.drop_prob = config.drop_path_rate
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return drop_path(hidden_states, self.drop_prob, self.training)
@@ -302,7 +302,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
         self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
         self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.layer_scale_1 = nn.Parameter(

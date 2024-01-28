@@ -156,9 +156,9 @@ def drop_path(x, drop_prob: float = 0.0, training: bool = False):
 class TFSwiftFormerDropPath(tf.keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None, **kwargs) -> None:
+    def __init__(self, config: SwiftFormerConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.drop_prob = drop_prob
+        self.drop_prob = config.drop_path_rate
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         return drop_path(hidden_states, self.drop_prob, training)
@@ -463,7 +463,7 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
         self.local_representation = TFSwiftFormerLocalRepresentation(config, dim=dim, name="local_representation")
         self.attn = TFSwiftFormerEfficientAdditiveAttention(config, dim=dim, name="attn")
         self.linear = TFSwiftFormerMlp(config, in_features=dim, name="linear")
-        self.drop_path = TFSwiftFormerDropPath(drop_path) if drop_path > 0.0 else tf.keras.layers.Identity()
+        self.drop_path = TFSwiftFormerDropPath(config) if drop_path > 0.0 else tf.keras.layers.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.dim = dim
