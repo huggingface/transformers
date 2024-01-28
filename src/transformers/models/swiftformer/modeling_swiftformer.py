@@ -169,7 +169,7 @@ class SwiftFormerConvEncoder(nn.Module):
         self.point_wise_conv1 = nn.Conv2d(dim, hidden_dim, kernel_size=1)
         self.act = nn.GELU()
         self.point_wise_conv2 = nn.Conv2d(hidden_dim, dim, kernel_size=1)
-        self.drop_path = nn.Identity()
+        self.drop_path = nn.Dropout(p=config.drop_conv_encoder_rate)
         self.layer_scale = nn.Parameter(torch.ones(dim).unsqueeze(-1).unsqueeze(-1), requires_grad=True)
 
     def forward(self, x):

@@ -66,6 +66,8 @@ class SwiftFormerConfig(PretrainedConfig):
             Rate at which to increase dropout probability in DropPath.
         drop_mlp_rate (`float`, *optional*, defaults to 0.0):
             Dropout rate for the MLP component of SwiftFormer.
+        drop_conv_encoder_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for the ConvEncoder component of SwiftFormer.
         drop_mlp_rate (`float`, *optional*, defaults to 0.0):
             Dropout rate for the MLP component of SwiftFormer.
         use_layer_scale (`bool`, *optional*, defaults to `True`):
@@ -107,6 +109,7 @@ class SwiftFormerConfig(PretrainedConfig):
         down_pad=1,
         drop_path_rate=0.0,
         drop_mlp_rate=0.0,
+        drop_conv_encoder_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
         batch_norm_eps=1e-5,
@@ -125,6 +128,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.down_pad = down_pad
         self.drop_path_rate = drop_path_rate
         self.drop_mlp_rate = drop_mlp_rate
+        self.drop_conv_encoder_rate = drop_conv_encoder_rate
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
         self.batch_norm_eps = batch_norm_eps
