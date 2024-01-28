@@ -326,7 +326,7 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size, device = "cuda:2") -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, device = "mps") -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_sequence_length = config.max_position_embeddings # if config.max_sequence_length is None else config.max_sequence_length 
@@ -345,7 +345,7 @@ class StaticCache(Cache):
         self._seen_tokens = 0 
         
         # We cache a big mask that will be updated with the input mask
-        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
+        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device=device,  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
         # self.causal_4d_mask = torch.triu(torch.full((self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
         # self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool,device = device))
     def update(
@@ -373,8 +373,8 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         attention_mask = cache_kwargs.get("attention_mask")
-        position_ids = cache_kwargs.get("position_ids")[0]
-        # position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
+        # position_ids = cache_kwargs.get("position_ids")[0] is faster?
+        position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
         # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         
         k_out = self.key_cache
@@ -385,12 +385,12 @@ class StaticCache(Cache):
         v_out[:, :, position_ids] = value_states
 
 
-        if attention_mask is not None:
+        if attention_mask is not None and self._seen_tokens == 0:
             # update the actual attention mask by masking padding tokens
-            self.causal_4d_mask[:,:,position_ids,torch.arange(attention_mask.shape[-1])] = attention_mask
+            self.causal_4d_mask[:,:,:,torch.arange(attention_mask.shape[-1])] = self.causal_4d_mask[:,:,:,torch.arange(attention_mask.shape[-1])].masked_fill_(~attention_mask[:,None,None,:].to(torch.bool), torch.finfo(k_out.dtype).min)
 
         self._seen_tokens += key_states.shape[-2]
-        return k_out, v_out, self.causal_4d_mask[:,:, position_ids,:]
+        return k_out, v_out, self.causal_4d_mask[:,:,position_ids,:]
 
     @property
     def seen_tokens(self):

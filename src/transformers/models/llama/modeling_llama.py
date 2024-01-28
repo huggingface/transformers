@@ -403,7 +403,7 @@ class LlamaAttention(nn.Module):
         past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
         
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask, "position_ids":position_ids}  # Specific to RoPE models
             key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
