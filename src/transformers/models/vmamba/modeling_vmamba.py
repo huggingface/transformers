@@ -200,7 +200,7 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     return out if not return_last_state else (out, last_state)
 
 
-class PatchEmbed2D(nn.Module):
+class VMambaPatchEmbed2D(nn.Module):
     r"""Image to Patch Embedding
     Args:
         patch_size (int): Patch token size. Default: 4.
@@ -226,7 +226,7 @@ class PatchEmbed2D(nn.Module):
         return x
 
 
-class PatchMerging2D(nn.Module):
+class VMambaPatchMerging2D(nn.Module):
     r"""Patch Merging Layer.
     Args:
         input_resolution (tuple[int]): Resolution of input feature.
@@ -269,7 +269,7 @@ class PatchMerging2D(nn.Module):
         return x
 
 
-class SS2D(nn.Module):
+class VMambaSS2D(nn.Module):
     def __init__(
         self,
         d_model,
@@ -481,7 +481,7 @@ class SS2D(nn.Module):
         return out
 
 
-class VSSBlock(nn.Module):
+class VMambaVSSBlock(nn.Module):
     def __init__(
         self,
         hidden_dim: int = 0,
@@ -501,7 +501,7 @@ class VSSBlock(nn.Module):
         return x
 
 
-class VSSLayer(nn.Module):
+class VMambaVSSLayer(nn.Module):
     """A basic Swin Transformer layer for one stage.
     Args:
         dim (int): Number of input channels.
@@ -532,7 +532,7 @@ class VSSLayer(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                VSSBlock(
+                VMambaVSSBlock(
                     hidden_dim=dim,
                     drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                     norm_layer=norm_layer,
@@ -694,7 +694,7 @@ class VMambaModel(VMambaPreTrainedModel):
         self.num_features = dims[-1]
         self.dims = dims
 
-        self.patch_embed = PatchEmbed2D(
+        self.patch_embed = VMambaPatchEmbed2D(
             patch_size=config.patch_size,
             in_chans=config.in_channels,
             embed_dim=self.embed_dim,
@@ -709,7 +709,7 @@ class VMambaModel(VMambaPreTrainedModel):
 
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
-            layer = VSSLayer(
+            layer = VMambaVSSLayer(
                 dim=dims[i_layer],
                 depth=config.depths[i_layer],
                 d_state=math.ceil(dims[0] / 6) if config.d_state is None else config.d_state,  # 20240109
@@ -717,7 +717,7 @@ class VMambaModel(VMambaPreTrainedModel):
                 attn_drop=config.attn_drop_rate,
                 drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                 norm_layer=torch.nn.LayerNorm,
-                downsample=PatchMerging2D if (i_layer < self.num_layers - 1) else None,
+                downsample=VMambaPatchMerging2D if (i_layer < self.num_layers - 1) else None,
                 use_checkpoint=config.use_checkpoint,
             )
             self.layers.append(layer)
