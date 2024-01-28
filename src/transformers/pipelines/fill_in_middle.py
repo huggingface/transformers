@@ -44,7 +44,7 @@ class FIMPipeline(Pipeline):
             return fib(x-1) + fib(x-2)
     '''
     >>> generator = pipeline(model="codellama/CodeLlama-7b-hf")
-    >>> generator(PROMPT, do_sample=False)
+    >>> print(generator(PROMPT, do_sample=False))
     [{'generated_text': "\ndef fib(x: int) -> int:\n\tif x == 0:\n\t\treturn 0\n\tif x == 1:\n\t\treturn 1\n\telse:\n\t\treturn fib(x-1) + fib(x-2)\n"}]
     ```
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
@@ -122,7 +122,11 @@ class FIMPipeline(Pipeline):
     ):
         preprocess_params = {"add_special_tokens": add_special_tokens}
         preprocess_params["infill_token"] = infill_token or self.DEFAULT_INFILL_TOKEN
-        preprocess_params["mode"] = mode.lower() if mode.lower() in ["psm", "spm"] else self.DEFAULT_MODE
+
+        if mode is not None:
+            preprocess_params["mode"] = mode.lower() if mode.lower() in ["psm", "spm"] else self.DEFAULT_MODE
+        else:
+            preprocess_params["mode"] = self.DEFAULT_MODE
 
         if prefix is not None:
             preprocess_params["prefix"] = prefix
