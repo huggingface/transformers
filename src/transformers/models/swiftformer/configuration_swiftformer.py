@@ -64,6 +64,10 @@ class SwiftFormerConfig(PretrainedConfig):
             Padding in downsampling layers.
         drop_path_rate (`float`, *optional*, defaults to 0.0):
             Rate at which to increase dropout probability in DropPath.
+        drop_mlp_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for the MLP component of SwiftFormer.
+        drop_mlp_rate (`float`, *optional*, defaults to 0.0):
+            Dropout rate for the MLP component of SwiftFormer.
         use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-05):
@@ -102,6 +106,7 @@ class SwiftFormerConfig(PretrainedConfig):
         down_stride=2,
         down_pad=1,
         drop_path_rate=0.0,
+        drop_mlp_rate=0.0,
         use_layer_scale=True,
         layer_scale_init_value=1e-5,
         batch_norm_eps=1e-5,
@@ -119,6 +124,7 @@ class SwiftFormerConfig(PretrainedConfig):
         self.down_stride = down_stride
         self.down_pad = down_pad
         self.drop_path_rate = drop_path_rate
+        self.drop_mlp_rate = drop_mlp_rate
         self.use_layer_scale = use_layer_scale
         self.layer_scale_init_value = layer_scale_init_value
         self.batch_norm_eps = batch_norm_eps
