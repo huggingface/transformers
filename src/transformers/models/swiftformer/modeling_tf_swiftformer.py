@@ -408,7 +408,7 @@ class TFSwiftFormerLocalRepresentation(tf.keras.layers.Layer):
     def build(self, input_shape=None):
         self.layer_scale = self.add_weight(
             name="layer_scale",
-            shape=(self.dim),  # FIXME: check this
+            shape=(self.dim),
             initializer="ones",
             trainable=True,
         )
@@ -476,13 +476,13 @@ class TFSwiftFormerEncoderBlock(tf.keras.layers.Layer):
 
         self.layer_scale_1 = self.add_weight(
             name="layer_scale_1",
-            shape=(self.dim),  # FIXME
+            shape=(self.dim),
             initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
         self.layer_scale_2 = self.add_weight(
             name="layer_scale_2",
-            shape=(self.dim),  # FIXME
+            shape=(self.dim),
             initializer=tf.keras.initializers.constant(self.layer_scale_init_value),
             trainable=True,
         )
@@ -673,7 +673,7 @@ TFSWIFTFORMER_INPUTS_DOCSTRING = r"""
 
 @keras_serializable
 class TFSwiftFormerMainLayer(tf.keras.layers.Layer):
-    config_class = SwiftFormerConfig  # FIXME: why is this used (copied from modeling_tf_bert)
+    config_class = SwiftFormerConfig
 
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
@@ -826,7 +826,6 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
 
         # run classification head
         sequence_output = self.norm(sequence_output, training=training)
-        # FIXME: review this conversion
         sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
         _, num_channels, height, width = sequence_output.shape
         sequence_output = tf.reshape(sequence_output, [-1, num_channels, height * width])
@@ -843,7 +842,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
                     self.config.problem_type = "regression"
                 elif self.num_labels > 1 and (
                     labels.dtype == tf.int64 or labels.dtype == tf.int32
-                ):  # FIXME: is this it?
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -854,15 +853,12 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
                     loss = loss_fct(labels.squeeze(), logits.squeeze())
                 else:
                     loss = loss_fct(labels, logits)
-            # FIXME: multilabel or multiclass?
             elif self.config.problem_type == "single_label_classification":
-                # FIXME: from_logits? Initially I had False from somewhere
                 loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
                     from_logits=True, reduction=tf.keras.losses.Reduction.NONE
                 )
                 loss = loss_fct(labels, logits)
             elif self.config.problem_type == "multi_label_classification":
-                # FIXME: from_logits? Initially I had False from somewhere
                 loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(
                     from_logits=True,
                     reduction=tf.keras.losses.Reduction.NONE,
