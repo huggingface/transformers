@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_sentencepiece_available,
     is_torch_available,
     is_vision_available,
 )
@@ -29,8 +30,16 @@ _import_structure = {
         "SiglipVisionConfig",
     ],
     "processing_siglip": ["SiglipProcessor"],
-    "tokenization_siglip": ["SiglipTokenizer"],
 }
+
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_siglip"] = ["SiglipTokenizer"]
+
 
 try:
     if not is_vision_available():
@@ -63,7 +72,14 @@ if TYPE_CHECKING:
         SiglipVisionConfig,
     )
     from .processing_siglip import SiglipProcessor
-    from .tokenization_siglip import SiglipTokenizer
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_siglip import SiglipTokenizer
 
     try:
         if not is_vision_available():
