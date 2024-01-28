@@ -637,7 +637,7 @@ class HfAgent(Agent):
         headers = {"Authorization": self.token}
         inputs = {
             "inputs": prompt,
-            "parameters": {"max_new_tokens": 200, "return_full_text": False, "stop": stop},
+            "parameters": {"return_full_text": False, "stop": stop},
         }
 
         response = requests.post(self.url_endpoint, json=inputs, headers=headers)
