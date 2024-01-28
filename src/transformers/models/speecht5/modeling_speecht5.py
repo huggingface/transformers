@@ -664,13 +664,11 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         )
 
         self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
-
         self.encode_positions = SpeechT5ScaledPositionalEncoding(
             config.positional_dropout,
             config.hidden_size,
             config.max_speech_positions,
         )
-
         self.speaker_embeds_layer = nn.Linear(config.speaker_embedding_dim + config.hidden_size, config.hidden_size)
 
     def _consistent_dropout(self, inputs_embeds, p):
@@ -695,9 +693,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
 
         if speaker_embeddings is not None:
             speaker_embeddings = nn.functional.normalize(speaker_embeddings)
-            speaker_embeddings = speaker_embeddings.unsqueeze(1)
-            speaker_embeddings = speaker_embeddings.expand(-1, inputs_embeds.size(1), -1)
-            speaker_embeddings = speaker_embeddings.repeat(inputs_embeds.size(0), 1, 1)
+            speaker_embeddings = speaker_embeddings.unsqueeze(1).expand(-1, inputs_embeds.size(1), -1)
             inputs_embeds = torch.cat([inputs_embeds, speaker_embeddings], dim=-1)
             inputs_embeds = nn.functional.relu(self.speaker_embeds_layer(inputs_embeds))
 
@@ -2655,6 +2651,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
+        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -2824,6 +2821,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch_size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
@@ -2910,6 +2917,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
@@ -2973,6 +2990,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.FloatTensor] = None,
+        stop_labels: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):

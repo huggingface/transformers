@@ -529,7 +529,7 @@ class GenerationIntegrationTestsMixin:
 
         pixel_values = floats_tensor((2, 3, 30, 30))
         model = model_cls.from_pretrained("hf-internal-testing/tiny-random-VisionEncoderDecoderModel-vit-gpt2")
-        model.config.decoder.eos_token_id = None
+        model.generation_config.eos_token_id = None
         if is_pt:
             pixel_values = pixel_values.to(torch_device)
             model = model.to(torch_device)
