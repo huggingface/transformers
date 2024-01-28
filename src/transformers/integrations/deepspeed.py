@@ -458,7 +458,7 @@ def deepspeed_load_checkpoint(
         # this magically updates self.optimizer and self.lr_scheduler
         load_path, _ = deepspeed_engine.load_checkpoint(
             checkpoint_path,
-            load_module_strict=load_module_strict,
+            load_module_strict=False,
             load_optimizer_states=True,
             load_lr_scheduler_states=True,
         )
