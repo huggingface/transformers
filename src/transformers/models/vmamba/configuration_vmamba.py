@@ -102,6 +102,8 @@ class VMambaConfig(PretrainedConfig):
         drop_path_rate=0.1,
         patch_norm=True,
         use_checkpoint=False,
+        ape=False, 
+        out_indices=(0, 1, 2, 3),
         **kwargs,
     ):
         self.patch_size = patch_size

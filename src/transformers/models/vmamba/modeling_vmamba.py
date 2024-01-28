@@ -19,11 +19,12 @@ import math
 import os
 from functools import partial
 from typing import Callable
+from einops import rearrange, repeat
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
-from mamba_ssm.ops.selective_scan_interface import selective_scan_ref  # selective_scan_fn
+# from mamba_ssm.ops.selective_scan_interface import selective_scan_ref  # selective_scan_fn
 from timm.models.layers import DropPath
 from torch import nn
 
@@ -124,6 +125,79 @@ def load_tf_weights_in_vmamba(model, config, tf_checkpoint_path):
         logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
+
+def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta_softplus=False,
+                      return_last_state=False):
+    """
+    u: r(B D L)
+    delta: r(B D L)
+    A: c(D N) or r(D N)
+    B: c(D N) or r(B N L) or r(B N 2L) or r(B G N L) or (B G N L)
+    C: c(D N) or r(B N L) or r(B N 2L) or r(B G N L) or (B G N L)
+    D: r(D)
+    z: r(B D L)
+    delta_bias: r(D), fp32
+
+    out: r(B D L)
+    last_state (optional): r(B D dstate) or c(B D dstate)
+    """
+    dtype_in = u.dtype
+    u = u.float()
+    delta = delta.float()
+    if delta_bias is not None:
+        delta = delta + delta_bias[..., None].float()
+    if delta_softplus:
+        delta = F.softplus(delta)
+    batch, dim, dstate = u.shape[0], A.shape[0], A.shape[1]
+    is_variable_B = B.dim() >= 3
+    is_variable_C = C.dim() >= 3
+    if A.is_complex():
+        if is_variable_B:
+            B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
+            # new_size = B.shape
+            # new_size[-1] = new_size[-1] / 2
+            # new_size = new_size + (2,)
+            # B = torch.view_as_complex(torch.reshape(B.float(), new_size))
+        if is_variable_C:
+            C = torch.view_as_complex(rearrange(C.float(), "... (L two) -> ... L two", two=2))
+    else:
+        B = B.float()
+        C = C.float()
+    x = A.new_zeros((batch, dim, dstate))
+    ys = []
+    deltaA = torch.exp(torch.einsum('bdl,dn->bdln', delta, A))
+    if not is_variable_B:
+        deltaB_u = torch.einsum('bdl,dn,bdl->bdln', delta, B, u)
+    else:
+        if B.dim() == 3:
+            deltaB_u = torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)
+        else:
+            B = repeat(B, "B G N L -> B (G H) N L", H=dim // B.shape[1])
+            # B = B.repeat(1, B.shape[1] * (dim // B.shape[1]), 1, 1)
+            deltaB_u = torch.einsum('bdl,bdnl,bdl->bdln', delta, B, u)
+    if is_variable_C and C.dim() == 4:
+        C = repeat(C, "B G N L -> B (G H) N L", H=dim // C.shape[1])
+    last_state = None
+    for i in range(u.shape[2]):
+        x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
+        if not is_variable_C:
+            y = torch.einsum('bdn,dn->bd', x, C)
+        else:
+            if C.dim() == 3:
+                y = torch.einsum('bdn,bn->bd', x, C[:, :, i])
+            else:
+                y = torch.einsum('bdn,bdn->bd', x, C[:, :, :, i])
+        if i == u.shape[2] - 1:
+            last_state = x
+        if y.is_complex():
+            y = y.real * 2
+        ys.append(y)
+    y = torch.stack(ys, dim=2) # (batch dim L)
+    out = y if D is None else y + u * rearrange(D, "d -> d 1")
+    if z is not None:
+        out = out * F.silu(z)
+    out = out.to(dtype=dtype_in)
+    return out if not return_last_state else (out, last_state)
 
 
 class PatchEmbed2D(nn.Module):
@@ -709,3 +783,59 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
         """
         x = self.vmamba(inputs)
         return self.head(x)
+    
+
+# @add_start_docstrings("""VMamba Model with a `detection` head on top. """, VMAMBA_START_DOCSTRING)
+# class VMambaForObjectDetection(VMambaPreTrainedModel):
+#     def __init__(self, config):
+#         super().__init__(config)
+
+#         self.vmamba = VMambaModel(config)
+#         self.head = (
+#             nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
+#         )
+
+#     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+#     @add_code_sample_docstrings(
+#         checkpoint=_CHECKPOINT_FOR_DOC,
+#         output_type=ImageClassifierOutput,
+#         config_class=_CONFIG_FOR_DOC,
+#     )
+#     def forward(self, inputs):
+#         r"""
+#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+#             Labels for computing the masked language modeling loss.
+#             Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
+#             Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
+#             in `[0, ..., config.vocab_size]`.
+#         """
+#         x = self.vmamba(inputs)
+#         return self.head(x)
+    
+
+# @add_start_docstrings("""VMamba Model with a `segmentation` head on top. """, VMAMBA_START_DOCSTRING)
+# class VMambaForSemanticSegmentation(VMambaPreTrainedModel):
+#     def __init__(self, config):
+#         super().__init__(config)
+
+#         self.vmamba = VMambaModel(config)
+#         self.head = (
+#             nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
+#         )
+
+#     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+#     @add_code_sample_docstrings(
+#         checkpoint=_CHECKPOINT_FOR_DOC,
+#         output_type=ImageClassifierOutput,
+#         config_class=_CONFIG_FOR_DOC,
+#     )
+#     def forward(self, inputs):
+#         r"""
+#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+#             Labels for computing the masked language modeling loss.
+#             Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
+#             Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
+#             in `[0, ..., config.vocab_size]`.
+#         """
+#         x = self.vmamba(inputs)
+#         return self.head(x)

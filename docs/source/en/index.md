@@ -295,6 +295,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [ViTMSN](model_doc/vit_msn)                        |       ✅        |         ❌         |      ❌      |
 |                          [VITS](model_doc/vits)                          |       ✅        |         ❌         |      ❌      |
 |                         [ViViT](model_doc/vivit)                         |       ✅        |         ❌         |      ❌      |
+|                        [VMamba](model_doc/vmamba)                        |       ✅        |         ❌         |      ❌      |
 |                      [Wav2Vec2](model_doc/wav2vec2)                      |       ✅        |         ✅         |      ✅      |
 |                 [Wav2Vec2-BERT](model_doc/wav2vec2-bert)                 |       ✅        |         ❌         |      ❌      |
 |            [Wav2Vec2-Conformer](model_doc/wav2vec2-conformer)            |       ✅        |         ❌         |      ❌      |

@@ -8699,6 +8699,34 @@ class VivitPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VMambaForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VMambaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VMambaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+def load_tf_weights_in_vmamba(*args, **kwargs):
+    requires_backends(load_tf_weights_in_vmamba, ["torch"])
+
+
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
