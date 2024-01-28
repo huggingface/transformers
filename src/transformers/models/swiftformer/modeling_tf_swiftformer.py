@@ -290,7 +290,7 @@ class TFSwiftFormerMlp(tf.keras.layers.Layer):
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer
         self.fc2 = tf.keras.layers.Conv2D(in_features, 1, name="fc2")
-        self.drop = tf.keras.layers.Dropout(rate=0.0)  # FIXME: is this supposed to be 0?
+        self.drop = tf.keras.layers.Dropout(rate=config.drop_path_rate)
         self.hidden_features = hidden_features
         self.in_features = in_features
 
