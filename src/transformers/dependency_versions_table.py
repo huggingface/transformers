@@ -50,7 +50,7 @@ deps = {
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pyyaml": "pyyaml>=5.1",
-    "pydantic": "pydantic<2",
+    "pydantic": "pydantic",
     "pytest": "pytest>=7.2.0",
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",

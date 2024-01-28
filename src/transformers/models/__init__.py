@@ -64,6 +64,7 @@ from . import (
     deformable_detr,
     deit,
     deprecated,
+    depth_anything,
     deta,
     detr,
     dialogpt,
