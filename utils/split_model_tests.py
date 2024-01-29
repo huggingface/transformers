@@ -11,9 +11,11 @@ if __name__ == "__main__":
 
     num_jobs = len(d)
     num_splits = int(os.getenv("NUM_SLICES", 2))
-    num_jobs_per_splits = num_jobs // num_splits + int(num_jobs % num_splits > 0)
+    num_jobs_per_splits = num_jobs // num_splits
 
     model_splits = []
     for idx in range(num_splits):
-        model_splits.append(d[(num_jobs_per_splits * idx):(num_jobs_per_splits * (idx + 1))])
+        start = num_jobs_per_splits * idx
+        end = start + num_jobs_per_splits if idx < num_splits - 1 else num_jobs
+        model_splits.append(d[start:end])
     print(model_splits)
