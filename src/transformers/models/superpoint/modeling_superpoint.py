@@ -275,10 +275,12 @@ class SuperPointDescriptorDecoder(nn.Module):
         keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
         kwargs = {"align_corners": True} if is_torch_greater_or_equal_than_1_13 else {}
-        descriptors = nn.functional.grid_sample(
-            descriptors, keypoints.view(batch_size, 1, -1, 2), mode="bilinear", **kwargs
-        )
-        descriptors = nn.functional.normalize(descriptors.reshape(batch_size, num_channels, -1), p=2, dim=1)
+        # [batch_size, num_channels, num_keypoints, 2] -> [batch_size, num_channels, num_keypoints, 2]
+        keypoints = keypoints.view(batch_size, 1, -1, 2)
+        descriptors = nn.functional.grid_sample(descriptors, keypoints, mode="bilinear", **kwargs)
+        # [batch_size, descriptor_decoder_dim, num_channels, num_keypoints] -> [batch_size, descriptor_decoder_dim, num_keypoints]
+        descriptors = descriptors.reshape(batch_size, num_channels, -1)
+        descriptors = nn.functional.normalize(descriptors, p=2, dim=1)
         return descriptors
 
 
