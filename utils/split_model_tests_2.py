@@ -8,7 +8,7 @@ d1.remove("models")
 d = d2[1:3] + d1[:1]
 
 num_jobs = len(d)
-num_splits = os.getenv("NUM_SLICES", 2)
+num_splits = int(os.getenv("NUM_SLICES", 2))
 num_jobs_per_splits = num_jobs // num_splits + int(num_jobs % num_splits > 0)
 
 model_splits = []
