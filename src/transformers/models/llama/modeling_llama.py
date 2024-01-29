@@ -1438,7 +1438,6 @@ class LlamaForQuestionAnswering(LlamaPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
