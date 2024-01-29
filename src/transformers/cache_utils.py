@@ -325,10 +325,10 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size, device = "mps") -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, device = "cuda:2") -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = config.max_position_embeddings # if config.max_sequence_length is None else config.max_sequence_length 
+        self.max_sequence_length = config.max_position_embeddings if config.max_sequence_length is None else config.max_sequence_length 
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
