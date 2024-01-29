@@ -19,7 +19,6 @@ import math
 import os
 from functools import partial
 from typing import Callable
-from einops import rearrange, repeat
 
 import torch
 import torch.nn.functional as F
@@ -152,13 +151,17 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
     is_variable_C = C.dim() >= 3
     if A.is_complex():
         if is_variable_B:
-            B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
-            # new_size = B.shape
-            # new_size[-1] = new_size[-1] / 2
-            # new_size = new_size + (2,)
-            # B = torch.view_as_complex(torch.reshape(B.float(), new_size))
+            # B = torch.view_as_complex(rearrange(B.float(), "... (L two) -> ... L two", two=2))
+            new_size = B.shape
+            new_size[-1] = new_size[-1] / 2
+            new_size = new_size + (2,)
+            B = torch.view_as_complex(torch.reshape(B.float(), new_size))
         if is_variable_C:
-            C = torch.view_as_complex(rearrange(C.float(), "... (L two) -> ... L two", two=2))
+            new_size = C.shape
+            new_size[-1] = new_size[-1] / 2
+            new_size = new_size + (2,)
+            C = torch.view_as_complex(torch.reshape(C.float(), new_size))
+            # C = torch.view_as_complex(rearrange(C.float(), "... (L two) -> ... L two", two=2))
     else:
         B = B.float()
         C = C.float()
@@ -171,11 +174,14 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
         if B.dim() == 3:
             deltaB_u = torch.einsum('bdl,bnl,bdl->bdln', delta, B, u)
         else:
-            B = repeat(B, "B G N L -> B (G H) N L", H=dim // B.shape[1])
-            # B = B.repeat(1, B.shape[1] * (dim // B.shape[1]), 1, 1)
+            # B = repeat(B, "B G N L -> B (G H) N L", H=dim // B.shape[1])
+            H = dim // B.shape[1]
+            B = B.repeat(1, H, 1, 1)
             deltaB_u = torch.einsum('bdl,bdnl,bdl->bdln', delta, B, u)
     if is_variable_C and C.dim() == 4:
-        C = repeat(C, "B G N L -> B (G H) N L", H=dim // C.shape[1])
+        H = dim // C.shape[1]
+        C = C.repeat(1, H, 1, 1)
+        # C = repeat(C, "B G N L -> B (G H) N L", H=dim // C.shape[1])
     last_state = None
     for i in range(u.shape[2]):
         x = deltaA[:, :, i] * x + deltaB_u[:, :, i]
@@ -192,7 +198,7 @@ def selective_scan_ref(u, delta, A, B, C, D=None, z=None, delta_bias=None, delta
             y = y.real * 2
         ys.append(y)
     y = torch.stack(ys, dim=2) # (batch dim L)
-    out = y if D is None else y + u * rearrange(D, "d -> d 1")
+    out = y if D is None else y + u * D.unsqueeze(-1) # rearrange(D, "d -> d 1")
     if z is not None:
         out = out * F.silu(z)
     out = out.to(dtype=dtype_in)
