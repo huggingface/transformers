@@ -334,20 +334,14 @@ class StaticCache(Cache):
         self.num_heads = config.num_attention_heads
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
         
-        cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
 
+        cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
+        # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device = device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype,  device = device)
         
-        # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
-        # self.key_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
-        # self.value_cache: List[torch.Tensor] = [torch.zeros(max_batch_size, max_sequence_length, num_heads, self.head_dim, dtype=dtype) for _ in range(num_layers)]
         self._seen_tokens = 0 
-        
-        # We cache a big mask that will be updated with the input mask
-        self.causal_4d_mask = torch.triu(torch.full((max_batch_size,1,self.max_sequence_length, self.max_sequence_length),device=device,  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
-        # self.causal_4d_mask = torch.triu(torch.full((self.max_sequence_length, self.max_sequence_length),device = "cuda:2",  dtype=self.dtype, fill_value=torch.finfo(self.dtype).min), diagonal = 1)
-        # self.causal_mask = torch.tril(torch.ones(config.max_position_embeddings, config.max_position_embeddings, dtype=torch.bool,device = device))
+
     def update(
         self,
         key_states: torch.Tensor,
@@ -372,42 +366,33 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        attention_mask = cache_kwargs.get("attention_mask")
         # position_ids = cache_kwargs.get("position_ids")[0] is faster?
         position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
-        # position_ids = torch.arange(position_ids, position_ids + key_states.shape[-2])
         
         k_out = self.key_cache
         v_out = self.value_cache
-        # prev_pos = self.seen_tokens//self.num_layers => faster already
-        # try to use the same memory sapce to make sure graph is called
+
         k_out[:, :, position_ids] = key_states
         v_out[:, :, position_ids] = value_states
 
-
-        if attention_mask is not None and self._seen_tokens == 0:
-            # update the actual attention mask by masking padding tokens
-            self.causal_4d_mask[:,:,:,torch.arange(attention_mask.shape[-1])] = self.causal_4d_mask[:,:,:,torch.arange(attention_mask.shape[-1])].masked_fill_(~attention_mask[:,None,None,:].to(torch.bool), torch.finfo(k_out.dtype).min)
-
         self._seen_tokens += key_states.shape[-2]
-        return k_out, v_out, self.causal_4d_mask[:,:,position_ids,:]
+        return k_out, v_out
 
     @property
     def seen_tokens(self):
-        return  self._seen_tokens # // self.num_layers
+        return  self._seen_tokens
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
-        return self._seen_tokens #// self.num_layers
+        return self._seen_tokens
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return self.max_sequence_length
     
-    # def reorder_cache(self, beam_idx: torch.LongTensor):
-    #     """Reorders the cache for beam search, given the selected beam indices."""
-    #     for layer_idx in range(len(self.key_cache)):
-    #         device = self.key_cache[layer_idx].device
-    #         self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx.to(device))
-    #         device = self.value_cache[layer_idx].device
-    #         self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        device = self.key_cache.device
+        self.key_cache = self.key_cache.index_select(0, beam_idx.to(device))
+        device = self.value_cache.device
+        self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
