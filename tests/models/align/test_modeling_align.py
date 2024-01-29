@@ -457,6 +457,9 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AlignModelTester(self)
 
+    def test_foo(self):
+        assert 1 == 2
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
