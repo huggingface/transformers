@@ -157,7 +157,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
 
         resize_size = get_resize_output_image_size(
-            image, size=(size["height"], size["width"]), default_to_square=False, input_data_format=input_data_format
+            image, size=(size["height"], size["width"]), input_data_format=input_data_format
         )
 
         return resize(
