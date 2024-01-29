@@ -1147,16 +1147,23 @@ class WhisperGenerationMixin:
             replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
         elif len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None):
             # language is not defined or intentially set to `None` to trigger language detection
-            lang_ids = self.detect_language(input_features=input_features, encoder_outputs=kwargs.get("encoder_outputs", None), generation_config=generation_config, num_segment_frames=num_segment_frames)
-            
+            lang_ids = self.detect_language(
+                input_features=input_features,
+                encoder_outputs=kwargs.get("encoder_outputs", None),
+                generation_config=generation_config,
+                num_segment_frames=num_segment_frames,
+            )
+
             if torch.unique(lang_ids).shape[0] > 1:
-                raise ValueError("Multiple languages detected when trying to guess the target language for transcription. It is currently not supported to transcribe to different languages in a single batch. Please make sure to either force a single language by passing `languag='...'` or make sure all input audio is of the same language.")
+                raise ValueError(
+                    "Multiple languages detected when trying to guess the target language for transcription. It is currently not supported to transcribe to different languages in a single batch. Please make sure to either force a single language by passing `languag='...'` or make sure all input audio is of the same language."
+                )
 
             lang_id = lang_ids[0].item()
-            
+
             # append or replace lang_id to init_tokens
             if len(init_tokens) > 1:
-                init_tokens[1] = lang_id 
+                init_tokens[1] = lang_id
             else:
                 init_tokens.append(lang_id)
 
@@ -1188,7 +1195,13 @@ class WhisperGenerationMixin:
 
         return init_tokens
 
-    def detect_language(self, input_features: Optional[torch.FloatTensor], encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]], generation_config: Optional[GenerationConfig] = None, num_segment_frames: int = 3000) -> torch.Tensor:
+    def detect_language(
+        self,
+        input_features: Optional[torch.FloatTensor],
+        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]],
+        generation_config: Optional[GenerationConfig] = None,
+        num_segment_frames: int = 3000,
+    ) -> torch.Tensor:
         """
         Detects language from log-mel input features or encoder_outputs
 
@@ -1218,17 +1231,22 @@ class WhisperGenerationMixin:
         """
         if input_features is None and encoder_outputs is None:
             raise ValueError("You have to specify either `input_features` or `encoder_outputs`")
-        elif not input_features is None and not encoder_outputs is None:
+        elif input_features is not None and encoder_outputs is not None:
             raise ValueError("Make sure to specificy only one of `input_features` or `encoder_outputs` - not both!")
         elif input_features is not None:
             inputs = {"input_features": input_features[:, :, :num_segment_frames]}
             batch_size = input_features.shape[0]
         elif encoder_outputs is not None:
             inputs = {"encoder_outputs": encoder_outputs}
-            batch_size = encoder_outputs[0].shape[0] if isinstance(encoder_outputs, BaseModelOutput) else encoder_outputs[0]
+            batch_size = (
+                encoder_outputs[0].shape[0] if isinstance(encoder_outputs, BaseModelOutput) else encoder_outputs[0]
+            )
 
         generation_config = generation_config or self.generation_config
-        decoder_input_ids = torch.ones((batch_size, 1), device=self.device, dtype=torch.long) * generation_config.decoder_start_token_id
+        decoder_input_ids = (
+            torch.ones((batch_size, 1), device=self.device, dtype=torch.long)
+            * generation_config.decoder_start_token_id
+        )
 
         with torch.no_grad():
             logits = self(**inputs, decoder_input_ids=decoder_input_ids).logits[:, -1]
@@ -1241,7 +1259,6 @@ class WhisperGenerationMixin:
         lang_ids = logits.argmax(-1)
 
         return lang_ids
-
 
     @staticmethod
     def _check_decoder_input_ids(prompt_ids, init_tokens, is_shortform, kwargs):
