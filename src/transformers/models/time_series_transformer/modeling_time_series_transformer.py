@@ -1228,8 +1228,9 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
                 Shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
-        indices = [lag - shift for lag in self.config.lags_sequence]
-
+        # (Khalid Oublal) -> addressed the issue regarding the scenario where lag equals 0.
+        # The previous implementation was: indices = [lag - shift for lag in self.config.lags_sequence]
+        indices = [lag - shift if lag > 0 else 0 for lag in self.config.lags_sequence]
         if max(indices) + subsequences_length > sequence_length:
             raise ValueError(
                 f"lags cannot go further than history length, found lag {max(indices)} "
