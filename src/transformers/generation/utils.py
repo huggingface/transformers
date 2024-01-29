@@ -4507,6 +4507,8 @@ class GenerationMixin:
         if streamer is not None:
             streamer.end()
 
+        if candidate_generator.assistant_model.generation_config.num_assistant_tokens_schedule == "heuristic":
+            candidate_generator.assistant_model.generation_config.num_assistant_tokens = candidate_generator.num_assistant_tokens
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return GenerateEncoderDecoderOutput(
