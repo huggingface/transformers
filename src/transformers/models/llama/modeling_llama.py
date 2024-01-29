@@ -29,13 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-    _prepare_4d_attention_mask,
-    _prepare_4d_causal_attention_mask,
-    _prepare_4d_causal_attention_mask_for_sdpa,
-)
+from ...cache_utils import Cache, StaticCache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
@@ -47,7 +41,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.import_utils import is_torch_fx_available
 from .configuration_llama import LlamaConfig
 
 
@@ -55,14 +48,6 @@ if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
 
-
-# This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
-# It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
-    if not is_torch_greater_or_equal_than_1_13:
-        import torch.fx
-
-    _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
 logger = logging.get_logger(__name__)
@@ -80,26 +65,6 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    warnings.warn(
-        "Calling `transformers.models.llama.modeling_llama._prepare_4d_attention_mask` is deprecated and will be removed in v4.37. Use `transformers.modeling_attn_mask_utils._prepare_4d_attention_mask"
-    )
-    return _prepare_4d_attention_mask(mask=mask, dtype=dtype, tgt_len=tgt_len)
-
-
-def _make_causal_mask(
-    input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
-):
-    warnings.warn(
-        "Calling `transformers.models.llama.modeling_llama._make_causal_mask` is deprecated and will be removed in v4.37. Use `transformers.models.llama.modeling_llama.AttentionMaskConverter._make_causal_mask"
-    )
-    return AttentionMaskConverter._make_causal_mask(
-        input_ids_shape=input_ids_shape, dtype=dtype, device=device, past_key_values_length=past_key_values_length
-    )
-
-
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -425,7 +390,7 @@ class LlamaAttention(nn.Module):
         elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, cache_positions, :kv_seq_len]
+            causal_mask = self.causal_mask[None, None, cache_positions, :key_states.shape[-2]]
 
         causal_mask = 1-causal_mask.to(hidden_states.dtype)
         # Invert mask from `[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]` to torch.finfo.min
@@ -721,17 +686,10 @@ class LlamaSdpaAttention(LlamaAttention):
         elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, cache_positions, :kv_seq_len]
+            causal_mask = self.causal_mask[None, None, cache_positions, :key_states.shape[-2]]
 
         causal_mask = 1-causal_mask.to(hidden_states.dtype)
-        # Invert mask from `[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]` to torch.finfo.min
         causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
-
-        # if attention_mask is not None:
-        #     if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
-        #         )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -881,15 +839,8 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size):
-        # if self.config.max_position_embeddings >= max_seq_length:
-        #     return
-
-        # max_seq_length = find_multiple(max_seq_length, 8)
-        self.max_batch_size = max_batch_size
-        for b in self.model.layers:
-            b.self_attn.past_key_value = cache_cls(self.config, max_batch_size, device=b.self_attn.o_proj.weight.device)
-
-
+        for layer in self.model.layers:
+            layer.self_attn.past_key_value = cache_cls(self.config, max_batch_size, device=layer.self_attn.o_proj.weight.device)
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -1035,17 +986,12 @@ class LlamaModel(LlamaPreTrainedModel):
                 use_cache = False
 
         use_legacy_cache = False # not isinstance(past_key_values, Cache)
-        past_key_values_length = 0
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
 
         # embed positions
         hidden_states = inputs_embeds
