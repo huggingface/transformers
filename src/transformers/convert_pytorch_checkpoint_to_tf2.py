@@ -330,10 +330,11 @@ def convert_pt_checkpoint_to_tf(
     if compare_with_pt_model:
         tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network
 
+        weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
         state_dict = torch.load(
             pytorch_checkpoint_path,
             map_location="cpu",
-            weights_only=is_torch_greater_or_equal_than_1_13,
+            **weights_only_kwarg,
         )
         pt_model = pt_model_class.from_pretrained(
             pretrained_model_name_or_path=None, config=config, state_dict=state_dict
