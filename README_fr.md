@@ -99,7 +99,6 @@ En traitement du langage naturel :
 En vision par ordinateur :
 - [Classification d'images avec ViT](https://huggingface.co/google/vit-base-patch16-224)
 - [Détection d'objets avec DETR](https://huggingface.co/facebook/detr-resnet-50)
-
 - [Segmentation sémantique avec SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
 - [Segmentation panoptique avec MaskFormer](https://huggingface.co/facebook/maskformer-swin-small-coco)
 - [Estimation de profondeur avec DPT](https://huggingface.co/docs/transformers/model_doc/dpt)
@@ -187,7 +186,7 @@ Ici, nous obtenons une liste d'objets détectés dans l'image, avec une boîte e
     <a><img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample_post_processed.png" width="400"></a>
 </h3>
 
-Vous pouvez en savoir plus sur les tâches supportées par l'API pipeline dans ce tutoriel.
+Vous pouvez en savoir plus sur les tâches supportées par l'API pipeline dans [ce tutoriel](https://huggingface.co/docs/transformers/task_summary).
 
 En plus de `pipeline`, pour télécharger et utiliser n'importe lequel des modèles pré-entraînés sur votre tâche donnée, il suffit de trois lignes de code. Voici la version PyTorch :
 
@@ -215,7 +214,7 @@ outputs = model(**inputs)
 
 Le tokenizer est responsable de toutes les étapes de prétraitement que le modèle préentraîné attend et peut être appelé directement sur une seule chaîne de caractères (comme dans les exemples ci-dessus) ou sur une liste. Il produira un dictionnaire que vous pouvez utiliser dans votre code ou simplement passer directement à votre modèle en utilisant l'opérateur de déballage **.
 
-Le modèle lui-même est un module nn.Module PyTorch ou un modèle tf.keras.Model TensorFlow (selon votre backend) que vous pouvez utiliser comme d'habitude. Ce tutoriel explique comment intégrer un tel modèle dans une boucle d'entraînement classique PyTorch ou TensorFlow, ou comment utiliser notre API Trainer pour affiner rapidement sur un nouvel ensemble de données.
+Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) ou un modèle [`tf.keras.Model` TensorFlow](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (selon votre backend) que vous pouvez utiliser comme d'habitude. [Ce tutoriel](https://huggingface.co/docs/transformers/training) explique comment intégrer un tel modèle dans une boucle d'entraînement classique PyTorch ou TensorFlow, ou comment utiliser notre API `Trainer` pour affiner rapidement sur un nouvel ensemble de données.
 
 ## Pourquoi devrais-je utiliser transformers ?
 
@@ -265,7 +264,7 @@ Lorsqu'un de ces backends est installé, 🤗 Transformers peut être installé 
 pip install transformers
 ```
 
-Si vous souhaitez jouer avec les exemples ou avez besoin de la dernière version du code et ne pouvez pas attendre une nouvelle version, vous devez installer la bibliothèque à partir de la source.
+Si vous souhaitez jouer avec les exemples ou avez besoin de la dernière version du code et ne pouvez pas attendre une nouvelle version, vous devez [installer la bibliothèque à partir de la source](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
 ### Avec conda
 
