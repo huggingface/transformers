@@ -28,7 +28,6 @@ if is_torch_available():
 
     from transformers import (
         SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        AutoModelForInterestPointDescription,
         SuperPointForInterestPointDescription,
         SuperPointModel,
     )
@@ -279,9 +278,4 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model = SuperPointModel.from_pretrained("stevenbucaille/superpoint").to(torch_device)
-        self.infer_on_model(model)
-
-    @slow
-    def test_auto_model_class(self):
-        model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint").to(torch_device)
         self.infer_on_model(model)
