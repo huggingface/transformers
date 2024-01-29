@@ -234,12 +234,12 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
-        out_string = " "
+        out_string = ""
         prev_is_special = False
-        for token in tokens:
+        for i,token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special:
+                if (not prev_is_special) or (i == 0):
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
