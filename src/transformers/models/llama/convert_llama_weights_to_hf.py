@@ -102,7 +102,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     if base > 10000.0:
         max_position_embeddings = 16384
     else:
-        max_position_embeddings = 2048
+        max_position_embeddings = 4096
 
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
     if tokenizer_path is not None:
