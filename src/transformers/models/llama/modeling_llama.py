@@ -404,8 +404,9 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
-        cache_positions = torch.arange(past_key_value.seen_tokens,past_key_value.seen_tokens+q_len)
+        past_key_value = getattr(self, "past_key_value", past_key_value)
+        cache_positions = torch.arange(kv_seq_len-key_states.shape[-2],kv_seq_len-key_states.shape[-2]+q_len)
+        
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids":cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -422,7 +423,7 @@ class LlamaAttention(nn.Module):
             )
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, cache_positions, :past_key_value.get_max_length()].repeat(bsz, 1, 1)
+            causal_mask = self.causal_mask[None, cache_positions, :key_states.shape[-2]].repeat(bsz, 1, 1)
             # mask out padding and unsqueeze in head position
             causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
             causal_mask = causal_mask.unsqueeze(1)
