@@ -97,7 +97,7 @@ jobs:
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
-      folders: ${{ needs.setup.outputs.folder_slices }}
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: multi-gpu
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
