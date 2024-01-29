@@ -44,6 +44,34 @@ _CHECKPOINT_FOR_DOC = "stevenbucaille/superpoint"
 SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
 
 
+class SuperPointConvBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, add_pooling: bool = False) -> None:
+        super().__init__()
+        self.conv_a = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.conv_b = nn.Conv2d(
+            out_channels,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+        self.relu = nn.ReLU(inplace=True)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if add_pooling else None
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.relu(self.conv_a(hidden_states))
+        hidden_states = self.relu(self.conv_b(hidden_states))
+        if self.pool is not None:
+            hidden_states = self.pool(hidden_states)
+        return hidden_states
+
+
 class SuperPointEncoder(nn.Module):
     """
     SuperPoint encoder module. It is made of 4 convolutional layers with ReLU activation and max pooling, reducing the
@@ -52,62 +80,16 @@ class SuperPointEncoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.hidden_sizes = config.hidden_sizes
-        self.descriptor_dim = config.descriptor_dim
+        # SuperPoint uses 1 channel images
+        self.input_dim = 1
+        self.hidden_sizes = config.encoder_hidden_sizes
 
-        self.relu = nn.ReLU(inplace=True)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-
-        self.conv1a = nn.Conv2d(1, self.hidden_sizes[0], kernel_size=3, stride=1, padding=1)
-        self.conv1b = nn.Conv2d(
-            self.hidden_sizes[0],
-            self.hidden_sizes[0],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv2a = nn.Conv2d(
-            self.hidden_sizes[0],
-            self.hidden_sizes[1],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv2b = nn.Conv2d(
-            self.hidden_sizes[1],
-            self.hidden_sizes[1],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv3a = nn.Conv2d(
-            self.hidden_sizes[1],
-            self.hidden_sizes[2],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv3b = nn.Conv2d(
-            self.hidden_sizes[2],
-            self.hidden_sizes[2],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv4a = nn.Conv2d(
-            self.hidden_sizes[2],
-            self.hidden_sizes[3],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-        self.conv4b = nn.Conv2d(
-            self.hidden_sizes[3],
-            self.hidden_sizes[3],
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
+        conv_blocks = []
+        conv_blocks.append(SuperPointConvBlock(self.input_dim, self.hidden_sizes[0], add_pooling=True))
+        for i in range(1, len(self.hidden_sizes) - 1):
+            conv_blocks.append(SuperPointConvBlock(self.hidden_sizes[i - 1], self.hidden_sizes[i], add_pooling=True))
+        conv_blocks.append(SuperPointConvBlock(self.hidden_sizes[-2], self.hidden_sizes[-1], add_pooling=False))
+        self.conv_blocks = nn.ModuleList(conv_blocks)
 
     def forward(
         self,
@@ -116,33 +98,12 @@ class SuperPointEncoder(nn.Module):
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
-        input = self.relu(self.conv1a(input))
-        input = self.relu(self.conv1b(input))
-        input = self.pool(input)
 
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (input,)
-
-        input = self.relu(self.conv2a(input))
-        input = self.relu(self.conv2b(input))
-        input = self.pool(input)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (input,)
-
-        input = self.relu(self.conv3a(input))
-        input = self.relu(self.conv3b(input))
-        input = self.pool(input)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (input,)
-
-        input = self.relu(self.conv4a(input))
-        output = self.relu(self.conv4b(input))
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (output,)
-
+        for conv_block in self.conv_blocks:
+            input = conv_block(input)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (input,)
+        output = input
         if not return_dict:
             return tuple(v for v in [output, all_hidden_states] if v is not None)
 
@@ -163,8 +124,8 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.hidden_sizes = config.hidden_sizes
-        self.descriptor_dim = config.descriptor_dim
+        self.hidden_size = config.decoder_hidden_size
+        self.keypoint_decoder_dim = config.keypoint_decoder_dim
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
         self.nms_radius = config.nms_radius
@@ -172,14 +133,14 @@ class SuperPointInterestPointDecoder(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.convSa = nn.Conv2d(
-            self.hidden_sizes[3],
-            self.hidden_sizes[4],
+        self.conv_score_a = nn.Conv2d(
+            config.encoder_hidden_sizes[-1],
+            self.hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
         )
-        self.convSb = nn.Conv2d(self.hidden_sizes[4], 65, kernel_size=1, stride=1, padding=0)
+        self.conv_score_b = nn.Conv2d(self.hidden_size, self.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0)
 
     def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Compute the dense keypoint scores
@@ -191,8 +152,8 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     def get_scores(self, encoded: torch.Tensor) -> torch.Tensor:
         """Compute the dense keypoint scores"""
-        scores = self.relu(self.convSa(encoded))
-        scores = self.convSb(scores)
+        scores = self.relu(self.conv_score_a(encoded))
+        scores = self.conv_score_b(scores)
         scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
         batch_size, _, height, width = scores.shape
         scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
@@ -265,8 +226,8 @@ class SuperPointDescriptorDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.hidden_sizes = config.hidden_sizes
-        self.descriptor_dim = config.descriptor_dim
+        self.hidden_size = config.decoder_hidden_size
+        self.descriptor_decoder_dim = config.descriptor_decoder_dim
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
         self.nms_radius = config.nms_radius
@@ -274,16 +235,16 @@ class SuperPointDescriptorDecoder(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.convDa = nn.Conv2d(
-            self.hidden_sizes[3],
-            self.hidden_sizes[4],
+        self.conv_descriptor_a = nn.Conv2d(
+            config.encoder_hidden_sizes[-1],
+            self.hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
         )
-        self.convDb = nn.Conv2d(
-            self.hidden_sizes[4],
-            self.descriptor_dim,
+        self.conv_descriptor_b = nn.Conv2d(
+            self.hidden_size,
+            self.descriptor_decoder_dim,
             kernel_size=1,
             stride=1,
             padding=0,
@@ -291,7 +252,7 @@ class SuperPointDescriptorDecoder(nn.Module):
 
     def forward(self, encoded, keypoints) -> torch.Tensor:
         """Compute the dense descriptors"""
-        descriptors = self.convDb(self.relu(self.convDa(encoded)))
+        descriptors = self.conv_descriptor_b(self.relu(self.conv_descriptor_a(encoded)))
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
         # Extract descriptors
@@ -376,8 +337,8 @@ Args:
         Pixel values. Pixel values can be obtained using [`SuperPointImageProcessor`]. See
         [`SuperPointImageProcessor.__call__`] for details.
     output_hidden_states (`bool`, *optional*):
-        Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-        more detail.
+        Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for more
+        detail.
     return_dict (`bool`, *optional*):
         Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
     """
@@ -459,7 +420,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0] if return_dict else encoder_outputs.last_hidden_state
+        last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
 
         list_keypoints_scores = [
             self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
@@ -478,7 +439,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
         keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
         scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
         descriptors = torch.zeros(
-            (batch_size, maximum_num_keypoints, self.config.descriptor_dim),
+            (batch_size, maximum_num_keypoints, self.config.descriptor_decoder_dim),
             device=pixel_values.device,
         )
         mask = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device, dtype=torch.int)
