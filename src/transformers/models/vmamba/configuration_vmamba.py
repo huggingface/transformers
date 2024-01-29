@@ -93,7 +93,6 @@ class VMambaConfig(PretrainedConfig):
         self,
         patch_size=4,
         in_channels=3,
-        num_classes=1000,
         depths=[2, 2, 9, 2],
         dims=[96, 192, 384, 768],
         d_state=16,
@@ -108,7 +107,6 @@ class VMambaConfig(PretrainedConfig):
     ):
         self.patch_size = patch_size
         self.in_channels = in_channels
-        self.num_classes = num_classes
         self.depths = depths
         self.dims = dims
         self.d_state = d_state

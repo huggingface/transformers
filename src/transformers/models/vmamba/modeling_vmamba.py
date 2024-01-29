@@ -18,17 +18,20 @@
 import math
 import os
 from functools import partial
-from typing import Callable
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from timm.models.layers import DropPath
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
+    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     ImageClassifierOutput,
+    ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -642,8 +645,8 @@ class VMambaPreTrainedModel(PreTrainedModel):
     config_class = VMambaConfig
     load_tf_weights = load_tf_weights_in_vmamba
     base_model_prefix = "vmamba"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -741,7 +744,6 @@ class VMambaModel(VMambaPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.num_classes = config.num_classes
         self.num_layers = len(config.depths)
         dims = config.dims
         if isinstance(dims, int):
@@ -781,22 +783,36 @@ class VMambaModel(VMambaPreTrainedModel):
         self.norm = torch.nn.LayerNorm(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
+    def get_input_embeddings(self) -> VMambaPatchEmbed2D:
+        return self.patch_embed
 
-    @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        modality="vision",
     )
     def forward(
         self,
-        pixel_values,
-    ):
+        pixel_values: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
         r"""
         inputs  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
             if the model is configured as a decoder.
         """
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        all_hidden_states = () if output_hidden_states else None
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
         x = self.patch_embed(pixel_values)
         # if self.ape:
         #     x = x + self.absolute_pos_embed
@@ -805,11 +821,21 @@ class VMambaModel(VMambaPreTrainedModel):
         for layer in self.layers:
             x = layer(x)
 
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (x,)
+
         x = torch.flatten(x, 1, 2)  # B H W C -> B L C
         x = self.norm(x)  # B L C
         x = self.avgpool(x.transpose(1, 2))  # B C 1
         x = torch.flatten(x, 1)
-        return x
+        
+        if not return_dict:
+            return x
+    
+        return BaseModelOutput(
+            last_hidden_state=x,
+            hidden_states=all_hidden_states
+        )
 
 
 @add_start_docstrings("""VMamba Model with a `classification` head on top. """, VMAMBA_START_DOCSTRING)
@@ -817,80 +843,74 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.num_labels = config.num_labels
         self.vmamba = VMambaModel(config)
         self.head = (
-            nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
+            nn.Linear(self.vmamba.num_features, self.num_labels) if self.num_labels > 0 else nn.Identity()
         )
 
-    @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        # checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        # expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(self, pixel_values):
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-            Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-            Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        x = self.vmamba(pixel_values)
-        return self.head(x)
-    
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-# @add_start_docstrings("""VMamba Model with a `detection` head on top. """, VMAMBA_START_DOCSTRING)
-# class VMambaForObjectDetection(VMambaPreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
+        outputs = self.vmamba(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
-#         self.vmamba = VMambaModel(config)
-#         self.head = (
-#             nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
-#         )
+        x = outputs[0]
+        logits = self.head(x)
 
-#     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-#     @add_code_sample_docstrings(
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=ImageClassifierOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     def forward(self, inputs):
-#         r"""
-#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-#             Labels for computing the masked language modeling loss.
-#             Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-#             Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-#             in `[0, ..., config.vocab_size]`.
-#         """
-#         x = self.vmamba(inputs)
-#         return self.head(x)
-    
+        loss = None
+        if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
 
-# @add_start_docstrings("""VMamba Model with a `segmentation` head on top. """, VMAMBA_START_DOCSTRING)
-# class VMambaForSemanticSegmentation(VMambaPreTrainedModel):
-#     def __init__(self, config):
-#         super().__init__(config)
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
 
-#         self.vmamba = VMambaModel(config)
-#         self.head = (
-#             nn.Linear(self.vmamba.num_features, config.num_classes) if config.num_classes > 0 else nn.Identity()
-#         )
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
 
-#     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-#     @add_code_sample_docstrings(
-#         checkpoint=_CHECKPOINT_FOR_DOC,
-#         output_type=ImageClassifierOutput,
-#         config_class=_CONFIG_FOR_DOC,
-#     )
-#     def forward(self, inputs):
-#         r"""
-#         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-#             Labels for computing the masked language modeling loss.
-#             Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-#             Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-#             in `[0, ..., config.vocab_size]`.
-#         """
-#         x = self.vmamba(inputs)
-#         return self.head(x)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )

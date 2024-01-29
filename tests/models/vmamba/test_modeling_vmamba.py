@@ -58,7 +58,8 @@ class VMambaModelTester:
         use_labels=True,
         patch_size=4,
         in_channels=3,
-        num_classes=1000,
+        num_labels=1000,
+        num_hidden_layers=2,
         depths=[2, 2, 9, 2],
         dims=[96, 192, 384, 768],
         d_state=16,
@@ -76,7 +77,8 @@ class VMambaModelTester:
         self.use_labels = use_labels
         self.patch_size = patch_size
         self.in_channels = in_channels
-        self.num_classes = num_classes
+        self.num_labels = num_labels
+        self.num_hidden_layers = num_hidden_layers
         self.depths = depths
         self.dims = dims
         self.d_state = d_state
@@ -99,10 +101,10 @@ class VMambaModelTester:
         return config, pixel_values, labels
 
     def get_config(self):
-        return VMambaConfig(
+        config = VMambaConfig(
             patch_size=self.patch_size,
             in_channels=self.in_channels,
-            num_classes=self.num_classes,
+            num_labels=self.num_labels,
             depths=self.depths,
             dims=self.dims,
             d_state=self.d_state,
@@ -112,20 +114,21 @@ class VMambaModelTester:
             patch_norm=self.patch_norm,
             use_checkpoint=False,
         )
+        return config
 
     def create_and_check_model(self, config, pixel_values, labels):
         model = VMambaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.shape, (self.batch_size, self.dims[-1]))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.dims[-1]))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         model = VMambaForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.shape, (self.batch_size, self.num_classes))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
         # test greyscale images
         config.in_channels = 1
@@ -135,7 +138,7 @@ class VMambaModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.shape, (self.batch_size, self.num_classes))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -148,6 +151,7 @@ class VMambaModelTester:
         config.depths = [2, 2]
         config.dims =[8, 16]
         config.d_state = 8
+        config.num_labels = 2
 
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -195,17 +199,25 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip(reason="VMamba does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
+    # @unittest.skip(reason="VMamba does not use inputs_embeds")
+    # def test_inputs_embeds(self):
+    #     pass
 
-    unittest.skip(reason="VMamba does not use input embeddings")
-    def test_model_common_attributes(self):
-        pass
+    # unittest.skip(reason="VMamba does not use input embeddings")
+    # def test_model_common_attributes(self):
+    #     pass
 
     # remove
     def test_initialization(self):
         super().test_initialization()
+
+    # remove
+    def test_problem_types(self):
+        super().test_problem_types()
+
+    # remove
+    def test_model_outputs_equivalence(self):
+        super().test_model_outputs_equivalence()
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -218,6 +230,34 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+        
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
