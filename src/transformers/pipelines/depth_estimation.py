@@ -52,7 +52,7 @@ class DepthEstimationPipeline(Pipeline):
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
-        Assign labels to the image(s) passed as inputs.
+        Predict the depth(s) of the image(s) passed as inputs.
 
         Args:
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
@@ -65,9 +65,6 @@ class DepthEstimationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
-            top_k (`int`, *optional*, defaults to 5):
-                The number of top labels that will be returned by the pipeline. If the provided number is higher than
-                the number of labels available in the model configuration, it will default to the number of labels.
             timeout (`float`, *optional*, defaults to None):
                 The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
                 the call may block forever.
