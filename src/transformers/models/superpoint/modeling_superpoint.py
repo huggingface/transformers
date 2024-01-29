@@ -438,7 +438,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
             for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
-        maximum_num_keypoints = max([keypoints.shape[0] for keypoints in list_keypoints])
+        maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)
 
         keypoints = torch.zeros((batch_size, maximum_num_keypoints, 2), device=pixel_values.device)
         scores = torch.zeros((batch_size, maximum_num_keypoints), device=pixel_values.device)
