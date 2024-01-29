@@ -67,8 +67,8 @@ jobs:
         # TODO: a script to prepare `matrix_2`
         # TODO: prepare the number of splits to be used in `run_tests_single_gpu` and `run_tests_multi_gpu`
         run: |
-          echo "matrix=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')" >> $GITHUB_OUTPUT
-          echo "matrix_2=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = [["models/align"], ["models/altclip"]]; print(d)')" >> $GITHUB_OUTPUT
+          echo "matrix=$(python3 ../utils/split_model_tests.py)" >> $GITHUB_OUTPUT
+          echo "matrix=$(python3 ../utils/split_model_tests_2.py)" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
