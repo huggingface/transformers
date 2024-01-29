@@ -359,11 +359,6 @@ class LlamaAttention(nn.Module):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
         bsz, q_len, _ = hidden_states.size()
 
         if self.config.pretraining_tp > 1:
@@ -728,14 +723,15 @@ class LlamaSdpaAttention(LlamaAttention):
         else:
             causal_mask = self.causal_mask[None, None, cache_positions, :kv_seq_len]
 
+        causal_mask = 1-causal_mask.to(hidden_states.dtype)
         # Invert mask from `[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]` to torch.finfo.min
-        causal_mask = (1-causal_mask).masked_fill((1-causal_mask).bool(), torch.finfo(hidden_states.dtype).min)
+        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
-                )
+        # if attention_mask is not None:
+        #     if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
+        #         raise ValueError(
+        #             f"Attention mask should be of size {(bsz, 1, q_len, key_states.shape[-2])}, but is {attention_mask.size()}"
+        #         )
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -1038,7 +1034,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
                 use_cache = False
 
-        use_legacy_cache=False
+        use_legacy_cache = False # not isinstance(past_key_values, Cache)
         past_key_values_length = 0
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
