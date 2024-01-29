@@ -69,7 +69,7 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
         raise ValueError("Expected positive values for nms_radius")
 
     def max_pool(x):
-        return torch.nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
+        return nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
 
     zeros = torch.zeros_like(scores)
     max_mask = scores == max_pool(scores)
@@ -194,7 +194,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         """Based on the encoder output, compute the scores for each pixel of the image"""
         scores = self.relu(self.conv_score_a(encoded))
         scores = self.conv_score_b(scores)
-        scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
+        scores = nn.functional.softmax(scores, 1)[:, :-1]
         batch_size, _, height, width = scores.shape
         scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(batch_size, height * 8, width * 8)
@@ -275,10 +275,10 @@ class SuperPointDescriptorDecoder(nn.Module):
         keypoints /= divisor
         keypoints = keypoints * 2 - 1  # normalize to (-1, 1)
         kwargs = {"align_corners": True} if is_torch_greater_or_equal_than_1_13 else {}
-        descriptors = torch.nn.functional.grid_sample(
+        descriptors = nn.functional.grid_sample(
             descriptors, keypoints.view(batch_size, 1, -1, 2), mode="bilinear", **kwargs
         )
-        descriptors = torch.nn.functional.normalize(descriptors.reshape(batch_size, num_channels, -1), p=2, dim=1)
+        descriptors = nn.functional.normalize(descriptors.reshape(batch_size, num_channels, -1), p=2, dim=1)
         return descriptors
 
 
