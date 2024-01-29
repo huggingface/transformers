@@ -432,8 +432,9 @@ class LlamaAttention(nn.Module):
         else:
             causal_mask = self.causal_mask[None, None, cache_positions, :kv_seq_len]
 
+        causal_mask = 1-causal_mask.to(hidden_states.dtype)
         # Invert mask from `[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]` to torch.finfo.min
-        causal_mask = (1-causal_mask).masked_fill((1-causal_mask).bool(), torch.finfo(hidden_states.dtype).min)
+        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -1038,8 +1039,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 use_cache = False
 
         use_legacy_cache=False
-        past_key_values_length = self.config.max_position_embeddings
-
+        past_key_values_length = 0
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(
