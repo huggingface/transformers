@@ -172,7 +172,6 @@ class XLMRobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->XLMRoberta
 class XLMRobertaSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -201,11 +200,13 @@ class XLMRobertaSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
+    # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.transpose_for_scores
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
+    # Copied from transformers.models.bert.modeling_bert.BertSelfAttention.forward with Bert->XLMRoberta
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -323,7 +324,6 @@ class XLMRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta
 class XLMRobertaAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -332,6 +332,7 @@ class XLMRobertaAttention(nn.Module):
         self.pruned_heads = set()
         self.is_causal = False
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
@@ -350,6 +351,7 @@ class XLMRobertaAttention(nn.Module):
         self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
+    # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -614,7 +616,6 @@ class XLMRobertaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLayer with Roberta->XLMRoberta
 class XLMRobertaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -632,6 +633,7 @@ class XLMRobertaLayer(nn.Module):
         self.intermediate = XLMRobertaIntermediate(config)
         self.output = XLMRobertaOutput(config)
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -697,6 +699,7 @@ class XLMRobertaLayer(nn.Module):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_bert.BertLayer.feed_forward_chunk
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -813,7 +816,6 @@ class XLMRobertaPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
 class XLMRobertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -914,7 +916,6 @@ XLM_ROBERTA_INPUTS_DOCSTRING = r"""
     "The bare XLM-RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     XLM_ROBERTA_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with Roberta->XLMRoberta, ROBERTA->XLM_ROBERTA
 class XLMRobertaModel(XLMRobertaPreTrainedModel):
     """
 
@@ -931,7 +932,6 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -945,12 +945,15 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -965,7 +968,6 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
