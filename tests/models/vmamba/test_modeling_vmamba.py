@@ -18,6 +18,7 @@
 import unittest
 
 from transformers import VMambaConfig
+from transformers.models.auto.image_processing_auto import AutoImageProcessor
 from transformers.models.vmamba.modeling_vmamba import VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
     require_accelerate,
@@ -211,8 +212,11 @@ def prepare_img():
 class VMambaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
-
+        return (
+            AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            if is_vision_available()
+            else None
+        )
     @slow
     def test_inference_image_classification_head(self):
         model = VMambaForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
