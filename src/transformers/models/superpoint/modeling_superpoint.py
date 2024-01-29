@@ -424,7 +424,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs.last_hidden_state if return_dict else encoder_outputs[0]
+        last_hidden_state = encoder_outputs[0]
 
         list_keypoints_scores = [
             self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
