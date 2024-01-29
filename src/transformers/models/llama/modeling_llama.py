@@ -436,8 +436,7 @@ class LlamaAttention(nn.Module):
         causal_mask = (1-causal_mask).masked_fill((1-causal_mask).bool(), torch.finfo(hidden_states.dtype).min)
         attn_weights = attn_weights + causal_mask
 
-
-        # upcast attention to fp32 
+        # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
         attn_output = torch.matmul(attn_weights, value_states)
@@ -490,16 +489,8 @@ class LlamaFlashAttention2(LlamaAttention):
         use_cache: bool = False,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        # LlamaFlashAttention2 attention does not support output_attentions
-        if "padding_mask" in kwargs:
-            warnings.warn(
-                "Passing `padding_mask` is deprecated and will be removed in v4.37. Please make sure use `attention_mask` instead.`"
-            )
-
-            # overwrite attention_mask with padding_mask
-            attention_mask = kwargs.pop("padding_mask")
-
         output_attentions = False
+        attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -706,28 +697,38 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim)
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        query_states, key_states, value_states = map(lambda x: x.transpose(1, 2), (query_states, key_states, value_states))
-
-        # get_usable_length make the whole code a lot slower
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_seq_length()
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)# 
-        past_key_value = self.past_key_value if  hasattr(self, "past_key_value") else past_key_value
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        past_key_value = getattr(self, "past_key_value", past_key_value)
+        cache_positions = torch.arange(kv_seq_len-key_states.shape[-2],kv_seq_len-key_states.shape[-2]+q_len)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask, "position_ids":position_ids}
-            # cache_kwargs = {"sin": sin, "cos": cos, "attention_mask":attention_mask}  # Specific to RoPE models
-            key_states, value_states, attention_mask = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids":cache_positions}  # Specific to RoPE models
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        if attention_mask is not None and attention_mask.dim() == 2:
+            causal_mask = self.causal_mask[None, cache_positions, :key_states.shape[-2]].repeat(bsz, 1, 1)
+            # mask out padding and unsqueeze in head position
+            causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
+            causal_mask = causal_mask.unsqueeze(1)
+        elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
+            causal_mask = attention_mask
+        else:
+            causal_mask = self.causal_mask[None, None, cache_positions, :kv_seq_len]
+
+        # Invert mask from `[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]` to torch.finfo.min
+        causal_mask = (1-causal_mask).masked_fill((1-causal_mask).bool(), torch.finfo(hidden_states.dtype).min)
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, key_states.shape[-2]):
@@ -746,7 +747,7 @@ class LlamaSdpaAttention(LlamaAttention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
             # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
             is_causal=self.is_causal and attention_mask is None and q_len > 1,
@@ -1049,9 +1050,6 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self._use_flash_attention_2:
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
 
         # embed positions
         hidden_states = inputs_embeds
