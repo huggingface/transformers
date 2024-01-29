@@ -9,20 +9,15 @@ import tensorflow as tf
 from huggingface_hub import Repository, create_repo
 from packaging.version import parse
 
-
-try:
-    from tf_keras.callbacks import Callback
-except (ImportError, ModuleNotFoundError):
-    from keras.callbacks import Callback
-
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
+from .modeling_tf_utils import keras
 
 
 logger = logging.getLogger(__name__)
 
 
-class KerasMetricCallback(Callback):
+class KerasMetricCallback(keras.Callback):
     """
     Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
     compilable by TF. It is particularly useful for common NLP metrics like BLEU and ROUGE that require string
@@ -270,7 +265,7 @@ class KerasMetricCallback(Callback):
         logs.update(metric_output)
 
 
-class PushToHubCallback(Callback):
+class PushToHubCallback(keras.Callback):
     """
     Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
     be changed with the `save_strategy` argument. Pushed models can be accessed like any other model on the hub, such

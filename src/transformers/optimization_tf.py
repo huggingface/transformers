@@ -23,7 +23,7 @@ import tensorflow as tf
 
 try:
     from tf_keras.optimizers.legacy import Adam
-except ImportError:
+except (ImportError, ModuleNotFoundError):
     from tensorflow.keras.optimizers.legacy import Adam
 
 from .modeling_tf_utils import keras

@@ -22,12 +22,6 @@ from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
-
-try:
-    from tf_keras.layers import Dense
-except (ImportError, ModuleNotFoundError):
-    from keras.layers import Dense
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_tf_utils import TFPreTrainedModel, keras, unpack_inputs
 from ...tf_utils import shape_list
@@ -222,8 +216,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = Dense(self.projection_dim, use_bias=False, name="visual_projection")
-        self.text_projection = Dense(self.projection_dim, use_bias=False, name="text_projection")
+        self.visual_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="visual_projection")
+        self.text_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="text_projection")
         self.logit_scale = None
         self.config = config
 
