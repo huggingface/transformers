@@ -436,6 +436,16 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
         )
         return config
 
+    def extra_repr(self) -> str:
+        """Overwriting `nn.Linear.extra_repr` to include new parameters."""
+        return "in_features={}, out_features={}, out_additional_features={}, bias={}, partially_freeze={}".format(
+            self.in_features,
+            self.out_features,
+            self.out_additional_features,
+            self.bias is not None,
+            self.partially_freeze,
+        )
+
     @classmethod
     def from_config(cls, config):
         return cls(**config)
@@ -971,10 +981,10 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         attention_mask: Optional[tf.Tensor] = None,
         image_hidden_states: Optional[tf.Tensor] = None,
         image_attention_mask: Optional[tf.Tensor] = None,
+        cross_attention_gate: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
-        no_images: Optional[bool] = False,
     ) -> Tuple[tf.Tensor, Optional[Tuple[tf.Tensor, tf.Tensor]]]:
         """
         Args:
@@ -996,6 +1006,11 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
                 " conditioned on."
             )
 
+        if cross_attention_gate is None:
+            raise ValueError(
+                "`cross_attention_gate` is required for Idefics cross attention module to zero-out the cross-attention hidden_states attending to no images."
+            )
+
         if past_key_value is not None:
             raise NotImplementedError("Past key value states are not implemented for Idefics cross attention module.")
 
@@ -1011,10 +1026,14 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
         )
         hidden_states = tf.nn.dropout(hidden_states, rate=self.config)
-        # when there are no images the model is used in pure language mode
-        gate = 0 if no_images else 1
-        hidden_states = residual + gate * self.act_cross_attn(self.alpha_cross_attn) * hidden_states
+        mask = tf.cast(cross_attention_gate == 0, dtype=hidden_states.dtype)
+        # Expand dimensions of mask to match hidden_states
+        mask = tf.expand_dims(mask, -1)
+        hidden_states = hidden_states * mask
 
+        # when there are no images the model is used in pure language mode
+        #gate = 0 if no_images else 1
+        hidden_states = residual +  self.act_cross_attn(self.alpha_cross_attn) * hidden_states
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1351,12 +1370,15 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         )
         # # Hack to use the model in full language modeling mode
         # image_attention_mask = tf.zeros((batch_size, seq_length, 1), dtype=tf.int32)
-        # Make image_attention_mask compatible with hidden states
-        if image_attention_mask is not None and pixel_values is not None:
-            text_seq_len = shape_list(image_attention_mask)[1]
-            image_attention_mask = tf.expand_dims(image_attention_mask, -1)
-            image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
-            image_attention_mask = tf.reshape(
+
+        # this is to account for the dummy inputs
+        if pixel_values is not None and len(pixel_values.shape) == 4 and image_attention_mask is None:
+            image_attention_mask = tf.zeros((batch_size, seq_length, 1), dtype=tf.int32)
+
+        text_seq_len = shape_list(image_attention_mask)[1]
+        image_attention_mask = tf.expand_dims(image_attention_mask, -1)
+        image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
+        image_attention_mask = tf.reshape(
                 image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len)
             )
 
@@ -1369,7 +1391,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         else:
             image_attention_mask = None
 
-        # TODO: Alazar, we are missing cross_attention_gate and it is also not being passed to gated cross attention layer
+        cross_attention_gate = tf.squeeze(tf.cast(tf.reduce_any(image_attention_mask == 0, axis=-1), dtype=self.dtype), axis=1)
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
@@ -1407,9 +1429,9 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
                 past_key_value,
                 image_hidden_states,
                 image_attention_mask,
+                cross_attention_gate,
                 output_attentions,
                 use_cache,
-                no_images,
                 layer_idx,
                 cross_layer_interval,
                 gated_cross_attn_layers,
@@ -1422,10 +1444,10 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
                         attention_mask=attention_mask,
                         image_hidden_states=image_hidden_states,
                         image_attention_mask=image_attention_mask,
+                        cross_attention_gate=cross_attention_gate,
                         output_attentions=output_attentions,
                         use_cache=use_cache,
                         past_key_value=None,  # not implemented
-                        no_images=no_images,
                     )
                     hidden_states = outputs[0]
 
@@ -1473,9 +1495,9 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
                     past_key_value=past_key_value,
                     image_hidden_states=image_hidden_states,
                     image_attention_mask=image_attention_mask,
+                    cross_attention_gate=cross_attention_gate,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
-                    no_images=no_images,
                     layer_idx=idx,
                     cross_layer_interval=self.cross_layer_interval,
                     gated_cross_attn_layers=self.gated_cross_attn_layers,
