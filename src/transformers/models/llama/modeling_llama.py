@@ -400,9 +400,7 @@ class LlamaAttention(nn.Module):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            
-            kv_seq_len += past_key_value.seen_tokens
-        
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -1053,20 +1051,6 @@ class LlamaModel(LlamaPreTrainedModel):
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        # elif self._use_sdpa and not output_attentions:
-        #     # output_attentions=True can not be supported when using SDPA, and we fall back on
-        #     # the manual implementation that requires a 4D causal mask in all cases.
-        #     attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
-        #         attention_mask,
-        #         (batch_size, seq_length),
-        #         inputs_embeds,
-        #         past_key_values_length,
-        #     )
-        # else:
-        #     # 4d mask is passed through the layers
-        #     attention_mask = _prepare_4d_causal_attention_mask(
-        #         attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
-        #     )
 
         # embed positions
         hidden_states = inputs_embeds
