@@ -129,8 +129,6 @@ class DynamicCache(Cache):
             self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
             self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
 
-        if cache_kwargs is not None:
-            return  self.key_cache[layer_idx], self.value_cache[layer_idx],cache_kwargs.get("attention_mask")
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
@@ -269,6 +267,7 @@ class SinkCache(Cache):
         cos = cache_kwargs.get("cos")
         partial_rotation_size = cache_kwargs.get("partial_rotation_size")
         using_rope = cos is not None and sin is not None
+
         # Update the number of seen tokens
         if layer_idx == 0:
             self.seen_tokens += key_states.shape[-2]
