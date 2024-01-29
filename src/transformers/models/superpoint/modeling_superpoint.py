@@ -179,15 +179,13 @@ class SuperPointInterestPointDecoder(nn.Module):
         self.conv_score_b = nn.Conv2d(self.hidden_size, self.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0)
 
     def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Compute the dense keypoint scores
-        scores = self.get_scores(encoded)
-        # Extract keypoints
-        keypoints, scores = self.extract_keypoints(scores)
+        scores = self.__get_pixel_scores(encoded)
+        keypoints, scores = self.__extract_keypoints(scores)
 
         return keypoints, scores
 
-    def get_scores(self, encoded: torch.Tensor) -> torch.Tensor:
-        """Compute the dense keypoint scores"""
+    def __get_pixel_scores(self, encoded: torch.Tensor) -> torch.Tensor:
+        """Based on the encoder output, compute the scores for each pixel of the image"""
         scores = self.relu(self.conv_score_a(encoded))
         scores = self.conv_score_b(scores)
         scores = torch.nn.functional.softmax(scores, 1)[:, :-1]
@@ -197,7 +195,8 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = simple_nms(scores, self.nms_radius)
         return scores
 
-    def extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation"""
         _, height, width = scores.shape
 
         # Threshold keypoints by score value
@@ -254,21 +253,20 @@ class SuperPointDescriptorDecoder(nn.Module):
             padding=0,
         )
 
-    def forward(self, encoded, keypoints) -> torch.Tensor:
-        """Compute the dense descriptors"""
+    def forward(self, encoded: torch.Tensor, keypoints: torch.Tensor) -> torch.Tensor:
+        """Based on the encoder output and the keypoints, compute the descriptors for each keypoint"""
         descriptors = self.conv_descriptor_b(self.relu(self.conv_descriptor_a(encoded)))
         descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
 
-        # Extract descriptors
-        descriptors = self.sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
+        descriptors = self.__sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
 
-        # From [descriptor_dim, num_keypoints] to [num_keypoints, descriptor_dim]
+        # [descriptor_dim, num_keypoints] -> [num_keypoints, descriptor_dim]
         descriptors = torch.transpose(descriptors, 0, 1)
 
         return descriptors
 
     @staticmethod
-    def sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
+    def __sample_descriptors(keypoints, descriptors, scale: int = 8) -> torch.Tensor:
         """Interpolate descriptors at keypoint locations"""
         batch_size, num_channels, height, width = descriptors.shape
         keypoints = keypoints - scale / 2 + 0.5
