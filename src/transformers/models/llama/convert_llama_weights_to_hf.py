@@ -302,7 +302,7 @@ def main():
         "--llama_version",
         choices=["v1", "v2", "code"],
         help="Specifies which LLaMa version to use, as each version has a different maximum context length. LLaMa v1 has a maximum context length of 2048, LLaMa v2 has a maximum context length of 4096, and CodeLLaMa has a maximum context length of 16384. Defaults to v1.",
-    )    
+    )
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
