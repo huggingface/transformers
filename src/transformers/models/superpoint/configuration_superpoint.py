@@ -35,10 +35,11 @@ class SuperPointConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_sizes (`List[int]`, *optional*, defaults to `[64, 64, 128, 128, 256]`):
-            The number of channels in each convolutional layer.
-        descriptor_dim (`int`, *optional*, defaults to 256):
-            The dimension of the descriptor.
+        encoder_hidden_sizes (`List`, *optional*, defaults to `[64, 64, 128, 128]`):
+            The number of channels in each convolutional layer in the encoder.
+        decoder_hidden_size (`int`, *optional*, defaults to 256): The hidden size of the decoder.
+        keypoint_decoder_dim (`int`, *optional*, defaults to 65): The output dimension of the keypoint decoder.
+        descriptor_decoder_dim (`int`, *optional*, defaults to 256): The output dimension of the descriptor decoder.
         keypoint_threshold (`float`, *optional*, defaults to 0.005):
             The threshold to use for extracting keypoints.
         max_keypoints (`int`, *optional*, defaults to -1):
@@ -66,8 +67,10 @@ class SuperPointConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_sizes: List[int] = [64, 64, 128, 128, 256],
-        descriptor_dim: int = 256,
+        encoder_hidden_sizes: List[int] = [64, 64, 128, 128],
+        decoder_hidden_size: int = 256,
+        keypoint_decoder_dim: int = 65,
+        descriptor_decoder_dim: int = 256,
         keypoint_threshold: float = 0.005,
         max_keypoints: int = -1,
         nms_radius: int = 4,
@@ -75,8 +78,10 @@ class SuperPointConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        self.hidden_sizes = hidden_sizes
-        self.descriptor_dim = descriptor_dim
+        self.encoder_hidden_sizes = encoder_hidden_sizes
+        self.decoder_hidden_size = decoder_hidden_size
+        self.keypoint_decoder_dim = keypoint_decoder_dim
+        self.descriptor_decoder_dim = descriptor_decoder_dim
         self.keypoint_threshold = keypoint_threshold
         self.max_keypoints = max_keypoints
         self.nms_radius = nms_radius
