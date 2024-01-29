@@ -118,13 +118,18 @@ class SuperPointEncoder(nn.Module):
         super().__init__()
         # SuperPoint uses 1 channel images
         self.input_dim = 1
-        self.hidden_sizes = config.encoder_hidden_sizes
 
         conv_blocks = []
-        conv_blocks.append(SuperPointConvBlock(self.input_dim, self.hidden_sizes[0], add_pooling=True))
-        for i in range(1, len(self.hidden_sizes) - 1):
-            conv_blocks.append(SuperPointConvBlock(self.hidden_sizes[i - 1], self.hidden_sizes[i], add_pooling=True))
-        conv_blocks.append(SuperPointConvBlock(self.hidden_sizes[-2], self.hidden_sizes[-1], add_pooling=False))
+        conv_blocks.append(SuperPointConvBlock(self.input_dim, config.encoder_hidden_sizes[0], add_pooling=True))
+        for i in range(1, len(config.encoder_hidden_sizes) - 1):
+            conv_blocks.append(
+                SuperPointConvBlock(
+                    config.encoder_hidden_sizes[i - 1], config.encoder_hidden_sizes[i], add_pooling=True
+                )
+            )
+        conv_blocks.append(
+            SuperPointConvBlock(config.encoder_hidden_sizes[-2], config.encoder_hidden_sizes[-1], add_pooling=False)
+        )
         self.conv_blocks = nn.ModuleList(conv_blocks)
 
     def forward(
@@ -160,8 +165,6 @@ class SuperPointInterestPointDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.hidden_size = config.decoder_hidden_size
-        self.keypoint_decoder_dim = config.keypoint_decoder_dim
         self.keypoint_threshold = config.keypoint_threshold
         self.max_keypoints = config.max_keypoints
         self.nms_radius = config.nms_radius
@@ -171,12 +174,14 @@ class SuperPointInterestPointDecoder(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.conv_score_a = nn.Conv2d(
             config.encoder_hidden_sizes[-1],
-            self.hidden_size,
+            config.decoder_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
         )
-        self.conv_score_b = nn.Conv2d(self.hidden_size, self.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0)
+        self.conv_score_b = nn.Conv2d(
+            config.decoder_hidden_size, config.keypoint_decoder_dim, kernel_size=1, stride=1, padding=0
+        )
 
     def forward(self, encoded: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         scores = self.__get_pixel_scores(encoded)
@@ -229,25 +234,19 @@ class SuperPointDescriptorDecoder(nn.Module):
 
     def __init__(self, config: SuperPointConfig) -> None:
         super().__init__()
-        self.hidden_size = config.decoder_hidden_size
-        self.descriptor_decoder_dim = config.descriptor_decoder_dim
-        self.keypoint_threshold = config.keypoint_threshold
-        self.max_keypoints = config.max_keypoints
-        self.nms_radius = config.nms_radius
-        self.border_removal_distance = config.border_removal_distance
 
         self.relu = nn.ReLU(inplace=True)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
         self.conv_descriptor_a = nn.Conv2d(
             config.encoder_hidden_sizes[-1],
-            self.hidden_size,
+            config.decoder_hidden_size,
             kernel_size=3,
             stride=1,
             padding=1,
         )
         self.conv_descriptor_b = nn.Conv2d(
-            self.hidden_size,
-            self.descriptor_decoder_dim,
+            config.decoder_hidden_size,
+            config.descriptor_decoder_dim,
             kernel_size=1,
             stride=1,
             padding=0,
