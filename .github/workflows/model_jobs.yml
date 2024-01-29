@@ -3,7 +3,7 @@ name: model jobs
 on:
   workflow_call:
     inputs:
-      folders:
+      folder_slices:
         required: true
         type: string
       machine_type:
@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        folders: ${{ fromJson(inputs.folders)[inputs.slice_id] }}
+        folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
         machine_type: ['${{ inputs.machine_type }}']
     runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
     container:
@@ -44,9 +44,9 @@ jobs:
       - name: Echo info
         shell: bash
         run: |
-          echo "${{ inputs.folders }}"
+          echo "${{ inputs.folder_slices }}"
           echo "${{ matrix.folders }}"
-          echo "${{ toJson(fromJson(inputs.folders)[0]) }}"
+          echo "${{ toJson(fromJson(inputs.folder_slices)[0]) }}"
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
