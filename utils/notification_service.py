@@ -852,6 +852,47 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 
 if __name__ == "__main__":
+
+    # ==============================================================================================================
+    # TODO: remove this block
+
+    github_actions_jobs = get_jobs(
+        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    )
+
+    info_dir = os.path.join(os.getcwd(), "jobs_and_artifacts")
+    os.makedirs(info_dir, exist_ok=True)
+
+    with open(os.path.join(info_dir, "jobs.json"), "w", encoding="UTF-8") as fp:
+        json.dump(github_actions_jobs, fp, ensure_ascii=False, indent=4)
+
+    artifact_names = []
+    directories = filter(os.path.isdir, os.listdir())
+    for directory in directories:
+        artifact_name = directory
+
+        name_parts = artifact_name.split("_postfix_")
+        if len(name_parts) > 1:
+            artifact_name = name_parts[0]
+
+        artifact_names.append(artifact_name)
+
+    with open(os.path.join(info_dir, "artifact_names.json"), "w", encoding="UTF-8") as fp:
+        json.dump(artifact_names, fp, ensure_ascii=False, indent=4)
+
+    artifact_name_to_job_map = {}
+    for job in github_actions_jobs:
+        for step in job["steps"]:
+            if step["name"].startswith("Test suite reports artifacts: "):
+                artifact_name = step["name"][len("Test suite reports artifacts: "):]
+                artifact_name_to_job_map[artifact_name] = job
+                break
+
+    with open(os.path.join(info_dir, "artifact_name_to_job_map.json"), "w", encoding="UTF-8") as fp:
+        json.dump(artifact_name_to_job_map, fp, ensure_ascii=False, indent=4)
+
+    # ==============================================================================================================
+
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
     setup_status = os.environ.get("SETUP_STATUS")
@@ -938,9 +979,10 @@ if __name__ == "__main__":
         Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
 
-    github_actions_jobs = get_jobs(
-        workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-    )
+    # TODO: un-comment this
+    # github_actions_jobs = get_jobs(
+    #     workflow_run_id=os.environ["GITHUB_RUN_ID"], token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+    # )
     github_actions_job_links = {job["name"]: job["html_url"] for job in github_actions_jobs}
 
     artifact_name_to_job_map = {}

@@ -12,7 +12,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - run_scheduled_ci*
+      - run_split_daily_ci_based_on_no_job_name
 
 env:
   HF_HOME: /mnt/cache
@@ -35,7 +35,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -91,7 +91,7 @@ jobs:
       fail-fast: false
       matrix:
         machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -136,167 +136,6 @@ jobs:
           name: ${{ matrix.machine_type }}_run_examples_gpu
           path: /transformers/reports/${{ matrix.machine_type }}_examples_gpu
 
-  run_pipelines_torch_gpu:
-    name: PyTorch pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-pytorch-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run all pipeline tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_torch_pipeline_gpu tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_pipeline_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_torch_pipeline_gpu
-
-  run_pipelines_tf_gpu:
-    name: TensorFlow pipelines
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    container:
-      image: huggingface/transformers-tensorflow-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
-    steps:
-      - name: Update clone
-        working-directory: /transformers
-        run: |
-          git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run all pipeline tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_tests_tf_pipeline_gpu tests/pipelines
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: |
-          cat /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_tests_tf_pipeline_gpu
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_tf_pipeline_gpu
-
-  run_all_tests_torch_cuda_extensions_gpu:
-    name: Torch CUDA extension tests
-    strategy:
-      fail-fast: false
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, daily-ci]
-    needs: setup
-    container:
-      image: huggingface/transformers-pytorch-deepspeed-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Update clone
-        working-directory: /workspace/transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /workspace/transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: Remove cached torch extensions
-        run: rm -rf /github/home/.cache/torch_extensions/
-
-      # To avoid unknown test failures
-      - name: Pre build DeepSpeed *again*
-        working-directory: /workspace
-        run: |
-          python3 -m pip uninstall -y deepspeed
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /workspace/transformers
-        run: |
-          python utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /workspace/transformers
-        run: pip freeze
-
-      - name: Run all tests on GPU
-        working-directory: /workspace/transformers
-        run: |
-          python -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu tests/deepspeed tests/extended
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu/failures_short.txt
-
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
-
   run_extract_warnings:
     name: Extract warnings in CI artifacts
     runs-on: ubuntu-22.04
@@ -305,9 +144,6 @@ jobs:
       setup,
       run_tests_gpu,
       run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
-      run_all_tests_torch_cuda_extensions_gpu
     ]
     steps:
       - name: Checkout transformers
@@ -352,9 +188,6 @@ jobs:
       setup,
       run_tests_gpu,
       run_examples_gpu,
-      run_pipelines_tf_gpu,
-      run_pipelines_torch_gpu,
-      run_all_tests_torch_cuda_extensions_gpu,
       run_extract_warnings
     ]
     steps:
@@ -372,7 +205,7 @@ jobs:
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
-          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
+          CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: scheduled
           CI_SHA: ${{ github.sha }}
@@ -393,3 +226,10 @@ jobs:
         with:
           name: prev_ci_results
           path: prev_ci_results
+
+      - name: Other artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: jobs_and_artifacts
+          path: jobs_and_artifacts
