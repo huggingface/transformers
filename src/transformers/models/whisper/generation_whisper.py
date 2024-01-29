@@ -1197,8 +1197,8 @@ class WhisperGenerationMixin:
 
     def detect_language(
         self,
-        input_features: Optional[torch.FloatTensor],
-        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]],
+        input_features: Optional[torch.FloatTensor] = None,
+        encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]] = None,
         generation_config: Optional[GenerationConfig] = None,
         num_segment_frames: int = 3000,
     ) -> torch.Tensor:

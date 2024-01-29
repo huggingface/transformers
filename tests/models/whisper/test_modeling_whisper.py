@@ -38,7 +38,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_flax_available, is_torch_available
+from huggingface_hub import hf_hub_download
+from transformers.utils import cached_property, is_flax_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -140,6 +141,10 @@ if is_torch_available():
                 raise ValueError("Dummy logit processor is incorrectly set up. Scores should not be all inf.")
 
             return scores
+
+
+if is_torchaudio_available():
+    import torchaudio
 
 
 if is_flax_available():
@@ -2019,6 +2024,31 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertEqual(output_without_prompt, expected_without_prompt)
         self.assertEqual(output_with_prompt, expected_with_prompt)
+
+    @slow
+    def test_language_detection(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        input_speech = self._load_datasamples(4)[-1:]
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        lang_id = model.detect_language(input_features)[0].item()
+
+        ids_to_lang = {v: k for k,v in model.generation_config.lang_to_id.items()}
+
+        assert ids_to_lang[lang_id] == "<|en|>"
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
+
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        lang_id = model.detect_language(input_features)[0].item()
+
+        assert ids_to_lang[lang_id] == "<|hi|>"
 
     @slow
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
