@@ -70,31 +70,18 @@ jobs:
         run: |
           nvidia-smi
 
-  run_tests_single_gpu:
+  run_tests_gpu:
     name: " "
     needs: setup
     strategy:
       fail-fast: false
       matrix:
+        machine_type: [single-gpu, multi-gpu]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      machine_type: single-gpu
-      slice_id: ${{ matrix.slice_id }}
-    secrets: inherit
-
-  run_tests_multi_gpu:
-    name: " "
-    needs: setup
-    strategy:
-      fail-fast: false
-      matrix:
-        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
-    uses: ./.github/workflows/model_jobs.yml
-    with:
-      folder_slices: ${{ needs.setup.outputs.folder_slices }}
-      machine_type: multi-gpu
+      machine_type: ${{ matrix.machine_type }}
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
 
@@ -316,8 +303,7 @@ jobs:
     if: always()
     needs: [
       setup,
-      run_tests_single_gpu,
-      run_tests_multi_gpu,
+      run_tests_gpu,
       run_examples_gpu,
       run_pipelines_tf_gpu,
       run_pipelines_torch_gpu,
@@ -364,8 +350,7 @@ jobs:
     if: always()
     needs: [
       setup,
-      run_tests_single_gpu,
-      run_tests_multi_gpu,
+      run_tests_gpu,
       run_examples_gpu,
       run_pipelines_tf_gpu,
       run_pipelines_torch_gpu,
