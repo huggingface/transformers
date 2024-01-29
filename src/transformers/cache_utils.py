@@ -365,8 +365,9 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
+        position_ids = cache_kwargs.get("position_ids")
         # position_ids = cache_kwargs.get("position_ids")[0] is faster?
-        position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
+        # position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
         
         k_out = self.key_cache
         v_out = self.value_cache
