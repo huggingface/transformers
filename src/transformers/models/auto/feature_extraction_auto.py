@@ -106,6 +106,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("whisper", "WhisperFeatureExtractor"),
         ("xclip", "CLIPFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
+        ("zoedepth", "ZoeDepthFeatureExtractor"),
     ]
 )
 

@@ -961,6 +961,7 @@ _import_structure = {
     "models.xmod": ["XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP", "XmodConfig"],
     "models.yolos": ["YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP", "YolosConfig"],
     "models.yoso": ["YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP", "YosoConfig"],
+    "models.zoedepth": ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
         "AudioClassificationPipeline",
@@ -3687,6 +3688,15 @@ else:
             "YosoPreTrainedModel",
         ]
     )
+    _import_structure["models.zoedepth"].extend(
+        [
+            "ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ZoeDepthForDepthEstimation",
+            "ZoeDepthForSemanticSegmentation",
+            "ZoeDepthModel",
+            "ZoeDepthPreTrainedModel",
+        ]
+    )
     _import_structure["optimization"] = [
         "Adafactor",
         "AdamW",
@@ -5685,6 +5695,7 @@ if TYPE_CHECKING:
     from .models.xmod import XMOD_PRETRAINED_CONFIG_ARCHIVE_MAP, XmodConfig
     from .models.yolos import YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP, YolosConfig
     from .models.yoso import YOSO_PRETRAINED_CONFIG_ARCHIVE_MAP, YosoConfig
+    from .models.zoedepth import ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP, ZoeDepthConfig
 
     # Pipelines
     from .pipelines import (
@@ -7986,6 +7997,13 @@ if TYPE_CHECKING:
             YosoLayer,
             YosoModel,
             YosoPreTrainedModel,
+        )
+        from .models.zoedepth import (
+            ZOEDEPTH_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ZoeDepthForDepthEstimation,
+            ZoeDepthForSemanticSegmentation,
+            ZoeDepthModel,
+            ZoeDepthPreTrainedModel,
         )
 
         # Optimization
