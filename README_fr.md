@@ -71,11 +71,11 @@ limitations under the License.
 
 Ces modèles peuvent être appliqués à :
 
-* 📝 Texte, pour des tâches telles que la classification de texte, l'extraction d'informations, la réponse aux questions, la résumé, la traduction et la génération de texte, dans plus de 100 langues.
+* 📝 Texte, pour des tâches telles que la classification de texte, l'extraction d'informations, la réponse aux questions, le résumé, la traduction et la génération de texte, dans plus de 100 langues.
 * 🖼️ Images, pour des tâches telles que la classification d'images, la détection d'objets et la segmentation.
 * 🗣️ Audio, pour des tâches telles que la reconnaissance vocale et la classification audio.
 
-Les modèles de transformer peuvent également effectuer des tâches sur **plusieurs modalités combinées**, telles que la réponse aux questions sur table, la reconnaissance optique de caractères, l'extraction d'informations à partir de documents numérisés, la classification vidéo et la réponse aux questions visuelles.
+Les modèles de transformer peuvent également effectuer des tâches sur **plusieurs modalités combinées**, telles que la réponse aux questions sur des tableaux, la reconnaissance optique de caractères, l'extraction d'informations à partir de documents numérisés, la classification vidéo et la réponse aux questions visuelles.
 
 🤗 Transformers fournit des API pour télécharger et utiliser rapidement ces modèles pré-entraînés sur un texte donné, les affiner sur vos propres ensembles de données, puis les partager avec la communauté sur notre [hub de modèles](https://huggingface.co/models). En même temps, chaque module Python définissant une architecture est complètement indépendant et peut être modifié pour permettre des expériences de recherche rapides.
 
@@ -83,7 +83,7 @@ Les modèles de transformer peuvent également effectuer des tâches sur **plusi
 
 ## Démos en ligne
 
-Vous pouvez tester la plupart de nos modèles directement sur leurs pages du [hub de modèles](https://huggingface.co/models). Nous proposons également [l'hébergement privé de modèles, la version et une API d'inférence](https://huggingface.co/pricing) pour des modèles publics et privés.
+Vous pouvez tester la plupart de nos modèles directement sur leurs pages du [hub de modèles](https://huggingface.co/models). Nous proposons également [l'hébergement privé de modèles, le versionning et une API d'inférence](https://huggingface.co/pricing) pour des modèles publics et privés.
 
 Voici quelques exemples :
 
@@ -120,7 +120,7 @@ Dans les tâches multimodales :
 
 ## 100 projets utilisant Transformers
 
-Transformers sont plus qu'une boîte à outils pour utiliser des modèles pré-entraînés : c'est une communauté de projets construits autour d'elle et du Hub Hugging Face. Nous voulons que Transformers permette aux développeurs, chercheurs, étudiants, professeurs, ingénieurs et à quiconque d'imaginer et de réaliser leurs projets de rêve.
+Transformers est plus qu'une boîte à outils pour utiliser des modèles pré-entraînés : c'est une communauté de projets construits autour de lui et du Hub Hugging Face. Nous voulons que Transformers permette aux développeurs, chercheurs, étudiants, professeurs, ingénieurs et à quiconque d'imaginer et de réaliser leurs projets de rêve.
 
 Afin de célébrer les 100 000 étoiles de transformers, nous avons décidé de mettre en avant la communauté et avons créé la page [awesome-transformers](./awesome-transformers.md) qui répertorie 100 projets incroyables construits autour de transformers.
 
@@ -147,7 +147,7 @@ Pour utiliser immédiatement un modèle sur une entrée donnée (texte, image, a
 
 La deuxième ligne de code télécharge et met en cache le modèle pré-entraîné utilisé par le pipeline, tandis que la troisième l'évalue sur le texte donné. Ici, la réponse est "positive" avec une confiance de 99,97%.
 
-De nombreuses tâches ont un pipeline pré-entraîné prêt à l'emploi, en NLP, mais aussi en vision par ordinateur et en parole. Par exemple, nous pouvons facilement extraire les objets détectés dans une image :
+De nombreuses tâches ont une pipeline pré-entraîné prêt à l'emploi, en NLP, mais aussi en vision par ordinateur et en parole. Par exemple, nous pouvons facilement extraire les objets détectés dans une image :
 
 ```python
 >>> import requests
@@ -231,7 +231,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
 
 1. Choisissez le bon framework pour chaque partie de la vie d'un modèle :
     - Entraînez des modèles de pointe en 3 lignes de code.
-    - Déplacez un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
+    - Trasnférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
     - Choisissez facilement le bon framework pour l'entraînement, l'évaluation et la production.
     
 1. Personnalisez facilement un modèle ou un exemple selon vos besoins :
@@ -551,7 +551,7 @@ Ces implémentations ont été testées sur plusieurs ensembles de données (voi
 | [Résumé des tâches](https://huggingface.co/docs/transformers/task_summary) | Tâches prises en charge par les 🤗 Transformers |
 | [Tutoriel de prétraitement](https://huggingface.co/docs/transformers/preprocessing) | Utilisation de la classe `Tokenizer` pour préparer les données pour les modèles |
 | [Entraînement et ajustement fin](https://huggingface.co/docs/transformers/training) | Utilisation des modèles fournis par les 🤗 Transformers dans une boucle d'entraînement PyTorch/TensorFlow et de l'API `Trainer` |
-| [Tour rapide : Scripts d'ajustement fin/utilisation](https://github.com/huggingface/transformers/tree/main/examples) | Scripts d'exemple pour ajuster finement les modèles sur une large gamme de tâches |
+| [Tour rapide : Scripts d'ajustement fin/d'utilisation](https://github.com/huggingface/transformers/tree/main/examples) | Scripts d'exemple pour ajuster finement les modèles sur une large gamme de tâches |
 | [Partage et téléversement de modèles](https://huggingface.co/docs/transformers/model_sharing) | Téléchargez et partagez vos modèles ajustés avec la communauté |
 
 ## Citation
