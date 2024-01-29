@@ -66,8 +66,7 @@ jobs:
         # TODO: a script to prepare `folder_slices`
         # TODO: prepare the number of splits to be used in `run_tests_single_gpu` and `run_tests_multi_gpu`
         run: |
-          echo "matrix=$(python3 ../utils/split_model_tests.py)" >> $GITHUB_OUTPUT
-          echo "folder_slices=$(python3 ../utils/split_model_tests_2.py)" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ../utils/split_model_tests.py)" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
