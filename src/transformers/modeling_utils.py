@@ -3916,14 +3916,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ:
-            if quantization_config.version == "exllama":
-                model = post_init_awq_exllama_modules(model)
-                model._awq_uses_exllama = True
-
-            if quantization_config.do_fuse:
-                model = fuse_awq_modules(model, quantization_config)
-                model._awq_is_fused = True
+        if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ and quantization_config.do_fuse:
+            model = fuse_awq_modules(model, quantization_config)
+            model._awq_is_fused = True
 
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
@@ -3935,6 +3930,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **device_map_kwargs)
+
+        if quantization_config is not None and quantization_config.quant_method == QuantizationMethod.AWQ and quantization_config.version == "exllama":
+            model = post_init_awq_exllama_modules(model)
+            model._awq_uses_exllama = True
 
         if quantization_method_from_args == QuantizationMethod.GPTQ:
             if quantization_config.tokenizer is None:
