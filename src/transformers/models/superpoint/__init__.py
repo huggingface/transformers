@@ -42,7 +42,6 @@ else:
         "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SuperPointModel",
         "SuperPointPreTrainedModel",
-        "SuperPointForInterestPointDescription",
     ]
 
 
@@ -68,7 +67,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_superpoint import (
             SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SuperPointForInterestPointDescription,
             SuperPointModel,
             SuperPointPreTrainedModel,
         )
