@@ -781,7 +781,6 @@ class VMambaModel(VMambaPreTrainedModel):
         self.norm = torch.nn.LayerNorm(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
 
-        # self.apply(self._init_weights)
 
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

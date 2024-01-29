@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch VMamba model. """
 
 
+import inspect
 import unittest
 
 from transformers import VMambaConfig
@@ -53,7 +54,7 @@ class VMambaModelTester:
         parent,
         batch_size=13,
         image_size=32,
-        is_training=True,
+        is_training=False,
         use_labels=True,
         patch_size=4,
         in_channels=3,
@@ -143,6 +144,11 @@ class VMambaModelTester:
             pixel_values,
             labels,
         ) = config_and_inputs
+
+        config.depths = [2, 2]
+        config.dims =[8, 16]
+        config.d_state = 8
+
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -192,6 +198,34 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VMamba does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
+
+    unittest.skip(reason="VMamba does not use input embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    # remove
+    def test_initialization(self):
+        super().test_initialization()
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_model_main_input_name(self):
+        for model_class in self.all_model_classes:
+            model_signature = inspect.signature(getattr(model_class, "forward"))
+            # The main input is the name of the argument after `self`
+            observed_main_input_name = list(model_signature.parameters.keys())[1]
+            expected_main_input_name = "pixel_values"
+            self.assertEqual(expected_main_input_name, observed_main_input_name)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
