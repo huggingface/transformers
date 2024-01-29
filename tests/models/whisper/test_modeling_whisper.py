@@ -25,6 +25,7 @@ import unittest
 
 import numpy as np
 import pytest
+from huggingface_hub import hf_hub_download
 
 import transformers
 from transformers import WhisperConfig
@@ -38,7 +39,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from huggingface_hub import hf_hub_download
 from transformers.utils import cached_property, is_flax_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
@@ -2035,7 +2035,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         lang_id = model.detect_language(input_features)[0].item()
 
-        ids_to_lang = {v: k for k,v in model.generation_config.lang_to_id.items()}
+        ids_to_lang = {v: k for k, v in model.generation_config.lang_to_id.items()}
 
         assert ids_to_lang[lang_id] == "<|en|>"
 
@@ -2049,6 +2049,89 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         lang_id = model.detect_language(input_features)[0].item()
 
         assert ids_to_lang[lang_id] == "<|hi|>"
+
+    @slow
+    def test_default_multilingual_transcription_short_form(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
+
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        # model.generation_config.forced_decoder_ids defaults to [1, null] for lang_token
+        sequences = model.generate(input_features)
+
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
+
+        assert (
+            transcription
+            == "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>"
+        )
+
+        # set forced_decoder_ids to English
+        model.generation_config.forced_decoder_ids[0][-1] = 50259
+
+        sequences = model.generate(input_features)
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)
+
+        assert (
+            transcription
+            == "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> MIRCHI MET, which is the name of the Bible.<|endoftext|>"
+        )
+
+        # even if forced_decoder_ids defaults to lang_token==English, setting `language=None` triggers lang_detection
+        sequences = model.generate(input_features, language=None)
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
+
+        assert (
+            transcription
+            == "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>"
+        )
+
+    @slow
+    def test_default_multilingual_transcription_long_form(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v2")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v2")
+        model.to(torch_device)
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio)
+
+        input_speech = input_speech.repeat(1, 10).numpy()
+        input_features = processor(
+            input_speech, return_tensors="pt", padding="longest", truncation=False
+        ).input_features.to(torch_device)
+
+        # model.generation_config.forced_decoder_ids defaults to [1, null] for lang_token
+        sequences = model.generate(input_features)
+
+        transcription = processor.batch_decode(sequences)[0]
+
+        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
+
+        # set forced_decoder_ids to English
+        model.generation_config.forced_decoder_ids[0][-1] = 50259
+
+        sequences = model.generate(input_features)
+        transcription = processor.batch_decode(sequences)[0]
+
+        assert (
+            transcription
+            == " How many different species are there in the chilli? How many different species are there in the chili?"
+        )
+
+        # even if forced_decoder_ids defaults to lang_token==English, setting `language=None` triggers lang_detection
+        sequences = model.generate(input_features, language=None)
+        transcription = processor.batch_decode(sequences)[0]
+
+        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
 
     @slow
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
