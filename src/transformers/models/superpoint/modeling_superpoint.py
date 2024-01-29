@@ -255,7 +255,7 @@ class SuperPointDescriptorDecoder(nn.Module):
     def forward(self, encoded: torch.Tensor, keypoints: torch.Tensor) -> torch.Tensor:
         """Based on the encoder output and the keypoints, compute the descriptors for each keypoint"""
         descriptors = self.conv_descriptor_b(self.relu(self.conv_descriptor_a(encoded)))
-        descriptors = torch.nn.functional.normalize(descriptors, p=2, dim=1)
+        descriptors = nn.functional.normalize(descriptors, p=2, dim=1)
 
         descriptors = self.__sample_descriptors(keypoints[None], descriptors[0][None], 8)[0]
 
