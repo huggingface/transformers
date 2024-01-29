@@ -454,10 +454,7 @@ class SuperPointModel(SuperPointPreTrainedModel):
             descriptors[i, : _descriptors.shape[0]] = _descriptors
             mask[i, : _scores.shape[0]] = 1
 
-        if output_hidden_states:
-            hidden_states = encoder_outputs.hidden_states if return_dict else encoder_outputs[1]
-        else:
-            hidden_states = None
+        hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:
             return tuple(
                 v for v in [keypoints, scores, descriptors, mask, last_hidden_state, hidden_states] if v is not None
