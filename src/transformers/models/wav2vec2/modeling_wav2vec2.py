@@ -37,6 +37,7 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -1333,7 +1334,12 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
-                state_dict = torch.load(weight_path, map_location="cpu")
+                weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+                state_dict = torch.load(
+                    weight_path,
+                    map_location="cpu",
+                    **weights_only_kwarg,
+                )
 
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted

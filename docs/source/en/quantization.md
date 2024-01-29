@@ -345,7 +345,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
 
-Once a model is quantized to 4-bit, you can't push the quantized weights to the Hub.
+If you have `bitsandbytes>=0.41.3`, you can serialize 4-bit models and push them on Hugging Face Hub. Simply call `model.push_to_hub()` after loading it in 4-bit precision. You can also save the serialized 4-bit models locally with `model.save_pretrained()` command.  
 
 </hfoption>
 </hfoptions>
@@ -468,6 +468,7 @@ Try 4-bit quantization in this [notebook](https://colab.research.google.com/driv
 
 This section explores some of the specific features of 4-bit models, such as changing the compute data type, using the Normal Float 4 (NF4) data type, and using nested quantization.
 
+
 #### Compute data type
 
 To speedup computation, you can change the data type from float32 (the default value) to bf16 using the `bnb_4bit_compute_dtype` parameter in [`BitsAndBytesConfig`]:
@@ -548,6 +549,7 @@ The benchmarks indicate AWQ quantization is the fastest for inference, text gene
 The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7B-OpenOrca-AWQ) model was benchmarked with `batch_size=1` with and without fused modules.
 
 <figcaption class="text-center text-gray-500 text-lg">Unfused module</figcaption>
+
 |   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
 |-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
 |            1 |               32 |              32 |            60.0984 |           38.4537 | 4.50 GB (5.68%) |
@@ -559,6 +561,7 @@ The [TheBloke/Mistral-7B-OpenOrca-AWQ](https://huggingface.co/TheBloke/Mistral-7
 |            1 |             2048 |            2048 |          2927.33   |           35.2676 | 5.73 GB (7.23%) |
 
 <figcaption class="text-center text-gray-500 text-lg">Fused module</figcaption>
+
 |   Batch Size |   Prefill Length |   Decode Length |   Prefill tokens/s |   Decode tokens/s | Memory (VRAM)   |
 |-------------:|-----------------:|----------------:|-------------------:|------------------:|:----------------|
 |            1 |               32 |              32 |            81.4899 |           80.2569 | 4.00 GB (5.05%) |

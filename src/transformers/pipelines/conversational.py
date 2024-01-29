@@ -215,12 +215,12 @@ class ConversationalPipeline(Pipeline):
     >>> conversation = Conversation("I'm looking for a movie - what's your favourite one?")
     >>> conversation = chatbot(conversation)
     >>> conversation.messages[-1]["content"]
-    ' I don't really have a favorite movie, but I do like action movies. What about you?'
+    "I don't really have a favorite movie, but I do like action movies. What about you?"
 
     >>> conversation.add_message({"role": "user", "content": "That's interesting, why do you like action movies?"})
     >>> conversation = chatbot(conversation)
     >>> conversation.messages[-1]["content"]
-    ' I think it's just because they're so fast-paced and action-fantastic.'
+    " I think it's just because they're so fast-paced and action-fantastic."
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)

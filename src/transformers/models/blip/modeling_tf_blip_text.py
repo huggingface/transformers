@@ -1060,7 +1060,8 @@ class TFBlipTextLMHeadModel(TFBlipTextPreTrainedModel):
             labels = labels[:, 1:]
             labels = tf.reshape(labels, (-1,))
             # Keras won't give us label smoothing for sparse CE, so we de-sparsify things here
-            one_hot_labels = tf.one_hot(labels, depth=self.config.vocab_size, dtype=tf.float32)
+            # Use relu to clamp masked labels at 0 to avoid NaN (we will be zeroing those out later anyway)
+            one_hot_labels = tf.one_hot(tf.nn.relu(labels), depth=self.config.vocab_size, dtype=tf.float32)
             loss_fct = tf.keras.losses.CategoricalCrossentropy(from_logits=True, label_smoothing=0.1, reduction="none")
             masked_positions = tf.cast(tf.not_equal(labels, -100), dtype=tf.float32)
             lm_loss = loss_fct(one_hot_labels, shifted_prediction_scores)

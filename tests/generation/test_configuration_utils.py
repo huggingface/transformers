@@ -152,14 +152,13 @@ class GenerationConfigTest(unittest.TestCase):
         """Tests that we refuse to save a generation config that fails validation."""
 
         # setting the temperature alone is invalid, as we also need to set do_sample to True -> throws a warning that
-        # is caught, doesn't save, and raises a warning
+        # is caught, doesn't save, and raises an exception
         config = GenerationConfig()
         config.temperature = 0.5
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with warnings.catch_warnings(record=True) as captured_warnings:
+            with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
-            self.assertEqual(len(captured_warnings), 1)
-            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)
 
         # greedy decoding throws an exception if we try to return multiple sequences -> throws an exception that is
@@ -167,13 +166,12 @@ class GenerationConfigTest(unittest.TestCase):
         config = GenerationConfig()
         config.num_return_sequences = 2
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with warnings.catch_warnings(record=True) as captured_warnings:
+            with self.assertRaises(ValueError) as exc:
                 config.save_pretrained(tmp_dir)
-            self.assertEqual(len(captured_warnings), 1)
-            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue("Fix these issues to save the configuration." in str(exc.exception))
             self.assertTrue(len(os.listdir(tmp_dir)) == 0)
 
-        # final check: no warnings thrown if it is correct, and file is saved
+        # final check: no warnings/exceptions thrown if it is correct, and file is saved
         config = GenerationConfig()
         with tempfile.TemporaryDirectory() as tmp_dir:
             with warnings.catch_warnings(record=True) as captured_warnings:

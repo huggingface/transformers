@@ -751,6 +751,12 @@ class SeamlessM4TModelWithTextInputTest(
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 @require_torch
 class SeamlessM4TGenerationTest(unittest.TestCase):

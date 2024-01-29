@@ -57,7 +57,7 @@ def convert_tf_weight_name_to_pt_weight_name(
           transposed with regards to each other
     """
     if name_scope is not None:
-        if not tf_name.startswith(name_scope):
+        if not tf_name.startswith(name_scope) and "final_logits_bias" not in tf_name:
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
@@ -167,6 +167,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
         from safetensors.torch import load_file as safe_load_file  # noqa: F401
+
+        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -186,7 +188,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            state_dict = torch.load(pt_path, map_location="cpu")
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
 
         pt_state_dict.update(state_dict)
 

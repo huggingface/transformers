@@ -57,6 +57,12 @@ class MaskFormerConfig(PretrainedConfig):
         backbone_config (`Dict`, *optional*):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `swin-base-patch4-window12-384` will be used.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `False`):
+            Whether to use pretrained weights for the backbone.
         decoder_config (`Dict`, *optional*):
             The configuration passed to the transformer decoder model, if unset the base config for `detr-resnet-50`
             will be used.
@@ -114,9 +120,17 @@ class MaskFormerConfig(PretrainedConfig):
         cross_entropy_weight: float = 1.0,
         mask_weight: float = 20.0,
         output_auxiliary_logits: Optional[bool] = None,
+        backbone: Optional[str] = None,
+        use_pretrained_backbone: bool = False,
         **kwargs,
     ):
-        if backbone_config is None:
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
+
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
             backbone_config = SwinConfig(
                 image_size=384,
@@ -136,7 +150,7 @@ class MaskFormerConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         # verify that the backbone is supported
-        if backbone_config.model_type not in self.backbones_supported:
+        if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
             logger.warning_once(
                 f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
                 f"Supported model types: {','.join(self.backbones_supported)}"
@@ -177,6 +191,8 @@ class MaskFormerConfig(PretrainedConfig):
 
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         super().__init__(**kwargs)
 
     @classmethod

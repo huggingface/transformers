@@ -787,7 +787,7 @@ class Mask2FormerLoss(nn.Module):
         Computes the average number of target masks across the batch, for normalization purposes.
         """
         num_masks = sum([len(classes) for classes in class_labels])
-        num_masks_pt = torch.as_tensor([num_masks], dtype=torch.float, device=device)
+        num_masks_pt = torch.as_tensor(num_masks, dtype=torch.float, device=device)
         return num_masks_pt
 
 

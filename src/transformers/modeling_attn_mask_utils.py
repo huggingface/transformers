@@ -132,6 +132,7 @@ class AttentionMaskConverter:
         expanded_attn_mask = self._expand_mask(attention_mask_2d, dtype, tgt_len=input_shape[-1]).to(
             attention_mask_2d.device
         )
+
         if causal_4d_mask is not None:
             expanded_attn_mask = causal_4d_mask.masked_fill(expanded_attn_mask.bool(), torch.finfo(dtype).min)
 
@@ -302,10 +303,22 @@ def _prepare_4d_causal_attention_mask(
     key_value_length = input_shape[-1] + past_key_values_length
 
     # 4d mask is passed through the layers
-    if attention_mask is not None:
+    if attention_mask is not None and len(attention_mask.shape) == 2:
         attention_mask = attn_mask_converter.to_4d(
             attention_mask, input_shape[-1], key_value_length=key_value_length, dtype=inputs_embeds.dtype
         )
+    elif attention_mask is not None and len(attention_mask.shape) == 4:
+        expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
+        if tuple(attention_mask.shape) != expected_shape:
+            raise ValueError(
+                f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
+            )
+        else:
+            # if the 4D mask has correct shape - invert it and fill with negative infinity
+            inverted_mask = 1.0 - attention_mask
+            attention_mask = inverted_mask.masked_fill(
+                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+            )
     else:
         attention_mask = attn_mask_converter.to_causal_4d(
             input_shape[0], input_shape[-1], key_value_length, dtype=inputs_embeds.dtype, device=inputs_embeds.device
@@ -334,16 +347,29 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
     key_value_length = input_shape[-1] + past_key_values_length
     batch_size, query_length = input_shape
 
-    # torch.jit.trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
+    # torch.jit.trace, symbolic_trace and torchdynamo with fullgraph=True are unable to capture the controlflow `is_causal=attention_mask is None and q_len > 1`
     # used as an SDPA argument. We keep compatibility with these tracing tools by always using SDPA's `attn_mask` argument in case we are tracing.
     # TODO: Fix this as well when using torchdynamo with fullgraph=True.
-    is_tracing = torch.jit.is_tracing()
+    is_tracing = torch.jit.is_tracing() or isinstance(inputs_embeds, torch.fx.Proxy)
 
     if attention_mask is not None:
-        if torch.all(attention_mask == 1):
-            if is_tracing:
-                pass
-            elif query_length == 1:
+        # 4d mask is passed through
+        if len(attention_mask.shape) == 4:
+            expected_shape = (input_shape[0], 1, input_shape[1], key_value_length)
+            if tuple(attention_mask.shape) != expected_shape:
+                raise ValueError(
+                    f"Incorrect 4D attention_mask shape: {tuple(attention_mask.shape)}; expected: {expected_shape}."
+                )
+            else:
+                # if the 4D mask has correct shape - invert it and fill with negative infinity
+                inverted_mask = 1.0 - attention_mask.to(inputs_embeds.dtype)
+                attention_mask = inverted_mask.masked_fill(
+                    inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+                )
+                return attention_mask
+
+        elif not is_tracing and torch.all(attention_mask == 1):
+            if query_length == 1:
                 # For query_length == 1, causal attention and bi-directional attention are the same.
                 attention_mask = None
             elif key_value_length == query_length:
@@ -378,7 +404,11 @@ def _prepare_4d_causal_attention_mask_for_sdpa(
 
         # From PyTorch 2.1 onwards, F.scaled_dot_product_attention with the memory-efficient attention backend
         # produces nans if sequences are completely unattended in the attention mask. Details: https://github.com/pytorch/pytorch/issues/110213
-        if query_length > 1:
+        #
+        # This fix is not applied in case we are tracing with torch.jit.trace or symbolic_trace, as _unmask_unattended has a data-dependent
+        # controlflow that can not be captured properly.
+        # TODO: _unmask_unattended does not work either with torch.compile when using fullgraph=True. We should find a way to detect this case.
+        if query_length > 1 and not is_tracing:
             expanded_4d_mask = AttentionMaskConverter._unmask_unattended(
                 expanded_4d_mask, attention_mask, unmasked_value=0.0
             )
