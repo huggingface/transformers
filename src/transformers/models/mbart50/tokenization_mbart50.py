@@ -234,7 +234,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
-        out_string = ""
+        out_string = " "
         prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
@@ -247,7 +247,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
-        out_string += " " + self.sp_model.decode(current_sub_tokens)
+        out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
