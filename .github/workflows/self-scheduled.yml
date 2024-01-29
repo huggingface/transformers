@@ -70,6 +70,23 @@ jobs:
         run: |
           nvidia-smi
 
+  echo:
+    name: Echo
+    needs: setup
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: echo
+        working-directory: /transformers
+        run: |
+          echo "${{ needs.setup.outputs.matrix }}"
+          echo "${{ needs.setup.outputs.matrix_2 }}"
+
   run_tests_gpu:
     name: " "
     needs: setup
