@@ -27,6 +27,7 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
+  NUM_SLICES: 2
 
 jobs:
   setup:
@@ -42,6 +43,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       # TODO: better name than `matrix_2`
       matrix_2: ${{ steps.set-matrix.outputs.matrix_2 }}
+      slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -67,6 +69,7 @@ jobs:
         run: |
           echo "matrix=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')" >> $GITHUB_OUTPUT
           echo "matrix_2=$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = [["models/align"], ["models/altclip"]]; print(d)')" >> $GITHUB_OUTPUT
+          echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
         run: |
@@ -78,7 +81,7 @@ jobs:
     # TODO: Get the number of splits from `setup` job
     strategy:
       matrix:
-        slice_id: [0, 1]
+        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folders: ${{ needs.setup.outputs.matrix_2 }}
@@ -92,7 +95,7 @@ jobs:
     # TODO: Get the number of splits from `setup` job
     strategy:
       matrix:
-        slice_id: [0, 1]
+        slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
       folders: ${{ needs.setup.outputs.matrix_2 }}
