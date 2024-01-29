@@ -46,8 +46,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
-
 
 class VMambaModelTester:
     def __init__(
@@ -152,7 +150,7 @@ class VMambaModelTester:
 @require_torch
 class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as VMamba does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -180,7 +178,16 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=VMambaConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # we don't test common_properties and arguments_init as these don't apply for Perceiver
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
+
+    @unittest.skip(reason="VMamba does not use attention")
+    def test_attention_outputs(self):
+        pass
 
     @unittest.skip(reason="VMamba does not use inputs_embeds")
     def test_inputs_embeds(self):
