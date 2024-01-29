@@ -84,8 +84,7 @@ jobs:
       - name: echo
         working-directory: /transformers
         run: |
-          echo "${{ needs.setup.outputs.matrix }}"
-          echo "${{ needs.setup.outputs.matrix_2 }}"
+          echo "${{ needs.setup.outputs.folder_slices }}"
 
   run_tests_gpu:
     name: " "
