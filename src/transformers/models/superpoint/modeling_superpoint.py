@@ -31,7 +31,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 
 
@@ -467,73 +466,4 @@ class SuperPointModel(SuperPointPreTrainedModel):
             mask=mask,
             last_hidden_state=last_hidden_state,
             hidden_states=hidden_states,
-        )
-
-
-@add_start_docstrings(
-    "SuperPoint model outputting keypoints and descriptors.",
-    SUPERPOINT_START_DOCSTRING,
-)
-class SuperPointForInterestPointDescription(SuperPointPreTrainedModel):
-    def __init__(self, config: SuperPointConfig) -> None:
-        super().__init__(config)
-
-        self.config = config
-
-        self.superpoint = SuperPointModel(config)
-
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(SUPERPOINT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImagePointDescriptionOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, ImagePointDescriptionOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoModelForInterestPointDescription
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/superpoint")
-        >>> model = AutoModelForInterestPointDescription.from_pretrained("stevenbucaille/superpoint")
-
-        >>> inputs = processor(image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
-        outputs = self.superpoint(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return tuple(v for v in outputs if v is not None)
-
-        return ImagePointDescriptionOutput(
-            keypoints=outputs.keypoints,
-            scores=outputs.scores,
-            descriptors=outputs.descriptors,
-            mask=outputs.mask,
-            last_hidden_state=outputs.last_hidden_state,
-            hidden_states=outputs.hidden_states,
         )

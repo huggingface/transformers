@@ -1118,7 +1118,7 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES = OrderedDict(
     [
-        ("superpoint", "SuperPointForInterestPointDescription"),
+        ("superpoint", "SuperPointModel"),
     ]
 )
 

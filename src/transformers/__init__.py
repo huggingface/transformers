@@ -2742,7 +2742,6 @@ else:
     _import_structure["models.superpoint"].extend(
         [
             "SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SuperPointForInterestPointDescription",
             "SuperPointModel",
             "SuperPointPreTrainedModel",
         ]
@@ -6519,7 +6518,6 @@ if TYPE_CHECKING:
         )
         from .models.superpoint import (
             SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SuperPointForInterestPointDescription,
             SuperPointModel,
             SuperPointPreTrainedModel,
         )
