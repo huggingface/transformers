@@ -530,9 +530,11 @@ class WhisperGenerationMixin:
         )
 
         # pass self.config for backward compatibility
-        init_tokens = self.retrieve_init_tokens(
+        init_tokens = self._retrieve_init_tokens(
+            input_features,
             generation_config=generation_config,
             config=self.config,
+            num_segment_frames=num_segment_frames,
             kwargs=kwargs,
         )
         # TODO(Sanchit) - passing `decoder_input_ids` is deprecated. One should use `prompt_ids` instead
@@ -1070,8 +1072,7 @@ class WhisperGenerationMixin:
                 )
             generation_config.task = task
 
-    @staticmethod
-    def retrieve_init_tokens(generation_config, config, kwargs):
+    def _retrieve_init_tokens(self, input_features, generation_config, config, num_segment_frames, kwargs):
         def replace_or_add(lst: List[int], num: int, itr: Iterator[int]):
             """short function to replace num with a itr in lst"""
             found = any(i in lst for i in itr)
@@ -1081,14 +1082,14 @@ class WhisperGenerationMixin:
                 lst.append(num)
             return lst
 
-        forced_decoder_ids = None
-        # Legacy code for backward compatibility
-        if hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
-            forced_decoder_ids = config.forced_decoder_ids
+        if kwargs.get("forced_decoder_ids", None) is not None:
+            forced_decoder_ids = kwargs["forced_decoder_ids"]
         elif hasattr(generation_config, "forced_decoder_ids") and generation_config.forced_decoder_ids is not None:
             forced_decoder_ids = generation_config.forced_decoder_ids
+        elif hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
+            forced_decoder_ids = config.forced_decoder_ids
         else:
-            forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+            forced_decoder_ids = None
 
         task = getattr(generation_config, "task", None)
         language = getattr(generation_config, "language", None)
@@ -1144,10 +1145,20 @@ class WhisperGenerationMixin:
 
             # if language is defined it'll overwrite language ids that might have already been defined via the generation_config
             replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
-        elif task is not None and hasattr(generation_config, "lang_to_id"):
-            # default to English
-            lang_id = generation_config.decoder_start_token_id + 1  # start_token_id + 1 is <en>
-            replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
+        elif len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None):
+            # language is not defined or intentially set to `None` to trigger language detection
+            lang_ids = self.detect_language(input_features=input_features, encoder_outputs=kwargs.get("encoder_outputs", None), generation_config=generation_config, num_segment_frames=num_segment_frames)
+            
+            if torch.unique(lang_ids).shape[0] > 1:
+                raise ValueError("Multiple languages detected when trying to guess the target language for transcription. It is currently not supported to transcribe to different languages in a single batch. Please make sure to either force a single language by passing `languag='...'` or make sure all input audio is of the same language.")
+
+            lang_id = lang_ids[0].item()
+            
+            # append or replace lang_id to init_tokens
+            if len(init_tokens) > 1:
+                init_tokens[1] = lang_id 
+            else:
+                init_tokens.append(lang_id)
 
         if task is not None:
             if task in TASK_IDS:
@@ -1176,6 +1187,61 @@ class WhisperGenerationMixin:
         init_tokens = [t for t in init_tokens if t is not None]
 
         return init_tokens
+
+    def detect_language(self, input_features: Optional[torch.FloatTensor], encoder_outputs: Optional[Union[torch.FloatTensor, BaseModelOutput]], generation_config: Optional[GenerationConfig] = None, num_segment_frames: int = 3000) -> torch.Tensor:
+        """
+        Detects language from log-mel input features or encoder_outputs
+
+        Parameters:
+            input_features (`torch.Tensor` of shape `(batch_size, feature_size, sequence_length)`, *optional*):
+                Float values of log-mel features extracted from the raw speech waveform. The raw speech waveform can be obtained by
+                loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+                the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+                [`AutoFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
+                tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`] for details.
+            encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+                Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+                `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+                hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+            num_segment_frames (`int`, defaults to 3000):
+                The number of log-mel frames the model expects
+
+        Return:
+            A `torch.LongTensor` representing the detected language ids.
+        """
+        if input_features is None and encoder_outputs is None:
+            raise ValueError("You have to specify either `input_features` or `encoder_outputs`")
+        elif not input_features is None and not encoder_outputs is None:
+            raise ValueError("Make sure to specificy only one of `input_features` or `encoder_outputs` - not both!")
+        elif input_features is not None:
+            inputs = {"input_features": input_features[:, :, :num_segment_frames]}
+            batch_size = input_features.shape[0]
+        elif encoder_outputs is not None:
+            inputs = {"encoder_outputs": encoder_outputs}
+            batch_size = encoder_outputs[0].shape[0] if isinstance(encoder_outputs, BaseModelOutput) else encoder_outputs[0]
+
+        generation_config = generation_config or self.generation_config
+        decoder_input_ids = torch.ones((batch_size, 1), device=self.device, dtype=torch.long) * generation_config.decoder_start_token_id
+
+        with torch.no_grad():
+            logits = self(**inputs, decoder_input_ids=decoder_input_ids).logits[:, -1]
+
+        non_lang_mask = torch.ones_like(logits[0], dtype=torch.bool)
+        non_lang_mask[list(generation_config.lang_to_id.values())] = False
+
+        logits[:, non_lang_mask] = -np.inf
+
+        lang_ids = logits.argmax(-1)
+
+        return lang_ids
+
 
     @staticmethod
     def _check_decoder_input_ids(prompt_ids, init_tokens, is_shortform, kwargs):
