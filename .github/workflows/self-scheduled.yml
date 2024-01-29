@@ -74,6 +74,7 @@ jobs:
     name: " "
     needs: setup
     strategy:
+      fail-fast: false
       matrix:
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
@@ -87,6 +88,7 @@ jobs:
     name: " "
     needs: setup
     strategy:
+      fail-fast: false
       matrix:
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
