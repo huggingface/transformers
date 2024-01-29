@@ -40,9 +40,8 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-      # TODO: better name than `matrix_2`
-      matrix_2: ${{ steps.set-matrix.outputs.matrix_2 }}
+      # TODO: better name than `folder_slices`
+      folder_slices: ${{ steps.set-matrix.outputs.folder_slices }}
       slice_ids: ${{ steps.set-matrix.outputs.slice_ids }}
     steps:
       - name: Update clone
@@ -64,11 +63,11 @@ jobs:
       - id: set-matrix
         name: Identify models to test
         working-directory: /transformers/tests
-        # TODO: a script to prepare `matrix_2`
+        # TODO: a script to prepare `folder_slices`
         # TODO: prepare the number of splits to be used in `run_tests_single_gpu` and `run_tests_multi_gpu`
         run: |
           echo "matrix=$(python3 ../utils/split_model_tests.py)" >> $GITHUB_OUTPUT
-          echo "matrix_2=$(python3 ../utils/split_model_tests_2.py)" >> $GITHUB_OUTPUT
+          echo "folder_slices=$(python3 ../utils/split_model_tests_2.py)" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
 
       - name: NVIDIA-SMI
@@ -84,7 +83,7 @@ jobs:
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
-      folders: ${{ needs.setup.outputs.matrix_2 }}
+      folder_slices: ${{ needs.setup.outputs.folder_slices }}
       machine_type: single-gpu
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
@@ -98,7 +97,7 @@ jobs:
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
-      folders: ${{ needs.setup.outputs.matrix_2 }}
+      folders: ${{ needs.setup.outputs.folder_slices }}
       machine_type: multi-gpu
       slice_id: ${{ matrix.slice_id }}
     secrets: inherit
@@ -405,7 +404,7 @@ jobs:
           sudo apt-get install -y curl
           pip install slack_sdk
           pip show slack_sdk
-          python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"
+          python utils/notification_service.py "${{ needs.setup.outputs.folder_slices }}"
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
