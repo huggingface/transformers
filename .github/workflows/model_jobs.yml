@@ -29,12 +29,12 @@ env:
 
 jobs:
   model_job:
-    name: Model tests
+    name: " "
     strategy:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[inputs.slice_id] }}
-    runs-on: ['${{ inputs.machine_type }}', nvidia-gpu, t4, daily-ci]
+    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
