@@ -345,8 +345,8 @@ once you set the correct chat template, your model will automatically become com
 
 <Tip>
 If you're fine-tuning a model for chat, in addition to setting a chat template, you should probably add any new chat
-control tokens, like `[INST]` or `<|im_start|>` as special tokens in the tokenizer. Special tokens are never split, 
-ensuring that your control tokens are always handled as single tokens, rather than being tokenized in pieces. You 
+control tokens, like `[INST]` or `<|im_start|>`, as special tokens in the tokenizer. Special tokens are never split, 
+ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You 
 should also set the tokenizer's `eos_token` attribute to the token that marks the end of assistant generations in your
 template. This will ensure that text generation tools can correctly figure out when to stop generating text.
 </Tip>
