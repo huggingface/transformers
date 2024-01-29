@@ -44,6 +44,42 @@ _CHECKPOINT_FOR_DOC = "stevenbucaille/superpoint"
 SUPERPOINT_PRETRAINED_MODEL_ARCHIVE_LIST = ["stevenbucaille/superpoint"]
 
 
+def remove_keypoints_from_borders(
+    keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Removes keypoints (and their associated scores) that are too close to the border"""
+    mask_h = (keypoints[:, 0] >= border) & (keypoints[:, 0] < (height - border))
+    mask_w = (keypoints[:, 1] >= border) & (keypoints[:, 1] < (width - border))
+    mask = mask_h & mask_w
+    return keypoints[mask], scores[mask]
+
+
+def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Keeps the k keypoints with highest score"""
+    if k >= len(keypoints):
+        return keypoints, scores
+    scores, indices = torch.topk(scores, k, dim=0)
+    return keypoints[indices], scores
+
+
+def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
+    """Applies non-maximum suppression on scores"""
+    if nms_radius < 0:
+        raise ValueError("Expected positive values for nms_radius")
+
+    def max_pool(x):
+        return torch.nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
+
+    zeros = torch.zeros_like(scores)
+    max_mask = scores == max_pool(scores)
+    for _ in range(2):
+        supp_mask = max_pool(max_mask.float()) > 0
+        supp_scores = torch.where(supp_mask, zeros, scores)
+        new_max_mask = supp_scores == max_pool(supp_scores)
+        max_mask = max_mask | (new_max_mask & (~supp_mask))
+    return torch.where(max_mask, scores, zeros)
+
+
 class SuperPointConvBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, add_pooling: bool = False) -> None:
         super().__init__()
@@ -158,7 +194,7 @@ class SuperPointInterestPointDecoder(nn.Module):
         batch_size, _, height, width = scores.shape
         scores = scores.permute(0, 2, 3, 1).reshape(batch_size, height, width, 8, 8)
         scores = scores.permute(0, 1, 3, 2, 4).reshape(batch_size, height * 8, width * 8)
-        scores = self.simple_nms(scores, self.nms_radius)
+        scores = simple_nms(scores, self.nms_radius)
         return scores
 
     def extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -169,50 +205,18 @@ class SuperPointInterestPointDecoder(nn.Module):
         scores = scores[0][tuple(keypoints.t())]
 
         # Discard keypoints near the image borders
-        keypoints, scores = self.remove_borders(keypoints, scores, self.border_removal_distance, height * 8, width * 8)
+        keypoints, scores = remove_keypoints_from_borders(
+            keypoints, scores, self.border_removal_distance, height * 8, width * 8
+        )
 
         # Keep the k keypoints with highest score
         if self.max_keypoints >= 0:
-            keypoints, scores = self.top_k_keypoints(keypoints, scores, self.max_keypoints)
+            keypoints, scores = top_k_keypoints(keypoints, scores, self.max_keypoints)
 
         # Convert (y, x) to (x, y)
         keypoints = torch.flip(keypoints, [1]).float()
 
         return keypoints, scores
-
-    @staticmethod
-    def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
-        if nms_radius < 0:
-            raise ValueError("Expected positive values for nms_radius")
-
-        def max_pool(x):
-            return torch.nn.functional.max_pool2d(x, kernel_size=nms_radius * 2 + 1, stride=1, padding=nms_radius)
-
-        zeros = torch.zeros_like(scores)
-        max_mask = scores == max_pool(scores)
-        for _ in range(2):
-            supp_mask = max_pool(max_mask.float()) > 0
-            supp_scores = torch.where(supp_mask, zeros, scores)
-            new_max_mask = supp_scores == max_pool(supp_scores)
-            max_mask = max_mask | (new_max_mask & (~supp_mask))
-        return torch.where(max_mask, scores, zeros)
-
-    @staticmethod
-    def remove_borders(
-        keypoints: torch.Tensor, scores: torch.Tensor, border: int, height: int, width: int
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Removes keypoints too close to the border"""
-        mask_h = (keypoints[:, 0] >= border) & (keypoints[:, 0] < (height - border))
-        mask_w = (keypoints[:, 1] >= border) & (keypoints[:, 1] < (width - border))
-        mask = mask_h & mask_w
-        return keypoints[mask], scores[mask]
-
-    @staticmethod
-    def top_k_keypoints(keypoints: torch.Tensor, scores: torch.Tensor, k: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        if k >= len(keypoints):
-            return keypoints, scores
-        scores, indices = torch.topk(scores, k, dim=0)
-        return keypoints[indices], scores
 
 
 class SuperPointDescriptorDecoder(nn.Module):
