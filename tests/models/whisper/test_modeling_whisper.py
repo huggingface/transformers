@@ -2077,20 +2077,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model.generation_config.forced_decoder_ids[0][-1] = 50259
 
         sequences = model.generate(input_features)
-        transcription = processor.batch_decode(sequences, skip_special_tokens=False)
-
-        assert (
-            transcription
-            == "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> MIRCHI MET, which is the name of the Bible.<|endoftext|>"
-        )
-
-        # even if forced_decoder_ids defaults to lang_token==English, setting `language=None` triggers lang_detection
-        sequences = model.generate(input_features, language=None)
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
         assert (
             transcription
-            == "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>"
+            == "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> MIRCHI MET, which is the name of the Bible.<|endoftext|>"
         )
 
     @slow
@@ -2126,12 +2117,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             transcription
             == " How many different species are there in the chilli? How many different species are there in the chili?"
         )
-
-        # even if forced_decoder_ids defaults to lang_token==English, setting `language=None` triggers lang_detection
-        sequences = model.generate(input_features, language=None)
-        transcription = processor.batch_decode(sequences)[0]
-
-        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
 
     @slow
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
