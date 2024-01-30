@@ -283,6 +283,7 @@ torch_and_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -297,6 +298,7 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -310,6 +312,7 @@ torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     parallelism=1,
     pytest_num_workers=6,
@@ -323,6 +326,7 @@ tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     parallelism=1,
 )
@@ -334,6 +338,7 @@ flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     parallelism=1,
 )
@@ -346,6 +351,7 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     marker="is_pipeline_test",
     pytest_num_workers=6,
@@ -360,6 +366,7 @@ pipelines_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     marker="is_pipeline_test",
 )
@@ -382,6 +389,7 @@ custom_tokenizers_job = CircleCIJob(
         },
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
         "python -m unidic download",
     ],
     parallelism=None,
@@ -404,6 +412,7 @@ examples_torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     pytest_num_workers=1,
 )
@@ -417,6 +426,7 @@ examples_tensorflow_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
         "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
 )
 
@@ -428,6 +438,7 @@ examples_flax_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
         "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
 )
 
@@ -441,6 +452,7 @@ hub_job = CircleCIJob(
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -453,6 +465,7 @@ onnx_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -474,6 +487,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -491,6 +505,7 @@ repo_utils_job = CircleCIJob(
     install_steps=[
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[quality,testing,torch]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
     ],
     parallelism=None,
     pytest_num_workers=1,
@@ -516,6 +531,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
         "pip install -U --upgrade-strategy eager g2p-en",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0 torchvision<0.17 torchaudio<2.2.0'"
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
