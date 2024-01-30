@@ -3416,7 +3416,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if hf_quantizer is not None:
                 target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
-                
+
             no_split_modules = model._get_no_split_modules(device_map)
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
                 raise ValueError(
