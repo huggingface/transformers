@@ -3364,7 +3364,7 @@ class Trainer:
                         )
                     else:
                         metrics = self.compute_metrics(
-                            EvalPrediction(predictions=preds_host,label_ids=labels_host),
+                            EvalPrediction(predictions=preds_host, label_ids=labels_host),
                             compute_result=is_last_step,
                         )
                 del losses_host, preds_host, inputs_host, labels_host
