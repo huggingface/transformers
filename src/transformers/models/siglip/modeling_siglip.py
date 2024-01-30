@@ -76,7 +76,13 @@ def _trunc_normal_(tensor, mean, std, a, b):
 
     # Use inverse cdf transform for normal distribution to get truncated
     # standard normal
-    tensor.erfinv_()
+    if tensor.dtype in [torch.bfloat16, torch.float16]:
+        og_dtype = tensor.dtype
+        tensor = tensor.to(torch.float32)
+        tensor.erfinv_()
+        tensor = tensor.to(og_dtype)
+    else:
+        tensor.erfinv_()
 
     # Transform to proper mean, std
     tensor.mul_(std * math.sqrt(2.0))
