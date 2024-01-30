@@ -513,7 +513,7 @@ doc_test_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
-        "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
+        "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager 'natten<0.15.0'",
         "pip install -U --upgrade-strategy eager g2p-en",
         "find -name __pycache__ -delete",
