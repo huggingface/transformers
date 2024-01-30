@@ -22,6 +22,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_tf_available,
 )
 
 
@@ -46,6 +47,17 @@ else:
         "ConvNextV2Backbone",
     ]
 
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_convnextv2"] = [
+        "TFConvNextV2ForImageClassification",
+        "TFConvNextV2Model",
+        "TFConvNextV2PreTrainedModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_convnextv2 import (
@@ -65,6 +77,18 @@ if TYPE_CHECKING:
             ConvNextV2ForImageClassification,
             ConvNextV2Model,
             ConvNextV2PreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_convnextv2 import (
+            TFConvNextV2ForImageClassification,
+            TFConvNextV2Model,
+            TFConvNextV2PreTrainedModel,
         )
 
 else:

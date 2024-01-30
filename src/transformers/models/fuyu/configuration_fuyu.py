@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 FUYU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "adept/fuyu-8b-base": "https://huggingface.co/adept/fuyu-8b-base/resolve/main/config.json",
+    "adept/fuyu-8b": "https://huggingface.co/adept/fuyu-8b/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class FuyuConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`FuyuForCausalLM`]. It is used to instantiate an
     Fuyu model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
-    [adept/fuyu-8b-base](https://huggingface.co/adept/fuyu-8b-base).
+    [adept/fuyu-8b](https://huggingface.co/adept/fuyu-8b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -72,8 +72,8 @@ class FuyuConfig(PretrainedConfig):
             The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
-            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
             these scaling strategies behave:
             https://www.reddit.com/r/LocalFuyu/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
@@ -102,6 +102,7 @@ class FuyuConfig(PretrainedConfig):
     >>> # Initializing a Fuyu fuyu-7b style configuration
     >>> configuration = FuyuConfig()
     ```"""
+
     model_type = "fuyu"
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -189,6 +190,7 @@ class FuyuConfig(PretrainedConfig):
             **kwargs,
         )
 
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
     def _rope_scaling_validation(self):
         """
         Validate the `rope_scaling` configuration.
@@ -208,4 +210,4 @@ class FuyuConfig(PretrainedConfig):
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")

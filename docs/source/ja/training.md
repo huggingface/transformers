@@ -49,7 +49,7 @@ rendered properly in your Markdown viewer.
 ```
 
 トークナイザがテキストを処理し、可変のシーケンス長を処理するためのパディングと切り捨て戦略を含める必要があることをご存知の通り、
-データセットを1つのステップで処理するには、🤗 Datasets の [`map`](https://huggingface.co/docs/datasets/process.html#map) メソッドを使用して、
+データセットを1つのステップで処理するには、🤗 Datasets の [`map`](https://huggingface.co/docs/datasets/process#map) メソッドを使用して、
 データセット全体に前処理関数を適用します：
 
 ```py

@@ -15,6 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
+import warnings
 from functools import lru_cache
 from typing import List, Optional, Tuple, Union
 
@@ -191,6 +192,7 @@ LANGUAGES = {
     "ba": "bashkir",
     "jw": "javanese",
     "su": "sundanese",
+    "yue": "cantonese",
 }
 
 # language code lookup by name, with a few language aliases
@@ -207,6 +209,7 @@ TO_LANGUAGE_CODE = {
     "moldovan": "ro",
     "sinhalese": "si",
     "castilian": "es",
+    "mandarin": "zh",
 }
 
 TASK_IDS = ["translate", "transcribe"]
@@ -505,6 +508,20 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, "")
 
     def _normalize(self, text):
+        warnings.warn(
+            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
+        )
+        return self.normalize(text)
+
+    def _basic_normalize(self, text, remove_diacritics=False):
+        warnings.warn(
+            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
+            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
+        )
+        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
+
+    def normalize(self, text):
         """
         Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
         english text.
@@ -513,7 +530,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return normalizer(text)
 
     @staticmethod
-    def _basic_normalize(text, remove_diacritics=False):
+    def basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which preforms commons transformation on
         multilingual text.
@@ -528,10 +545,21 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """
         timestamp_begin = self.all_special_ids[-1] + 1
         outputs = [[]]
+
+        cur_max_timestamp = 0.0
+        prev_segments_len = 0.0
+
         for token in token_ids:
             if token >= timestamp_begin:
-                timestamp = f"<|{(token - timestamp_begin) * time_precision:.2f}|>"
-                outputs.append(timestamp)
+                timestamp = float((token - timestamp_begin) * time_precision)
+
+                if timestamp < cur_max_timestamp:
+                    # next segment has started
+                    prev_segments_len += cur_max_timestamp
+
+                cur_max_timestamp = timestamp
+
+                outputs.append(f"<|{(timestamp + prev_segments_len):.2f}|>")
                 outputs.append([])
             else:
                 outputs[-1].append(token)
@@ -551,6 +579,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 The time ratio to convert from token to time.
         """
         offsets = []
+        # ensure torch tensor of token ids is placed on cpu
+        if "torch" in str(type(token_ids)) and (hasattr(token_ids, "cpu") and callable(token_ids.cpu)):
+            token_ids = token_ids.cpu()
         token_ids = np.array(token_ids)
         if token_ids.shape[0] > 1 and len(token_ids.shape) > 1:
             raise ValueError("Can only process a single input at a time")
@@ -626,7 +657,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
         output_offsets: bool = False,
-        time_precision=0.02,
+        time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
         normalize: bool = False,
         basic_normalize: bool = False,
@@ -729,10 +760,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         text = "".join(sub_texts)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
@@ -1206,7 +1237,7 @@ def _combine_tokens_into_words(
     if language is None:
         language = "english"
 
-    if language in {"chinese", "japanese", "thai", "lao", "myanmar"}:
+    if language in {"chinese", "japanese", "thai", "lao", "myanmar", "cantonese"}:
         # These languages don't typically use spaces.
         words, word_tokens, token_indices = _split_tokens_on_unicode(tokenizer, tokens)
     else:

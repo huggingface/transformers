@@ -90,7 +90,7 @@ tornado==6.3.3
 tqdm==4.48.2
 traitlets
 git+https://github.com/huggingface/transformers.git
-urllib3==1.26.17
+urllib3==1.26.18
 wcwidth==0.2.5
 webencodings==0.5.1
 wget==3.2

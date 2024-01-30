@@ -107,7 +107,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티와
 ```
 
 위의 예제에서와 마찬가지로, `text` 필드는 `answers` 안에 중첩되어 있습니다. 
-따라서 중첩된 구조에서 [`flatten`](https://huggingface.co/docs/datasets/process.html#flatten) 메소드를 사용하여 `text` 하위 필드를 추출합니다:
+따라서 중첩된 구조에서 [`flatten`](https://huggingface.co/docs/datasets/process#flatten) 메소드를 사용하여 `text` 하위 필드를 추출합니다:
 
 ```py
 >>> eli5 = eli5.flatten()

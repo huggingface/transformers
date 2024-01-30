@@ -122,6 +122,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "convnext",
     "deberta",
     "deberta-v2",
+    "dinov2",
     "distilbert",
     "donut-swin",
     "electra",
@@ -130,6 +131,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "hubert",
     "layoutlm",
+    "llama",
     "lxmert",
     "m2m_100",
     "marian",
@@ -155,6 +157,8 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     #    "xlnet",
 ]
 
+_FX_SUPPORTED_MODELS_WITH_KV_CACHE = ["llama", "opt"]
+
 _REGULAR_SUPPORTED_MODELS = []
 for item in _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS:
     if isinstance(item, dict):
@@ -174,7 +178,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "Speech2Text2Decoder",
     "TrOCRDecoder",
     "PeftModelForCausalLM",
-    "PeftModelForSeq2SeqLM"
+    "PeftModelForSeq2SeqLM",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -513,6 +517,14 @@ def torch_nn_functional_one_hot(tensor, num_classes=-1):
     return torch.empty(shape, device="meta")
 
 
+def torch_nn_functional_scaled_dot_product_attention(
+    query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None
+):
+    target_length = query.shape[-2]
+    head_dim = value.shape[-1]
+    return torch.empty((*query.shape[:-2], target_length, head_dim), device="meta")
+
+
 def torch_nn_mseloss(self, input, target):
     if self.reduction == "none":
         shape = target.shape
@@ -596,6 +608,7 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.unsqueeze: torch_tensor_unsqueeze,
     torch.unique_consecutive: torch_unique_consecutive,
     torch.nn.functional.one_hot: torch_nn_functional_one_hot,
+    torch.nn.functional.scaled_dot_product_attention: torch_nn_functional_scaled_dot_product_attention,
     torch.nn.MSELoss: torch_nn_mseloss,
     torch.nn.CrossEntropyLoss: torch_nn_crossentropyloss,
     torch.nn.BCEWithLogitsLoss: torch_nn_bcewithlogitsloss,
@@ -867,6 +880,23 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
+        elif "past_key_values" in input_name:
+            if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                raise NotImplementedError(
+                    f"Symbolic trace with past_key_values input is not supported yet for the model {model.config.model_type}. Please open an issue or a PR in Transformers repository if you would like to see the support added."
+                )
+            num_heads = model.config.num_attention_heads
+            head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+            cache_shape = (shape[0], num_heads, 0, head_dim)
+            pkv = tuple(
+                (
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                    torch.rand(cache_shape, dtype=torch.float, device=device),
+                )
+                for i in range(model.config.num_hidden_layers)
+            )
+            inputs_dict[input_name] = pkv
         else:
             shape_with_hidden_size = shape + [model.config.hidden_size]
             inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
@@ -1198,8 +1228,12 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
 
 
+def is_model_supported(model: PreTrainedModel):
+    return model.__class__.__name__ in _SUPPORTED_MODELS
+
+
 def check_if_model_is_supported(model: PreTrainedModel):
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+    if not is_model_supported(model):
         supported_model_names = ", ".join(_SUPPORTED_MODELS)
         raise NotImplementedError(
             f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"

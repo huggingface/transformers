@@ -25,8 +25,6 @@ rendered properly in your Markdown viewer.
 </a>
 </div>
 
-**DISCLAIMER:** If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title) and assign
-@patrickvonplaten
 
 ## Overview of MBart
 
@@ -186,6 +184,9 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 
 [[autodoc]] MBart50TokenizerFast
 
+<frameworkcontent>
+<pt>
+
 ## MBartModel
 
 [[autodoc]] MBartModel
@@ -207,6 +208,9 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 [[autodoc]] MBartForCausalLM
     - forward
 
+</pt>
+<tf>
+
 ## TFMBartModel
 
 [[autodoc]] TFMBartModel
@@ -216,6 +220,9 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 
 [[autodoc]] TFMBartForConditionalGeneration
     - call
+
+</tf>
+<jax>
 
 ## FlaxMBartModel
 
@@ -244,3 +251,6 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     - __call__
     - encode
     - decode
+
+</jax>
+</frameworkcontent>

@@ -192,7 +192,7 @@ def convert_weight_and_push(
     )
 
     from_output = from_model(x)
-    from_output = from_output[-1] if type(from_output) is list else from_output
+    from_output = from_output[-1] if isinstance(from_output, list) else from_output
 
     # now since I don't want to use any config files, vissl seer model doesn't actually have an head, so let's just check the last hidden state
     if "seer" in name and "in1k" in name:

@@ -99,7 +99,7 @@ Define a `model_init` function and pass it to the [`Trainer`], as an example:
 ...         config=config,
 ...         cache_dir=model_args.cache_dir,
 ...         revision=model_args.model_revision,
-...         use_auth_token=True if model_args.use_auth_token else None,
+...         token=True if model_args.use_auth_token else None,
 ...     )
 ```
 

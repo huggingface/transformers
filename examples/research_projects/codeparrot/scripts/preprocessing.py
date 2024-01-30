@@ -1,5 +1,4 @@
 import gzip
-import hashlib
 import json
 import multiprocessing
 import os
@@ -11,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from arguments import PreprocessingArguments
 from datasets import load_dataset
+from huggingface_hub.utils import insecure_hashlib
 from minhash_deduplication import deduplicate_dataset
 
 from transformers import AutoTokenizer, HfArgumentParser
@@ -21,7 +21,7 @@ PATTERN = re.compile(r"\s+")
 
 def get_hash(example):
     """Get hash of content field."""
-    return {"hash": hashlib.md5(re.sub(PATTERN, "", example["content"]).encode("utf-8")).hexdigest()}
+    return {"hash": insecure_hashlib.md5(re.sub(PATTERN, "", example["content"]).encode("utf-8")).hexdigest()}
 
 
 def line_stats(example):

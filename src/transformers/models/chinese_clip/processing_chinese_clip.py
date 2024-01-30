@@ -36,6 +36,7 @@ class ChineseCLIPProcessor(ProcessorMixin):
         tokenizer ([`BertTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "ChineseCLIPImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")

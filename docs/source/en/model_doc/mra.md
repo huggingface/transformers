@@ -27,23 +27,19 @@ The abstract from the paper is the following:
 This model was contributed by [novice03](https://huggingface.co/novice03).
 The original code can be found [here](https://github.com/mlpen/mra-attention).
 
-
 ## MraConfig
 
 [[autodoc]] MraConfig
-
 
 ## MraModel
 
 [[autodoc]] MraModel
     - forward
 
-
 ## MraForMaskedLM
 
 [[autodoc]] MraForMaskedLM
     - forward
-
 
 ## MraForSequenceClassification
 
@@ -55,12 +51,10 @@ The original code can be found [here](https://github.com/mlpen/mra-attention).
 [[autodoc]] MraForMultipleChoice
     - forward
 
-
 ## MraForTokenClassification
 
 [[autodoc]] MraForTokenClassification
     - forward
-
 
 ## MraForQuestionAnswering
 

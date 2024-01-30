@@ -149,6 +149,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            add_bos_token=add_bos_token,
+            add_eos_token=add_eos_token,
             prefix_token=prefix_token,
             middle_token=middle_token,
             suffix_token=suffix_token,

@@ -84,6 +84,7 @@ class CpmAntConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "cpmant"
 
     def __init__(

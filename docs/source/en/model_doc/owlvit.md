@@ -31,12 +31,11 @@ alt="drawing" width="600"/>
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).
 
-## Usage
+## Usage tips
 
 OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CLIP](clip) as its multi-modal backbone, with a ViT-like Transformer to get visual features and a causal language model to get the text features. To use CLIP for detection, OWL-ViT removes the final token pooling layer of the vision model and attaches a lightweight classification and box head to each transformer output token. Open-vocabulary classification is enabled by replacing the fixed classification layer weights with the class-name embeddings obtained from the text model. The authors first train CLIP from scratch and fine-tune it end-to-end with the classification and box heads on standard detection datasets using a bipartite matching loss. One or multiple text queries per image can be used to perform zero-shot text-conditioned object detection.
 
 [`OwlViTImageProcessor`] can be used to resize (or rescale) and normalize images for the model and [`CLIPTokenizer`] is used to encode the text. [`OwlViTProcessor`] wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`] into a single instance to both encode the text and prepare the images. The following example shows how to perform object detection using [`OwlViTProcessor`] and [`OwlViTForObjectDetection`].
-
 
 ```python
 >>> import requests
@@ -56,7 +55,7 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 
 >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
 >>> target_sizes = torch.Tensor([image.size[::-1]])
->>> # Convert outputs (bounding boxes and class logits) to COCO API
+>>> # Convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
 >>> results = processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.1)
 >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
 >>> text = texts[i]

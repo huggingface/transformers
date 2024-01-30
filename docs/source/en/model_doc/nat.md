@@ -36,7 +36,18 @@ that boosts image classification and downstream vision performance. Experimental
 NAT-Tiny reaches 83.2% top-1 accuracy on ImageNet, 51.4% mAP on MS-COCO and 48.4% mIoU on ADE20K, which is 1.9%
 ImageNet accuracy, 1.0% COCO mAP, and 2.6% ADE20K mIoU improvement over a Swin model with similar size. *
 
-Tips:
+<img
+src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"
+alt="drawing" width="600"/>
+
+<small> Neighborhood Attention compared to other attention patterns.
+Taken from the <a href="https://arxiv.org/abs/2204.07143">original paper</a>.</small>
+
+This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
+The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
+
+## Usage tips
+
 - One can use the [`AutoImageProcessor`] API to prepare images for the model.
 - NAT can be used as a *backbone*. When `output_hidden_states = True`,
 it will output both `hidden_states` and `reshaped_hidden_states`.
@@ -49,16 +60,6 @@ You can install it with pre-built wheels for Linux by referring to [shi-labs.com
 or build on your system by running `pip install natten`.
 Note that the latter will likely take time to compile. NATTEN does not support Windows devices yet.
 - Patch size of 4 is only supported at the moment.
-
-<img
-src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/neighborhood-attention-pattern.jpg"
-alt="drawing" width="600"/>
-
-<small> Neighborhood Attention compared to other attention patterns.
-Taken from the <a href="https://arxiv.org/abs/2204.07143">original paper</a>.</small>
-
-This model was contributed by [Ali Hassani](https://huggingface.co/alihassanijr).
-The original code can be found [here](https://github.com/SHI-Labs/Neighborhood-Attention-Transformer).
 
 ## Resources
 
@@ -74,7 +75,6 @@ If you're interested in submitting a resource to be included here, please feel f
 ## NatConfig
 
 [[autodoc]] NatConfig
-
 
 ## NatModel
 

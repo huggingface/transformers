@@ -139,7 +139,7 @@ NVLinkを使用すると、トレーニングが約23％速く完了すること
 ```bash
 # DDP w/ NVLink
 
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch \
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 torchrun \
 --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train \
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
@@ -148,7 +148,7 @@ rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch
 
 # DDP w/o NVLink
 
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 python -m torch.distributed.launch \
+rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 NCCL_P2P_DISABLE=1 torchrun \
 --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py --model_name_or_path gpt2 \
 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 --do_train
 --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200

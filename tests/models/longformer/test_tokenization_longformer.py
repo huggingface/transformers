@@ -28,7 +28,9 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
+# Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest with roberta-base->allenai/longformer-base-4096,Roberta->Longformer,roberta->longformer,
 class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    # Ignore copy
     tokenizer_class = LongformerTokenizer
     test_slow_tokenizer = True
     rust_tokenizer_class = LongformerTokenizerFast
@@ -71,23 +73,19 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.get_tokenizer
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.get_rust_tokenizer
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.get_input_output_texts
     def get_input_output_texts(self, tokenizer):
         input_text = "lower newer"
         output_text = "lower newer"
         return input_text, output_text
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_full_tokenizer
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, self.merges_file, **self.special_tokens_map)
         text = "lower newer"
@@ -99,7 +97,6 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.roberta_dict_integration_testing with roberta->longformer
     def longformer_dict_integration_testing(self):
         tokenizer = self.get_tokenizer()
 
@@ -110,7 +107,6 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     @slow
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_sequence_builders with roberta-base->allenai/longformer-base-4096
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("allenai/longformer-base-4096")
 
@@ -130,7 +126,6 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_sentence == encoded_text_from_decode
         assert encoded_pair == encoded_pair_from_decode
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_space_encoding
     def test_space_encoding(self):
         tokenizer = self.get_tokenizer()
 
@@ -171,11 +166,9 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         first_char = tokenizer.convert_ids_to_tokens(encoded[mask_loc + 1])[0]
         self.assertNotEqual(first_char, space_encoding)
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_pretokenized_inputs
     def test_pretokenized_inputs(self):
         pass
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_embeded_special_tokens
     def test_embeded_special_tokens(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -208,7 +201,6 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     tokens_r_str, ["<s>", "A", ",", "<mask>", "ĠAllen", "N", "LP", "Ġsentence", ".", "</s>"]
                 )
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_change_add_prefix_space_and_trim_offsets_args
     def test_change_add_prefix_space_and_trim_offsets_args(self):
         for trim_offsets, add_prefix_space in itertools.product([True, False], repeat=2):
             tokenizer_r = self.rust_tokenizer_class.from_pretrained(
@@ -223,7 +215,6 @@ class LongformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             self.assertEqual(post_processor_state["add_prefix_space"], add_prefix_space)
             self.assertEqual(post_processor_state["trim_offsets"], trim_offsets)
 
-    # Copied from tests.models.roberta.test_tokenization_roberta.RobertaTokenizationTest.test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments
     def test_offsets_mapping_with_different_add_prefix_space_and_trim_space_arguments(self):
         # Test which aims to verify that the offsets are well adapted to the argument `add_prefix_space` and
         # `trim_offsets`

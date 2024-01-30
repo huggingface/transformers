@@ -25,7 +25,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -149,7 +149,9 @@ class DeformableDetrModelTester:
             encoder_n_points=self.encoder_n_points,
             decoder_n_points=self.decoder_n_points,
             use_timm_backbone=False,
+            backbone=None,
             backbone_config=resnet_config,
+            use_pretrained_backbone=False,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -476,6 +478,22 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    def test_forward_auxiliary_loss(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.auxiliary_loss = True
+
+        # only test for object detection and segmentation model
+        for model_class in self.all_model_classes[1:]:
+            model = model_class(config)
+            model.to(torch_device)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+            outputs = model(**inputs)
+
+            self.assertIsNotNone(outputs.auxiliary_outputs)
+            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -502,6 +520,8 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
         # let's pick a random timm backbone
         config.backbone = "tf_mobilenetv3_small_075"
+        config.use_timm_backbone = True
+        config.backbone_config = None
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -648,7 +668,7 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -663,10 +683,10 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
             cpu_outputs = model(pixel_values, pixel_mask)
 
         # 2. run model on GPU
-        model.to("cuda")
+        model.to(torch_device)
 
         with torch.no_grad():
-            gpu_outputs = model(pixel_values.to("cuda"), pixel_mask.to("cuda"))
+            gpu_outputs = model(pixel_values.to(torch_device), pixel_mask.to(torch_device))
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():

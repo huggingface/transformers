@@ -84,6 +84,33 @@ SPECIAL_CASES_TO_ALLOW = {
     "ClapAudioConfig": ["num_classes"],
     # Not used, but providing useful information to users
     "SpeechT5HifiGanConfig": ["sampling_rate"],
+    # Actually used in the config or generation config, in that case necessary for the sub-components generation
+    "SeamlessM4TConfig": [
+        "max_new_tokens",
+        "t2u_max_new_tokens",
+        "t2u_decoder_attention_heads",
+        "t2u_decoder_ffn_dim",
+        "t2u_decoder_layers",
+        "t2u_encoder_attention_heads",
+        "t2u_encoder_ffn_dim",
+        "t2u_encoder_layers",
+        "t2u_max_position_embeddings",
+    ],
+    # Actually used in the config or generation config, in that case necessary for the sub-components generation
+    "SeamlessM4Tv2Config": [
+        "max_new_tokens",
+        "t2u_decoder_attention_heads",
+        "t2u_decoder_ffn_dim",
+        "t2u_decoder_layers",
+        "t2u_encoder_attention_heads",
+        "t2u_encoder_ffn_dim",
+        "t2u_encoder_layers",
+        "t2u_max_position_embeddings",
+        "t2u_variance_pred_dropout",
+        "t2u_variance_predictor_embed_dim",
+        "t2u_variance_predictor_hidden_dim",
+        "t2u_variance_predictor_kernel_size",
+    ],
 }
 
 
@@ -96,6 +123,7 @@ SPECIAL_CASES_TO_ALLOW.update(
         "DinatConfig": True,
         "DonutSwinConfig": True,
         "EfficientFormerConfig": True,
+        "FastSpeech2ConformerConfig": True,
         "FSMTConfig": True,
         "JukeboxConfig": True,
         "LayoutLMv2Config": True,
@@ -115,7 +143,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "SwitchTransformersConfig": True,
         "TableTransformerConfig": True,
         "TapasConfig": True,
-        "TransfoXLConfig": True,
         "UniSpeechConfig": True,
         "UniSpeechSatConfig": True,
         "WavLMConfig": True,
@@ -192,6 +219,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "out_features",
         "out_indices",
         "sampling_rate",
+        "use_pretrained_backbone",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

@@ -24,7 +24,8 @@ if is_vision_available():
 @require_torchvision
 class TestFuyuImageProcessor(unittest.TestCase):
     def setUp(self):
-        self.processor = FuyuImageProcessor(target_height=160, target_width=320, padding_value=1.0)
+        self.size = {"height": 160, "width": 320}
+        self.processor = FuyuImageProcessor(size=self.size, padding_value=1.0)
         self.batch_size = 3
         self.channels = 3
         self.height = 300
@@ -38,29 +39,25 @@ class TestFuyuImageProcessor(unittest.TestCase):
         self.sample_image_pil = Image.fromarray(self.sample_image)
 
     def test_patches(self):
-        expected_num_patches = self.processor.get_num_patches(
-            img_h=self.height, img_w=self.width, patch_dim_h=self.image_patch_dim_h, patch_dim_w=self.image_patch_dim_w
-        )
+        expected_num_patches = self.processor.get_num_patches(image_height=self.height, image_width=self.width)
 
-        patches_final = self.processor.patchify_image(
-            image=self.image_input, patch_dim_h=self.image_patch_dim_h, patch_dim_w=self.image_patch_dim_w
-        )
+        patches_final = self.processor.patchify_image(image=self.image_input)
         assert (
             patches_final.shape[1] == expected_num_patches
         ), f"Expected {expected_num_patches} patches, got {patches_final.shape[1]}."
 
     def test_scale_to_target_aspect_ratio(self):
         # (h:450, w:210) fitting (160, 320) -> (160, 210*160/450)
-        scaled_image = self.processor._scale_to_target_aspect_ratio(self.sample_image)
+        scaled_image = self.processor.resize(self.sample_image, size=self.size)
         self.assertEqual(scaled_image.shape[0], 160)
         self.assertEqual(scaled_image.shape[1], 74)
 
     def test_apply_transformation_numpy(self):
-        transformed_image = self.processor.apply_transformation(self.sample_image)
-        self.assertEqual(transformed_image.shape[0], 160)
-        self.assertEqual(transformed_image.shape[1], 320)
+        transformed_image = self.processor.preprocess(self.sample_image).images[0][0]
+        self.assertEqual(transformed_image.shape[1], 160)
+        self.assertEqual(transformed_image.shape[2], 320)
 
     def test_apply_transformation_pil(self):
-        transformed_image = self.processor.apply_transformation(self.sample_image_pil)
-        self.assertEqual(transformed_image.shape[0], 160)
-        self.assertEqual(transformed_image.shape[1], 320)
+        transformed_image = self.processor.preprocess(self.sample_image_pil).images[0][0]
+        self.assertEqual(transformed_image.shape[1], 160)
+        self.assertEqual(transformed_image.shape[2], 320)

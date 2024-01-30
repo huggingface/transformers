@@ -110,6 +110,7 @@ class TvltConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "tvlt"
 
     def __init__(

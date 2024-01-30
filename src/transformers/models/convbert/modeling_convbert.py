@@ -264,10 +264,6 @@ class ConvBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ConvBertEncoder):
-            module.gradient_checkpointing = value
-
 
 class SeparableConv1D(nn.Module):
     """This class implements separable convolution, i.e. a depthwise and a pointwise layer"""
@@ -632,20 +628,14 @@ class ConvBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -866,12 +856,13 @@ class ConvBertGeneratorPredictions(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+        self.activation = get_activation("gelu")
         self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
         self.dense = nn.Linear(config.hidden_size, config.embedding_size)
 
     def forward(self, generator_hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.dense(generator_hidden_states)
-        hidden_states = get_activation("gelu")(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
 
         return hidden_states

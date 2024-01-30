@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import BloomConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -401,7 +401,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertIsNotNone(model)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_simple_generation(self):
         # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
@@ -440,7 +440,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
@@ -460,7 +460,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batch_generation_padd(self):
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
@@ -489,7 +489,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
@@ -699,9 +699,7 @@ class BloomEmbeddingTest(unittest.TestCase):
             },
         }
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         EMBEDDINGS_DS_AFTER_LN_MEAN = {
             3478: -6.580352783203125e-05,
@@ -782,9 +780,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         )
         model.eval()
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         MEAN_VALUE_LAST_LM = -4.3392181396484375e-05
         MIN_MAX_DICT = {"min": -2.0625, "max": 2.75}
@@ -812,9 +808,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         )  # load in bf16
         model.eval()
 
-        # fmt: off
-        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]
-        # fmt: on
+        EXAMPLE_IDS = [3478, 368, 109586, 35433, 2, 77, 132619, 3478, 368, 109586, 35433, 2, 2175, 23714, 73173, 144252, 2, 77, 132619, 3478]  # fmt: skip
 
         MEAN_LOGITS_GPU_1 = -1.823902130126953e-05
         MEAN_LOGITS_GPU_2 = 1.9431114196777344e-05

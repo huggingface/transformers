@@ -146,7 +146,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
 
-        tokenizer.push_to_hub("test-tokenizer", use_auth_token=self._token)
+        tokenizer.push_to_hub("test-tokenizer", token=self._token)
         new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
         self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
@@ -155,7 +155,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            tokenizer.save_pretrained(tmp_dir, repo_id="test-tokenizer", push_to_hub=True, use_auth_token=self._token)
+            tokenizer.save_pretrained(tmp_dir, repo_id="test-tokenizer", push_to_hub=True, token=self._token)
 
         new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
         self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
@@ -167,7 +167,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
 
-        tokenizer.push_to_hub("valid_org/test-tokenizer-org", use_auth_token=self._token)
+        tokenizer.push_to_hub("valid_org/test-tokenizer-org", token=self._token)
         new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
         self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
@@ -177,7 +177,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-tokenizer-org", push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="valid_org/test-tokenizer-org", push_to_hub=True, token=self._token
             )
 
         new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
@@ -193,7 +193,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             tokenizer = CustomTokenizer(vocab_file)
 
         # No fast custom tokenizer
-        tokenizer.push_to_hub("test-dynamic-tokenizer", use_auth_token=self._token)
+        tokenizer.push_to_hub("test-dynamic-tokenizer", token=self._token)
 
         tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
         # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
@@ -210,7 +210,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             bert_tokenizer.save_pretrained(tmp_dir)
             tokenizer = CustomTokenizerFast.from_pretrained(tmp_dir)
 
-        tokenizer.push_to_hub("test-dynamic-tokenizer", use_auth_token=self._token)
+        tokenizer.push_to_hub("test-dynamic-tokenizer", token=self._token)
 
         tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
         # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module

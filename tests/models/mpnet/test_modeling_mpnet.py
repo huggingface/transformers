@@ -246,6 +246,10 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_question_answering(*config_and_inputs)
 
+    @unittest.skip("TFMPNet adds poolers to all models, unlike the PT model class.")
+    def test_tf_from_pt_safetensors(self):
+        return
+
 
 @require_torch
 class MPNetModelIntegrationTest(unittest.TestCase):

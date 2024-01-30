@@ -101,6 +101,7 @@ class LayoutLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "layoutlm"
 
     def __init__(

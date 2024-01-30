@@ -26,6 +26,8 @@ requirements:
     - protobuf
     - tokenizers >=0.11.1,!=0.11.3,<0.13
     - pyyaml >=5.1
+    - safetensors
+    - fsspec
   run:
     - python
     - numpy >=1.17
@@ -40,6 +42,8 @@ requirements:
     - protobuf
     - tokenizers >=0.11.1,!=0.11.3,<0.13
     - pyyaml >=5.1
+    - safetensors
+    - fsspec
 
 test:
   imports:

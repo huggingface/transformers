@@ -2616,7 +2616,7 @@ class OneFormerTextTransformer(nn.Module):
     def forward(self, hidden_states: torch.Tensor):
         for layer in self.layers:
             if self.use_checkpoint:
-                hidden_states = torch.utils.checkpoint.checkpoint(layer, hidden_states)
+                hidden_states = self._gradient_checkpointing_func(layer, hidden_states)
             else:
                 hidden_states = layer(hidden_states)
         return hidden_states
@@ -3247,5 +3247,5 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         if not return_dict:
             output = tuple(v for v in output.values())
             if loss is not None:
-                output = ((loss)) + output
+                output = (loss) + output
         return output
