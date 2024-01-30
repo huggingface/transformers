@@ -20,7 +20,6 @@ import inspect
 import unittest
 
 from transformers import VMambaConfig
-from transformers.models.auto.image_processing_auto import AutoImageProcessor
 from transformers.models.perceiver.image_processing_perceiver import PerceiverImageProcessor
 from transformers.models.vmamba.modeling_vmamba import VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
@@ -41,7 +40,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from torch import nn
 
     from transformers import VMambaForImageClassification, VMambaModel
 
@@ -151,7 +149,7 @@ class VMambaModelTester:
         ) = config_and_inputs
 
         config.depths = [2, 2]
-        config.dims =[8, 16]
+        config.dims = [8, 16]
         config.d_state = 8
         config.num_labels = 2
 
@@ -220,15 +218,20 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             wte = model.get_input_embeddings()
             embeddings = wte(pixel_values)
-            
+
             expected_spatial_shape = pixel_values.shape[-1] // config.patch_size
-            self.assertEqual(embeddings.shape, (pixel_values.shape[0], config.dims[0], expected_spatial_shape, expected_spatial_shape))
+            self.assertEqual(
+                embeddings.shape,
+                (pixel_values.shape[0], config.dims[0], expected_spatial_shape, expected_spatial_shape),
+            )
 
     unittest.skip(reason="VMamba does not use output embeddings")
+
     def test_model_common_attributes(self):
         pass
 
     unittest.skip(reason="VMamba does not use attention")
+
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -269,7 +272,7 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
-        
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -316,11 +319,8 @@ def prepare_img():
 class VMambaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return (
-            PerceiverImageProcessor()
-            if is_vision_available()
-            else None
-        )
+        return PerceiverImageProcessor() if is_vision_available() else None
+
     @slow
     def test_inference_image_classification_head(self):
         model = VMambaForImageClassification.from_pretrained("/home/derk/hf_checkpoints/").to(torch_device)
@@ -337,7 +337,7 @@ class VMambaModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.5905,  1.6459, -0.3650]).to(torch_device)
+        expected_slice = torch.tensor([-1.5905, 1.6459, -0.3650]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
