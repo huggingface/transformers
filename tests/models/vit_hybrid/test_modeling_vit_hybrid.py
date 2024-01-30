@@ -122,6 +122,7 @@ class ViTHybridModelTester:
             initializer_range=self.initializer_range,
             backbone_featmap_shape=self.backbone_featmap_shape,
             backbone_config=backbone_config,
+            backbone=None,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
