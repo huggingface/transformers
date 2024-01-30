@@ -21,7 +21,7 @@ if is_torch_available():
     import torch
 
 
-@slow
+@slow   
 @require_torch
 @require_torch_gpu
 def test_equivalence_cpu_cuda():
