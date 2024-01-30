@@ -141,20 +141,20 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
 class MusicgenMelodyConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
-    Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder, audio decoder and Musicgen Melody decoder
+    Musicgen Melody model according to the specified arguments, defining the text encoder, audio decoder and Musicgen Melody decoder
     configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        num_chroma (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+        chroma_length (`<fill_type>`, *optional*, defaults to 235): <fill_docstring>
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
                 - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
                 - **audio_decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the audio decoder config.
                 - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
@@ -171,14 +171,13 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     MusicgenMelodyForConditionalGeneration,
     ... )
 
-    >>> # Initializing text encoder, audio encoder, and decoder model configurations
+    >>> # Initializing text encoder, audio decoder, and decoder model configurations
     >>> text_encoder_config = T5Config()
-    >>> audio_encoder_config = EncodecConfig() # TODO: demucs
     >>> audio_decoder_config = EncodecConfig()
     >>> decoder_config = MusicgenMelodyDecoderConfig()
 
     >>> configuration = MusicgenMelodyConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_encoder_config, audio_decoder_config, decoder_config
+    ...     text_encoder_config, audio_decoder_config, decoder_config
     ... )
 
     >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the facebook/musicgen-melody style configuration
@@ -187,7 +186,6 @@ class MusicgenMelodyConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     >>> config_text_encoder = model.config.text_encoder
-    >>> config_audio_encoder = model.config.audio_encoder
     >>> config_audio_decoder = model.config.audio_decoder
     >>> config_decoder = model.config.decoder
 
@@ -202,22 +200,18 @@ class MusicgenMelodyConfig(PretrainedConfig):
     model_type = "musicgen_melody"
     is_composition = True
 
-    def __init__(self,
-                 num_chroma=12, # TODO: add to
-                 num_mel_bins=16384, # TODO: add to
-                 frame_length=16384, # TODO
-                 hop_length=4096, # TODO
-                 chroma_length=235, # TODO: chroma duration used during training. This is later used for correct padding in case we are using chroma as prefix.
-                 **kwargs):
+    def __init__(
+        self,
+        num_chroma=12,  # TODO: add to
+        chroma_length=235,  # TODO: DO NOT REMOVE chroma duration used during training. This is later used for correct padding in case we are using chroma as prefix.
+        **kwargs,
+    ):
         super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "audio_decoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder, audio_decoder and decoder config")
+        if "text_encoder" not in kwargs or "audio_decoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError("Config has to be initialized with text_encoder, audio_decoder and decoder config")
 
         text_encoder_config = kwargs.pop("text_encoder")
         text_encoder_model_type = text_encoder_config.pop("model_type")
-
-        audio_encoder_config = kwargs.pop("audio_encoder")
-        audio_encoder_model_type = audio_encoder_config.pop("model_type")
 
         audio_decoder_config = kwargs.pop("audio_decoder")
         audio_decoder_model_type = audio_decoder_config.pop("model_type")
@@ -225,28 +219,23 @@ class MusicgenMelodyConfig(PretrainedConfig):
         decoder_config = kwargs.pop("decoder")
 
         self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         self.audio_decoder = AutoConfig.for_model(audio_decoder_model_type, **audio_decoder_config)
         self.decoder = MusicgenMelodyDecoderConfig(**decoder_config)
         self.is_encoder_decoder = False
-        
+
         self.num_chroma = num_chroma
-        self.num_mel_bins = num_mel_bins
-        self.frame_length = frame_length
-        self.hop_length = hop_length
         self.chroma_length = chroma_length
 
     @classmethod
     def from_sub_models_config(
         cls,
         text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
         audio_decoder_config: PretrainedConfig,
         decoder_config: MusicgenMelodyDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio encoder, audio decoder and decoder
+        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio decoder and decoder
         configurations.
 
         Returns:
@@ -255,7 +244,6 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
         return cls(
             text_encoder=text_encoder_config.to_dict(),
-            audio_encoder=audio_encoder_config.to_dict(),
             audio_decoder=audio_decoder_config.to_dict(),
             decoder=decoder_config.to_dict(),
             **kwargs,

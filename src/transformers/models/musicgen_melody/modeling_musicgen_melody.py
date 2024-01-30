@@ -32,9 +32,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
     ModelOutput,
-    Seq2SeqLMOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -46,10 +44,6 @@ from ...utils import (
 from ..auto.configuration_auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from .configuration_musicgen_melody import MusicgenMelodyConfig, MusicgenMelodyDecoderConfig
-
-
-from librosa.filters import chroma
-import torchaudio
 
 
 if TYPE_CHECKING:
@@ -67,23 +61,43 @@ MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.musicgen.modeling_musicgen.MusicgenUnconditionalInput with Musicgen->MusicgenMelody
-class MusicgenMelodyUnconditionalInput(ModelOutput):
+class MusicgenMelodyOutputWithPast(ModelOutput):
     """
+    Base class for Musicgen Melody autoregressive outputs.
+
     Args:
-        encoder_outputs  (`Tuple[torch.FloatTensor]` of length 1, with tensor shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the text encoder model.
-        attention_mask (`torch.LongTensor`)  of shape `(batch_size, sequence_length)`, *optional*):
-            Encoder attention mask to avoid performing attention on padding token indices. Mask values selected in `[0,
-            1]`: 1 for tokens that are **not masked**, 0 for tokens that are **masked**.
-        guidance_scale (`float`, *optional*):
-            Guidance scale for classifier free guidance, setting the balance between the conditional logits (predicted
-            from the prompts) and the unconditional logits (predicted without prompts).
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        conditional_hidden_states (`torch.FloatTensor` of shape `(batch_size, conditional_sequence_length, hidden_size)`, *optional*): # TODO update docs
+            Sequence of conditional hidden-states representing the concatenation of the projeted text encoder output and the projeted audio encoder output.
+            Used as a conditional signal.
     """
 
-    encoder_outputs: Tuple[torch.FloatTensor] = None
-    attention_mask: torch.LongTensor = None
-    guidance_scale: float = None
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    conditional_hidden_states: Optional[torch.FloatTensor] = None
 
 
 # Copied from transformers.models.encoder_decoder.modeling_encoder_decoder.shift_tokens_right
@@ -103,73 +117,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-
-class MusicgenMelodyChromaExtractor(nn.Module):
-    """This module processes the audio conditioning."""
-    def __init__(self, config: MusicgenMelodyConfig):
-        super().__init__()
-        self.audio_model_sampling_rate = config.audio_encoder.sampling_rate
-        self.sampling_rate = config.sampling_rate
-        
-        self.num_mel_bins = config.num_mel_bins
-        
-        self.register_buffer('fbanks', torch.from_numpy(chroma(sr=config.sampling_rate, n_fft=config.num_mel_bins, tuning=0,
-                                                                       n_chroma=config.num_chroma)), persistent=False)
-        self.spectrogram = torchaudio.transforms.Spectrogram(n_fft=config.num_mel_bins, win_length=config.frame_length,
-                                                      hop_length=config.hop_length, power=2, center=True,
-                                                      pad=0, normalized=True)
-        
-        # TODO: adapt depending on how Demucs goes -> should depends on the model
-        self.register_buffer('stem_indices', torch.tensor([3,2]), persistent=False)
-        
-    def forward(self, wav):
-        # extract "vocals" and "others" sources from audio encoder (demucs) output
-        # [batch_size, num_stems, channel_size, audio_length]
-        wav = wav[:, self.stem_indices]
-        
-        # merge extracted stems to single waveform
-        wav = wav.sum(1)
-        
-        # convert to mono-channel waveform
-        wav = wav.mean(dim=1, keepdim=True)
-                
-        # resample to model sampling rate
-        # not equivalent to julius.resample
-        wav = torchaudio.functional.resample(wav, self.audio_model_sampling_rate, self.sampling_rate,
-                             rolloff=0.945,
-                             lowpass_filter_width=24
-                             )
-                
-        # the rest converts the raw waveform to chroma spectrogram
-        
-        # if wav length is not long enough, pad it
-        wav_length = wav.shape[-1]
-        if wav_length < self.num_mel_bins:
-            
-            pad = self.num_mel_bins-wav_length
-            rest = 0 if pad % 2 == 0 else 1
-            wav = nn.functional.pad(wav, (pad//2, pad//2 + rest), "constant", 0)
-        
-        # squeeze alongside channel dimension
-        spec = self.spectrogram(wav).squeeze(1)
-        
-        # sum along the frequency dimension
-        raw_chroma = torch.einsum('cf, ...ft->...ct', self.fbanks, spec)
-        # normalise with max value
-        norm_chroma = torch.nn.functional.normalize(raw_chroma, p=float('inf'), dim=-2, eps=1e-6)
-        
-        # transpose time and chroma dimension -> (batch, time, chroma)
-        norm_chroma = norm_chroma.transpose(1,2)
-            
-        # replace max value alongside chroma dimension with 1 and replace the rest with 0
-        idx = norm_chroma.argmax(-1, keepdim=True)
-        norm_chroma[:] = 0
-        norm_chroma.scatter_(dim=-1, index=idx, value=1)
-        
-        return norm_chroma
-        
-        
 
 
 # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenSinusoidalPositionalEmbedding with Musicgen->MusicgenMelody
@@ -208,10 +155,11 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
         return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-        bsz, codebooks, seq_len = input_ids.size()
+    # Ignore copy
+    def forward(self, inputs_embeds: torch.Tensor, past_key_values_length: int = 0):
+        bsz, seq_len, _ = inputs_embeds.size()
         # Create the position ids from the input token ids.
-        position_ids = (torch.arange(seq_len) + past_key_values_length).to(input_ids.device)
+        position_ids = (torch.arange(seq_len) + past_key_values_length).to(inputs_embeds.device)
         # expand embeddings if needed
         if seq_len > self.weights.size(0):
             self.make_weights(seq_len + self.offset, self.embedding_dim)
@@ -522,7 +470,7 @@ MUSICGEN_MELODY_INPUTS_DOCSTRING = r"""
             Indices of decoder input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
 
             Indices can be obtained by encoding an audio prompt with an audio encoder model to predict audio codes,
-            such as with the [`EncodecModel`]. See [`EncodecModel.encode`] for details.
+            such as with the [`EncodecModel`]. See [`EncodecModel.encode`] for details.  # TODO change
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
@@ -551,11 +499,6 @@ MUSICGEN_MELODY_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -621,8 +564,8 @@ MUSICGEN_MELODY_DECODER_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output. 
-            Used as a conditional signal. 
+            Sequence of hidden-states representing the concatenation of the text encoder output and the processed audio encoder output.
+            Used as a conditional signal.
         encoder_attention_mask (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding tokens indices of the encoder hidden states. Mask values
             selected in `[0, 1]`:
@@ -706,8 +649,8 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        conditional_hidden_states: Optional[torch.FloatTensor] = None,  # TODO: add to docstrings
+        conditional_attention_mask: Optional[torch.LongTensor] = None,  # TODO: add to docstrings
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -742,23 +685,35 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = sum([self.embed_tokens[codebook](input[:, codebook]) for codebook in range(num_codebooks)])
-            
-        if encoder_hidden_states is not None:
-            # fuse encoder_hidden_states (aka conditioning tensor here) and inputs_embeds
-            inputs_embeds = torch.cat([encoder_hidden_states, inputs_embeds], dim=1)
-            
-            input_shape = inputs_embeds.size()[:-1]
-            
-            # TODO: check if it makes sense and if the original implementation does it
-            # attention_mask = torch.cat([encoder_attention_mask, attention_mask], dim=1)
 
-        # TODO: not causal for because of conditioning
+        if conditional_hidden_states is not None:
+            # take care of attention masks
+            if conditional_attention_mask is not None and attention_mask is None:
+                attention_mask = torch.ones(inputs_embeds.shape[:2], device = inputs_embeds.device)
+            
+            if attention_mask is not None:
+                if conditional_attention_mask is None:
+                    conditional_attention_mask = torch.ones(conditional_hidden_states.shape[:2], device = attention_mask.device)
+                attention_mask = torch.cat([conditional_attention_mask, attention_mask], dim=1)
+            
+
+            # fuse conditional_hidden_states and inputs_embeds
+            inputs_embeds = torch.cat([conditional_hidden_states, inputs_embeds], dim=1)
+
+            
+            
+
+        # TODO: check if it makes sense and if the original implementation does it
+
+        input_shape = inputs_embeds.size()[:-1]
+        
+        # TODO: not causal for because of conditioning - yes causal for ?
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
+        positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
 
@@ -816,7 +771,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -865,8 +820,8 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        conditional_hidden_states: Optional[torch.FloatTensor] = None,
+        conditional_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -886,8 +841,8 @@ class MusicgenMelodyModel(MusicgenMelodyPreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            encoder_attention_mask=encoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
+            conditional_hidden_states=conditional_hidden_states,
+            conditional_attention_mask=conditional_attention_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -946,14 +901,14 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         return self.model.decoder
 
     @add_start_docstrings_to_model_forward(MUSICGEN_MELODY_DECODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=MusicgenMelodyOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        conditional_hidden_states: Optional[torch.FloatTensor] = None,
+        conditional_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -962,7 +917,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, MusicgenMelodyOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
@@ -976,8 +931,8 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            conditional_hidden_states=conditional_hidden_states,
+            conditional_attention_mask=conditional_attention_mask,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1002,7 +957,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             output = (lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return MusicgenMelodyOutputWithPast(
             loss=loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
@@ -1015,8 +970,8 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         self,
         input_ids,
         attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        conditional_hidden_states=None,
+        conditional_attention_mask=None,
         head_mask=None,
         past_key_values=None,
         use_cache=True,
@@ -1040,25 +995,28 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             input_ids = input_ids.repeat((2, 1))
             if attention_mask is not None:
                 attention_mask = attention_mask.repeat((2, 1))
-                
-            if encoder_hidden_states is not None:
-                encoder_hidden_states = torch.concatenate([encoder_hidden_states, torch.zeros_like(encoder_hidden_states)], dim=0)
-                
-            if encoder_attention_mask is not None:
-                encoder_hidden_states = torch.concatenate(encoder_hidden_states, encoder_hidden_states, dim=0)
-                
+
+            if conditional_hidden_states is not None:
+                conditional_hidden_states = torch.concatenate(
+                    [conditional_hidden_states, torch.zeros_like(conditional_hidden_states)], dim=0
+                )
+
+            if conditional_attention_mask is not None:
+                conditional_attention_mask = torch.concatenate(
+                    conditional_attention_mask, torch.zeros_like(conditional_attention_mask), dim=0
+                )
+
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
-            
-            # if past, encoder hidden states are not used anymore
-            encoder_hidden_states = None
-            encoder_attention_mask = None
+
+            # we only want to use conditional signal in the 1st generation step but keeping the attention mask
+            conditional_hidden_states = None
 
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
-            "encoder_hidden_states": encoder_hidden_states,
-            "encoder_attention_mask": encoder_attention_mask,
+            "conditional_hidden_states": conditional_hidden_states,
+            "conditional_attention_mask": conditional_attention_mask,
             "head_mask": head_mask,
             "past_key_values": past_key_values,
             "use_cache": use_cache,
@@ -1147,6 +1105,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         return input_ids
 
     @torch.no_grad()
+    # Ignore copy
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1264,14 +1223,13 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
-        requires_attention_mask = "encoder_outputs" not in model_kwargs
-        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+        if model_kwargs.get("attention_mask", None) is None:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 input_ids, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
         # 5. Prepare `max_length` depending on other stopping criteria.
-        # TODO: modify here to account for encoder_hidden_states
+        # TODO: modify here to account for encoder_hidden_states - is it necessary ?
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
@@ -1420,33 +1378,30 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite Musicgen Melody model with a text encoder, audio encoder and MusicgenMelody decoder, "
+    "The composite Musicgen Melody model with a text and audio conditional models, a MusicgenMelody decoder and an audio decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_MELODY_START_DOCSTRING,
 )
-# Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration with MUSICGEN->MUSICGEN_MELODY,Musicgen->MusicgenMelody,small->melody
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
     config_class = MusicgenMelodyConfig
     # base_model_prefix = "encoder_decoder" # TODO: modify
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
 
-    # Ignore copy
     def __init__(
         self,
         config: Optional[MusicgenMelodyConfig] = None,
         text_encoder: Optional[PreTrainedModel] = None,
-        audio_encoder: Optional[PreTrainedModel] = None,
         audio_decoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
-        if config is None and (text_encoder is None or audio_encoder is None or audio_decoder is None or decoder is None):
+        if config is None and (text_encoder is None or audio_decoder is None or decoder is None):
             raise ValueError(
-                "Either a configuration has to be provided, or all four of text encoder, audio encoder, audio decoder and Musicgen Melody decoder."
+                "Either a configuration has to be provided, or all four of text encoder, audio decoder and Musicgen Melody decoder."
             )
         if config is None:
             config = MusicgenMelodyConfig.from_sub_models_config(
-                text_encoder.config, audio_encoder.config, audio_decoder.config, decoder.config
+                text_encoder.config, audio_decoder.config, decoder.config
             )
         else:
             if not isinstance(config, self.config_class):
@@ -1460,33 +1415,22 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
             text_encoder = AutoModelForTextEncoding.from_config(config.text_encoder)
 
-        if audio_encoder is None:
-            from ..auto.modeling_auto import AutoModel
-
-            audio_encoder = AutoModel.from_config(config.audio_encoder)
-            
         if audio_decoder is None:
             from ..auto.modeling_auto import AutoModel
+
             audio_decoder = AutoModel.from_config(config.audio_decoder)
 
         if decoder is None:
             decoder = MusicgenMelodyForCausalLM(config.decoder)
 
         self.text_encoder = text_encoder
-        self.audio_encoder = audio_encoder
         self.audio_decoder = audio_decoder
-        self.chroma_extractor = MusicgenMelodyChromaExtractor(config)
         self.decoder = decoder
 
         if self.text_encoder.config.to_dict() != self.config.text_encoder.to_dict():
             logger.warning(
                 f"Config of the text_encoder: {self.text_encoder.__class__} is overwritten by shared text_encoder config:"
                 f" {self.config.text_encoder}"
-            )
-        if self.audio_encoder.config.to_dict() != self.config.audio_encoder.to_dict():
-            logger.warning(
-                f"Config of the audio_encoder: {self.audio_encoder.__class__} is overwritten by shared audio_encoder config:"
-                f" {self.config.audio_encoder}"
             )
         if self.audio_decoder.config.to_dict() != self.config.audio_decoder.to_dict():
             logger.warning(
@@ -1502,14 +1446,13 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.text_encoder.config = self.config.text_encoder
-        self.audio_encoder.config = self.config.audio_encoder
         self.audio_decoder.config = self.config.audio_decoder
         self.decoder.config = self.config.decoder
 
         # text encoder outputs might need to be projected to different dimension for decoder
         if self.text_encoder.config.hidden_size != self.decoder.config.hidden_size:
             self.enc_to_dec_proj = nn.Linear(self.text_encoder.config.hidden_size, self.decoder.config.hidden_size)
-            
+
         # audio encoder outputs after chroma extraction might need to be projected to different dimension for decoder
         if self.config.num_chroma != self.decoder.config.hidden_size:
             self.audio_enc_to_dec_proj = nn.Linear(self.config.num_chroma, self.decoder.config.hidden_size)
@@ -1531,13 +1474,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 self.text_encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
 
-    def get_audio_encoder(self):
-        return self.audio_encoder
-
     def get_text_encoder(self):
         return self.text_encoder
 
-    # Ignore copy
     def get_encoder(self):
         # get the text encoder to compute the conditionning hidden-states for generation
         return self.get_text_encoder()
@@ -1555,7 +1494,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
-    # Ignore copy
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
         Example:
@@ -1577,18 +1515,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
-    # Ignore copy
     def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: str = None,
-        audio_encoder_pretrained_model_name_or_path: str = None,
         audio_decoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
         r"""
-        Instantiate a text encoder, an audio encoder, and a Musicgen Melody decoder from one, two or three base classes of the
+        Instantiate a text encoder, an audio decoder, and a Musicgen Melody decoder from one to four base classes of the
         library from pretrained model checkpoints.
 
 
@@ -1605,15 +1541,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
-            audio_encoder_pretrained_model_name_or_path (`str`, *optional*):
-                Information necessary to initiate the audio encoder. Can be either:
-
-                    - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `facebook/encodec_24khz`. # TODO
-                    - A path to a *directory* containing model weights saved using
-                      [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                      
             audio_decoder_pretrained_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the audio decoder. Can be either:
 
@@ -1641,7 +1568,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
                 - To update the text encoder configuration, use the prefix *text_encoder_* for each configuration
                   parameter.
-                - To update the audio encoder configuration, use the prefix *audio_encoder_* for each configuration
+                - To update the audio decoder configuration, use the prefix *audio_decoder_* for each configuration
                   parameter.
                 - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
                 - To update the parent model configuration, do not use a prefix for each configuration parameter.
@@ -1653,10 +1580,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         ```python
         >>> from transformers import MusicgenMelodyForConditionalGeneration
 
-        >>> # initialize a musicgen_melody model from a t5 text encoder, encodec audio encoder, and musicgen_melody decoder
+        >>> # initialize a musicgen_melody model from a t5 text encoder, encodec audio decoder, and musicgen_melody decoder
         >>> model = MusicgenMelodyForConditionalGeneration.from_sub_models_pretrained(
         ...     text_encoder_pretrained_model_name_or_path="t5-base",
-        ...     audio_encoder_pretrained_model_name_or_path="facebook/demucs", # TODO
         ...     audio_decoder_pretrained_model_name_or_path="facebook/encodec_24khz",
         ...     decoder_pretrained_model_name_or_path="facebook/musicgen-melody",
         ... )
@@ -1672,12 +1598,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             if argument.startswith("text_encoder_")
         }
 
-        kwargs_audio_encoder = {
-            argument[len("audio_encoder_") :]: value
-            for argument, value in kwargs.items()
-            if argument.startswith("audio_encoder_")
-        }
-        
         kwargs_audio_decoder = {
             argument[len("audio_decoder_") :]: value
             for argument, value in kwargs.items()
@@ -1688,11 +1608,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        # remove text encoder, audio encoder, audio_decoder and decoder kwargs from kwargs
+        # remove text encoder, audio_decoder and decoder kwargs from kwargs
         for key in kwargs_text_encoder.keys():
             del kwargs["text_encoder_" + key]
-        for key in kwargs_audio_encoder.keys():
-            del kwargs["audio_encoder_" + key]
         for key in kwargs_audio_decoder.keys():
             del kwargs["audio_decoder_" + key]
         for key in kwargs_decoder.keys():
@@ -1728,33 +1646,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 text_encoder_pretrained_model_name_or_path, *model_args, **kwargs_text_encoder
             )
 
-        audio_encoder = kwargs_audio_encoder.pop("model", None)
-        if audio_encoder is None:
-            if audio_encoder_pretrained_model_name_or_path is None:
-                raise ValueError(
-                    "If `audio_encoder_model` is not defined as an argument, an `audio_encoder_pretrained_model_name_or_path` has "
-                    "to be defined."
-                )
-
-            if "config" not in kwargs_audio_encoder:
-                encoder_config, kwargs_audio_encoder = AutoConfig.from_pretrained(
-                    audio_encoder_pretrained_model_name_or_path, **kwargs_audio_encoder, return_unused_kwargs=True
-                )
-
-                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
-                    logger.info(
-                        f"Initializing {audio_encoder_pretrained_model_name_or_path} as an audio_encoder model "
-                        "from a decoder model. Cross-attention and casual mask are disabled."
-                    )
-                    encoder_config.is_decoder = False
-                    encoder_config.add_cross_attention = False
-
-                kwargs_audio_encoder["config"] = encoder_config
-
-            audio_encoder = AutoModel.from_pretrained(
-                audio_encoder_pretrained_model_name_or_path, *model_args, **kwargs_audio_encoder
-            )
-            
         audio_decoder = kwargs_audio_decoder.pop("model", None)
         if audio_decoder is None:
             if audio_decoder_pretrained_model_name_or_path is None:
@@ -1824,24 +1715,21 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         # instantiate config with corresponding kwargs
         config = MusicgenMelodyConfig.from_sub_models_config(
-            text_encoder.config, audio_encoder.config, audio_decoder.config, decoder.config, **kwargs
+            text_encoder.config, audio_decoder.config, decoder.config, **kwargs
         )
-        return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
+        return cls(text_encoder=text_encoder, audio_decoder=audio_decoder, decoder=decoder, config=config)
 
     @add_start_docstrings_to_model_forward(MUSICGEN_MELODY_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
+    @replace_return_docstrings(output_type=MusicgenMelodyOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.BoolTensor] = None,
         input_values: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
-        audio_encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None, # TODO
         past_key_values: Tuple[Tuple[torch.FloatTensor]] = None,
+        conditional_hidden_states: Optional[torch.FloatTensor] = None,  # TODO
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -1850,7 +1738,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[Tuple, Seq2SeqLMOutput]:
+    ) -> Union[Tuple, MusicgenMelodyOutputWithPast]:
         r"""
         Returns:
 
@@ -1886,95 +1774,66 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             if argument.startswith("text_encoder_")
         }
 
-        kwargs_audio_encoder = {
-            argument[len("audio_encoder_")]: value
-            for argument, value in kwargs.items()
-            if argument.startswith("audio_encoder_")
-        }
-
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        if encoder_outputs is None and input_ids is not None:
-            encoder_outputs = self.text_encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                **kwargs_text_encoder,
-            )
-            
-        if encoder_outputs is not None:
-            encoder_hidden_states = encoder_outputs[0]
-            
-            # optionally project encoder_hidden_states
-            if self.text_encoder.config.hidden_size != self.decoder.config.hidden_size:
-                encoder_hidden_states = self.enc_to_dec_proj(encoder_hidden_states)
+        if conditional_hidden_states is None:
+            if inputs_embeds is None and input_ids is not None:
+                encoder_outputs = self.text_encoder(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    inputs_embeds=inputs_embeds,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                    **kwargs_text_encoder,
+                )
 
-            if isinstance(encoder_outputs, tuple):
-                encoder_outputs = BaseModelOutput(*encoder_outputs)
+                conditional_hidden_states = encoder_outputs[0]
 
+                # optionally project conditional_hidden_states
+                if self.text_encoder.config.hidden_size != self.decoder.config.hidden_size:
+                    conditional_hidden_states = self.enc_to_dec_proj(conditional_hidden_states)
 
-        if attention_mask is not None and encoder_hidden_states is not None:
-            encoder_hidden_states = encoder_hidden_states * attention_mask[..., None]
+            if attention_mask is not None and conditional_hidden_states is not None:
+                conditional_hidden_states = conditional_hidden_states * attention_mask[..., None]
 
-            
-        # TODO: change condition to enter        
-        if audio_encoder_outputs is None and input_values is not None:
-            # TODO: make sure about naming of padding_mask
-            # TODO: change how it is done here -> should forward audio_hidden_states, audio_attenton_mask
-            # audio_encoder_outputs = self.audio_encoder(
-            #     input_values=input_values,
-            #     padding_mask=padding_mask,
-            #     **kwargs_audio_encoder,
-            # )
-            pass
-        
-        if audio_encoder_outputs is not None:
-            # audio_hidden_states = audio_encoder_outputs[0]
-            # TODO: probably not same size
-            audio_hidden_states = input_values
-                
-            # TODO: also needs to adapt attention mask
-            audio_hidden_states = self.chroma_extractor(audio_hidden_states)
-            
-            # optionally project audio_hidden_states -> 
-            # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
-            if self.config.num_chroma != self.decoder.config.hidden_size:
-                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
-                
-            # pad or truncate to config.chroma_length
-            if audio_hidden_states.shape[1] < self.config.chroma_length:
-                n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
-                audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
-            audio_hidden_states = audio_hidden_states[:, :self.config.chroma_length]
+            # TODO: change condition to enter
+            if input_values is not None:
+                audio_hidden_states = input_values
 
-            if encoder_hidden_states is not None:
-                encoder_hidden_states = torch.cat([audio_hidden_states, encoder_hidden_states], dim=1)
-            else:
-                encoder_hidden_states = audio_hidden_states
-                
-            # TODO: same for AUDIO attention_mask ? (padding mask ?)
-            
-            if isinstance(audio_encoder_outputs, tuple):
-                audio_encoder_outputs = BaseModelOutput(*audio_encoder_outputs)
+                # optionally project audio_hidden_states ->
+                # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
+                if self.config.num_chroma != self.decoder.config.hidden_size:
+                    audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
 
+                # pad or truncate to config.chroma_length
+                if audio_hidden_states.shape[1] < self.config.chroma_length:
+                    n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
+                    audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
+                audio_hidden_states = audio_hidden_states[:, : self.config.chroma_length]
+
+                if conditional_hidden_states is not None:
+                    conditional_hidden_states = torch.cat([audio_hidden_states, conditional_hidden_states], dim=1)
+                else:
+                    conditional_hidden_states = audio_hidden_states
+                    
+                    
+
+                # TODO: same for AUDIO attention_mask ? (padding mask ?)
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
                 labels, self.config.pad_token_id, self.config.decoder_start_token_id
             )
 
-
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=attention_mask,
+            conditional_hidden_states=conditional_hidden_states,
+            conditional_attention_mask=attention_mask,
             inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1992,34 +1851,30 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         if not return_dict:
             if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs
+                return (loss,) + decoder_outputs + encoder_outputs  # TODO
             else:
-                return decoder_outputs + encoder_outputs
+                return decoder_outputs + encoder_outputs  # TODO
 
-        # TODO change this
-        return Seq2SeqLMOutput(
+        # TODO change this -> want to have conditional hidden states, audio hidden states, text hidden states, and attention mask
+        # and tradioinal LM outputs (with encoder/decoder)
+        return MusicgenMelodyOutputWithPast(
             loss=loss,
             logits=decoder_outputs.logits,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            hidden_states=decoder_outputs.hidden_states,
+            attentions=decoder_outputs.attentions,
+            conditional_hidden_states=conditional_hidden_states,
         )
 
-    # Ignore copy
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
+        conditional_hidden_states=None,
         past_key_values=None,
         attention_mask=None,
-        head_mask=None,
         decoder_attention_mask=None,
         decoder_head_mask=None,
         use_cache=None,
-        encoder_outputs=None,
-        audio_encoder_outputs=None,
         decoder_delay_pattern_mask=None,
         guidance_scale=None,
         **kwargs,
@@ -2040,8 +1895,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             decoder_input_ids = decoder_input_ids.repeat((2, 1))
             if decoder_attention_mask is not None:
                 decoder_attention_mask = decoder_attention_mask.repeat((2, 1))
-                
-            # TODO: do the same for encoder outputs and audio encoder outputs
 
         if past_key_values is not None:
             past_length = past_key_values[0][0].shape[2]
@@ -2054,26 +1907,22 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 remove_prefix_length = decoder_input_ids.shape[1] - 1
 
             decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-            
-            # only use conditioning encoding once
-            encoder_outputs = None
-            audio_encoder_outputs = None
-            
+
+            # we only want to use conditional signal in the 1st generation step but keeping the attention mask
+            conditional_hidden_states = None
+            # we also have to update the attention mask
 
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "audio_encoder_outputs": audio_encoder_outputs,
+            "input_ids": None,  # conditional_hidden_states is defined. input_ids not needed
+            "conditional_hidden_states": conditional_hidden_states,
             "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "decoder_attention_mask": decoder_attention_mask,
-            "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "use_cache": use_cache,
         }
 
-    # Ignore copy
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
@@ -2121,107 +1970,98 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         return decoder_input_ids, model_kwargs
 
-    # Ignore copy
-    def _prepare_text_encoder_kwargs_for_generation(
+    def _prepare_conditional_hidden_states_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
         model_input_name: Optional[str] = None,
         guidance_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
-        # 1. get text encoder
-        encoder = self.get_text_encoder()
-        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
-        # as the inputs.
-        if hasattr(encoder, "_hf_hook"):
-            encoder._hf_hook.io_same_device = True
+        conditional_hidden_states = None
+        conditional_attention_mask = model_kwargs.get("attention_mask", None)
 
-        # 2. Prepare encoder args and encoder kwargs from model kwargs.
-        irrelevant_prefix = ["decoder_", "use_cache"]
-        encoder_kwargs = {
-            argument: value
-            for argument, value in model_kwargs.items()
-            if not any(argument.startswith(p) for p in irrelevant_prefix)
-        }
-        encoder_signature = set(inspect.signature(encoder.forward).parameters)
-        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
-        if not encoder_accepts_wildcard:
+        # 1. condition on text
+        if inputs_tensor is not None:
+            encoder = self.get_text_encoder()
+            # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
+            # as the inputs.
+            if hasattr(encoder, "_hf_hook"):
+                encoder._hf_hook.io_same_device = True
+
+            # Prepare args and kwargs from model kwargs.
+            irrelevant_prefix = ["decoder_", "use_cache"]
             encoder_kwargs = {
-                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+                argument: value
+                for argument, value in model_kwargs.items()
+                if not any(argument.startswith(p) for p in irrelevant_prefix)
             }
+            encoder_signature = set(inspect.signature(encoder.forward).parameters)
+            encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
+            if not encoder_accepts_wildcard:
+                encoder_kwargs = {
+                    argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
+                }
 
-        # 3. make sure that encoder returns `ModelOutput`
-        model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
-        encoder_kwargs["return_dict"] = True
-        encoder_kwargs[model_input_name] = inputs_tensor
-        last_hidden_state = encoder(**encoder_kwargs).last_hidden_state
+            # make sure that encoder returns `ModelOutput`
+            model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
+            encoder_kwargs["return_dict"] = True
+            encoder_kwargs[model_input_name] = inputs_tensor
+            conditional_hidden_states = encoder(**encoder_kwargs).last_hidden_state
 
-        # for classifier free guidance we need to add a 'null' input to our encoder hidden states
-        if guidance_scale is not None and guidance_scale > 1:
-            last_hidden_state = torch.concatenate([last_hidden_state, torch.zeros_like(last_hidden_state)], dim=0)
-            if "attention_mask" in model_kwargs:
-                model_kwargs["attention_mask"] = torch.concatenate(
-                    [model_kwargs["attention_mask"], torch.zeros_like(model_kwargs["attention_mask"])], dim=0
+            # optionally project conditional_hidden_states
+            if self.text_encoder.config.hidden_size != self.decoder.config.hidden_size:
+                conditional_hidden_states = self.enc_to_dec_proj(conditional_hidden_states)
+
+            # for classifier free guidance we need to add a 'null' input to our encoder hidden states
+            if guidance_scale is not None and guidance_scale > 1:
+                conditional_hidden_states = torch.concatenate(
+                    [conditional_hidden_states, torch.zeros_like(conditional_hidden_states)], dim=0
                 )
+                if conditional_attention_mask is not None:
+                    conditional_attention_mask = torch.concatenate(
+                        [conditional_attention_mask, torch.zeros_like(conditional_attention_mask)], dim=0
+                    )
 
-        model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=last_hidden_state)
-
-        return model_kwargs
-
-    # Ignore copy
-    def _prepare_audio_encoder_kwargs_for_generation(
-        self,
-        input_values,
-        model_kwargs,
-        model_input_name: Optional[str] = None,
-        guidance_scale: Optional[float] = None,
-    ):
-        # TODO: guidance scale !
-        # TODO: adapt to get audio_encoder_outputs -> to get audio_hidden_states and audio_attention_mask from demucs
-        # TODO: as well, for classifier free qguidance, we need to add a 'null' input to our encoder hidden states
-
-        # 1. get audio encoder
-        encoder = self.get_audio_encoder()
-        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
-        # as the inputs.
-        if hasattr(encoder, "_hf_hook"):
-            encoder._hf_hook.io_same_device = True
-
-        # 2. Prepare encoder args and encoder kwargs from model kwargs.
-        irrelevant_prefix = ["decoder_", "use_cache"]
-        encoder_kwargs = {
-            argument: value
-            for argument, value in model_kwargs.items()
-            if not any(argument.startswith(p) for p in irrelevant_prefix)
-        }
-        encoder_signature = set(inspect.signature(encoder.forward).parameters)
-        encoder_accepts_wildcard = "kwargs" in encoder_signature or "model_kwargs" in encoder_signature
-        if not encoder_accepts_wildcard:
-            encoder_kwargs = {
-                argument: value for argument, value in encoder_kwargs.items() if argument in encoder_signature
-            }
-
-        # 3. make sure that encoder returns `ModelOutput`
-        model_input_name = model_input_name if model_input_name is not None else self.audio_encoder.main_input_name
-        encoder_kwargs["return_dict"] = True
+        # 2. condition on audio
+        audio_hidden_states = model_kwargs.get("input_values", None)
+        if inputs_tensor is not None and audio_hidden_states is None:
+            audio_hidden_states = torch.zeros((inputs_tensor.shape[0], 1, self.config.num_chroma), device = self.device, dtype=self.dtype)
+            audio_hidden_states[:, 0] = 1
         
-        
+        if audio_hidden_states is not None:
+            # optionally project audio_hidden_states ->
+            # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
+            if self.config.num_chroma != self.decoder.config.hidden_size:
+                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
 
-        encoder_kwargs[model_input_name] = input_values
-        audio_encoder_outputs = encoder(**encoder_kwargs)
-
-        # TODO: how to deal with audio scales ?
-        # model_kwargs["audio_scales"] = audio_scales
-        
-        # for classifier free guidance we need to add a 'null' input to our encoder hidden states
-        if guidance_scale is not None and guidance_scale > 1:
-            audio_encoder_outputs = torch.concatenate([audio_encoder_outputs, torch.zeros_like(audio_encoder_outputs)], dim=0)
-            if "audio_attention_mask" in model_kwargs:
-                model_kwargs["audio_attention_mask"] = torch.concatenate(
-                    [model_kwargs["audio_attention_mask"], torch.zeros_like(model_kwargs["audio_attention_mask"])], dim=0
+            # for classifier free guidance we need to add a 'null' input to our encoder hidden states
+            if guidance_scale is not None and guidance_scale > 1:
+                audio_hidden_states = torch.concatenate(
+                    [audio_hidden_states, torch.zeros_like(audio_hidden_states)], dim=0
                 )
-                
-        model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=audio_encoder_outputs)
+                if "audio_attention_mask" in model_kwargs:
+                    audio_attention_mask = torch.concatenate(
+                        [model_kwargs["audio_attention_mask"], torch.zeros_like(model_kwargs["audio_attention_mask"])],
+                        dim=0,
+                    )
+                    n_repeat = audio_attention_mask  # TODO
+
+            # pad or truncate to config.chroma_length
+            if audio_hidden_states.shape[1] < self.config.chroma_length:
+                n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
+                audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
+            audio_hidden_states = audio_hidden_states[:, : self.config.chroma_length]
+
+            if conditional_hidden_states is not None:
+                conditional_hidden_states = torch.cat([audio_hidden_states, conditional_hidden_states], dim=1)
+            else:
+                conditional_hidden_states = audio_hidden_states
+
+            if conditional_attention_mask is not None:
+                conditional_attention_mask = torch.cat([torch.ones(audio_hidden_states.shape[:2], device = self.device), conditional_attention_mask], dim=1)
+
+        model_kwargs["conditional_hidden_states"] = conditional_hidden_states
+        model_kwargs["attention_mask"] = conditional_attention_mask
 
         return model_kwargs
 
@@ -2235,7 +2075,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             " model.decoder.resize_token_embeddings(...))"
         )
 
-    # Ignore copy
     def _maybe_initialize_input_ids_for_generation(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -2261,7 +2100,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     @torch.no_grad()
-    # Ignore copy
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -2347,10 +2185,6 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
-        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) == tuple:
-            # wrap the unconditional outputs as a BaseModelOutput for compatibility with the rest of generate
-            model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs["encoder_outputs"][0])
-
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
@@ -2383,26 +2217,17 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
-        requires_attention_mask = "encoder_outputs" not in model_kwargs
-
-        if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
+        if model_kwargs.get("attention_mask", None) is None:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
             )
 
-        if "encoder_outputs" not in model_kwargs:
-            # encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_text_encoder_kwargs_for_generation(
+        if "conditional_hidden_states" not in model_kwargs:
+            # conditional_hidden_states are created and added to `model_kwargs`
+            model_kwargs = self._prepare_conditional_hidden_states_kwargs_for_generation(
                 inputs_tensor,
                 model_kwargs,
                 model_input_name,
-                guidance_scale=generation_config.guidance_scale,
-            )
-
-        if "audio_encoder_outputs" not in model_kwargs and "input_values" in model_kwargs:
-            model_kwargs = self._prepare_audio_encoder_kwargs_for_generation(
-                model_kwargs["input_values"],
-                model_kwargs,
                 guidance_scale=generation_config.guidance_scale,
             )
 
@@ -2585,37 +2410,32 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             return outputs
         else:
             return output_values
-
-    def get_unconditional_inputs(self, num_samples=1):
-        """
-        Helper function to get null inputs for unconditional generation, enabling the model to be used without the
-        feature extractor or tokenizer.
-
-        Args:
-            num_samples (int, *optional*):
-                Number of audio samples to unconditionally generate.
-            max_new_tokens (int, *optional*):
-                Number of tokens to generate for each sample. More tokens means longer audio samples, at the expense of
-                longer inference (since more audio tokens need to be generated per sample).
-
-        Example:
-        ```python
-        >>> from transformers import MusicgenMelodyForConditionalGeneration
-
-        >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
-
-        >>> # get the unconditional (or 'null') inputs for the model
-        >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
-        >>> audio_samples = model.generate(**unconditional_inputs, max_new_tokens=256)
-        ```"""
-        last_hidden_state = torch.zeros(
-            (num_samples, 1, self.config.text_encoder.hidden_size), device=self.device, dtype=self.dtype
+        
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: Dict[str, Any],
+        is_encoder_decoder: bool = False,
+        standardize_cache_format: bool = False,
+    ) -> Dict[str, Any]:
+        # update past_key_values
+        model_kwargs["past_key_values"] = self._extract_past_from_model_output(
+            outputs, standardize_cache_format=standardize_cache_format
         )
+        if getattr(outputs, "state", None) is not None:
+            model_kwargs["state"] = outputs.state
 
-        attention_mask = torch.zeros((num_samples, 1), device=self.device, dtype=torch.long)
+        # update token_type_ids with last value
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
-        return MusicgenMelodyUnconditionalInput(
-            encoder_outputs=(last_hidden_state,),
-            attention_mask=attention_mask,
-            guidance_scale=1.0,
-        )
+        # update decoder attention mask
+        if "decoder_attention_mask" in model_kwargs:
+            decoder_attention_mask = model_kwargs["decoder_attention_mask"]
+            model_kwargs["decoder_attention_mask"] = torch.cat(
+                [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
+                dim=-1,
+            )
+
+        return model_kwargs

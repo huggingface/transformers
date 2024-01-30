@@ -13,7 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available,is_librosa_available, is_torchaudio_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_librosa_available,
+    is_torch_available,
+    is_torchaudio_available,
+)
 
 
 _import_structure = {
@@ -31,6 +37,14 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
+    _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_musicgen_melody"] = [
         "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MusicgenMelodyForConditionalGeneration",
@@ -38,6 +52,7 @@ else:
         "MusicgenMelodyModel",
         "MusicgenMelodyPreTrainedModel",
     ]
+
 
 if TYPE_CHECKING:
     from .configuration_musicgen_melody import (
@@ -53,6 +68,14 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_musicgen_melody import (
             MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenMelodyForCausalLM,
@@ -60,6 +83,7 @@ if TYPE_CHECKING:
             MusicgenMelodyModel,
             MusicgenMelodyPreTrainedModel,
         )
+
 
 else:
     import sys

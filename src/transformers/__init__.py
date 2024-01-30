@@ -41,6 +41,7 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchaudio_available,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -4409,6 +4410,20 @@ else:
     _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
     _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
 
+try:
+    if not (is_librosa_available() and is_torchaudio_available() and is_torch_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import (
+        dummy_librosa_and_torch_and_torchaudio_objects,
+    )
+
+    _import_structure["utils.dummy_librosa_and_torch_and_torchaudio_objects"] = [
+        name for name in dir(dummy_librosa_and_torch_and_torchaudio_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
+
 
 # FLAX-backed objects
 try:
@@ -8545,6 +8560,14 @@ if TYPE_CHECKING:
             Pop2PianoProcessor,
             Pop2PianoTokenizer,
         )
+
+    try:
+        if not (is_librosa_available() and is_torchaudio_available() and is_torch_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_librosa_and_torch_and_torchaudio_objects import *
+    else:
+        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor
 
     try:
         if not is_flax_available():
