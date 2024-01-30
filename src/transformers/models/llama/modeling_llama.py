@@ -1428,11 +1428,11 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     LLAMA_START_DOCSTRING,
 )
 class LlamaForQuestionAnswering(LlamaPreTrainedModel):
+    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->LLama
     def __init__(self, config):
         super().__init__(config)
-        self.num_labels = config.num_labels
         self.transformer = LlamaModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
