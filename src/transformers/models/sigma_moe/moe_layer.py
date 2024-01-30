@@ -1,9 +1,13 @@
 import math
 from typing import Optional, Tuple, Union
 
-import torch
-import torch.distributed
-import torch.nn.functional as F
+from transformers.utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.distributed
+    import torch.nn.functional as F
 
 
 def is_at_least_volta_gpu():

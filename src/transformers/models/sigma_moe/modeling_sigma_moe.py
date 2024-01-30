@@ -19,8 +19,8 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
