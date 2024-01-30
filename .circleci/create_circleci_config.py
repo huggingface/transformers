@@ -474,6 +474,7 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0' 'torchvision<0.17' 'torchaudio<2.2.0'"
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
