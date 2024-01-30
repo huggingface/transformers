@@ -512,12 +512,11 @@ class VMambaVSSBlock(nn.Module):
 
 
 class VMambaVSSLayer(nn.Module):
-    """A basic Swin Transformer layer for one stage.
+    """A basic VMamba layer for one stage.
     Args:
         dim (int): Number of input channels.
         depth (int): Number of blocks.
         drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
         drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
         norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
         downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
@@ -528,7 +527,6 @@ class VMambaVSSLayer(nn.Module):
         self,
         dim,
         depth,
-        attn_drop=0.0,
         drop_path=0.0,
         norm_layer=nn.LayerNorm,
         downsample=None,
@@ -546,7 +544,6 @@ class VMambaVSSLayer(nn.Module):
                     hidden_dim=dim,
                     drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
                     norm_layer=norm_layer,
-                    attn_drop_rate=attn_drop,
                     d_state=d_state,
                 )
                 for i in range(depth)
@@ -674,46 +671,10 @@ VMAMBA_START_DOCSTRING = r"""
 
 VMAMBA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
-            Indices can be obtained using [`VMambaTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -727,21 +688,6 @@ VMAMBA_INPUTS_DOCSTRING = r"""
     VMAMBA_START_DOCSTRING,
 )
 class VMambaModel(VMambaPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the
-    `is_decoder` argument of the configuration set to `True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an
-    `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config):
         super().__init__(config)
         self.config = config
@@ -801,11 +747,7 @@ class VMambaModel(VMambaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        r"""
-        inputs  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
-        """
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -843,7 +785,12 @@ class VMambaModel(VMambaPreTrainedModel):
         )
 
 
-@add_start_docstrings("""VMamba Model with a `classification` head on top. """, VMAMBA_START_DOCSTRING)
+@add_start_docstrings(
+    """
+    VMamba Model with an image classification head on top (a linear layer on top of the final hidden state) e.g. for ImageNet.
+    """,
+    VMAMBA_START_DOCSTRING,
+)
 class VMambaForImageClassification(VMambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
