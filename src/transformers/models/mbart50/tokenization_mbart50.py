@@ -236,10 +236,10 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
-        for i,token in enumerate(tokens):
+        for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if (not prev_is_special) or (i == 0):
+                if not prev_is_special:
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
@@ -247,7 +247,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
-        out_string += self.sp_model.decode(current_sub_tokens)
+        out_string += " " + self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
