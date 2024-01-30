@@ -3,7 +3,7 @@ name: Self-hosted runner (nightly-past-ci-caller)
 on:
   push:
     branches:
-      - check_nightly_build
+      - check_nightly_build_build_image
 
 jobs:
   build_nightly_ci_images:

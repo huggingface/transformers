@@ -46,7 +46,7 @@ jobs:
             REF=main
             PYTORCH=pre
           push: true
-          tags: huggingface/transformers-all-latest-torch-nightly-gpu
+          tags: huggingface/transformers-all-latest-torch-nightly-gpu-test
 
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
@@ -82,4 +82,4 @@ jobs:
           build-args: |
             REF=main
           push: true
-          tags: huggingface/transformers-pytorch-deepspeed-nightly-gpu
+          tags: huggingface/transformers-pytorch-deepspeed-nightly-gpu-test
