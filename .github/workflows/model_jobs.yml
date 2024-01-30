@@ -39,13 +39,12 @@ jobs:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
-      # TODO: remove this job
-      - name: Echo info
+      - name: Echo input and matrix info
         shell: bash
         run: |
           echo "${{ inputs.folder_slices }}"
           echo "${{ matrix.folders }}"
-          echo "${{ toJson(fromJson(inputs.folder_slices)[0]) }}"
+          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
