@@ -1122,6 +1122,7 @@ class WhisperGenerationMixin:
             # TODO(Sanchit): set generation_config.forced_decoder_ids to None for v4.39
             generation_config.forced_decoder_ids = forced_decoder_ids if len(forced_decoder_ids) > 0 else None
 
+        is_lang_id_undefined = len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None)
         if language is not None:
             if language in generation_config.lang_to_id.keys():
                 language_token = language
@@ -1145,7 +1146,7 @@ class WhisperGenerationMixin:
 
             # if language is defined it'll overwrite language ids that might have already been defined via the generation_config
             replace_or_add(init_tokens, lang_id, generation_config.lang_to_id.values())
-        elif len(init_tokens) <= 1 or (len(init_tokens) > 1 and init_tokens[1] is None):
+        elif hasattr(generation_config, "lang_to_id") and is_lang_id_undefined:
             # language is not defined or intentially set to `None` to trigger language detection
             lang_ids = self.detect_language(
                 input_features=input_features,
