@@ -819,10 +819,13 @@ class VMambaModel(VMambaPreTrainedModel):
         x = self.pos_drop(x)
 
         for layer in self.layers:
-            x = layer(x)
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (x,)
+
+            x = layer(x)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (x,)
 
         x = torch.flatten(x, 1, 2)  # B H W C -> B L C
         x = self.norm(x)  # B L C
@@ -830,7 +833,7 @@ class VMambaModel(VMambaPreTrainedModel):
         x = torch.flatten(x, 1)
         
         if not return_dict:
-            return x
+            return tuple(v for v in [x, all_hidden_states] if v is not None)
     
         return BaseModelOutput(
             last_hidden_state=x,

@@ -15,6 +15,7 @@
 """ Testing suite for the PyTorch VMamba model. """
 
 
+import copy
 import inspect
 import unittest
 
@@ -59,7 +60,7 @@ class VMambaModelTester:
         patch_size=4,
         in_channels=3,
         num_labels=1000,
-        num_hidden_layers=2,
+        num_hidden_layers=3,
         depths=[2, 2, 9, 2],
         dims=[96, 192, 384, 768],
         d_state=16,
@@ -182,6 +183,7 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = VMambaModelTester(self)
@@ -202,22 +204,46 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # @unittest.skip(reason="VMamba does not use inputs_embeds")
     # def test_inputs_embeds(self):
     #     pass
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    # unittest.skip(reason="VMamba does not use input embeddings")
-    # def test_model_common_attributes(self):
-    #     pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            pixel_values = inputs["pixel_values"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            embeddings = wte(pixel_values)
+            
+            expected_spatial_shape = pixel_values.shape[-1] // config.patch_size
+            self.assertEqual(embeddings.shape, (pixel_values.shape[0], config.dims[0], expected_spatial_shape, expected_spatial_shape))
+
+    unittest.skip(reason="VMamba does not use output embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    unittest.skip(reason="VMamba does not use attention")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
 
     # remove
     def test_initialization(self):
         super().test_initialization()
 
     # remove
-    def test_problem_types(self):
-        super().test_problem_types()
-
-    # remove
     def test_model_outputs_equivalence(self):
         super().test_model_outputs_equivalence()
+
+    def test_torch_fx(self):
+        super().test_torch_fx()
+
+    def test_save_load_fast_init_from_base(self):
+        super().test_save_load_fast_init_from_base()
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
