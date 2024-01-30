@@ -51,7 +51,7 @@ if is_torch_available():
         MT5ForTokenClassification,
         MT5Model,
     )
-    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.mt5.modeling_mt5 import MT5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5ModelTester with T5->MT5
@@ -546,6 +546,7 @@ class MT5ModelTester:
 
 
 @require_torch
+# Copied from tests.models.t5.test_modeling_t5.T5ModelTest with T5->MT5
 class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MT5Model, MT5ForConditionalGeneration, MT5ForSequenceClassification, MT5ForQuestionAnswering)
@@ -573,7 +574,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
-    # The small T5 model needs higher percentages for CPU/MP tests
+    # The small MT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.8, 0.9]
 
     def setUp(self):
@@ -585,8 +586,10 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def is_pipeline_test_to_skip(
         self, pipeline_test_case_name, config_class, model_architecture, tokenizer_name, processor_name
     ):
-        if pipeline_test_case_name == "QAPipelineTests":
-            return tokenizer_name is not None and not tokenizer_name.endswith("Fast")
+        if tokenizer_name is None:
+            return True
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
 
         return False
 
@@ -729,7 +732,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config.feed_forward_proj = "gated-gelu"
         self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
 
-    # T5ForSequenceClassification does not support inputs_embeds
+    # MT5ForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -832,7 +835,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in MT5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = MT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -866,7 +869,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
             head_masks = {name: mask}
-            # Explicitly pass decoder_head_mask as it is required from T5 model when head_mask specified
+            # Explicitly pass decoder_head_mask as it is required from MT5 model when head_mask specified
             if name == "head_mask":
                 head_masks["decoder_head_mask"] = torch.ones(
                     config.num_decoder_layers, config.num_heads, device=torch_device
