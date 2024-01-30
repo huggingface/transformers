@@ -1113,9 +1113,10 @@ class WhisperGenerationMixin:
                 forced_decoder_ids = forced_decoder_ids[1:]
                 i += 1
 
+            # TODO(Sanchit): Let's make sure we don't allow incorrectly / weirdly formatted `forced_decoder_ids` after transformers v4.39
             if len(forced_decoder_ids) > 0:
                 warnings.warn(
-                    f"You are using token ids in `forced_decoder_ids` that do not seem to be part of the initial prompt ids: {forced_decoder_ids}. This functionality has been deprecated and will throw an error in v4.39.",
+                    f"You are using token ids in `forced_decoder_ids` that do not seem to correctly follow the prompt pattern of Whisper. Make sure that {forced_decoder_ids} has an entry for all indices >= 1 and < {forced_decoder_ids[0][0]}. `forced_decoder_ids` will be passed as a logit processor, but note that this functionality has been deprecated and will throw an error in v4.39.",
                     FutureWarning,
                 )
 
@@ -1189,6 +1190,9 @@ class WhisperGenerationMixin:
         ):
             init_tokens.append(generation_config.no_timestamps_token_id)
         elif generation_config.return_timestamps and init_tokens[-1] == generation_config.no_timestamps_token_id:
+            logger.info(
+                "<|notimestamps|> prompt token is removed from generation_config since `return_timestamps` is set to `'True'`."
+            )
             init_tokens = init_tokens[:-1]
 
         # let's make sure we don't pass `None` tokens as prompt tokens
