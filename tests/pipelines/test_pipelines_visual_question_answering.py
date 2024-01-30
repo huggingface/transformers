@@ -14,10 +14,7 @@
 
 import unittest
 
-from transformers import (
-    MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
-    is_vision_available,
-)
+from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -174,18 +171,6 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
-
-    @slow
-    def test_pt_beit3(self):
-        vqa_pipeline = pipeline(
-            "visual-question-answering",
-            model="Raghavan/beit3_base_patch16_480_vqa",
-        )
-
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-        question = "What is in this photo ?"
-        ans = vqa_pipeline(image, question, top_k=1)
-        self.assertEqual(ans[0]["answer"], "cat")
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")

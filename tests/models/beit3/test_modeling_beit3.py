@@ -22,10 +22,7 @@ import numpy as np
 
 from transformers import Beit3Config, Beit3Processor
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import (
-    MODEL_FOR_BACKBONE_MAPPING_NAMES,
-    MODEL_MAPPING_NAMES,
-)
+from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -616,7 +613,6 @@ class BeitModelIntegrationTest(unittest.TestCase):
         output = model(
             input_ids=torch.tensor(inputs["input_ids"]),
             pixel_values=inputs["pixel_values"].unsqueeze(0),
-            attention_mask=torch.ones(inputs["input_ids"].shape),
         )
         self.assertTrue(output.logits.shape == torch.Size([1, 2]))
         torch.testing.assert_allclose(output.logits.detach(), torch.tensor([[3.3999, -3.3991]]))
