@@ -40,12 +40,13 @@ class GptqHfQuantizer(HfQuantizer):
 
     requires_calibration = False
     required_packages = ["optimum", "auto_gptq"]
+    optimum_quantizer = None
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
         from optimum.gptq import GPTQQuantizer
 
-        self.quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
+        self.optimum_quantizer = GPTQQuantizer.from_dict(self.quantization_config.to_dict_optimum())
 
     def validate_environment(self, *args, **kwargs):
         gptq_supports_cpu = version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
@@ -72,7 +73,7 @@ class GptqHfQuantizer(HfQuantizer):
             raise RuntimeError("We can only quantize pure text model.")
 
         if self.pre_quantized:
-            model = self.quantizer.convert_model(model)
+            model = self.optimum_quantizer.convert_model(model)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
@@ -82,7 +83,7 @@ class GptqHfQuantizer(HfQuantizer):
                 self.quantization_config.tokenizer = model.name_or_path
 
             self.quantizer.quantize_model(model, self.quantization_config.tokenizer)
-            model.config.quantization_config = GPTQConfig.from_dict(self.quantizer.to_dict())
+            model.config.quantization_config = GPTQConfig.from_dict(self.optimum_quantizer.to_dict())
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
