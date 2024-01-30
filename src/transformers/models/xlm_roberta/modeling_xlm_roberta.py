@@ -403,6 +403,11 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.self.query(hidden_states)
+        bsz, q_len, _ = hidden_states.size()
+
+        def reshape(x: torch.Tensor) -> torch.Tensor:
+            """separate heads"""
+            return x.view(bsz, -1, self.self.num_attention_heads, self.self.attention_head_size)
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -426,8 +431,6 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
         else:
             key_layer = self.self.transpose_for_scores(self.self.key(hidden_states))
             value_layer = self.self.transpose_for_scores(self.self.value(hidden_states))
-
-        bsz, q_len, _ = hidden_states.size()
 
         query_layer = self.self.transpose_for_scores(mixed_query_layer)
 
@@ -628,7 +631,7 @@ class XLMRobertaLayer(nn.Module):
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = XLM_ROBERTA_ATTENTION_CLASSES[config._attn_implementation](
-                config, position_embedding_type="absolute"
+                config, position_embedding_type="absolute", is_cross_attention=True
             )
         self.intermediate = XLMRobertaIntermediate(config)
         self.output = XLMRobertaOutput(config)
@@ -1032,7 +1035,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            if self.use_flash_attention_2:
+            if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
