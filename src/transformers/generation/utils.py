@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import torch
 import torch.distributed as dist
+from pygtrie import CharTrie
 from torch import nn
 
 from ..cache_utils import Cache, DynamicCache, StaticCache
@@ -33,6 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
+    AutoTokenizer,
 )
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -1750,7 +1752,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-    @torch.no_grad()
     def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         r"""
 
@@ -1762,10 +1763,6 @@ class GenerationMixin:
         Return:
             `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
         """
-
-        from pygtrie import CharTrie
-
-        from ..models.auto import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id

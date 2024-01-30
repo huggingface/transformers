@@ -3476,3 +3476,39 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             encoder_outputs=encoder_outputs,
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
+
+
+@require_torch
+class TokenHealingTestCase(unittest.TestCase):
+    model_name_or_path = "TheBloke/deepseek-llm-7B-base-GPTQ"
+    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+    completion_model = AutoModelForCausalLM.from_pretrained(
+        model_name_or_path,
+        device_map="auto",
+        trust_remote_code=False,
+        revision="main",
+        use_cache=True,
+    )
+
+    @parameterized.expand(
+        [
+            (
+                "square_bracket",
+                'An example ["like this"] and another example [',
+                'An example ["like this"] and another example ["',
+            ),
+            ("url", 'The link is <a href="http:', 'The link is <a href="http://'),
+            ("aggressive_healing", 'The link is <a href="http', 'The link is <a href="http'),
+            ("trailing_whitespace", "I read a book about ", "I read a book about"),
+            ("nothing_to_heal", "I read a book about", "I read a book about"),
+            ("single_token", "I", "I"),
+            ("empty_prompt", "", ""),
+        ]
+    )
+    def test_prompts(self, name, input, expected):
+        input_ids = self.tokenizer(input, return_tensors="pt").input_ids.to(self.completion_model.device)
+
+        healed_ids = self.completion_model.heal_tokens(input_ids)
+        predicted = self.tokenizer.decode(healed_ids[0], skip_special_tokens=True)
+
+        self.assertEqual(predicted, expected)
