@@ -1,7 +1,7 @@
 from typing import Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
@@ -15,7 +15,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
 class VisualQuestionAnsweringPipeline(Pipeline):
     """
     Visual Question Answering pipeline using a `AutoModelForVisualQuestionAnswering`. This pipeline is currently only

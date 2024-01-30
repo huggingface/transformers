@@ -787,7 +787,7 @@ MIXTRAL_ATTENTION_CLASSES = {
 }
 
 
-class MixtralBLockSparseTop2MLP(nn.Module):
+class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: MixtralConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -803,6 +803,14 @@ class MixtralBLockSparseTop2MLP(nn.Module):
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
         current_hidden_states = self.w2(current_hidden_states)
         return current_hidden_states
+
+
+class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "MixtralBLockSparseTop2MLP is deprecated by MixtralBlockSparseTop2MLP and will be removed in v4.40."
+        )
+        super().__init__(*args, **kwargs)
 
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -827,7 +835,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """
