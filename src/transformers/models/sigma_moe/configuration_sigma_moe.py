@@ -1,5 +1,11 @@
 import math
+
 from ...configuration_utils import PretrainedConfig
+
+
+SIGMA_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "sigma-moe-small": "https://huggingface.co/ibm-aimc/sigma-moe-small/raw/main/config.json",
+}
 
 
 class SigmaMoEConfiguration(PretrainedConfig):
@@ -71,14 +77,10 @@ class SigmaMoEConfiguration(PretrainedConfig):
         self.weight_std_scale = weight_std_scale
         self.routing_regularization = routing_regularization
         self.num_sparse_hidden_layers = (
-            self.num_hidden_layers
-            if num_sparse_hidden_layers is None
-            else num_sparse_hidden_layers
+            self.num_hidden_layers if num_sparse_hidden_layers is None else num_sparse_hidden_layers
         )
         if self.num_sparse_hidden_layers > 0:
-            self.sparse_step = math.ceil(
-                self.num_hidden_layers / self.num_sparse_hidden_layers
-            )
+            self.sparse_step = math.ceil(self.num_hidden_layers / self.num_sparse_hidden_layers)
         else:
             # this will create no sparse layers
             self.sparse_step = -1
@@ -109,11 +111,5 @@ class SigmaMoEConfiguration(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
             )
-        if (
-            rope_scaling_factor is None
-            or not isinstance(rope_scaling_factor, float)
-            or rope_scaling_factor <= 1.0
-        ):
-            raise ValueError(
-                f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}"
-            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")

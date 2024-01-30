@@ -1,12 +1,21 @@
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoModelForPreTraining,
+    AutoModelForSequenceClassification,
+    AutoModelForTokenClassification,
+    AutoTokenizer,
+    SigmaMoEForCausalLM,
+)
 from transformers.models.sigma_moe.moe_layer import SigmaMoELayer
-from transformers import SigmaMoEForCausalLM, AutoTokenizer
 from transformers.testing_utils import (
-    slow,
     require_torch,
     require_torch_gpu,
+    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available
+
 
 if is_torch_available():
     import torch
@@ -63,9 +72,7 @@ def test_model_correctness():
     test_data = tokenizer("this is a test")
     model_outputs = model(
         input_ids=torch.tensor(test_data.input_ids).unsqueeze(0).to(torch_device),
-        attention_mask=torch.tensor(test_data.attention_mask)
-        .unsqueeze(0)
-        .to(torch_device),
+        attention_mask=torch.tensor(test_data.attention_mask).unsqueeze(0).to(torch_device),
         output_hidden_states=False,
         output_attentions=False,
     )
@@ -79,3 +86,13 @@ def test_model_correctness():
         torch.tensor(-2.5466).to(torch_device),
         atol=1e-4,
     )
+
+
+@slow
+@require_torch
+def test_load_auto():
+    AutoModelForPreTraining.from_pretrained("ibm-aimc/sigma-moe-small")
+    AutoModelForCausalLM.from_pretrained("ibm-aimc/sigma-moe-small")
+    AutoModelForTokenClassification.from_pretrained("ibm-aimc/sigma-moe-small")
+    AutoModelForSequenceClassification.from_pretrained("ibm-aimc/sigma-moe-small")
+    AutoConfig.from_pretrained("ibm-aimc/sigma-moe-small")

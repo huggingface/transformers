@@ -1,9 +1,12 @@
-import torch
-import torch.autograd
-import torch.utils.cpp_extension
 import os
 from dataclasses import dataclass
 from typing import Union
+
+import torch
+import torch.autograd
+import torch.utils.cpp_extension
+
+
 cvmm_module = None
 
 
@@ -11,16 +14,15 @@ def load_cvmm():
     global cvmm_module
     if cvmm_module is None:
         dirname = os.path.dirname(__file__)
-        filename = os.path.join(dirname, 'cvmm.cu')
+        filename = os.path.join(dirname, "cvmm.cu")
 
         old_flags = torch.utils.cpp_extension.COMMON_NVCC_FLAGS
         # This hack is needed because certain versions nvcc fails to compile if the flag is present
-        new_flags = [f for f in old_flags if f != '--expt-relaxed-constexpr']
+        new_flags = [f for f in old_flags if f != "--expt-relaxed-constexpr"]
         print(f"Hacking nvcc flags from {old_flags} to {new_flags}")
         torch.utils.cpp_extension.COMMON_NVCC_FLAGS = new_flags
 
-        cvmm_module = torch.utils.cpp_extension.load(
-            'cvmm', [filename], verbose=True)
+        cvmm_module = torch.utils.cpp_extension.load("cvmm", [filename], verbose=True)
 
         torch.utils.cpp_extension.COMMON_NVCC_FLAGS = old_flags
 
@@ -74,7 +76,9 @@ class CVMM(torch.autograd.Function):
 
         if (not CVMM.warned) and not (x.shape[-1] % 64 == 0 and keys.shape[-1] % 64 == 0):
             CVMM.warned = True
-            print(f"CVMM is the fastest if both x and keys must be divisible by 64. Shapes: x: {x.shape}, keys: {keys.shape}")
+            print(
+                f"CVMM is the fastest if both x and keys must be divisible by 64. Shapes: x: {x.shape}, keys: {keys.shape}"
+            )
 
         res = cvmm_module.cvmm_sorted_blocktile_co_raw(x, sel.sel, keys, sel.sel_index, sel.cnts, sel.offsets)
 
@@ -90,8 +94,12 @@ class CVMM(torch.autograd.Function):
         x = xorig.flatten(end_dim=-2)
         grad_output = grad_output.flatten(end_dim=-2)
 
-        grad_x = cvmm_module.cvmm_sorted_blocktile_co_raw(grad_output, ssel, keys.transpose(1, 2), sindex, sel_cnts, sel_offsets)
-        grad_keys = cvmm_module.cvmm_sorted_blocktile_co_raw_project_grads(keys.shape[0], x, ssel, grad_output, sindex, sel_cnts, sel_offsets)
+        grad_x = cvmm_module.cvmm_sorted_blocktile_co_raw(
+            grad_output, ssel, keys.transpose(1, 2), sindex, sel_cnts, sel_offsets
+        )
+        grad_keys = cvmm_module.cvmm_sorted_blocktile_co_raw_project_grads(
+            keys.shape[0], x, ssel, grad_output, sindex, sel_cnts, sel_offsets
+        )
 
         return grad_x.view_as(xorig), None, grad_keys
 
@@ -117,7 +125,7 @@ if __name__ == "__main__":
 
     olist = []
     for b in range(bs):
-        olist.append(testvec[b:b+1] @ keys[sel[b]])
+        olist.append(testvec[b : b + 1] @ keys[sel[b]])
     ref = torch.cat(olist, dim=0)
 
     out = cvmm(testvec, sel, keys)

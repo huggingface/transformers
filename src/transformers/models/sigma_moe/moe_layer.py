@@ -1,8 +1,10 @@
+import math
+from typing import Optional, Tuple, Union
+
 import torch
 import torch.distributed
 import torch.nn.functional as F
-from typing import Tuple, Optional, Union
-import math
+
 
 def is_at_least_volta_gpu():
     if torch.cuda.is_available():
@@ -11,24 +13,25 @@ def is_at_least_volta_gpu():
             return True
     return False
 
+
 IS_TRITON = False
 try:
-    from .triton_src import cvmm, cvmm_prepare_sel2, CVMMSel
+    from .triton_src import CVMMSel, cvmm, cvmm_prepare_sel2
+
     if not is_at_least_volta_gpu():
         raise ImportError("GPU must at least be Volta")
     IS_TRITON = True
 except ImportError:
     from ...utils import logging
+
     logger = logging.get_logger(__name__)
     if torch.cuda.is_available():
-        logger.warning(
-            "Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead."
-        )
+        logger.warning("Could not import triton_src.moe_layer.cvmm. Using cuda_src.moe_layer.cvmm instead.")
     else:
         logger.warning(
             "GPU not available. Falling back to CPU verison of the MoE layer, which is equally fast as a dense layer."
         )
-    from .cuda_src import cvmm, cvmm_prepare_sel, CVMMSel
+    from .cuda_src import CVMMSel, cvmm, cvmm_prepare_sel
 
 
 def dist_logsumexp(x: torch.Tensor, dim: int, keepdim: bool = False) -> torch.Tensor:
@@ -96,22 +99,12 @@ class SigmaMoELayer(torch.nn.Module):
         if self.selection_mode not in {"softmax", "sigmoid", "sinkmoid"}:
             raise ValueError(f"Unknown selection mode {self.selection_mode}")
 
-        self.keys = torch.nn.Parameter(
-            torch.randn(self.n_experts, self.k_vec_dim, self.expert_size)
-        )
-        self.values = torch.nn.Parameter(
-            torch.randn(self.n_experts, self.expert_size, self.v_dim)
-        )
-        self.expert_sel = torch.nn.Linear(
-            in_features=self.k_vec_dim,
-            out_features=self.n_experts,
-            bias=False
-        )
+        self.keys = torch.nn.Parameter(torch.randn(self.n_experts, self.k_vec_dim, self.expert_size))
+        self.values = torch.nn.Parameter(torch.randn(self.n_experts, self.expert_size, self.v_dim))
+        self.expert_sel = torch.nn.Linear(in_features=self.k_vec_dim, out_features=self.n_experts, bias=False)
 
         if bias:
-            self.bias = torch.nn.Parameter(
-                torch.zeros(self.n_experts, self.expert_size)
-            )
+            self.bias = torch.nn.Parameter(torch.zeros(self.n_experts, self.expert_size))
             self.o_bias = torch.nn.Parameter(torch.zeros(self.v_dim))
         else:
             self.bias = None
@@ -130,7 +123,7 @@ class SigmaMoELayer(torch.nn.Module):
         sel = log_mean(sel, -2)
         return -entropy_l(sel).mean()
 
-    def cvmm_wrapper(self, inputs: torch.Tensor, sel_indices: Union[CVMMSel,torch.Tensor], weights: torch.Tensor):
+    def cvmm_wrapper(self, inputs: torch.Tensor, sel_indices: Union[CVMMSel, torch.Tensor], weights: torch.Tensor):
         """
         TODO
 
@@ -145,7 +138,7 @@ class SigmaMoELayer(torch.nn.Module):
         return cvmm(inputs, sel_indices, weights)
 
     def compute_scores(
-        self, input: torch.Tensor, index: Union[CVMMSel,torch.Tensor], expert_scores: Optional[torch.Tensor] = None
+        self, input: torch.Tensor, index: Union[CVMMSel, torch.Tensor], expert_scores: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         IS_CUDA = input.is_cuda
         if IS_CUDA:
@@ -153,12 +146,12 @@ class SigmaMoELayer(torch.nn.Module):
             if self.bias is not None:
                 scores = scores + self.bias[index.raw_sel]
         else:
-            scores = index  * F.linear(input, self.keys, None)
+            scores = index * F.linear(input, self.keys, None)
             if self.bias is not None:
                 scores = scores + index * self.bias
 
         scores = self.activation(scores)
-        if not expert_scores is None:
+        if expert_scores is not None:
             scores = scores * expert_scores[..., None]
 
         if self.dropout > 0:
@@ -199,20 +192,22 @@ class SigmaMoELayer(torch.nn.Module):
 
         return (a[..., None, :] + b[..., None] + x).exp()
 
-
     def create_index(self, index: torch.Tensor) -> torch.Tensor:
         bs, seq_len = index.shape
         one_hot = torch.nn.functional.one_hot(index, num_classes=self.n_experts)
         return one_hot.unsqueeze(-1).expand(bs, seq_len, self.n_experts, self.expert_size).reshape((bs, seq_len, -1))
 
     def forward(self, input: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        
         IS_CUDA = input.is_cuda
         if not IS_CUDA:
             if self.keys.ndim > 2:
-                self.keys.data = torch.reshape(self.keys.transpose(1,2), (int(self.n_experts * self.expert_size), self.k_vec_dim))
+                self.keys.data = torch.reshape(
+                    self.keys.transpose(1, 2), (int(self.n_experts * self.expert_size), self.k_vec_dim)
+                )
             if self.values.ndim > 2:
-                self.values.data = torch.reshape(self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)).T
+                self.values.data = torch.reshape(
+                    self.values, (int(self.n_experts * self.expert_size), self.k_vec_dim)
+                ).T
 
         sel = sel_raw = self.expert_sel(input)
         reg_loss = self.entropy_reg(sel_raw)
@@ -238,11 +233,7 @@ class SigmaMoELayer(torch.nn.Module):
         if self.activation_after_topk or (self.selection_mode == "sinkmoid"):
             sel_val = torch.gather(sel_raw, -1, sel_index)
             # for sinkmoid, the score is always calculated by a sigmoid
-            sel_val = (
-                torch.sigmoid(sel_val)
-                if self.selection_mode == "sinkmoid"
-                else self.sel_activation(sel_val)
-            )
+            sel_val = torch.sigmoid(sel_val) if self.selection_mode == "sinkmoid" else self.sel_activation(sel_val)
 
         # Preprocess the selection indices. They will be needed for both layers and save some time
         if IS_CUDA:
@@ -250,15 +241,10 @@ class SigmaMoELayer(torch.nn.Module):
                 sel_indices = cvmm_prepare_sel2(sel_index.int())
             else:
                 sel_indices = [
-                    cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts)
-                    for h in range(sel_index.shape[-1])
+                    cvmm_prepare_sel(sel_index[..., h].int(), self.n_experts) for h in range(sel_index.shape[-1])
                 ]
         else:
-            sel_indices = [
-                self.create_index(sel_index[..., h].long())
-                for h in range(sel_index.shape[-1])
-            ]
-
+            sel_indices = [self.create_index(sel_index[..., h].long()) for h in range(sel_index.shape[-1])]
 
         if IS_CUDA and IS_TRITON:
             # "Up-projection" layer for each head
@@ -274,8 +260,7 @@ class SigmaMoELayer(torch.nn.Module):
         else:
             # "Up-projection" layer for each head
             scores_l = [
-                self.compute_scores(input, sel_indices[h], sel_val[..., h])
-                for h in range(sel_index.shape[-1])
+                self.compute_scores(input, sel_indices[h], sel_val[..., h]) for h in range(sel_index.shape[-1])
             ]
             # Down projection layer for each head
             if IS_CUDA:

@@ -16,15 +16,17 @@
 # Based on transformers.models.phi.modeling_phi.
 
 import math
-from typing import Optional, Tuple, List, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
-    SigmaMoEModelOutputWithPast,
     SigmaMoECausalLMOutputWithPast,
+    SigmaMoEModelOutputWithPast,
     SigmaMoESequenceClassifierOutputWithPast,
     SigmaMoETokenClassifierOutput,
 )
@@ -38,9 +40,9 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...activations import ACT2FN
 from .configuration_sigma_moe import SigmaMoEConfiguration
 from .moe_layer import SigmaMoELayer
+
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
@@ -50,6 +52,10 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "SigmaMoEConfiguration"
 
+
+SIGMA_MOE_PRETRAINED_MODEL_ARCHIVE_LIST = ["ibm-aimc/sigma-moe-small"]
+
+
 def _get_router_loss(config: SigmaMoEConfiguration, reg_losses: Tuple):
     # router loss is the sum of all reg losses
     no_none = [x for x in reg_losses if x is not None]
@@ -57,7 +63,9 @@ def _get_router_loss(config: SigmaMoEConfiguration, reg_losses: Tuple):
         return 0.0
     else:
         if config.routing_regularization is None:
-            raise ValueError("Got reg losses but no routing regularization is None. Set routing_regularization in config to non-None value.")
+            raise ValueError(
+                "Got reg losses but no routing regularization is None. Set routing_regularization in config to non-None value."
+            )
     return config.routing_regularization * sum(no_none)
 
 
@@ -66,9 +74,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = torch.nn.functional.pad(
-        torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0)
-    )
+    cu_seqlens = torch.nn.functional.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -84,9 +90,7 @@ class SigmaMoERotaryEmbedding(torch.nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (
-            self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
-        )
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -98,9 +102,7 @@ class SigmaMoERotaryEmbedding(torch.nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -136,9 +138,7 @@ class SigmaMoELinearScalingRotaryEmbedding(SigmaMoERotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
         t = t / self.scaling_factor
 
         freqs = torch.outer(t, self.inv_freq)
@@ -168,17 +168,12 @@ class SigmaMoEDynamicNTKScalingRotaryEmbedding(SigmaMoERotaryEmbedding):
 
         if seq_len > self.max_position_embeddings:
             base = self.base * (
-                (self.scaling_factor * seq_len / self.max_position_embeddings)
-                - (self.scaling_factor - 1)
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (
-                base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim)
-            )
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(
-            self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype
-        )
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -269,9 +264,7 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
             _, d_model = hidden_states.shape
         else:
             _, _, d_model = hidden_states.shape
-        assert (
-            d_model == self.config.d_model
-        ), f"Expected {self.config.d_model} but got {d_model}."
+        assert d_model == self.config.d_model, f"Expected {self.config.d_model} but got {d_model}."
 
         if self.is_sparse:
             hidden_states, reg_loss = self.ff(hidden_states)
@@ -309,12 +302,8 @@ class SigmaMoEAttention(torch.nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.query_key_value = torch.nn.Linear(
-            self.hidden_size, 3 * self.hidden_size, bias=True
-        )
-        self.dense = torch.nn.Linear(
-            self.num_heads * self.head_dim, self.hidden_size, bias=True
-        )
+        self.query_key_value = torch.nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=True)
+        self.dense = torch.nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
         self.qk_layernorm = config.qk_layernorm
 
         if self.qk_layernorm:
@@ -359,9 +348,7 @@ class SigmaMoEAttention(torch.nn.Module):
                 raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._split_heads
-    def _split_heads(
-        self, fused_qkv: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
         storage as `fused_qkv`
@@ -374,9 +361,7 @@ class SigmaMoEAttention(torch.nn.Module):
             value: [batch_size, seq_length, num_heads, head_dim]
         """
         batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
-        fused_qkv = fused_qkv.view(
-            batch_size, seq_length, self.num_heads, 3, self.head_dim
-        )
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
         return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
     def forward(
@@ -426,9 +411,7 @@ class SigmaMoEAttention(torch.nn.Module):
             key_states[..., self.rotary_emb.dim :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = apply_rotary_pos_emb(
-            query_rot, key_rot, cos, sin, position_ids
-        )
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
         # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
@@ -441,13 +424,9 @@ class SigmaMoEAttention(torch.nn.Module):
                 "cos": cos,
                 "partial_rotation_size": self.rotary_emb.dim,
             }
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_weights = torch.matmul(
-            query_states, key_states.transpose(2, 3)
-        ) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
             raise ValueError(
@@ -463,9 +442,7 @@ class SigmaMoEAttention(torch.nn.Module):
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = torch.nn.functional.softmax(
-            attn_weights, dtype=torch.float32, dim=-1
-        ).to(query_states.dtype)
+        attn_weights = torch.nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query_states.dtype)
         attn_weights = self.attention_dropout(attn_weights)
 
         attn_output = torch.matmul(attn_weights, value_states)
@@ -549,9 +526,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
             key_states[..., self.rotary_emb.dim :],
         )
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        query_rot, key_rot = apply_rotary_pos_emb(
-            query_rot, key_rot, cos, sin, position_ids
-        )
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
         # [batch_size, seq_length, num_heads, head_dim]
         query_states = torch.cat((query_rot, query_pass), dim=-1)
@@ -563,23 +538,15 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
                 "cos": cos,
                 "partial_rotation_size": self.rotary_emb.dim,
             }
-            key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, cache_kwargs
-            )
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         tgt_len = key_states.shape[2]
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
-        query_states = query_states.transpose(1, 2).view(
-            bsz, q_len, self.num_heads, self.head_dim
-        )
-        key_states = key_states.transpose(1, 2).view(
-            bsz, tgt_len, self.num_heads, self.head_dim
-        )
-        value_states = value_states.transpose(1, 2).view(
-            bsz, tgt_len, self.num_heads, self.head_dim
-        )
+        query_states = query_states.transpose(1, 2).view(bsz, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+        value_states = value_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
@@ -670,9 +637,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
                 indices_q,
                 cu_seq_lens,
                 max_seq_lens,
-            ) = self._upad_input(
-                query_states, key_states, value_states, attention_mask, query_length
-            )
+            ) = self._upad_input(query_states, key_states, value_states, attention_mask, query_length)
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -690,9 +655,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
                 causal=causal,
             )
 
-            attn_output = pad_input(
-                attn_output_unpad, indices_q, batch_size, query_length
-            )
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
                 query_states,
@@ -706,9 +669,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
         return attn_output
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._upad_input
-    def _upad_input(
-        self, query_layer, key_layer, value_layer, attention_mask, query_length
-    ):
+    def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(attention_mask)
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
@@ -738,9 +699,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
         else:
             # The -q_len: slice assumes left padding.
             attention_mask = attention_mask[:, -query_length:]
-            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(
-                query_layer, attention_mask
-            )
+            query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
 
         return (
             query_layer,
@@ -763,16 +722,10 @@ SIGMA_MOE_ATTENTION_CLASSES = {
 class SigmaMoEDecoderLayer(torch.nn.Module):
     def __init__(self, config: SigmaMoEConfiguration, is_sparse: bool, layer_idx: int):
         super().__init__()
-        self.self_attn = SIGMA_MOE_ATTENTION_CLASSES[config._attn_implementation](
-            config, layer_idx=layer_idx
-        )
+        self.self_attn = SIGMA_MOE_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.mlp = SigmaMoEFeedForwardLayer(config, is_sparse=is_sparse)
-        self.norm1 = torch.nn.LayerNorm(
-            config.d_model, eps=config.layer_norm_eps
-        )
-        self.norm2 = torch.nn.LayerNorm(
-            config.d_model, eps=config.layer_norm_eps
-        )
+        self.norm1 = torch.nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.norm2 = torch.nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.resid_dropout = torch.nn.Dropout(config.resid_pdrop)
 
     def forward(
@@ -783,9 +736,7 @@ class SigmaMoEDecoderLayer(torch.nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-    ) -> Tuple[
-        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
-    ]:
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
@@ -973,23 +924,15 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = torch.nn.Embedding(
-            config.vocab_size, config.d_model, self.padding_idx
-        )
+        self.embed_tokens = torch.nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
         self.embed_dropout = torch.nn.Dropout(config.embd_pdrop)
 
         self.layers = torch.nn.ModuleList()
         for i in range(config.num_hidden_layers):
-            is_sparse = (
-                (i % config.sparse_step == 0) if config.sparse_step > 0 else False
-            )
+            is_sparse = (i % config.sparse_step == 0) if config.sparse_step > 0 else False
 
-            self.layers.append(
-                SigmaMoEDecoderLayer(config, is_sparse=is_sparse, layer_idx=i)
-            )
-        self.final_layernorm = torch.nn.LayerNorm(
-            config.d_model, eps=config.layer_norm_eps
-        )
+            self.layers.append(SigmaMoEDecoderLayer(config, is_sparse=is_sparse, layer_idx=i))
+        self.final_layernorm = torch.nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
@@ -1022,27 +965,17 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
     ) -> Union[Tuple, SigmaMoEModelOutputWithPast]:
         self.config: SigmaMoEConfiguration
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time"
-            )
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -1076,11 +1009,7 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
         # Attention mask.
         if self._use_flash_attention_2:
             # 2d mask is passed through the layers
-            attention_mask = (
-                attention_mask
-                if (attention_mask is not None and 0 in attention_mask)
-                else None
-            )
+            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             # 4d mask is passed through the layers
             attention_mask = _prepare_4d_causal_attention_mask(
@@ -1147,17 +1076,9 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = (
-                next_decoder_cache.to_legacy_cache()
-                if use_legacy_cache
-                else next_decoder_cache
-            )
+            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
         if not return_dict:
-            return tuple(
-                v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return SigmaMoEModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1205,9 +1126,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
         return self.model
 
     @add_start_docstrings_to_model_forward(SIGMA_MOE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=SigmaMoECausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
-    )
+    @replace_return_docstrings(output_type=SigmaMoECausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1247,19 +1166,11 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
         'This is an example script .py file that uses the `os` module to create a new directory and write some text to it.\n\n``'
         ```"""
 
-        output_attentions = (
-            output_attentions
-            if output_attentions is not None
-            else self.config.output_attentions
-        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
-            output_hidden_states
-            if output_hidden_states is not None
-            else self.config.output_hidden_states
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder model_outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         model_outputs = self.model(
@@ -1330,10 +1241,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
             # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
             # input)
-            if (
-                attention_mask is not None
-                and attention_mask.shape[1] > input_ids.shape[1]
-            ):
+            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
             # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
             # input_ids based on the past_length.
@@ -1379,10 +1287,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(
-                    past_state.index_select(0, beam_idx.to(past_state.device))
-                    for past_state in layer_past
-                ),
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
 
@@ -1440,9 +1345,7 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         self.config: SigmaMoEConfiguration
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_outputs = self.model(
             input_ids,
@@ -1464,22 +1367,18 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError(
-                "Cannot handle batch sizes > 1 if no padding token is defined."
-            )
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                ).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
 
-        pooled_logits = logits[
-            torch.arange(batch_size, device=logits.device), sequence_lengths
-        ]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
 
         loss = None
         if labels is not None:
@@ -1487,9 +1386,7 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == torch.long or labels.dtype == torch.int
-                ):
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1502,9 +1399,7 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(
-                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
-                )
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
@@ -1541,10 +1436,7 @@ class SigmaMoEForTokenClassification(SigmaMoEPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.model = SigmaMoEModel(config)
-        if (
-            hasattr(config, "classifier_dropout")
-            and config.classifier_dropout is not None
-        ):
+        if hasattr(config, "classifier_dropout") and config.classifier_dropout is not None:
             classifier_dropout = config.classifier_dropout
         elif hasattr(config, "hidden_dropout") and config.resid_pdrop is not None:
             classifier_dropout = config.resid_pdrop
@@ -1580,9 +1472,7 @@ class SigmaMoEForTokenClassification(SigmaMoEPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
-        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         model_outputs = self.model(
             input_ids,

@@ -20,11 +20,8 @@ from ...utils import (
     is_torch_available,
 )
 
-_import_structure = {
-    "configuration_sigma_moe": [
-        "SigmaMoEConfiguration",
-    ]
-}
+
+_import_structure = {"configuration_sigma_moe": ["SigmaMoEConfiguration"]}
 
 try:
     if not is_torch_available():
@@ -55,13 +52,13 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_sigma_moe import (
-            SigmaMoEPreTrainedModel,
-            SigmaMoEModel,
+            SigmaMoEDecoderLayer,
+            SigmaMoEFeedForwardLayer,
             SigmaMoEForCausalLM,
             SigmaMoEForSequenceClassification,
             SigmaMoEForTokenClassification,
-            SigmaMoEFeedForwardLayer,
-            SigmaMoEDecoderLayer,
+            SigmaMoEModel,
+            SigmaMoEPreTrainedModel,
         )
 
 

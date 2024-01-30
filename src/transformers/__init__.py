@@ -688,7 +688,6 @@ _import_structure = {
     ],
     "models.persimmon": ["PERSIMMON_PRETRAINED_CONFIG_ARCHIVE_MAP", "PersimmonConfig"],
     "models.phi": ["PHI_PRETRAINED_CONFIG_ARCHIVE_MAP", "PhiConfig"],
-    "models.sigma_moe": ["SigmaMoEConfiguration"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
         "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -776,6 +775,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.sigma_moe": ["SigmaMoEConfiguration"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -2922,15 +2922,6 @@ else:
             "PhiPreTrainedModel",
         ]
     )
-    _import_structure["models.sigma_moe"].extend(
-        [
-            "SigmaMoEForCausalLM",
-            "SigmaMoEForSequenceClassification",
-            "SigmaMoEForTokenClassification",
-            "SigmaMoEModel",
-            "SigmaMoEPreTrainedModel",
-        ]
-    )
     _import_structure["models.pix2struct"].extend(
         [
             "PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3208,6 +3199,15 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.sigma_moe"].extend(
+        [
+            "SigmaMoEForCausalLM",
+            "SigmaMoEForSequenceClassification",
+            "SigmaMoEForTokenClassification",
+            "SigmaMoEModel",
+            "SigmaMoEPreTrainedModel",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5429,7 +5429,6 @@ if TYPE_CHECKING:
         PersimmonConfig,
     )
     from .models.phi import PHI_PRETRAINED_CONFIG_ARCHIVE_MAP, PhiConfig
-    from .models.sigma_moe import SigmaMoEConfiguration
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
         PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5516,6 +5515,7 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.sigma_moe import SigmaMoEConfiguration
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -7380,14 +7380,6 @@ if TYPE_CHECKING:
             PhiModel,
             PhiPreTrainedModel,
         )
-        from .models.sigma_moe import (
-            SigmaMoEForCausalLM,
-            SigmaMoEForSequenceClassification,
-            SigmaMoEForTokenClassification,
-            SigmaMoEModel,
-            SigmaMoEPreTrainedModel,
-            SigmaMoELayer,
-        )
         from .models.pix2struct import (
             PIX2STRUCT_PRETRAINED_MODEL_ARCHIVE_LIST,
             Pix2StructForConditionalGeneration,
@@ -7616,6 +7608,14 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.sigma_moe import (
+            SigmaMoEForCausalLM,
+            SigmaMoEForSequenceClassification,
+            SigmaMoEForTokenClassification,
+            SigmaMoELayer,
+            SigmaMoEModel,
+            SigmaMoEPreTrainedModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (

@@ -1,11 +1,14 @@
-from typing import Union, Optional
-import torch
 from dataclasses import dataclass
+from typing import Optional, Union
+
+import torch
 import triton
 import triton.language as tl
 
+
 # Based on https://github.com/openai/triton/blob/main/python/tutorials/03-matrix-multiplication.py
 # Based on https://github.com/RobertCsordas/moe_layer
+
 
 @dataclass
 class CVMMSel:
@@ -15,7 +18,7 @@ class CVMMSel:
     out_index: Optional[torch.Tensor] = None
     reduction_weight: Optional[torch.Tensor] = None
 
-    def clone(self) -> 'CVMMSel':
+    def clone(self) -> "CVMMSel":
         return CVMMSel(self.raw_sel, self.sel, self.sel_index, self.out_index, self.reduction_weight)
 
 
@@ -27,37 +30,77 @@ def cvmm_prepare_sel(sel: torch.Tensor, n_experts: int) -> CVMMSel:
 
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 64, 'GROUP_SIZE_M': 8}, num_stages=3, num_warps=8),
-        triton.Config({'BLOCK_SIZE_M': 256, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 256, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 128, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 128, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=5, num_warps=2),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=5, num_warps=2),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 32, 'GROUP_SIZE_M': 8}, num_stages=4, num_warps=4),
+        triton.Config(
+            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 64, "GROUP_SIZE_M": 8},
+            num_stages=3,
+            num_warps=8,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 256, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 256, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 128, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 128, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=5, num_warps=2
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=5, num_warps=2
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 32, "GROUP_SIZE_M": 8}, num_stages=4, num_warps=4
+        ),
     ],
-    key=['M', 'N', 'K', 'float32', 'allow_tf32']
+    key=["M", "N", "K", "float32", "allow_tf32"],
 )
 @triton.jit
 def cvmm_kernel(
     # Pointers to matrices
-    a_ptr, b_ptr, c_ptr, index_ptr, sel_ptr, out_index_ptr,
+    a_ptr,
+    b_ptr,
+    c_ptr,
+    index_ptr,
+    sel_ptr,
+    out_index_ptr,
     # Matrix dimensions
-    M, N, K,
+    M,
+    N,
+    K,
     # The stride variables represent how much to increase the ptr by when moving by 1
     # element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
     # by to get the element one row down (A has M rows).
-    stride_am, stride_ak,
-    stride_bo, stride_bk, stride_bn,
-    stride_cm, stride_cn,
-    stride_index, stride_sel, stride_out_index,
+    stride_am,
+    stride_ak,
+    stride_bo,
+    stride_bk,
+    stride_bn,
+    stride_cm,
+    stride_cn,
+    stride_index,
+    stride_sel,
+    stride_out_index,
     out_index_is_none: tl.constexpr,
-    float32: tl.constexpr, allow_tf32: tl.constexpr,
+    float32: tl.constexpr,
+    allow_tf32: tl.constexpr,
     # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+    GROUP_SIZE_M: tl.constexpr,
 ):
     pid = tl.program_id(axis=0)
 
@@ -84,7 +127,6 @@ def cvmm_kernel(
         offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
         offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
 
-
         # remap_offs_am would be something like [0, 2, 3, ..., 12, 15]
         # they represent the tokens that are routed to [0, 0, 0, ..., 1, 1]
         # for this round, we only want to save the ones corresponding to expert number matrix_id
@@ -93,7 +135,7 @@ def cvmm_kernel(
 
         # Create offset pointers
         offs_k = tl.arange(0, BLOCK_SIZE_K)
-        
+
         # a_ptrs now represents a chunk of size [BLOCK_SIZE_M, BLOCK_SIZE_K] of tokens (or part of tokens)
         # that mostly will be routed to the same expert. Some should be routed to another expert and
         # we calculate it wrongly, but we mask this out.
@@ -125,7 +167,6 @@ def cvmm_kernel(
             a_ptrs += BLOCK_SIZE_K * stride_ak
             b_ptrs += BLOCK_SIZE_K * stride_bk
 
-
         if not float32:
             c = accumulator.to(tl.float16)
         else:
@@ -147,7 +188,7 @@ def cvmm_kernel(
 
         offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
         c_ptrs = c_ptr + stride_cm * remap_offs_cm[:, None] + stride_cn * offs_cn[None, :]
-        
+
         # we don't want to store the results where the tokens should have been routed to a different
         # expert, so we mask it out with sel_all[:, None] == matrix_id
         # sel_all is this vector [0, 0, 0, ..., 1, 1] and matrix id is an integer in this case between [0, 1]
@@ -157,45 +198,118 @@ def cvmm_kernel(
 
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 64}, num_stages=4, num_warps=4),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 64},
+            num_stages=4,
+            num_warps=4,
+        ),
         # triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 128}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 4}, num_stages=4, num_warps=4),
-
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 64}, num_stages=4, num_warps=4),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 32},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 4},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 64},
+            num_stages=4,
+            num_warps=4,
+        ),
         # triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 128}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 8}, num_stages=4, num_warps=4),
-
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 8}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 16}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 16}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 64}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 64}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 32, 'BLOCK_SIZE_N': 64, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 32}, num_stages=4, num_warps=4),
-        triton.Config({'BLOCK_SIZE_M': 64, 'BLOCK_SIZE_N': 32, 'BLOCK_SIZE_K': 16, 'GROUP_SIZE_M': 8, 'K_BLOCKS': 32}, num_stages=4, num_warps=4),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 32},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 8},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 8},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 8},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 16},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 16},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 64},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 64},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 32, "BLOCK_SIZE_N": 64, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 32},
+            num_stages=4,
+            num_warps=4,
+        ),
+        triton.Config(
+            {"BLOCK_SIZE_M": 64, "BLOCK_SIZE_N": 32, "BLOCK_SIZE_K": 16, "GROUP_SIZE_M": 8, "K_BLOCKS": 32},
+            num_stages=4,
+            num_warps=4,
+        ),
     ],
-    key=['M', 'N', 'K', 'float32_out', 'allow_tf32', 'op_float16'], reset_to_zero = ['c_ptr']
+    key=["M", "N", "K", "float32_out", "allow_tf32", "op_float16"],
+    reset_to_zero=["c_ptr"],
 )
 @triton.jit
 def cvmm_backward_kernel3(
     # Pointers to matrices
-    a_ptr, b_ptr, c_ptr, index_ptr, sel_ptr, out_index_ptr,
+    a_ptr,
+    b_ptr,
+    c_ptr,
+    index_ptr,
+    sel_ptr,
+    out_index_ptr,
     # Matrix dimensions
-    M, N, K,
+    M,
+    N,
+    K,
     # The stride variables represent how much to increase the ptr by when moving by 1
     # element in a particular dimension. E.g. `stride_am` is how much to increase `a_ptr`
     # by to get the element one row down (A has M rows).
-    stride_am, stride_ak,
-    stride_bk, stride_bn,
-    stride_co, stride_cm, stride_cn,
-    stride_index, stride_sel, stride_out_index,
+    stride_am,
+    stride_ak,
+    stride_bk,
+    stride_bn,
+    stride_co,
+    stride_cm,
+    stride_cn,
+    stride_index,
+    stride_sel,
+    stride_out_index,
     out_index_is_none: tl.constexpr,
-    float32_out: tl.constexpr, allow_tf32: tl.constexpr, op_float16: tl.constexpr,
+    float32_out: tl.constexpr,
+    allow_tf32: tl.constexpr,
+    op_float16: tl.constexpr,
     # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr, BLOCK_SIZE_N: tl.constexpr, BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr, K_BLOCKS: tl.constexpr
+    BLOCK_SIZE_M: tl.constexpr,
+    BLOCK_SIZE_N: tl.constexpr,
+    BLOCK_SIZE_K: tl.constexpr,
+    GROUP_SIZE_M: tl.constexpr,
+    K_BLOCKS: tl.constexpr,
 ):
     """Kernel for computing the matmul C = A x B.
     A has shape (M, K), B has shape (K, N) and C has shape (M, N)
@@ -241,7 +355,6 @@ def cvmm_backward_kernel3(
     # WORK_PER_WORKER = (Nblocks + K_BLOCKS - 1) // K_BLOCKS
     # WORK_PER_WORKER = WORK_PER_WORKER if WORK_PER_WORKER > MIN_WORK_SIZE else MIN_WORK_SIZE
 
-
     # # Kloop_start = (Kactual + BLOCK_SIZE_K - 1) // BLOCK_SIZE_K
 
     # first_block_k = k_block_id * WORK_PER_WORKER
@@ -252,7 +365,6 @@ def cvmm_backward_kernel3(
 
     first_mat = tl.load(sel_ptr + stride_sel * block_start_index)
     last_mat = tl.load(sel_ptr + stride_sel * block_end_index)
-
 
     for matrix_index in range(first_mat, last_mat + 1):
         accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
@@ -266,7 +378,6 @@ def cvmm_backward_kernel3(
                 start_i = middle + 1
             else:
                 end_i = middle
-
 
         # # Continue binary search: find the first matrix that is > matrix_index
         start_i2 = start_i
@@ -283,7 +394,7 @@ def cvmm_backward_kernel3(
 
         count = end_i - start_i
 
-        block_mem_indices_f_base = start_i  + tl.arange(0, BLOCK_SIZE_K)
+        block_mem_indices_f_base = start_i + tl.arange(0, BLOCK_SIZE_K)
 
         if count > 0:
             for k in range((count + BLOCK_SIZE_K - 1) // BLOCK_SIZE_K):
@@ -327,7 +438,11 @@ def cvmm_backward_kernel3(
             tl.atomic_add(c_ptrs, c, mask=c_mask)
 
 
-torch.library.define("mylib::cvmm_triton", "(Tensor x, Tensor sel_index, Tensor sel, Tensor keys, ScalarType out_dtype, Tensor out_index) -> Tensor")
+torch.library.define(
+    "mylib::cvmm_triton",
+    "(Tensor x, Tensor sel_index, Tensor sel, Tensor keys, ScalarType out_dtype, Tensor out_index) -> Tensor",
+)
+
 
 @torch.library.impl("mylib::cvmm_triton", "default")
 def cvmm_triton(
@@ -336,7 +451,7 @@ def cvmm_triton(
     sel: torch.Tensor,
     keys: torch.Tensor,
     out_dtype: torch.dtype,
-    out_index: torch.Tensor
+    out_index: torch.Tensor,
 ):
     """
     TODO
@@ -369,23 +484,36 @@ def cvmm_triton(
     # expected_m_per_matrix = int(math.ceil(M / O * 1.5))
     # expected_m_per_matrix = M
 
-    grid = lambda META: (
-        triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']),
-    )
+    def grid(META):
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     out_index_is_none = False
     if out_index.numel() == 1 and out_index == -1:
         out_index_is_none = True
 
     cvmm_kernel[grid](
-        x, keys, out, sel_index, sel, out_index,
-        M, N, K,
-        x.stride(0), x.stride(1),
-        keys.stride(0), keys.stride(1), keys.stride(2),
-        out.stride(0), out.stride(1),
-        sel_index.stride(0), sel.stride(0), 0 if out_index_is_none else out_index.stride(0),
+        x,
+        keys,
+        out,
+        sel_index,
+        sel,
+        out_index,
+        M,
+        N,
+        K,
+        x.stride(0),
+        x.stride(1),
+        keys.stride(0),
+        keys.stride(1),
+        keys.stride(2),
+        out.stride(0),
+        out.stride(1),
+        sel_index.stride(0),
+        sel.stride(0),
+        0 if out_index_is_none else out_index.stride(0),
         out_index_is_none=out_index_is_none,
-        float32=out.dtype==torch.float32, allow_tf32=False, #torch.backends.cuda.matmul.allow_tf32
+        float32=out.dtype == torch.float32,
+        allow_tf32=False,  # torch.backends.cuda.matmul.allow_tf32
     )
 
     return out.view(*sel_shape, N)
@@ -404,6 +532,7 @@ def cvmm_triton_abstract(x, sel_idx, sel, keys, out_dtype, out_index):
 
 # torch.library.define("mylib::cvmm_triton_backward", "(Tensor x, Tensor sel_index, Tensor sel, Tensor grads, int n_experts, ScalarType key_dtype, bool op_float16, Tensor out_index) -> Tensor")
 
+
 # @torch.library.impl("mylib::cvmm_triton_backward", "default")
 def cvmm_triton_backward(
     x: torch.Tensor,
@@ -413,7 +542,7 @@ def cvmm_triton_backward(
     n_experts: int,
     key_dtype: torch.dtype,
     op_float16: bool,
-    out_index: torch.Tensor
+    out_index: torch.Tensor,
 ):
     x = x.flatten(end_dim=-2)
     x = x.transpose(0, 1)
@@ -422,24 +551,40 @@ def cvmm_triton_backward(
     M, _ = x.shape
     K, N = grads.shape
     out = torch.zeros((n_experts, M, N), device=x.device, dtype=key_dtype)
-    grid = lambda META: (
-        triton.cdiv(M, META['BLOCK_SIZE_M']) * triton.cdiv(N, META['BLOCK_SIZE_N']), triton.cdiv(K, META['BLOCK_SIZE_K'] * META['K_BLOCKS'])
-    )
+
+    def grid(META):
+        return triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]), triton.cdiv(
+            K, META["BLOCK_SIZE_K"] * META["K_BLOCKS"]
+        )
+
     out_index_is_none = False
     if out_index.numel() == 1 and out_index == -1:
         out_index_is_none = True
 
     cvmm_backward_kernel3[grid](
-        x, grads, out, sel_index, sel, out_index,
-        M, N, K,
-        x.stride(0), x.stride(1),
-        grads.stride(0), grads.stride(1),
-        out.stride(0), out.stride(1), out.stride(2),
-        sel_index.stride(0), sel.stride(0), 0 if out_index_is_none else out_index.stride(0),
+        x,
+        grads,
+        out,
+        sel_index,
+        sel,
+        out_index,
+        M,
+        N,
+        K,
+        x.stride(0),
+        x.stride(1),
+        grads.stride(0),
+        grads.stride(1),
+        out.stride(0),
+        out.stride(1),
+        out.stride(2),
+        sel_index.stride(0),
+        sel.stride(0),
+        0 if out_index_is_none else out_index.stride(0),
         out_index_is_none=out_index_is_none,
         float32_out=out.dtype == torch.float32,
         op_float16=op_float16,
-        allow_tf32=False #torch.backends.cuda.matmul.allow_tf32
+        allow_tf32=False,  # torch.backends.cuda.matmul.allow_tf32
     )
     return out
 
@@ -475,7 +620,7 @@ class CVMM(torch.autograd.Function):
         sel: torch.Tensor,
         keys: torch.Tensor,
         out_index: Optional[torch.Tensor] = None,
-        reduction_weight: Optional[torch.Tensor] = None
+        reduction_weight: Optional[torch.Tensor] = None,
     ):
         out_type = torch.float16 if torch.is_autocast_enabled() else x.dtype
         out_index_is_none = False
@@ -483,14 +628,10 @@ class CVMM(torch.autograd.Function):
             out_index_is_none = True
             out_index = torch.tensor(-1).cuda()
 
-        res = torch.ops.mylib.cvmm_triton(
-            x, sel_index, sel, keys, out_type, out_index
-        )
+        res = torch.ops.mylib.cvmm_triton(x, sel_index, sel, keys, out_type, out_index)
         if reduction_weight is not None:
             res_into_reduction = res.view(*reduction_weight.shape, res.shape[-1])
-            res = (
-                reduction_weight.unsqueeze(-2).type_as(res) @ res_into_reduction
-            ).squeeze(-2)
+            res = (reduction_weight.unsqueeze(-2).type_as(res) @ res_into_reduction).squeeze(-2)
         else:
             res_into_reduction = None
 
@@ -519,7 +660,7 @@ class CVMM(torch.autograd.Function):
             grad_output_w = reduction_weight.unsqueeze(-1).type_as(grad_output) @ grad_output.unsqueeze(-2)
             # print("no none", grad_output_w.shape)
         else:
-            grad_output_w  = grad_output
+            grad_output_w = grad_output
             # print("none", grad_output_w.shape)
 
         out_index_is_none = False
@@ -528,15 +669,8 @@ class CVMM(torch.autograd.Function):
             out_index = torch.tensor(-1).cuda()
 
         grad_w = cvmm_triton_backward(
-            x,
-            sel_index,
-            sel,
-            grad_output_w,
-            keys_dt.shape[0],
-            ctx.keys_type,
-            ctx.is_autocast,
-            out_index=out_index
-        ) 
+            x, sel_index, sel, grad_output_w, keys_dt.shape[0], ctx.keys_type, ctx.is_autocast, out_index=out_index
+        )
 
         # grad_w = torch.ops.mylib.cvmm_triton_backward(
         #     x,
@@ -560,24 +694,18 @@ class CVMM(torch.autograd.Function):
             bw_index = bw_index // reduction_weight.shape[-1]
 
         grad_x_full = torch.ops.mylib.cvmm_triton(
-            grad_output,
-            bw_index,
-            sel,
-            keys_dt.transpose(1,2),
-            ctx.op_type,
-            bw_index_out
+            grad_output, bw_index, sel, keys_dt.transpose(1, 2), ctx.op_type, bw_index_out
         )
 
         grad_x_full = grad_x_full.view(*x.shape[:-1], -1, x.shape[-1])
         if reduction_weight is not None:
             # grad_x_full is the unscaled grad. For the input, we have to scale it, for the reduction wegiht,
             # we have to compute dot products with the input.
-            grad_x = (reduction_weight.view(*grad_x_full.shape[:-1]).unsqueeze(-2).type_as(grad_x_full) @ grad_x_full).squeeze(-2)
+            grad_x = (
+                reduction_weight.view(*grad_x_full.shape[:-1]).unsqueeze(-2).type_as(grad_x_full) @ grad_x_full
+            ).squeeze(-2)
             grad_w_off = (
-                (
-                    res_into_reduction.type_as(reduction_weight)
-                    @ grad_output.unsqueeze(-1).type_as(reduction_weight)
-                )
+                (res_into_reduction.type_as(reduction_weight) @ grad_output.unsqueeze(-1).type_as(reduction_weight))
                 .squeeze(-1)
                 .view_as(reduction_weight)
             )
@@ -624,12 +752,8 @@ if __name__ == "__main__":
             self.expert_size = 64
             self.k_vec_dim = 128
             self.v_dim = 128
-            self.keys = torch.nn.Parameter(
-                torch.empty(self.n_experts, self.k_vec_dim, self.expert_size)
-            )
-            self.values = torch.nn.Parameter(
-                torch.empty(self.n_experts, self.expert_size, self.v_dim)
-            )
+            self.keys = torch.nn.Parameter(torch.empty(self.n_experts, self.k_vec_dim, self.expert_size))
+            self.values = torch.nn.Parameter(torch.empty(self.n_experts, self.expert_size, self.v_dim))
             self.expert_sel = torch.nn.Linear(self.k_vec_dim, self.n_experts, bias=False)
             self.sel_activation = torch.nn.Sigmoid()
 
@@ -638,7 +762,7 @@ if __name__ == "__main__":
             return scores
 
         def forward(self, input: torch.Tensor):
-            sel = sel_raw = self.expert_sel(input)
+            sel = self.expert_sel(input)
             sel = self.sel_activation(sel)
             sel_val, sel_index = sel.topk(self.n_heads, dim=-1, sorted=False)
             # Preprocess the selection indices. They will be needed for both layers and save some time
@@ -652,7 +776,6 @@ if __name__ == "__main__":
             sel_indices.out_index = None
             out = cvmm(scores, sel_indices, self.values)
             return out
-
 
     model = Model().to(torch.float16).cuda()
     model = torch.compile(model)

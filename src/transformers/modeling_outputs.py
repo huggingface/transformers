@@ -1751,7 +1751,7 @@ class MaskedImageModelingOutput(ModelOutput):
             FutureWarning,
         )
         return self.reconstruction
-    
+
 
 @dataclass
 class SigmaMoEModelOutputWithPast(BaseModelOutputWithPast):
