@@ -5,10 +5,11 @@ def generate(inputs, model, tokenizer, token_healing):
     input_ids = tokenizer(inputs, return_tensors="pt", padding=True).input_ids.cuda()
     generation_config = GenerationConfig(
         max_new_tokens=8,
+        token_healing=token_healing,
         pad_token_id=model.config.pad_token_id,
         repetition_penalty=1.1,
     )
-    output = model.generate(inputs=input_ids, token_healing=token_healing, generation_config=generation_config)
+    output = model.generate(inputs=input_ids, generation_config=generation_config)
     return tokenizer.batch_decode(output, skip_special_tokens=True)
 
 

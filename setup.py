@@ -145,6 +145,7 @@ _deps = [
     "psutil",
     "pyyaml>=5.1",
     "pydantic<2",
+    "pygtrie>=2.5.0",
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",

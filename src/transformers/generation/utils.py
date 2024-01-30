@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import torch
 import torch.distributed as dist
+from pygtrie import CharTrie
 from torch import nn
 
 from ..cache_utils import Cache, DynamicCache
@@ -33,6 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
+    AutoTokenizer,
 )
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -1168,7 +1170,6 @@ class GenerationMixin:
         self,
         inputs: Optional[torch.Tensor] = None,
         generation_config: Optional[GenerationConfig] = None,
-        token_healing: bool = False,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
@@ -1378,7 +1379,7 @@ class GenerationMixin:
         else:
             input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
 
-        if token_healing:
+        if generation_config.token_healing:
             input_ids = self.heal_tokens(input_ids)
 
         if streamer is not None:
@@ -1709,7 +1710,6 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-    @torch.no_grad()
     def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         r"""
 
@@ -1721,10 +1721,6 @@ class GenerationMixin:
         Return:
             `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
         """
-
-        from pygtrie import CharTrie
-
-        from ..models.auto import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(self.name_or_path)
         bos_id, pad_id = tokenizer.bos_token_id, tokenizer.pad_token_id
