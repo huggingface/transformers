@@ -472,9 +472,7 @@ class FSMTEncoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList(
-            [EncoderLayer(config) for _ in range(config.encoder_layers)]
-        )  # type: List[EncoderLayer]
+        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])  # type: List[EncoderLayer]
 
     def forward(
         self,
@@ -682,9 +680,7 @@ class FSMTDecoder(nn.Module):
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-        self.layers = nn.ModuleList(
-            [DecoderLayer(config) for _ in range(config.decoder_layers)]
-        )  # type: List[DecoderLayer]
+        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])  # type: List[DecoderLayer]
 
         if is_deepspeed_zero3_enabled():
             import deepspeed

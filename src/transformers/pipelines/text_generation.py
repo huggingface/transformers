@@ -39,7 +39,10 @@ class TextGenerationPipeline(Pipeline):
     >>> outputs = generator("My tart needs some", num_return_sequences=4, return_full_text=False)
     ```
 
-    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
+    generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
+    text generation parameters in [Text generation strategies](../generation_strategies) and [Text
+    generation](text_generation).
 
     This language generation pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"text-generation"`.
@@ -101,9 +104,20 @@ class TextGenerationPipeline(Pipeline):
         handle_long_generation=None,
         stop_sequence=None,
         add_special_tokens=False,
+        truncation=None,
+        padding=False,
+        max_length=None,
         **generate_kwargs,
     ):
-        preprocess_params = {"add_special_tokens": add_special_tokens}
+        preprocess_params = {
+            "add_special_tokens": add_special_tokens,
+            "truncation": truncation,
+            "padding": padding,
+            "max_length": max_length,
+        }
+        if max_length is not None:
+            generate_kwargs["max_length"] = max_length
+
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
@@ -205,10 +219,23 @@ class TextGenerationPipeline(Pipeline):
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(
-        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False, **generate_kwargs
+        self,
+        prompt_text,
+        prefix="",
+        handle_long_generation=None,
+        add_special_tokens=False,
+        truncation=None,
+        padding=False,
+        max_length=None,
+        **generate_kwargs,
     ):
         inputs = self.tokenizer(
-            prefix + prompt_text, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
+            prefix + prompt_text,
+            return_tensors=self.framework,
+            truncation=truncation,
+            padding=padding,
+            max_length=max_length,
+            add_special_tokens=add_special_tokens,
         )
         inputs["prompt_text"] = prompt_text
 

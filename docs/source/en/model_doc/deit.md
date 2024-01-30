@@ -16,13 +16,6 @@ rendered properly in your Markdown viewer.
 
 # DeiT
 
-<Tip>
-
-This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-breaking changes to fix it in the future. If you see something strange, file a [Github Issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title).
-
-</Tip>
-
 ## Overview
 
 The DeiT model was proposed in [Training data-efficient image transformers & distillation through attention](https://arxiv.org/abs/2012.12877) by Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
@@ -45,7 +38,9 @@ distillation, especially when using a convnet as a teacher. This leads us to rep
 for both Imagenet (where we obtain up to 85.2% accuracy) and when transferring to other tasks. We share our code and
 models.*
 
-Tips:
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [amyeroberts](https://huggingface.co/amyeroberts).
+
+## Usage tips
 
 - Compared to ViT, DeiT models use a so-called distillation token to effectively learn from a teacher (which, in the
   DeiT paper, is a ResNet like-model). The distillation token is learned through backpropagation, by interacting with
@@ -72,8 +67,6 @@ Tips:
   *facebook/deit-tiny-patch16-224*, *facebook/deit-small-patch16-224*, *facebook/deit-base-patch16-224* and
   *facebook/deit-base-patch16-384*. Note that one should use [`DeiTImageProcessor`] in order to
   prepare images for the model.
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version of this model was added by [amyeroberts](https://huggingface.co/amyeroberts).
 
 ## Resources
 
@@ -104,6 +97,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DeiTImageProcessor
     - preprocess
 
+<frameworkcontent>
+<pt>
+
 ## DeiTModel
 
 [[autodoc]] DeiTModel
@@ -124,6 +120,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] DeiTForImageClassificationWithTeacher
     - forward
 
+</pt>
+<tf>
+
 ## TFDeiTModel
 
 [[autodoc]] TFDeiTModel
@@ -143,3 +142,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
 [[autodoc]] TFDeiTForImageClassificationWithTeacher
     - call
+
+</tf>
+</frameworkcontent>

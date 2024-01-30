@@ -169,7 +169,12 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
                 name="embeddings",
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embedding", None) is not None:
+            with tf.name_scope(self.patch_embedding.name):
+                self.patch_embedding.build([None, None, None, self.config.num_channels])
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         """`pixel_values` is expected to be of NCHW format."""
@@ -352,6 +357,23 @@ class TFCLIPAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 class TFCLIPMLP(tf.keras.layers.Layer):
     def __init__(self, config: CLIPConfig, **kwargs):
@@ -369,12 +391,24 @@ class TFCLIPMLP(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(in_proj_std), name="fc2"
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.fc1(inputs=hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(inputs=hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.config.hidden_size])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.intermediate_size])
 
 
 class TFCLIPEncoderLayer(tf.keras.layers.Layer):
@@ -427,6 +461,23 @@ class TFCLIPEncoderLayer(tf.keras.layers.Layer):
         outputs = (hidden_states,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build([None, None, self.embed_dim])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build([None, None, self.embed_dim])
 
 
 class TFCLIPEncoder(tf.keras.layers.Layer):
@@ -483,6 +534,15 @@ class TFCLIPEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 class TFCLIPTextTransformer(tf.keras.layers.Layer):
     def __init__(self, config: CLIPTextConfig, **kwargs):
@@ -496,6 +556,7 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         # For `pooled_output` computation
         self.eos_token_id = config.eos_token_id
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -586,6 +647,20 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
 
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 @keras_serializable
 class TFCLIPTextMainLayer(tf.keras.layers.Layer):
@@ -634,6 +709,14 @@ class TFCLIPTextMainLayer(tf.keras.layers.Layer):
 
         return text_model_outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "text_model", None) is not None:
+            with tf.name_scope(self.text_model.name):
+                self.text_model.build(None)
+
 
 class TFCLIPVisionTransformer(tf.keras.layers.Layer):
     def __init__(self, config: CLIPVisionConfig, **kwargs):
@@ -643,6 +726,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
+        self.embed_dim = config.hidden_size
 
     def call(
         self,
@@ -679,6 +763,23 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "pre_layernorm", None) is not None:
+            with tf.name_scope(self.pre_layernorm.name):
+                self.pre_layernorm.build([None, None, self.embed_dim])
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "post_layernorm", None) is not None:
+            with tf.name_scope(self.post_layernorm.name):
+                self.post_layernorm.build([None, self.embed_dim])
+
 
 @keras_serializable
 class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
@@ -713,6 +814,14 @@ class TFCLIPVisionMainLayer(tf.keras.layers.Layer):
         )
 
         return vision_model_outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
 
 
 @keras_serializable
@@ -757,6 +866,8 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             use_bias=False,
             name="text_projection",
         )
+        self.text_embed_dim = text_config.hidden_size
+        self.vision_embed_dim = vision_config.hidden_size
 
     def build(self, input_shape: tf.TensorShape = None):
         self.logit_scale = self.add_weight(
@@ -766,7 +877,21 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             name="logit_scale",
         )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "text_model", None) is not None:
+            with tf.name_scope(self.text_model.name):
+                self.text_model.build(None)
+        if getattr(self, "vision_model", None) is not None:
+            with tf.name_scope(self.vision_model.name):
+                self.vision_model.build(None)
+        if getattr(self, "visual_projection", None) is not None:
+            with tf.name_scope(self.visual_projection.name):
+                self.visual_projection.build([None, None, self.vision_embed_dim])
+        if getattr(self, "text_projection", None) is not None:
+            with tf.name_scope(self.text_projection.name):
+                self.text_projection.build([None, None, self.text_embed_dim])
 
     @unpack_inputs
     def get_text_features(
@@ -1108,6 +1233,14 @@ class TFCLIPTextModel(TFCLIPPreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "clip", None) is not None:
+            with tf.name_scope(self.clip.name):
+                self.clip.build(None)
+
 
 class TFCLIPVisionModel(TFCLIPPreTrainedModel):
     config_class = CLIPVisionConfig
@@ -1161,6 +1294,14 @@ class TFCLIPVisionModel(TFCLIPPreTrainedModel):
         )
 
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "clip", None) is not None:
+            with tf.name_scope(self.clip.name):
+                self.clip.build(None)
 
 
 @add_start_docstrings(CLIP_START_DOCSTRING)
@@ -1313,3 +1454,11 @@ class TFCLIPModel(TFCLIPPreTrainedModel):
         # TensorFlow cannot trace through nested dataclasses. Reference:
         # https://github.com/huggingface/transformers/pull/16886
         return output
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "clip", None) is not None:
+            with tf.name_scope(self.clip.name):
+                self.clip.build(None)

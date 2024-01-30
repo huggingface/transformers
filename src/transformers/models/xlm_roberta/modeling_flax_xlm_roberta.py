@@ -88,9 +88,10 @@ XLM_ROBERTA_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -266,7 +267,7 @@ class FlaxXLMRobertaSelfAttention(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        key_value_states: Optional[jnp.array] = None,
+        key_value_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic=True,
         output_attentions: bool = False,
@@ -1358,7 +1359,7 @@ class FlaxXLMRobertaForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 

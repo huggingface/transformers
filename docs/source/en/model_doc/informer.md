@@ -39,12 +39,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] InformerConfig
 
-
 ## InformerModel
 
 [[autodoc]] InformerModel
     - forward
-
 
 ## InformerForPrediction
 

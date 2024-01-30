@@ -34,14 +34,14 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/clovaai/donut).
 
-Tips:
+## Usage tips
 
 - The quickest way to get started with Donut is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Donut), which show how to use the model
   at inference time as well as fine-tuning on custom data.
 - Donut is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
 
-## Inference
+## Inference examples
 
 Donut's [`VisionEncoderDecoder`] model accepts images as input and makes use of
 [`~generation.GenerationMixin.generate`] to autoregressively generate text given the input image.

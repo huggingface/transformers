@@ -145,17 +145,17 @@ class MptConfig(PretrainedConfig):
             the `inputs_ids` passed when calling [`MptModel`]. Check [this
             discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
             `vocab_size` has been defined.
-        resid_pdrop (`float`, *optional*, defaults to 0.1):
+        resid_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability applied to the attention output before combining with residual.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers.
-        emb_pdrop (`float`, *optional*, defaults to 0.1):
+        emb_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability for the embedding layer.
-        learned_pos_emb (`bool`, *optional*, defaults to `False`):
+        learned_pos_emb (`bool`, *optional*, defaults to `True`):
             Whether to use learned positional embeddings.
         attn_config (`dict`, *optional*):
             A dictionary used to configure the model's attention module.
-        init_device (`str`, *optional*):
+        init_device (`str`, *optional*, defaults to `"cpu"`):
             The device to use for parameter initialization. Defined for backward compatibility
         logit_scale (`float`, *optional*):
             If not None, scale the logits by this value.
@@ -169,7 +169,7 @@ class MptConfig(PretrainedConfig):
         norm_type (`str`, *optional*, defaults to `"low_precision_layernorm"`):
             Type of layer norm to use. All MPT models uses the same layer norm implementation. Defined for backward
             compatibility.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

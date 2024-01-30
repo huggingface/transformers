@@ -57,7 +57,7 @@ class SegformerImageProcessor(BaseImageProcessor):
         size (`Dict[str, int]` *optional*, defaults to `{"height": 512, "width": 512}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -440,8 +440,7 @@ class SegformerImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->Segformer
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
-        PyTorch.
+        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`SegformerForSemanticSegmentation`]):

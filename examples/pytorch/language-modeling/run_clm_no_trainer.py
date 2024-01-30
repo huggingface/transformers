@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.34.0.dev0")
+check_min_version("4.38.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -199,7 +199,7 @@ def parse_args():
         default=False,
         help=(
             "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-            "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
             "execute code present on the Hub on your local machine."
         ),
     )
@@ -226,7 +226,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations. '
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -234,7 +234,7 @@ def parse_args():
         "--low_cpu_mem_usage",
         action="store_true",
         help=(
-            "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded."
+            "It is an option to create the model as an empty shell, then only materialize its parameters when the pretrained weights are loaded. "
             "If passed, LLM loading time and RAM consumption will be benefited."
         ),
     )
@@ -246,13 +246,16 @@ def parse_args():
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`train_file` should be a csv, json or txt file.")
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
+            if extension not in ["csv", "json", "txt"]:
+                raise ValueError("`validation_file` should be a csv, json or txt file.")
 
     if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+        if args.output_dir is None:
+            raise ValueError("Need an `output_dir` to create a repo when `--push_to_hub` is passed.")
 
     return args
 
@@ -342,9 +345,10 @@ def main():
         dataset_args = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
+            extension = args.train_file.split(".")[-1]
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-        extension = args.train_file.split(".")[-1]
+            extension = args.validation_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
             dataset_args["keep_linebreaks"] = not args.no_keep_linebreaks
@@ -365,7 +369,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     #
@@ -395,7 +399,7 @@ def main():
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -437,17 +441,16 @@ def main():
 
     if args.block_size is None:
         block_size = tokenizer.model_max_length
-        if block_size > 1024:
+        if block_size > config.max_position_embeddings:
             logger.warning(
-                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
-                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-                " override this default with `--block_size xxx`."
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-        block_size = 1024
+            block_size = min(1024, config.max_position_embeddings)
     else:
         if args.block_size > tokenizer.model_max_length:
             logger.warning(
-                f"The block_size passed ({args.block_size}) is larger than the maximum length for the model"
+                f"The block_size passed ({args.block_size}) is larger than the maximum length for the model "
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(args.block_size, tokenizer.model_max_length)
@@ -524,8 +527,10 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
+        num_training_steps=args.max_train_steps
+        if overrode_max_train_steps
+        else args.max_train_steps * accelerator.num_processes,
     )
 
     # Prepare everything with our `accelerator`.
@@ -586,7 +591,7 @@ def main():
             path = os.path.basename(checkpoint_path)
 
         accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
-        accelerator.load_state(path)
+        accelerator.load_state(checkpoint_path)
         # Extract `epoch_{i}` or `step_{i}`
         training_difference = os.path.splitext(path)[0]
 

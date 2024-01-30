@@ -128,6 +128,17 @@
         ],
         "sha": "3106af0fd503970717c05f27218e5cacf19ba872"
     },
+    "BarkModel": {
+        "tokenizer_classes": [
+            "BertTokenizer",
+            "BertTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "BarkModel"
+        ],
+        "sha": "187e590fd87359cea47693e8cb11a604cd7b673c"
+    },
     "BartForCausalLM": {
         "tokenizer_classes": [
             "BartTokenizer",
@@ -708,6 +719,28 @@
         ],
         "sha": "28b600fcfdc4f4938406fb518abf895620048cb2"
     },
+    "BrosForTokenClassification": {
+        "tokenizer_classes": [
+            "BertTokenizer",
+            "BertTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "BrosForTokenClassification"
+        ],
+        "sha": "4ec2c91936f96b93667e8946fc7abbdeeb08a6d7"
+    },
+    "BrosModel": {
+        "tokenizer_classes": [
+            "BertTokenizer",
+            "BertTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "BrosModel"
+        ],
+        "sha": "e2464830b1874eeaf9f4b425fbe0ce8e7c7643e9"
+    },
     "CLIPModel": {
         "tokenizer_classes": [
             "CLIPTokenizer",
@@ -843,6 +876,16 @@
             "ClapModel"
         ],
         "sha": "a7874595b900f9b2ddc79130dafc3ff48f4fbfb9"
+    },
+    "ClvpModelForConditionalGeneration": {
+        "tokenizer_classes": [
+            "ClvpTokenizer"
+        ],
+        "processor_classes": [
+            "ClvpFeatureExtractor"
+        ],
+        "model_classes": [],
+        "sha": "45df7581535be337ff781707b6c20994ca221f05"
     },
     "CodeGenForCausalLM": {
         "tokenizer_classes": [
@@ -1006,7 +1049,8 @@
             "ConvNextImageProcessor"
         ],
         "model_classes": [
-            "ConvNextV2ForImageClassification"
+            "ConvNextV2ForImageClassification",
+            "TFConvNextV2ForImageClassification"
         ],
         "sha": "ee22bae1cbb87d66fc7f62f7e15a43d6ff80d3cc"
     },
@@ -1016,7 +1060,8 @@
             "ConvNextImageProcessor"
         ],
         "model_classes": [
-            "ConvNextV2Model"
+            "ConvNextV2Model",
+            "TFConvNextV2Model"
         ],
         "sha": "c4dd68ee1102cba05bcc483da2a88e39427b7249"
     },
@@ -1323,7 +1368,8 @@
         ],
         "processor_classes": [],
         "model_classes": [
-            "DebertaV2ForMultipleChoice"
+            "DebertaV2ForMultipleChoice",
+            "TFDebertaV2ForMultipleChoice"
         ],
         "sha": "07e39f520ce239b39ef8cb24cd7874d06c791063"
     },
@@ -1518,6 +1564,16 @@
             "DinatModel"
         ],
         "sha": "d6c75bc51196f0a683afb12de6310fdda13efefd"
+    },
+    "Dinov2Backbone": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "BitImageProcessor"
+        ],
+        "model_classes": [
+            "Dinov2Backbone"
+        ],
+        "sha": "dbf8d2ff3092ac53c11e6525e6cbae7ace84769a"
     },
     "Dinov2ForImageClassification": {
         "tokenizer_classes": [],
@@ -2092,6 +2148,56 @@
         ],
         "sha": "683f6f73a2ab87801f1695a72d1af63cf173ab7c"
     },
+    "FalconForCausalLM": {
+        "tokenizer_classes": [
+            "PreTrainedTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "FalconForCausalLM"
+        ],
+        "sha": "60076d5dafc5e33ba9c90dcd05e7c0834e44049a"
+    },
+    "FalconForQuestionAnswering": {
+        "tokenizer_classes": [
+            "PreTrainedTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "FalconForQuestionAnswering"
+        ],
+        "sha": "b1ee9cd5fad2d177ea5a46df4611cd02f66ae788"
+    },
+    "FalconForSequenceClassification": {
+        "tokenizer_classes": [
+            "PreTrainedTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "FalconForSequenceClassification"
+        ],
+        "sha": "007838c0991c2b6a87dc49a8a5c20f29149a00fa"
+    },
+    "FalconForTokenClassification": {
+        "tokenizer_classes": [
+            "PreTrainedTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "FalconForTokenClassification"
+        ],
+        "sha": "0ea6ae548773daa6e3317fddc058957e956eebf4"
+    },
+    "FalconModel": {
+        "tokenizer_classes": [
+            "PreTrainedTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "FalconModel"
+        ],
+        "sha": "ca15a579c946eb00c5b39cc8e0ea63d0c1460f84"
+    },
     "FlaubertForMultipleChoice": {
         "tokenizer_classes": [
             "FlaubertTokenizer"
@@ -2319,6 +2425,18 @@
             "TFFunnelModel"
         ],
         "sha": "bfbaa8fa21c3abf80b94e7168b5ecff8ec5b5f76"
+    },
+    "FuyuForCausalLM": {
+        "tokenizer_classes": [
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [
+            "FuyuImageProcessor"
+        ],
+        "model_classes": [
+            "FuyuForCausalLM"
+        ],
+        "sha": "685d78258ea95c5c82e0e4555d0d4a2270ab8bff"
     },
     "GLPNForDepthEstimation": {
         "tokenizer_classes": [],
@@ -2768,6 +2886,30 @@
         ],
         "sha": "6749164c678d4883d455f98b1dfc98c62da8f08b"
     },
+    "IdeficsForVisionText2Text": {
+        "tokenizer_classes": [
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [
+            "IdeficsImageProcessor"
+        ],
+        "model_classes": [
+            "IdeficsForVisionText2Text"
+        ],
+        "sha": "2c2f2e2cd6b02a77d0cdd8c3767ba9a6267dbd20"
+    },
+    "IdeficsModel": {
+        "tokenizer_classes": [
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [
+            "IdeficsImageProcessor"
+        ],
+        "model_classes": [
+            "IdeficsModel"
+        ],
+        "sha": "649df2e35e067efd573ff2d083784a5cf876545e"
+    },
     "ImageGPTForCausalImageModeling": {
         "tokenizer_classes": [],
         "processor_classes": [
@@ -2797,6 +2939,30 @@
             "ImageGPTModel"
         ],
         "sha": "5a7983e48d5841704733dd0756177680ed50c074"
+    },
+    "Kosmos2ForConditionalGeneration": {
+        "tokenizer_classes": [
+            "XLMRobertaTokenizerFast"
+        ],
+        "processor_classes": [
+            "CLIPImageProcessor"
+        ],
+        "model_classes": [
+            "Kosmos2ForConditionalGeneration"
+        ],
+        "sha": "d1d4607782b911411676f1ee79997dee645def58"
+    },
+    "Kosmos2Model": {
+        "tokenizer_classes": [
+            "XLMRobertaTokenizerFast"
+        ],
+        "processor_classes": [
+            "CLIPImageProcessor"
+        ],
+        "model_classes": [
+            "Kosmos2Model"
+        ],
+        "sha": "379d8944a65312094d9ab1c4b8a82058a2d3274e"
     },
     "LEDForConditionalGeneration": {
         "tokenizer_classes": [
@@ -3752,6 +3918,39 @@
         ],
         "sha": "f197d5bfa1fe27b5f28a6e6d4e3ad229b753450a"
     },
+    "MistralForCausalLM": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "MistralForCausalLM"
+        ],
+        "sha": "f7e06aeedbba8f4f665b438b868ed932d451f64b"
+    },
+    "MistralForSequenceClassification": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "MistralForSequenceClassification"
+        ],
+        "sha": "65045444ea1933309270d8b08b21d3fa94a84290"
+    },
+    "MistralModel": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "MistralModel"
+        ],
+        "sha": "becd727ad72b1e8a7c0fa0ea39b61904fa68aeac"
+    },
     "MobileBertForMaskedLM": {
         "tokenizer_classes": [
             "MobileBertTokenizer",
@@ -4076,6 +4275,24 @@
             "MraModel"
         ],
         "sha": "315f34f30bcc4b0b66b11987726df2a80c50e271"
+    },
+    "MusicgenForCausalLM": {
+        "tokenizer_classes": [
+            "T5TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [],
+        "sha": "f67d387eaaa7c71ddf88af95eda4bf14ace08d49"
+    },
+    "MusicgenForConditionalGeneration": {
+        "tokenizer_classes": [
+            "T5TokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "MusicgenForConditionalGeneration"
+        ],
+        "sha": "16102cdf580e70cf0b4e0e2cda5bc75b934da92c"
     },
     "MvpForCausalLM": {
         "tokenizer_classes": [
@@ -4472,6 +4689,32 @@
         ],
         "sha": "f0e27b2b4e53ba70e05d13dcfea8e85272b292a5"
     },
+    "Owlv2ForObjectDetection": {
+        "tokenizer_classes": [
+            "CLIPTokenizer",
+            "CLIPTokenizerFast"
+        ],
+        "processor_classes": [
+            "Owlv2ImageProcessor"
+        ],
+        "model_classes": [
+            "Owlv2ForObjectDetection"
+        ],
+        "sha": "30439c0b2749726468dc13a755261e8101170052"
+    },
+    "Owlv2Model": {
+        "tokenizer_classes": [
+            "CLIPTokenizer",
+            "CLIPTokenizerFast"
+        ],
+        "processor_classes": [
+            "Owlv2ImageProcessor"
+        ],
+        "model_classes": [
+            "Owlv2Model"
+        ],
+        "sha": "7aeebdad5f72b36cb07c74355afad8e6052e2377"
+    },
     "PLBartForCausalLM": {
         "tokenizer_classes": [
             "PLBartTokenizer"
@@ -4641,6 +4884,83 @@
         ],
         "sha": "83ec4d2d61ed62525ee033e13d144817beb29d19"
     },
+    "PersimmonForCausalLM": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PersimmonForCausalLM"
+        ],
+        "sha": "454234d6496c3857f5bf3eafb784616e2cd3ea82"
+    },
+    "PersimmonForSequenceClassification": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PersimmonForSequenceClassification"
+        ],
+        "sha": "1d2674846543a181ca67bafa8b8f3a48bd2eefd1"
+    },
+    "PersimmonModel": {
+        "tokenizer_classes": [
+            "LlamaTokenizer",
+            "LlamaTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PersimmonModel"
+        ],
+        "sha": "b8c8d479e29e9ee048e2d0b05b001ac835ad8859"
+    },
+    "PhiForCausalLM": {
+        "tokenizer_classes": [
+            "CodeGenTokenizer",
+            "CodeGenTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PhiForCausalLM"
+        ],
+        "sha": "3fecc0109a4a3a230e3a5509eaf47a26eba85d79"
+    },
+    "PhiForSequenceClassification": {
+        "tokenizer_classes": [
+            "CodeGenTokenizer",
+            "CodeGenTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PhiForSequenceClassification"
+        ],
+        "sha": "e1c9f8ebf1317516acc1cd6338de71a53e770245"
+    },
+    "PhiForTokenClassification": {
+        "tokenizer_classes": [
+            "CodeGenTokenizer",
+            "CodeGenTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PhiForTokenClassification"
+        ],
+        "sha": "d3a8054903753b5c96c05eaf9877905a116a1d5e"
+    },
+    "PhiModel": {
+        "tokenizer_classes": [
+            "CodeGenTokenizer",
+            "CodeGenTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "PhiModel"
+        ],
+        "sha": "99c38d5ce7ace35127d00ed3eeb3561308ea6b21"
+    },
     "Pix2StructForConditionalGeneration": {
         "tokenizer_classes": [
             "T5TokenizerFast"
@@ -4649,7 +4969,9 @@
             "Pix2StructImageProcessor",
             "Pix2StructProcessor"
         ],
-        "model_classes": [],
+        "model_classes": [
+            "Pix2StructForConditionalGeneration"
+        ],
         "sha": "42b3de00ad535076c4893e4ac5ae2d2748cc4ccb"
     },
     "PoolFormerForImageClassification": {
@@ -5432,6 +5754,18 @@
         ],
         "sha": "d46f0a83324e5865420a27a738ef203292de3479"
     },
+    "SpeechT5ForTextToSpeech": {
+        "tokenizer_classes": [
+            "SpeechT5Tokenizer"
+        ],
+        "processor_classes": [
+            "SpeechT5FeatureExtractor"
+        ],
+        "model_classes": [
+            "SpeechT5ForTextToSpeech"
+        ],
+        "sha": "922e748d9e1ea256a8d9259782021cd3820d5924"
+    },
     "SpeechT5Model": {
         "tokenizer_classes": [
             "SpeechT5Tokenizer"
@@ -5559,6 +5893,16 @@
             "SwiftFormerModel"
         ],
         "sha": "25ba2d88c770533f8c69811d2a454a00c1d09f5d"
+    },
+    "Swin2SRForImageSuperResolution": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "Swin2SRImageProcessor"
+        ],
+        "model_classes": [
+            "Swin2SRForImageSuperResolution"
+        ],
+        "sha": "3a2780de0b455084c018ac8a62b56040969e26ec"
     },
     "Swin2SRModel": {
         "tokenizer_classes": [],
@@ -6254,6 +6598,16 @@
         ],
         "sha": "85020189fb7bf1217eb9370b09bca8ec5bcfdafa"
     },
+    "VitsModel": {
+        "tokenizer_classes": [
+            "VitsTokenizer"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "VitsModel"
+        ],
+        "sha": "b9a20ca5b6a7874576e485850260578895587dd2"
+    },
     "Wav2Vec2ConformerForAudioFrameClassification": {
         "tokenizer_classes": [
             "Wav2Vec2CTCTokenizer"
@@ -6483,6 +6837,18 @@
             "WhisperForAudioClassification"
         ],
         "sha": "d71b13674b1a67443cd19d0594a3b5b1e5968f0d"
+    },
+    "WhisperForCausalLM": {
+        "tokenizer_classes": [
+            "WhisperTokenizer"
+        ],
+        "processor_classes": [
+            "WhisperFeatureExtractor"
+        ],
+        "model_classes": [
+            "WhisperForCausalLM"
+        ],
+        "sha": "e7febfd7f4512e029293c677e6d2633e23fc459a"
     },
     "WhisperForConditionalGeneration": {
         "tokenizer_classes": [

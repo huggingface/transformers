@@ -501,20 +501,14 @@ class DebertaV2Encoder(nn.Module):
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                output_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                output_states = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     next_kv,
                     attention_mask,
                     query_states,
                     relative_pos,
                     rel_embeddings,
+                    output_attentions,
                 )
             else:
                 output_states = layer_module(
@@ -786,15 +780,11 @@ class DisentangledSelfAttention(nn.Module):
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
@@ -937,10 +927,6 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, DebertaV2Encoder):
-            module.gradient_checkpointing = value
 
 
 DEBERTA_START_DOCSTRING = r"""

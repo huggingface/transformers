@@ -297,10 +297,6 @@ class Blip2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Blip2Encoder):
-            module.gradient_checkpointing = value
-
 
 BLIP_2_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -473,17 +469,11 @@ class Blip2Encoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -944,15 +934,8 @@ class Blip2QFormerEncoder(nn.Module):
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions, query_length)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
@@ -1140,13 +1123,13 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
-            if type(encoder_hidden_states) == list:
+            if isinstance(encoder_hidden_states, list):
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
             else:
                 encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
-            if type(encoder_attention_mask) == list:
+            if isinstance(encoder_attention_mask, list):
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -1272,14 +1255,10 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import torch
         >>> from transformers import AutoTokenizer, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt").to(device)
+        >>> inputs = tokenizer(["a photo of a cat"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1333,16 +1312,12 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
+        >>> inputs = processor(images=image, return_tensors="pt")
         >>> image_outputs = model.get_image_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1381,15 +1356,12 @@ class Blip2Model(Blip2PreTrainedModel):
         >>> import requests
         >>> from transformers import Blip2Processor, Blip2Model
 
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+        >>> model = Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
+        >>> inputs = processor(images=image, return_tensors="pt")
         >>> qformer_outputs = model.get_qformer_features(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1654,34 +1626,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         Examples:
 
-        Image captioning (without providing a text prompt):
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
-        >>> import torch
-
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
-        >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ... )
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
-
-        >>> generated_ids = model.generate(**inputs)
-        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
-        >>> print(generated_text)
-        two cats laying on a couch
-        ```
-
-        Visual question answering (prompt = question):
+        Prepare processor, model and image input
 
         ```python
         >>> from PIL import Image
@@ -1698,7 +1643,22 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
+        ```
 
+        Image captioning (without providing a text prompt):
+
+        ```python
+        >>> inputs = processor(images=image, return_tensors="pt").to(device, torch.float16)
+
+        >>> generated_ids = model.generate(**inputs)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+        >>> print(generated_text)
+        two cats laying on a couch
+        ```
+
+        Visual question answering (prompt = question):
+
+        ```python
         >>> prompt = "Question: how many cats are there? Answer:"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device="cuda", dtype=torch.float16)
 
@@ -1712,20 +1672,10 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         This greatly reduces the amount of memory used by the model while maintaining the same performance.
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
-        >>> import torch
-
-        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-flan-t5-xl", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
+        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
         ... )  # doctest: +IGNORE_RESULT
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> prompt = "Question: how many cats are there? Answer:"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
 
         >>> generated_ids = model.generate(**inputs)

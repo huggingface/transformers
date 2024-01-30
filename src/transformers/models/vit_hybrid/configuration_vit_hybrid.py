@@ -40,6 +40,14 @@ class ViTHybridConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+            The configuration of the backbone in a dictionary or the config object of the backbone.
+        backbone (`str`, *optional*):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
+            Whether to use pretrained weights for the backbone.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -51,9 +59,9 @@ class ViTHybridConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -65,12 +73,10 @@ class ViTHybridConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*, defaults to `None`):
-            The configuration of the backbone in a dictionary or the config object of the backbone.
         backbone_featmap_shape (`List[int]`, *optional*, defaults to `[1, 1024, 24, 24]`):
             Used only for the `hybrid` embedding type. The shape of the feature maps of the backbone.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
 
     Example:
 
@@ -86,11 +92,14 @@ class ViTHybridConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit-hybrid"
 
     def __init__(
         self,
         backbone_config=None,
+        backbone=None,
+        use_pretrained_backbone=False,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -108,8 +117,13 @@ class ViTHybridConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+        if use_pretrained_backbone:
+            raise ValueError("Pretrained backbones are not supported yet.")
 
-        if backbone_config is None:
+        if backbone_config is not None and backbone is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
+        if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with a `BiT` backbone.")
             backbone_config = {
                 "global_padding": "same",
@@ -131,6 +145,8 @@ class ViTHybridConfig(PretrainedConfig):
 
         self.backbone_featmap_shape = backbone_featmap_shape
         self.backbone_config = backbone_config
+        self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads

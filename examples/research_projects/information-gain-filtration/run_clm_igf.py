@@ -354,7 +354,7 @@ def main():
         default=10,
         type=int,
         help=(
-            "decay the selectivity of our secondary learner filter from"
+            "decay the selectivity of our secondary learner filter from "
             "1 standard deviation above average to 1 below average after 10 batches"
         ),
     )

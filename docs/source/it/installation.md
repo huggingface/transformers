@@ -130,10 +130,10 @@ Il tuo ambiente Python troverà la versione `main` di 🤗 Transformers alla pro
 
 ## Installazione con conda
 
-Installazione dal canale conda `huggingface`:
+Installazione dal canale conda `conda-forge`:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Impostazione della cache

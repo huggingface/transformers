@@ -28,7 +28,6 @@ import tempfile
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import partial
-from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlparse
@@ -39,6 +38,7 @@ import numpy as np
 import requests
 import wget
 from filelock import FileLock
+from huggingface_hub.utils import insecure_hashlib
 from PIL import Image
 from tqdm.auto import tqdm
 from yaml import Loader, dump, load
@@ -402,12 +402,12 @@ def get_from_cache(
 
 def url_to_filename(url, etag=None):
     url_bytes = url.encode("utf-8")
-    url_hash = sha256(url_bytes)
+    url_hash = insecure_hashlib.sha256(url_bytes)
     filename = url_hash.hexdigest()
 
     if etag:
         etag_bytes = etag.encode("utf-8")
-        etag_hash = sha256(etag_bytes)
+        etag_hash = insecure_hashlib.sha256(etag_bytes)
         filename += "." + etag_hash.hexdigest()
 
     if url.endswith(".h5"):

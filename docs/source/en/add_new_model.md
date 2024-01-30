@@ -52,7 +52,7 @@ A good first starting point to better understand the library is to read the [doc
 
 In our opinion, the library's code is not just a means to provide a product, *e.g.* the ability to use BERT for
 inference, but also as the very product that we want to improve. Hence, when adding a model, the user is not only the
-person that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
+person who will use your model, but also everybody who will read, try to understand, and possibly tweak your code.
 
 With this in mind, let's go a bit deeper into the general library design.
 
@@ -131,9 +131,9 @@ From experience, we can tell you that the most important things to keep in mind 
   friends. Note that it might very well happen that your model's tokenizer is based on one model implementation, and
   your model's modeling code on another one. *E.g.* FSMT's modeling code is based on BART, while FSMT's tokenizer code
   is based on XLM.
--  It's more of an engineering challenge than a scientific challenge. You should spend more time on creating an
-  efficient debugging environment than trying to understand all theoretical aspects of the model in the paper.
--  Ask for help, when you're stuck! Models are the core component of 🤗 Transformers so that we at Hugging Face are more
+-  It's more of an engineering challenge than a scientific challenge. You should spend more time creating an
+  efficient debugging environment rather than trying to understand all theoretical aspects of the model in the paper.
+-  Ask for help, when you're stuck! Models are the core component of 🤗 Transformers so we at Hugging Face are more
   than happy to help you at every step to add your model. Don't hesitate to ask if you notice you are not making
   progress.
 
@@ -157,9 +157,9 @@ List:
 ☐ Submitted the pull request<br>
 ☐ (Optional) Added a demo notebook
 
-To begin with, we usually recommend to start by getting a good theoretical understanding of `BrandNewBert`. However,
+To begin with, we usually recommend starting by getting a good theoretical understanding of `BrandNewBert`. However,
 if you prefer to understand the theoretical aspects of the model *on-the-job*, then it is totally fine to directly dive
-into the `BrandNewBert`'s code-base. This option might suit you better, if your engineering skills are better than
+into the `BrandNewBert`'s code-base. This option might suit you better if your engineering skills are better than
 your theoretical skill, if you have trouble understanding `BrandNewBert`'s paper, or if you just enjoy programming
 much more than reading scientific papers.
 
@@ -175,7 +175,7 @@ theoretical aspects, but rather focus on the practical ones, namely:
   encoder-decoder model? Look at the [model_summary](model_summary) if you're not familiar with the differences between those.
 -  What are the applications of *brand_new_bert*? Text classification? Text generation? Seq2Seq tasks, *e.g.,*
   summarization?
--  What is the novel feature of the model making it different from BERT/GPT-2/BART?
+-  What is the novel feature of the model that makes it different from BERT/GPT-2/BART?
 -  Which of the already existing [🤗 Transformers models](https://huggingface.co/transformers/#contents) is most
   similar to *brand_new_bert*?
 -  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
@@ -261,7 +261,7 @@ figure out the following:
 - How can you debug the model in the original environment of the repo? Do you have to add *print* statements, can you
   work with an interactive debugger like *ipdb*, or should you use an efficient IDE to debug the model, like PyCharm?
 
-It is very important that before you start the porting process, that you can **efficiently** debug code in the original
+It is very important that before you start the porting process, you can **efficiently** debug code in the original
 repository! Also, remember that you are working with an open-source library, so do not hesitate to open an issue, or
 even a pull request in the original repository. The maintainers of this repository are most likely very happy about
 someone looking into their code!
@@ -280,10 +280,10 @@ In general, there are two possible debugging environments for running the origin
 Jupyter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
 logical components from one another and to have faster debugging cycles as intermediate results can be stored. Also,
 notebooks are often easier to share with other contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupyter notebooks, we strongly recommend you to work with them.
+Face team for help. If you are familiar with Jupyter notebooks, we strongly recommend you work with them.
 
 The obvious disadvantage of Jupyter notebooks is that if you are not used to working with them you will have to spend
-some time adjusting to the new programming environment and that you might not be able to use your known debugging tools
+some time adjusting to the new programming environment and you might not be able to use your known debugging tools
 anymore, like `ipdb`.
 
 For each code-base, a good first step is always to load a **small** pretrained checkpoint and to be able to reproduce a
@@ -329,7 +329,7 @@ example is [T5's MeshTensorFlow](https://github.com/tensorflow/mesh/tree/master/
 very complex and does not offer a simple way to decompose the model into its sub-components. For such libraries, one
 often relies on verifying print statements.
 
-No matter which strategy you choose, the recommended procedure is often the same in that you should start to debug the
+No matter which strategy you choose, the recommended procedure is often the same that you should start to debug the
 starting layers first and the ending layers last.
 
 It is recommended that you retrieve the output, either by print statements or sub-component functions, of the following
@@ -364,7 +364,7 @@ depending on the library framework, we accept an error tolerance of 1e-3 (0.001)
 nearly the same output, they have to be almost identical. Therefore, you will certainly compare the intermediate
 outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
 *brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely
-important. Here is some advice is to make your debugging environment as efficient as possible.
+important. Here is some advice to make your debugging environment as efficient as possible.
 
 - Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
   probably take the time to write a longer script that decomposes the original model into smaller sub-components to
@@ -409,7 +409,7 @@ Otherwise, let's start generating a new model. You have two choices here:
 - `transformers-cli add-new-model-like` to add a new model like an existing one
 - `transformers-cli add-new-model` to add a new model from our template (will look like BERT or Bart depending on the type of model you select)
 
-In both cases, you will be prompted with a questionnaire to fill the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
+In both cases, you will be prompted with a questionnaire to fill in the basic information of your model. The second command requires to install `cookiecutter`, you can find more information on it [here](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model).
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
@@ -451,7 +451,7 @@ git push -u origin a-descriptive-name-for-my-changes
 
 6. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
 
-In the following, whenever you have done some progress, don't forget to commit your work and push it to your account so
+In the following, whenever you have made some progress, don't forget to commit your work and push it to your account so
 that it shows in the pull request. Additionally, you should make sure to update your work with the current main from
 time to time by doing:
 
@@ -483,7 +483,7 @@ Now you can finally start coding :). The generated code in
 `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` will either have the same architecture as BERT if
 it's an encoder-only model or BART if it's an encoder-decoder model. At this point, you should remind yourself what
 you've learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
-BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
+BART?*". Implement those changes which often means changing the *self-attention* layer, the order of the normalization
 layer, etc… Again, it is often useful to look at the similar architecture of already existing models in Transformers to
 get a better feeling of how your model should be implemented.
 
@@ -665,7 +665,7 @@ PyTorch's implementation of a layer requires the weight to be transposed beforeh
 
 Finally, you should also check that **all** required weights are initialized and print out all checkpoint weights that
 were not used for initialization to make sure the model is correctly converted. It is completely normal, that the
-conversion trials fail with either a wrong shape statement or wrong name assignment. This is most likely because either
+conversion trials fail with either a wrong shape statement or a wrong name assignment. This is most likely because either
 you used incorrect parameters in `BrandNewBertConfig()`, have a wrong architecture in the 🤗 Transformers
 implementation, you have a bug in the `init()` functions of one of the components of the 🤗 Transformers
 implementation or you need to transpose one of the checkpoint weights.
@@ -722,7 +722,7 @@ in the 🤗 Transformers implementation. From our experience, a simple and effic
 in both the original implementation and 🤗 Transformers implementation, at the same positions in the network
 respectively, and to successively remove print statements showing the same values for intermediate presentations.
 
-When you're confident that both implementations yield the same output, verifying the outputs with
+When you're confident that both implementations yield the same output, verify the outputs with
 `torch.allclose(original_output, output, atol=1e-3)`, you're done with the most difficult part! Congratulations - the
 work left to be done should be a cakewalk 😊.
 
@@ -744,7 +744,7 @@ Having fixed all common tests, it is now crucial to ensure that all the nice wor
 - b) Future changes to your model will not break any important feature of the model.
 
 At first, integration tests should be added. Those integration tests essentially do the same as the debugging scripts
-you used earlier to implement the model to 🤗 Transformers. A template of those model tests is already added by the
+you used earlier to implement the model to 🤗 Transformers. A template of those model tests has already added by the
 Cookiecutter, called `BrandNewBertModelIntegrationTests` and only has to be filled out by you. To ensure that those
 tests are passing, run
 
@@ -769,7 +769,7 @@ ways:
 
 **9. Implement the tokenizer**
 
-Next, we should add the tokenizer of *brand_new_bert*. Usually, the tokenizer is equivalent or very similar to an
+Next, we should add the tokenizer of *brand_new_bert*. Usually, the tokenizer is equivalent to or very similar to an
 already existing tokenizer of 🤗 Transformers.
 
 It is very important to find/extract the original tokenizer file and to manage to load this file into the 🤗
@@ -890,6 +890,6 @@ reviewer.
 Now, it's time to get some credit from the community for your work! Having completed a model addition is a major
 contribution to Transformers and the whole NLP community. Your code and the ported pre-trained models will certainly be
 used by hundreds and possibly even thousands of developers and researchers. You should be proud of your work and share
-your achievement with the community.
+your achievements with the community.
 
 **You have made another model that is super easy to access for everyone in the community! 🤯**

@@ -94,6 +94,7 @@ class YosoConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "yoso"
 
     def __init__(

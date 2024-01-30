@@ -539,9 +539,7 @@ class MegaGatedCrossAttention(nn.Module):
         self.config = config
         self.activation = ACT2FN[self.config.activation]
         self.attention_activation = self.config.attention_activation
-        self.scaling = (
-            self.config.shared_representation_size**-0.5 if self.attention_activation == "softmax" else None
-        )
+        self.scaling = self.config.shared_representation_size**-0.5 if self.attention_activation == "softmax" else None
 
         self.dropout = MegaDropout(self.config.dropout_prob, is_featurewise=self.config.use_feature_dropout)
         self.hidden_dropout = MegaDropout(

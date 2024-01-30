@@ -56,10 +56,10 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The begin of sequence token.
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -177,17 +177,23 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         token = self.sp_model.IdToPiece(index)
         return token
 
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
         out_string = ""
+        prev_is_special = False
         for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
+                prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 

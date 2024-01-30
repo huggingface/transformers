@@ -130,7 +130,7 @@ Il [Trainer](https://huggingface.co/docs/transformers/main_classes/trainer) supp
 - Imposta un numero di GPU da usare con l'argomento `nproc_per_node`.
 
 ```bash
-python -m torch.distributed.launch \
+torchrun \
     --nproc_per_node 8 pytorch/summarization/run_summarization.py \
     --fp16 \
     --model_name_or_path t5-small \

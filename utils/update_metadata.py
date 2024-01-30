@@ -197,9 +197,9 @@ def get_frameworks_table() -> pd.DataFrame:
             processors[t] = "AutoProcessor"
         elif t in transformers_module.models.auto.tokenization_auto.TOKENIZER_MAPPING_NAMES:
             processors[t] = "AutoTokenizer"
-        elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
-            processors[t] = "AutoFeatureExtractor"
         elif t in transformers_module.models.auto.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES:
+            processors[t] = "AutoImageProcessor"
+        elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
             processors[t] = "AutoFeatureExtractor"
         else:
             # Default to AutoTokenizer if a model has nothing, for backward compatibility.

@@ -45,7 +45,7 @@ inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
 generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 ```
 
-The `generation_output` object is a [`~generation.GreedySearchDecoderOnlyOutput`], as we can
+The `generation_output` object is a [`~generation.GenerateDecoderOnlyOutput`], as we can
 see in the documentation of that class below, it means it has the following attributes:
 
 - `sequences`: the generated sequences of tokens
@@ -77,25 +77,13 @@ We document here all output types.
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchEncoderDecoderOutput
+[[autodoc]] generation.GenerateDecoderOnlyOutput
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateEncoderDecoderOutput
 
-[[autodoc]] generation.SampleEncoderDecoderOutput
+[[autodoc]] generation.GenerateBeamDecoderOnlyOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSearchEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
-
-[[autodoc]] generation.BeamSampleEncoderDecoderOutput
-
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
-
-[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
-
-[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
+[[autodoc]] generation.GenerateBeamEncoderDecoderOutput
 
 ### TensorFlow
 
@@ -317,7 +305,7 @@ generation.
 
 ## StoppingCriteria
 
-A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusivelly available to our PyTorch implementations.
+A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] StoppingCriteria
     - __call__
@@ -333,7 +321,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 ## Constraints
 
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusivelly available to our PyTorch implementations.
+A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusively available to our PyTorch implementations.
 
 [[autodoc]] Constraint
 
@@ -368,3 +356,20 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 [[autodoc]] TextStreamer
 
 [[autodoc]] TextIteratorStreamer
+
+## Caches
+
+[[autodoc]] Cache
+    - update
+
+[[autodoc]] DynamicCache
+    - update
+    - get_seq_length
+    - reorder_cache
+    - to_legacy_cache
+    - from_legacy_cache
+
+[[autodoc]] SinkCache
+    - update
+    - get_seq_length
+    - reorder_cache

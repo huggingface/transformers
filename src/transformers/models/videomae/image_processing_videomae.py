@@ -71,7 +71,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
             Size of the output image after resizing. The shortest edge of the image will be resized to
             `size["shortest_edge"]` while maintaining the aspect ratio of the original image. Can be overriden by
             `size` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):

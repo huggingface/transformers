@@ -47,6 +47,7 @@ _re_configuration_file = re.compile(r"config\.(.*)\.json")
 
 
 class PretrainedConfig(PushToHubMixin):
+    # no-format
     r"""
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
@@ -235,6 +236,8 @@ class PretrainedConfig(PushToHubMixin):
 
             This attribute is currently not being used during model loading time, but this may change in the future
             versions. But we can already start preparing for the future by saving the dtype with save_pretrained.
+        attn_implementation (`str`, *optional*):
+            The attention implementation to use in the model. Can be any of `"eager"` (manual implementation of the attention), `"sdpa"` (attention using [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html)), or `"flash_attention_2"` (attention using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention)). By default, if available, SDPA will be used for torch>=2.1.1. The default is otherwise the manual `"eager"` implementation.
 
         > TensorFlow specific parameters
 
@@ -245,6 +248,7 @@ class PretrainedConfig(PushToHubMixin):
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
     """
+
     model_type: str = ""
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
@@ -273,6 +277,7 @@ class PretrainedConfig(PushToHubMixin):
         self.tie_word_embeddings = kwargs.pop(
             "tie_word_embeddings", True
         )  # Whether input and output word embeddings should be tied for all MLM, LM and Seq2Seq models.
+        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
 
         # Is decoder is used in encoder-decoder models to differentiate encoder from decoder
         self.is_encoder_decoder = kwargs.pop("is_encoder_decoder", False)
@@ -281,33 +286,10 @@ class PretrainedConfig(PushToHubMixin):
         self.add_cross_attention = kwargs.pop("add_cross_attention", False)
         self.tie_encoder_decoder = kwargs.pop("tie_encoder_decoder", False)
 
-        # Parameters for sequence generation
-        self.max_length = kwargs.pop("max_length", 20)
-        self.min_length = kwargs.pop("min_length", 0)
-        self.do_sample = kwargs.pop("do_sample", False)
-        self.early_stopping = kwargs.pop("early_stopping", False)
-        self.num_beams = kwargs.pop("num_beams", 1)
-        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
-        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
-        self.temperature = kwargs.pop("temperature", 1.0)
-        self.top_k = kwargs.pop("top_k", 50)
-        self.top_p = kwargs.pop("top_p", 1.0)
-        self.typical_p = kwargs.pop("typical_p", 1.0)
-        self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
-        self.length_penalty = kwargs.pop("length_penalty", 1.0)
-        self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
-        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
-        self.bad_words_ids = kwargs.pop("bad_words_ids", None)
-        self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
-        self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
-        self.output_scores = kwargs.pop("output_scores", False)
-        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
-        self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
-        self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
-        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
-        self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
-        self.suppress_tokens = kwargs.pop("suppress_tokens", None)
-        self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
+        # Retrocompatibility: Parameters for sequence generation. While we will keep the ability to load these
+        # parameters, saving them will be deprecated. In a distant future, we won't need to load them.
+        for parameter_name, default_value in self._get_generation_defaults().items():
+            setattr(self, parameter_name, kwargs.pop(parameter_name, default_value))
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -372,6 +354,9 @@ class PretrainedConfig(PushToHubMixin):
         # Config hash
         self._commit_hash = kwargs.pop("_commit_hash", None)
 
+        # Attention implementation to use, if relevant.
+        self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -420,6 +405,22 @@ class PretrainedConfig(PushToHubMixin):
             self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
+    @property
+    def _attn_implementation(self):
+        # This property is made private for now (as it cannot be changed and a PreTrainedModel.use_attn_implementation method needs to be implemented.)
+        if hasattr(self, "_attn_implementation_internal"):
+            if self._attn_implementation_internal is None:
+                # `config.attn_implementation` should never be None, for backward compatibility.
+                return "eager"
+            else:
+                return self._attn_implementation_internal
+        else:
+            return "eager"
+
+    @_attn_implementation.setter
+    def _attn_implementation(self, value):
+        self._attn_implementation_internal = value
+
     def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
         """
         Save a configuration object to the directory `save_directory`, so that it can be re-loaded using the
@@ -439,6 +440,18 @@ class PretrainedConfig(PushToHubMixin):
 
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
+
+        non_default_generation_parameters = {}
+        for parameter_name, default_value in self._get_generation_defaults().items():
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
+                non_default_generation_parameters[parameter_name] = getattr(self, parameter_name)
+        if len(non_default_generation_parameters) > 0:
+            logger.warning(
+                "Some non-default generation parameters are set in the model config. These should go into a "
+                "GenerationConfig file (https://huggingface.co/docs/transformers/generation_strategies#save-a-custom-decoding-strategy-with-your-model) "
+                "instead. This warning will be raised to an exception in v4.41.\n"
+                f"Non-default generation parameters: {str(non_default_generation_parameters)}"
+            )
 
         os.makedirs(save_directory, exist_ok=True)
 
@@ -483,7 +496,8 @@ class PretrainedConfig(PushToHubMixin):
 
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -744,6 +758,9 @@ class PretrainedConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
+        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+
         config = cls(**config_dict)
 
         if hasattr(config, "pruned_heads"):
@@ -853,10 +870,13 @@ class PretrainedConfig(PushToHubMixin):
                 else self.quantization_config
             )
 
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = serializable_config_dict.pop("_pre_quantization_dtype", None)
+
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
-        if "_flash_attn_2_enabled" in serializable_config_dict:
-            del serializable_config_dict["_flash_attn_2_enabled"]
+        if "_attn_implementation_internal" in serializable_config_dict:
+            del serializable_config_dict["_attn_implementation_internal"]
 
         return serializable_config_dict
 
@@ -874,8 +894,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
-        if "_flash_attn_2_enabled" in output:
-            del output["_flash_attn_2_enabled"]
+        if "_attn_implementation_internal" in output:
+            del output["_attn_implementation_internal"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -894,6 +914,9 @@ class PretrainedConfig(PushToHubMixin):
                 if not isinstance(self.quantization_config, dict)
                 else self.quantization_config
             )
+
+            # pop the `_pre_quantization_dtype` as torch.dtypes are not serializable.
+            _ = output.pop("_pre_quantization_dtype", None)
 
         self.dict_torch_dtype_to_str(output)
 
@@ -1016,6 +1039,45 @@ class PretrainedConfig(PushToHubMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    @staticmethod
+    def _get_generation_defaults() -> Dict[str, Any]:
+        return {
+            "max_length": 20,
+            "min_length": 0,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "num_beam_groups": 1,
+            "diversity_penalty": 0.0,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "typical_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "encoder_no_repeat_ngram_size": 0,
+            "bad_words_ids": None,
+            "num_return_sequences": 1,
+            "output_scores": False,
+            "return_dict_in_generate": False,
+            "forced_bos_token_id": None,
+            "forced_eos_token_id": None,
+            "remove_invalid_values": False,
+            "exponential_decay_length_penalty": None,
+            "suppress_tokens": None,
+            "begin_suppress_tokens": None,
+        }
+
+    def _has_non_default_generation_parameters(self) -> bool:
+        """
+        Whether or not this instance holds non-default generation parameters.
+        """
+        for parameter_name, default_value in self._get_generation_defaults().items():
+            if hasattr(self, parameter_name) and getattr(self, parameter_name) != default_value:
+                return True
+        return False
 
 
 def get_configuration_file(configuration_files: List[str]) -> str:

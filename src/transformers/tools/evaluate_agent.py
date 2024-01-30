@@ -200,7 +200,7 @@ EVALUATION_TASKS = [
         task=[
             "Provide me the summary of the `text`, then read it to me before transcribing it and translating it in French.",
             "Summarize `text`, read it out loud then transcribe the audio and translate it in French.",
-            "Read me a summary of the the `text` out loud. Transcribe this and translate it in French.",
+            "Read me a summary of the `text` out loud. Transcribe this and translate it in French.",
         ],
         inputs=["text"],
         answer="translator(transcriber(text_reader(summarizer(text))), src_lang='English', tgt_lang='French')",

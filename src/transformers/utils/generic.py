@@ -22,11 +22,13 @@ from collections.abc import MutableMapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, ContextManager, List, Tuple
+from functools import partial
+from typing import Any, ContextManager, Iterable, List, Tuple
 
 import numpy as np
+from packaging import version
 
-from .import_utils import is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
+from .import_utils import get_torch_version, is_flax_available, is_tf_available, is_torch_available, is_torch_fx_proxy
 
 
 if is_flax_available():
@@ -306,13 +308,19 @@ class ModelOutput(OrderedDict):
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
         if is_torch_available():
-            import torch.utils._pytree
-
-            torch.utils._pytree._register_pytree_node(
-                cls,
-                torch.utils._pytree._dict_flatten,
-                lambda values, context: cls(**torch.utils._pytree._dict_unflatten(values, context)),
-            )
+            if version.parse(get_torch_version()) >= version.parse("2.2"):
+                _torch_pytree.register_pytree_node(
+                    cls,
+                    _model_output_flatten,
+                    partial(_model_output_unflatten, output_type=cls),
+                    serialized_type_name=f"{cls.__module__}.{cls.__name__}",
+                )
+            else:
+                _torch_pytree._register_pytree_node(
+                    cls,
+                    _model_output_flatten,
+                    partial(_model_output_unflatten, output_type=cls),
+                )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -416,11 +424,46 @@ class ModelOutput(OrderedDict):
         # Don't call self.__setattr__ to avoid recursion errors
         super().__setattr__(key, value)
 
+    def __reduce__(self):
+        if not is_dataclass(self):
+            return super().__reduce__()
+        callable, _args, *remaining = super().__reduce__()
+        args = tuple(getattr(self, field.name) for field in fields(self))
+        return callable, args, *remaining
+
     def to_tuple(self) -> Tuple[Any]:
         """
         Convert self to a tuple containing all the attributes/keys that are not `None`.
         """
         return tuple(self[k] for k in self.keys())
+
+
+if is_torch_available():
+    import torch.utils._pytree as _torch_pytree
+
+    def _model_output_flatten(output: ModelOutput) -> Tuple[List[Any], "_torch_pytree.Context"]:
+        return list(output.values()), list(output.keys())
+
+    def _model_output_unflatten(
+        values: Iterable[Any],
+        context: "_torch_pytree.Context",
+        output_type=None,
+    ) -> ModelOutput:
+        return output_type(**dict(zip(context, values)))
+
+    if version.parse(get_torch_version()) >= version.parse("2.2"):
+        _torch_pytree.register_pytree_node(
+            ModelOutput,
+            _model_output_flatten,
+            partial(_model_output_unflatten, output_type=ModelOutput),
+            serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
+        )
+    else:
+        _torch_pytree._register_pytree_node(
+            ModelOutput,
+            _model_output_flatten,
+            partial(_model_output_unflatten, output_type=ModelOutput),
+        )
 
 
 class ExplicitEnum(str, Enum):
@@ -634,7 +677,7 @@ def tensor_size(array):
     elif is_jax_tensor(array):
         return array.size
     else:
-        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+        raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
 
 
 def add_model_info_to_auto_map(auto_map, repo_id):

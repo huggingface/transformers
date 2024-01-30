@@ -32,15 +32,15 @@ variety of training setups. For example, under the 100h-960h semi-supervised set
 inference speedup compared to wav2vec 2.0, with a 13.5% relative reduction in word error rate. With a similar inference
 time, SEW reduces word error rate by 25-50% across different model sizes.*
 
-Tips:
+This model was contributed by [anton-l](https://huggingface.co/anton-l).
+
+## Usage tips
 
 - SEW-D is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - SEWDForCTC is fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
 
-This model was contributed by [anton-l](https://huggingface.co/anton-l).
-
-## Documentation resources
+## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)

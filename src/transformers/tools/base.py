@@ -46,6 +46,7 @@ if is_torch_available():
     import torch
 
 if is_accelerate_available():
+    from accelerate import PartialState
     from accelerate.utils import send_to_device
 
 
@@ -226,8 +227,9 @@ class Tool:
         resolved_config_file = cached_file(
             repo_id,
             TOOL_CONFIG_FILE,
-            use_auth_token=token,
+            token=token,
             **hub_kwargs,
+            _raise_exceptions_for_gated_repo=False,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
@@ -236,8 +238,9 @@ class Tool:
             resolved_config_file = cached_file(
                 repo_id,
                 CONFIG_NAME,
-                use_auth_token=token,
+                token=token,
                 **hub_kwargs,
+                _raise_exceptions_for_gated_repo=False,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
             )
@@ -259,7 +262,7 @@ class Tool:
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(tool_class, repo_id, use_auth_token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
@@ -348,7 +351,7 @@ class RemoteTool(Tool):
     A [`Tool`] that will make requests to an inference endpoint.
 
     Args:
-        endpoint_url (`str`):
+        endpoint_url (`str`, *optional*):
             The url of the endpoint to use.
         token (`str`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when
@@ -529,7 +532,7 @@ class PipelineTool(Tool):
             if self.device_map is not None:
                 self.device = list(self.model.hf_device_map.values())[0]
             else:
-                self.device = get_default_device()
+                self.device = PartialState().default_device
 
         if self.device_map is None:
             self.model.to(self.device)
@@ -595,19 +598,6 @@ def launch_gradio_demo(tool_class: Tool):
         title=tool_class.__name__,
         article=tool.description,
     ).launch()
-
-
-# TODO: Migrate to Accelerate for this once `PartialState.default_device` makes its way into a release.
-def get_default_device():
-    if not is_torch_available():
-        raise ImportError("Please install torch in order to use this tool.")
-
-    if torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        return torch.device("mps")
-    elif torch.cuda.is_available():
-        return torch.device("cuda")
-    else:
-        return torch.device("cpu")
 
 
 TASK_MAPPING = {

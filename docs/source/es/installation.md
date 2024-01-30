@@ -131,10 +131,10 @@ El entorno de Python que creaste para la instalación de 🤗 Transformers encon
 
 ## Instalación con conda
 
-Puedes instalar 🤗 Transformers desde el canal de conda `huggingface` con el siguiente comando:
+Puedes instalar 🤗 Transformers desde el canal de conda `conda-forge` con el siguiente comando:
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## Configuración de Caché
@@ -148,7 +148,7 @@ Los modelos preentrenados se descargan y almacenan en caché localmente en: `~/.
 <Tip>
 
 🤗 Transformers usará las variables de entorno de shell `PYTORCH_TRANSFORMERS_CACHE` o `PYTORCH_PRETRAINED_BERT_CACHE` si viene de una iteración anterior de la biblioteca y ha configurado esas variables de entorno, a menos que especifiques la variable de entorno de shell `TRANSFORMERS_CACHE`.
-    
+
 </Tip>
 
 
@@ -204,7 +204,7 @@ Otra opción para usar 🤗 Transformers offline es descargando previamente los 
     >>> model.save_pretrained("./your/path/bigscience_t0")
     ```
 
-    3. Cuando te encuentres offline, recarga los archivos con [`PreTrainedModel.from_pretrained`] desde el directorio especificado: 
+    3. Cuando te encuentres offline, recarga los archivos con [`PreTrainedModel.from_pretrained`] desde el directorio especificado:
 
     ```py
     >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
@@ -213,7 +213,7 @@ Otra opción para usar 🤗 Transformers offline es descargando previamente los 
 
 * Descarga de manera programática los archivos con la biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub):
 
-    1. Instala la biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) en tu entorno virtual: 
+    1. Instala la biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) en tu entorno virtual:
 
     ```bash
     python -m pip install huggingface_hub

@@ -27,7 +27,7 @@ _CONFIG_FOR_DOC = "T5Config"
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: jnp.array, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
@@ -61,6 +61,7 @@ class FlaxMT5Model(FlaxT5Model):
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 
@@ -87,6 +88,7 @@ class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     >>> outputs = model(input_ids=inputs["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
     ```"""
+
     model_type = "mt5"
     config_class = MT5Config
 

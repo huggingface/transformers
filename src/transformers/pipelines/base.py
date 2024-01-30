@@ -34,7 +34,16 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
+from ..utils import (
+    ModelOutput,
+    add_end_docstrings,
+    infer_framework,
+    is_tf_available,
+    is_torch_available,
+    is_torch_cuda_available,
+    is_torch_xpu_available,
+    logging,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -445,9 +454,9 @@ class PipelineDataFormat:
     pipelines keyword arguments through the `dataset_kwarg_1=dataset_column_1` format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -550,9 +559,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using CSV data format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -594,9 +603,9 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     Support for pipelines using JSON file format.
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -638,9 +647,9 @@ class PipedPipelineDataFormat(PipelineDataFormat):
     If columns are provided, then the output will be a dictionary with {column_x: value_x}
 
     Args:
-        output_path (`str`, *optional*): Where to save the outgoing data.
-        input_path (`str`, *optional*): Where to look for the input data.
-        column (`str`, *optional*): The column to read.
+        output_path (`str`): Where to save the outgoing data.
+        input_path (`str`): Where to look for the input data.
+        column (`str`): The column to read.
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether or not to overwrite the `output_path`.
     """
@@ -792,10 +801,6 @@ class Pipeline(_ScikitCompat):
                 "discard the `device` argument when creating your pipeline object."
             )
 
-        # We shouldn't call `model.to()` for models loaded with accelerate
-        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
-            self.model.to(device)
-
         if device is None:
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
@@ -805,17 +810,34 @@ class Pipeline(_ScikitCompat):
 
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
+                if device.type == "xpu" and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
                 self.device = device
             elif isinstance(device, str):
+                if "xpu" in device and not is_torch_xpu_available(check_device=True):
+                    raise ValueError(f'{device} is not available, you should use device="cpu" instead')
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
-            else:
+            elif is_torch_cuda_available():
                 self.device = torch.device(f"cuda:{device}")
+            elif is_torch_xpu_available(check_device=True):
+                self.device = torch.device(f"xpu:{device}")
+            else:
+                raise ValueError(f"{device} unrecognized or not available.")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
         self.binary_output = binary_output
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if (
+            self.framework == "pt"
+            and self.device is not None
+            and not (isinstance(self.device, int) and self.device < 0)
+            and hf_device_map is None
+        ):
+            self.model.to(self.device)
 
         # Update config and generation_config with task specific parameters
         task_specific_params = self.model.config.task_specific_params
@@ -836,7 +858,7 @@ class Pipeline(_ScikitCompat):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str, safe_serialization: bool = False):
+    def save_pretrained(self, save_directory: str, safe_serialization: bool = True):
         """
         Save the pipeline's model and tokenizer.
 
@@ -844,7 +866,7 @@ class Pipeline(_ScikitCompat):
             save_directory (`str`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
             safe_serialization (`str`):
-                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow
+                Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")

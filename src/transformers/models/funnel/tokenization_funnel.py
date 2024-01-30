@@ -120,9 +120,9 @@ class FunnelTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        bos_token (`str`, `optional`, defaults to `"<s>"`):
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sentence token.
-        eos_token (`str`, `optional`, defaults to `"</s>"`):
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sentence token.
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.

@@ -49,7 +49,7 @@ class PvtImageProcessor(BaseImageProcessor):
         size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -58,7 +58,7 @@ class PvtImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True):
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):

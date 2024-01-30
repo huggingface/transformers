@@ -1118,7 +1118,7 @@ if __name__ == "__main__":
         required=True,
         type=Path,
         help=(
-            "A path to OneFormer's original implementation directory. You can download from here:"
+            "A path to OneFormer's original implementation directory. You can download from here: "
             "https://github.com/SHI-Labs/OneFormer"
         ),
     )

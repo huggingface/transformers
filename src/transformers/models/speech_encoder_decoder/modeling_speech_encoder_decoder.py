@@ -177,6 +177,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
@@ -248,11 +249,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
             raise ValueError(
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
 
     def get_encoder(self):
         return self.encoder

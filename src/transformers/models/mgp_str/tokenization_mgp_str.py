@@ -52,7 +52,7 @@ class MgpstrTokenizer(PreTrainedTokenizer):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"[s]"`):
             The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*, , defaults to `"[GO]"`):
+        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"[GO]"`):
             A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
             attention mechanisms or loss computation.
     """

@@ -37,7 +37,9 @@ length where we see favorable performance relative to a standard pretrained Tran
 for evaluating performance on long sequences, our method achieves results consistent with softmax self-attention but with sizable 
 speed-ups and memory savings and often outperforms other efficient self-attention methods. Our code is available at this https URL*
 
-Tips:
+This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/YOSO).
+
+## Usage tips
 
 - The YOSO attention algorithm is implemented through custom CUDA kernels, functions written in CUDA C++ that can be executed multiple times
 in parallel on a GPU.
@@ -52,9 +54,7 @@ alt="drawing" width="600"/>
 
 <small> YOSO Attention Algorithm. Taken from the <a href="https://arxiv.org/abs/2111.09714">original paper</a>.</small>
 
-This model was contributed by [novice03](https://huggingface.co/novice03). The original code can be found [here](https://github.com/mlpen/YOSO).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -66,18 +66,15 @@ This model was contributed by [novice03](https://huggingface.co/novice03). The o
 
 [[autodoc]] YosoConfig
 
-
 ## YosoModel
 
 [[autodoc]] YosoModel
     - forward
 
-
 ## YosoForMaskedLM
 
 [[autodoc]] YosoForMaskedLM
     - forward
-
 
 ## YosoForSequenceClassification
 
@@ -89,12 +86,10 @@ This model was contributed by [novice03](https://huggingface.co/novice03). The o
 [[autodoc]] YosoForMultipleChoice
     - forward
 
-
 ## YosoForTokenClassification
 
 [[autodoc]] YosoForTokenClassification
     - forward
-
 
 ## YosoForQuestionAnswering
 

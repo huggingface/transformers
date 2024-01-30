@@ -24,7 +24,6 @@ from ... import AutoBackbone
 from ...modeling_outputs import SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...utils.backbone_utils import BackboneMixin
 from .configuration_upernet import UperNetConfig
 
 
@@ -299,7 +298,6 @@ class UperNetPreTrainedModel(PreTrainedModel):
 
     config_class = UperNetConfig
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         if isinstance(module, UperNetPreTrainedModel):
@@ -314,10 +312,6 @@ class UperNetPreTrainedModel(PreTrainedModel):
         self.decode_head.init_weights()
         if self.auxiliary_head is not None:
             self.auxiliary_head.init_weights()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BackboneMixin):
-            module.gradient_checkpointing = value
 
 
 UPERNET_START_DOCSTRING = r"""

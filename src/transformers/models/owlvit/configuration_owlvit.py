@@ -66,15 +66,21 @@ class OwlViTTextConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the padding token in the input sequences.
+        bos_token_id (`int`, *optional*, defaults to 49406):
+            The id of the beginning-of-sequence token in the input sequences.
+        eos_token_id (`int`, *optional*, defaults to 49407):
+            The id of the end-of-sequence token in the input sequences.
 
     Example:
 
@@ -90,6 +96,7 @@ class OwlViTTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "owlvit_text_model"
 
     def __init__(
@@ -171,13 +178,13 @@ class OwlViTVisionConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
@@ -268,6 +275,8 @@ class OwlViTConfig(PretrainedConfig):
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
             The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
             implementation.
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return a dictionary. If `False`, returns a tuple.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """

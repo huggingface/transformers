@@ -180,8 +180,17 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         """
         A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
         """
+        logger.warning_once(
+            "\nNo chat template is defined for this tokenizer - using the default template "
+            f"for the {self.__class__.__name__} class. If the default is not appropriate for "
+            "your model, please set `tokenizer.chat_template` to an appropriate template. "
+            "See https://huggingface.co/docs/transformers/main/chat_templating for more information.\n"
+        )
         return (
-            "{% for message in messages %}" "{{ bos_token + eos_token + message.content + eos_token }}" "{% endfor %}"
+            "{% for message in messages %}"
+            "{{ bos_token + eos_token + message.content + eos_token }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %} {{ bos_token + eos_token }} {% endif %}"
         )
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

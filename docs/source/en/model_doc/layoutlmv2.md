@@ -56,7 +56,7 @@ python -m pip install torchvision tesseract
 ```
 (If you are developing for LayoutLMv2, note that passing the doctests also requires the installation of these packages.)
 
-Tips:
+## Usage tips
 
 - The main difference between LayoutLMv1 and LayoutLMv2 is that the latter incorporates visual embeddings during
   pre-training (while LayoutLMv1 only adds visual embeddings during fine-tuning).

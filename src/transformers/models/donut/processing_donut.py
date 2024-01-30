@@ -32,11 +32,12 @@ class DonutProcessor(ProcessorMixin):
     [`~DonutProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`DonutImageProcessor`]):
+        image_processor ([`DonutImageProcessor`], *optional*):
             An instance of [`DonutImageProcessor`]. The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
+        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
             An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"

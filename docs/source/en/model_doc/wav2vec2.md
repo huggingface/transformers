@@ -31,13 +31,13 @@ of the art on the 100 hour subset while using 100 times less labeled data. Using
 pre-training on 53k hours of unlabeled data still achieves 4.8/8.2 WER. This demonstrates the feasibility of speech
 recognition with limited amounts of labeled data.*
 
-Tips:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+
+## Usage tips
 
 - Wav2Vec2 is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
-
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
 
 ## Resources
 
@@ -167,6 +167,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 
 [[autodoc]] models.wav2vec2.modeling_flax_wav2vec2.FlaxWav2Vec2ForPreTrainingOutput
 
+<frameworkcontent>
+<pt>
+
 ## Wav2Vec2Model
 
 [[autodoc]] Wav2Vec2Model
@@ -198,6 +201,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 [[autodoc]] Wav2Vec2ForPreTraining
     - forward
 
+</pt>
+<tf>
+
 ## TFWav2Vec2Model
 
 [[autodoc]] TFWav2Vec2Model
@@ -213,6 +219,9 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 [[autodoc]] TFWav2Vec2ForCTC
     - call
 
+</tf>
+<jax>
+
 ## FlaxWav2Vec2Model
 
 [[autodoc]] FlaxWav2Vec2Model
@@ -227,3 +236,6 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 
 [[autodoc]] FlaxWav2Vec2ForPreTraining
     - __call__
+
+</jax>
+</frameworkcontent>

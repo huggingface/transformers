@@ -51,7 +51,7 @@ class EncoderDecoderConfig(PretrainedConfig):
 
     >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+    >>> # Initializing a Bert2Bert model (with random weights) from the bert-base-uncased style configurations
     >>> model = EncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -68,6 +68,7 @@ class EncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained("my-model")
     >>> model = EncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "encoder-decoder"
     is_composition = True
 

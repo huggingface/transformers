@@ -68,13 +68,13 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.convert_tokens_to_shape_ids(tokens), [5, 6, 2, 5, 7, 8])
         self.assertListEqual(tokenizer.convert_tokens_to_pronunciation_ids(tokens), [5, 6, 2, 5, 7, 8])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_chinese with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_chinese with BasicTokenizer->RoCBertBasicTokenizer
     def test_chinese(self):
         tokenizer = RoCBertBasicTokenizer()
 
         self.assertListEqual(tokenizer.tokenize("ah\u535A\u63A8zz"), ["ah", "\u535A", "\u63A8", "zz"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_lower with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=True)
 
@@ -83,7 +83,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_lower_strip_accents_false with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_false with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_false(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=True, strip_accents=False)
 
@@ -92,7 +92,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["h\u00E9llo"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_lower_strip_accents_true with BertBasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_true with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_true(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=True, strip_accents=True)
 
@@ -101,7 +101,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_lower_strip_accents_default with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_lower_strip_accents_default with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_lower_strip_accents_default(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=True)
 
@@ -110,7 +110,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertListEqual(tokenizer.tokenize("H\u00E9llo"), ["hello"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_no_lower with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_no_lower with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_no_lower(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=False)
 
@@ -118,7 +118,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU?  "), ["HeLLo", "!", "how", "Are", "yoU", "?"]
         )
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_no_lower_strip_accents_false with BertBasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_no_lower_strip_accents_false with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_no_lower_strip_accents_false(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=False, strip_accents=False)
 
@@ -126,7 +126,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HäLLo", "!", "how", "Are", "yoU", "?"]
         )
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_no_lower_strip_accents_true with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_no_lower_strip_accents_true with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_no_lower_strip_accents_true(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=False, strip_accents=True)
 
@@ -134,7 +134,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHäLLo!how  \n Are yoU?  "), ["HaLLo", "!", "how", "Are", "yoU", "?"]
         )
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_basic_tokenizer_respects_never_split_tokens with BasicTokenizer->RoCBertBertBasicTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_basic_tokenizer_respects_never_split_tokens with BasicTokenizer->RoCBertBasicTokenizer
     def test_basic_tokenizer_respects_never_split_tokens(self):
         tokenizer = RoCBertBasicTokenizer(do_lower_case=False, never_split=["[UNK]"])
 
@@ -142,7 +142,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.tokenize(" \tHeLLo!how  \n Are yoU? [UNK]"), ["HeLLo", "!", "how", "Are", "yoU", "?", "[UNK]"]
         )
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_wordpiece_tokenizer with WordpieceTokenizer->RoCBertWordpieceTokenizer
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_wordpiece_tokenizer with WordpieceTokenizer->RoCBertWordpieceTokenizer
     def test_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
@@ -157,7 +157,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_is_whitespace
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_is_whitespace
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(" "))
         self.assertTrue(_is_whitespace("\t"))
@@ -168,7 +168,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_whitespace("A"))
         self.assertFalse(_is_whitespace("-"))
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_is_control
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_is_control
     def test_is_control(self):
         self.assertTrue(_is_control("\u0005"))
 
@@ -177,7 +177,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertFalse(_is_control("\t"))
         self.assertFalse(_is_control("\r"))
 
-    # Copied from tests.models.bert.test_tokenization_bert.test_is_punctuation
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_is_punctuation
     def test_is_punctuation(self):
         self.assertTrue(_is_punctuation("-"))
         self.assertTrue(_is_punctuation("$"))
@@ -199,7 +199,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 [rust_tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], [], ["[UNK]"]]
             )
 
-    # Copied from tests.models.bert.test_tokenization_bert. test_offsets_with_special_characters
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_offsets_with_special_characters
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -252,7 +252,7 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
-    # Copied from tests.models.bert.test_tokenization_bert. test_change_tokenize_chinese_chars
+    # Copied from tests.models.bert.test_tokenization_bert.BertTokenizationTest.test_change_tokenize_chinese_chars
     def test_change_tokenize_chinese_chars(self):
         list_of_commun_chinese_char = ["的", "人", "有"]
         text_with_chinese_char = "".join(list_of_commun_chinese_char)

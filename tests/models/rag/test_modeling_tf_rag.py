@@ -1005,6 +1005,7 @@ class TFRagModelSaveLoadTests(unittest.TestCase):
                 retriever=rag_retriever,
                 config=rag_config,
             )
+            rag_sequence.build_in_name_scope()
             # check that the from pretrained methods work
             rag_sequence.save_pretrained(tmp_dirname)
             rag_sequence.from_pretrained(tmp_dirname, retriever=rag_retriever)
@@ -1056,6 +1057,7 @@ class TFRagModelSaveLoadTests(unittest.TestCase):
                 retriever=rag_retriever,
                 config=rag_config,
             )
+            rag_token.build_in_name_scope()
             # check that the from pretrained methods work
             rag_token.save_pretrained(tmp_dirname)
             rag_token.from_pretrained(tmp_dirname, retriever=rag_retriever)

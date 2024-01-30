@@ -712,7 +712,6 @@ class GraphormerPreTrainedModel(PreTrainedModel):
 
     config_class = GraphormerConfig
     base_model_prefix = "graphormer"
-    supports_gradient_checkpointing = True
     main_input_name_nodes = "input_nodes"
     main_input_name_edges = "input_edges"
 
@@ -771,10 +770,6 @@ class GraphormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, GraphormerModel):
-            module.gradient_checkpointing = value
 
 
 class GraphormerModel(GraphormerPreTrainedModel):

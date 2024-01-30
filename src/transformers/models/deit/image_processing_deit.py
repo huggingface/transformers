@@ -52,19 +52,19 @@ class DeiTImageProcessor(BaseImageProcessor):
             `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.BICUBIC`):
+        resample (`PILImageResampling` filter, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image. If the input size is smaller than `crop_size` along any edge, the image
             is padded with 0's and then center cropped. Can be overridden by `do_center_crop` in `preprocess`.
         crop_size (`Dict[str, int]`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Desired output size when applying center-cropping. Can be overridden by `crop_size` in `preprocess`.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
+            parameter in the `preprocess` method.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.

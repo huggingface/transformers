@@ -16,8 +16,9 @@ rendered properly in your Markdown viewer.
 
 # NLLB
 
-**DISCLAIMER:** The default behaviour for the tokenizer has recently been fixed (and thus changed)!
+## Updated tokenizer behavior 
 
+**DISCLAIMER:** The default behaviour for the tokenizer was fixed and thus changed in April 2023.
 The previous version adds `[self.eos_token_id, self.cur_lang_code]` at the end of the token sequence for both target and source tokenization. This is wrong as the NLLB paper mentions (page 48, 6.1.1. Model Architecture) :
 
 *Note that we prefix the source sequence with the source language, as opposed to the target
@@ -56,7 +57,7 @@ Enabling the old behaviour can be done as follows:
 
 For more details, feel free to check the linked [PR](https://github.com/huggingface/transformers/pull/22313) and [Issue](https://github.com/huggingface/transformers/issues/19943).
 
-## Overview of NLLB
+## Overview
 
 The NLLB model was presented in [No Language Left Behind: Scaling Human-Centered Machine Translation](https://arxiv.org/abs/2207.04672) by Marta R. Costa-jussà, James Cross, Onur Çelebi,
 Maha Elbayad, Kenneth Heafield, Kevin Heffernan, Elahe Kalbassi, Janice Lam, Daniel Licht, Jean Maillard, Anna Sun, Skyler Wang, Guillaume Wenzek, Al Youngblood, Bapi Akula,
@@ -117,9 +118,9 @@ See example below for a translation from romanian to german:
 >>> from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 >>> tokenizer = AutoTokenizer.from_pretrained(
-...     "facebook/nllb-200-distilled-600M", use_auth_token=True, src_lang="ron_Latn"
+...     "facebook/nllb-200-distilled-600M", token=True, src_lang="ron_Latn"
 ... )
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", use_auth_token=True)
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", token=True)
 
 >>> article = "Şeful ONU spune că nu există o soluţie militară în Siria"
 >>> inputs = tokenizer(article, return_tensors="pt")
@@ -131,7 +132,7 @@ See example below for a translation from romanian to german:
 UN-Chef sagt, es gibt keine militärische Lösung in Syrien
 ```
 
-## Documentation resources
+## Resources
 
 - [Translation task guide](../tasks/translation)
 - [Summarization task guide](../tasks/summarization)

@@ -1,0 +1,8 @@
+datasets[audio]>=2.14.0
+jax>=0.3.6
+jaxlib>=0.3.6
+flax>=0.4.1
+optax>=0.0.8
+torch>=1.9.0
+jiwer
+evaluate

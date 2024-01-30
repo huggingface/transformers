@@ -304,21 +304,23 @@ def get_mask2former_resize_output_image_size(
     size_divisor: int = 0,
     default_to_square: bool = True,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
-) -> tuple:
+) -> Tuple[int, int]:
     """
     Computes the output size given the desired size.
 
     Args:
-        input_image (`np.ndarray`):
+        image (`np.ndarray`):
             The input image.
-        size (`int`, `Tuple[int, int]`, `List[int]`, `Tuple[int]`):
+        size (`int` or `Tuple[int, int]` or `List[int]` or `Tuple[int]`):
             The size of the output image.
-        default_to_square (`bool`, *optional*, defaults to `True`):
-            Whether to default to square if no size is provided.
         max_size (`int`, *optional*):
             The maximum size of the output image.
-        size_divisible (`int`, *optional*, defaults to 0):
-            If size_divisible is given, the output image size will be divisible by the number.
+        size_divisor (`int`, *optional*, defaults to 0):
+            If `size_divisor` is given, the output image size will be divisible by the number.
+        default_to_square (`bool`, *optional*, defaults to `True`):
+            Whether to default to square if no size is provided.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
     Returns:
         `Tuple[int, int]`: The output size.
@@ -356,20 +358,17 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to 1333):
-            The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
-            set to `True`.
-        resample (`int`, *optional*, defaults to `PIL.Image.Resampling.BILINEAR`):
+        size_divisor (`int`, *optional*, defaults to 32):
+            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
+            Swin Transformer.
+        resample (`int`, *optional*, defaults to `Resampling.BILINEAR`):
             An optional resampling filter. This can be one of `PIL.Image.Resampling.NEAREST`,
             `PIL.Image.Resampling.BOX`, `PIL.Image.Resampling.BILINEAR`, `PIL.Image.Resampling.HAMMING`,
             `PIL.Image.Resampling.BICUBIC` or `PIL.Image.Resampling.LANCZOS`. Only has an effect if `do_resize` is set
             to `True`.
-        size_divisor (`int`, *optional*, defaults to 32):
-            Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-            Swin Transformer.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the input to a certain `scale`.
-        rescale_factor (`float`, *optional*, defaults to 1/ 255):
+        rescale_factor (`float`, *optional*, defaults to `1/ 255`):
             Rescale the input by the given factor. Only has an effect if `do_rescale` is set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to normalize the input with mean and standard deviation.
@@ -474,10 +473,10 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`):
                 The size of the output image.
             size_divisor (`int`, *optional*, defaults to 0):
-                If size_divisor is given, the output image size will be divisible by the number.
+                If `size_divisor` is given, the output image size will be divisible by the number.
             resample (`PILImageResampling` resampling filter, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
+            data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used.
             input_data_format (`ChannelDimension` or `str`, *optional*):

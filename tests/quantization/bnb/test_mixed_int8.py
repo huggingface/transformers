@@ -124,6 +124,24 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_get_keys_to_not_convert_trust_remote_code(self):
+        r"""
+        Test the `get_keys_to_not_convert` function with `trust_remote_code` models.
+        """
+        from accelerate import init_empty_weights
+
+        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
+
+        model_id = "mosaicml/mpt-7b"
+        config = AutoConfig.from_pretrained(
+            model_id, trust_remote_code=True, revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
+        )
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_config(
+                config, trust_remote_code=True, code_revision="ada218f9a93b5f1c6dce48a4cc9ff01fcba431e7"
+            )
+        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
+
     def test_get_keys_to_not_convert(self):
         r"""
         Test the `get_keys_to_not_convert` function.
@@ -134,13 +152,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         from transformers.integrations.bitsandbytes import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
-        config = AutoConfig.from_pretrained(
-            model_id, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
-        )
-        with init_empty_weights():
-            model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
-        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
-        # without trust_remote_code
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
         with init_empty_weights():
             model = MptForCausalLM(config)
@@ -183,6 +194,14 @@ class MixedInt8Test(BaseMixedInt8Test):
         _ = config.to_diff_dict()
 
         _ = config.to_json_string()
+
+    def test_original_dtype(self):
+        r"""
+        A simple test to check if the model succesfully stores the original dtype
+        """
+        self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
+        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
+        self.assertTrue(self.model_8bit.config._pre_quantization_dtype == torch.float16)
 
     def test_memory_footprint(self):
         r"""
@@ -261,13 +280,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_warns_save_pretrained(self):
-        r"""
-        Test whether trying to save a model after converting it in 8-bit will throw a warning.
-        """
-        with self.assertWarns(UserWarning), tempfile.TemporaryDirectory() as tmpdirname:
-            self.model_8bit.save_pretrained(tmpdirname)
-
     def test_raise_if_config_and_load_in_8bit(self):
         r"""
         Test that loading the model with the config and `load_in_8bit` raises an error
@@ -338,6 +350,33 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.model_8bit.save_pretrained(tmpdirname)
+
+            # check that the file `quantization_config` is present
+            config = AutoConfig.from_pretrained(tmpdirname)
+            self.assertTrue(hasattr(config, "quantization_config"))
+
+            model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
+
+            linear = get_some_linear_layer(model_from_saved)
+            self.assertTrue(linear.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(linear.weight, "SCB"))
+
+            # generate
+            encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+            output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+            self.assertEqual(
+                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
+            )
+
+    def test_int8_serialization_regression(self):
+        r"""
+        Test whether it is possible to serialize a model in 8-bit - using not safetensors
+        """
+        from bitsandbytes.nn import Int8Params
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model_8bit.save_pretrained(tmpdirname, safe_serialization=False)
 
             # check that the file `quantization_config` is present
             config = AutoConfig.from_pretrained(tmpdirname)

@@ -54,7 +54,8 @@ _CHECKPOINT_FOR_DOC = "facebook/dinov2-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-base"
+_IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-small-imagenet1k-1-layer"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -102,12 +103,13 @@ class Dinov2Embeddings(nn.Module):
         height, width = height + 0.1, width + 0.1
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(height / math.sqrt(num_positions), width / math.sqrt(num_positions)),
+            patch_pos_embed.to(dtype=torch.float32),
+            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
             mode="bicubic",
             align_corners=False,
-        )
+        ).to(dtype=target_dtype)
         if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
             raise ValueError("Width or height does not match with the interpolated position embeddings")
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -115,7 +117,8 @@ class Dinov2Embeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values)
+        target_dtype = self.patch_embeddings.projection.weight.dtype
+        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
@@ -446,17 +449,11 @@ class Dinov2Encoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -514,10 +511,6 @@ class Dinov2PreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
-
-    def _set_gradient_checkpointing(self, module: Dinov2Encoder, value: bool = False) -> None:
-        if isinstance(module, Dinov2Encoder):
-            module.gradient_checkpointing = value
 
 
 DINOV2_START_DOCSTRING = r"""
@@ -693,6 +686,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
@@ -843,11 +837,12 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
-                    hidden_state = hidden_state[:, 1:, :].reshape(
-                        batch_size, width // patch_size, height // patch_size, -1
-                    )
+                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

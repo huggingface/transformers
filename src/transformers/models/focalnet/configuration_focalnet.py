@@ -67,7 +67,7 @@ class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
             Stochastic depth rate.
         use_layerscale (`bool`, *optional*, defaults to `False`):
             Whether to use layer scale in the encoder.
-        layerscale_value (`float`, *optional*, defaults to 1e-4):
+        layerscale_value (`float`, *optional*, defaults to 0.0001):
             The initial value of the layer scale.
         use_post_layernorm (`bool`, *optional*, defaults to `False`):
             Whether to use post layer normalization in the encoder.
@@ -77,18 +77,20 @@ class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to normalize the modulator.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        encoder_stride (`int`, `optional`, defaults to 32):
+        encoder_stride (`int`, *optional*, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         out_indices (`List[int]`, *optional*):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
 
@@ -104,6 +106,7 @@ class FocalNetConfig(BackboneConfigMixin, PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "focalnet"
 
     def __init__(

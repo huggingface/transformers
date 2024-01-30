@@ -83,11 +83,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -132,7 +127,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]

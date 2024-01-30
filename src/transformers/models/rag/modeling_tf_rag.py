@@ -123,13 +123,13 @@ class TFRetrievAugLMMarginOutput(ModelOutput):
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -206,13 +206,13 @@ class TFRetrievAugLMOutput(ModelOutput):
     context_input_ids: tf.Tensor | None = None
     context_attention_mask: tf.Tensor | None = None
     question_encoder_last_hidden_state: tf.Tensor | None = None
-    question_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    question_enc_attentions: Tuple[tf.Tensor] | None = None
+    question_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    question_enc_attentions: Tuple[tf.Tensor, ...] | None = None
     generator_enc_last_hidden_state: tf.Tensor | None = None
-    generator_enc_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_enc_attentions: Tuple[tf.Tensor] | None = None
-    generator_dec_hidden_states: Tuple[tf.Tensor] | None = None
-    generator_dec_attentions: Tuple[tf.Tensor] | None = None
+    generator_enc_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_enc_attentions: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    generator_dec_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 class TFRagPreTrainedModel(TFPreTrainedModel):
@@ -224,6 +224,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
 
     """
+
     config_class = RagConfig
     base_model_prefix = "rag"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -718,6 +719,15 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_hidden_states=gen_outputs.decoder_hidden_states,
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        with tf.name_scope(self.generator.name):
+            self.generator.build(None)
+        with tf.name_scope(self.question_encoder.name):
+            self.question_encoder.build(None)
 
 
 @add_start_docstrings_to_model_forward(
@@ -1291,6 +1301,14 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         return loss
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)
+
 
 @add_start_docstrings_to_model_forward(
     """
@@ -1742,3 +1760,11 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
         output = tf.convert_to_tensor(output)
         return tf.cast(output, tensors[0][0][0].dtype)
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rag", None) is not None:
+            with tf.name_scope(self.rag.name):
+                self.rag.build(None)

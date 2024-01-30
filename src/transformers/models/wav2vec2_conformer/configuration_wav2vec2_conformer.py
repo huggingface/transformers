@@ -209,6 +209,7 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "wav2vec2-conformer"
 
     def __init__(

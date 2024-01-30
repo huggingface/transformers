@@ -38,7 +38,11 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     out_bytes = output_stream[0]
     audio = np.frombuffer(out_bytes, np.float32)
     if audio.shape[0] == 0:
-        raise ValueError("Malformed soundfile")
+        raise ValueError(
+            "Soundfile is either not in the correct format or is malformed. Ensure that the soundfile has "
+            "a valid audio file extension (e.g. wav, flac or mp3) and is not corrupted. If reading from a remote "
+            "URL, ensure that the URL is the full address to **download** the audio file."
+        )
     return audio
 
 
@@ -48,7 +52,7 @@ def ffmpeg_microphone(
     format_for_conversion: str = "f32le",
 ):
     """
-    Helper function ro read raw microphone data.
+    Helper function to read raw microphone data.
     """
     ar = f"{sampling_rate}"
     ac = "1"
@@ -68,7 +72,7 @@ def ffmpeg_microphone(
         input_ = ":0"
     elif system == "Windows":
         format_ = "dshow"
-        input_ = "default"
+        input_ = _get_microphone_name()
 
     ffmpeg_command = [
         "ffmpeg",
@@ -222,3 +226,23 @@ def _ffmpeg_stream(ffmpeg_command, buflen: int):
                 yield raw
     except FileNotFoundError as error:
         raise ValueError("ffmpeg was not found but is required to stream audio files from filename") from error
+
+
+def _get_microphone_name():
+    """
+    Retrieve the microphone name in Windows .
+    """
+    command = ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", ""]
+
+    try:
+        ffmpeg_devices = subprocess.run(command, text=True, stderr=subprocess.PIPE, encoding="utf-8")
+        microphone_lines = [line for line in ffmpeg_devices.stderr.splitlines() if "(audio)" in line]
+
+        if microphone_lines:
+            microphone_name = microphone_lines[0].split('"')[1]
+            print(f"Using microphone: {microphone_name}")
+            return f"audio={microphone_name}"
+    except FileNotFoundError:
+        print("ffmpeg was not found. Please install it or make sure it is in your system PATH.")
+
+    return "default"

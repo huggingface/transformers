@@ -503,7 +503,7 @@ class TokenClassificationPipeline(ChunkPipeline):
             entities (`dict`): The entities predicted by the pipeline.
         """
         # Get the first entity in the entity group
-        entity = entities[0]["entity"].split("-")[-1]
+        entity = entities[0]["entity"].split("-", 1)[-1]
         scores = np.nanmean([entity["score"] for entity in entities])
         tokens = [entity["word"] for entity in entities]
 

@@ -48,7 +48,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (`int`, *optional*, defaults to 100):
+        extra_ids (`int`, *optional*, defaults to 125):
             Add a number of extra ids added to the end of the vocabulary for use as sentinels. These tokens are
             accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
             indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
@@ -104,7 +104,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return self._utf_vocab_size
 
     def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 

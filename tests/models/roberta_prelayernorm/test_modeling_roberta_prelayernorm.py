@@ -44,7 +44,7 @@ if is_torch_available():
     )
 
 
-# Copied from tests.models.roberta.test_modelling_roberta.RobertaModelTester with Roberta->RobertaPreLayerNorm
+# Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTester with Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormModelTester:
     def __init__(
         self,
@@ -365,7 +365,6 @@ class RobertaPreLayerNormModelTester:
 
 
 @require_torch
-# Copied from tests.models.roberta.test_modelling_roberta.RobertaPreLayerNormModelTest with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -397,27 +396,33 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     fx_compatible = False
     model_split_percents = [0.5, 0.8, 0.9]
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setUp with Roberta->RobertaPreLayerNorm
     def setUp(self):
         self.model_tester = RobertaPreLayerNormModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=37)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_various_embeddings
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_as_decoder
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_as_decoder_with_default_input_mask
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
         (
@@ -446,36 +451,44 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             encoder_attention_mask,
         )
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_for_causal_lm
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_decoder_model_past_with_large_inputs
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_for_masked_lm
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_for_token_classification
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_for_multiple_choice
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_for_question_answering
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     @slow
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model_from_pretrained with ROBERTA->ROBERTA_PRELAYERNORM,Roberta->RobertaPreLayerNorm
     def test_model_from_pretrained(self):
         for model_name in ROBERTA_PRELAYERNORM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = RobertaPreLayerNormModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_respects_padding_index with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_respects_padding_index(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761
@@ -495,6 +508,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_create_position_ids_from_inputs_embeds with Roberta->RobertaPreLayerNorm
     def test_create_position_ids_from_inputs_embeds(self):
         """Ensure that the default position ids only assign a sequential . This is a regression
         test for https://github.com/huggingface/transformers/issues/1761

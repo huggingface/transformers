@@ -41,14 +41,14 @@ class TvltFeatureExtractor(SequenceFeatureExtractor):
             Number of audio channels.
         patch_size (`List[int]` *optional*, defaults to `[16, 16]`):
             The patch size of audio patch embedding.
-        feature_size (`int`, defaults to 128):
+        feature_size (`int`, *optional*, defaults to 128):
             The frequency length of audio spectrogram.
-        sampling_rate (`int`, defaults to 44100):
+        sampling_rate (`int`, *optional*, defaults to 44100):
             The sampling rate at which the audio files should be digitalized expressed in Hertz (Hz).
-        hop_length_to_sampling_rate (`int`, defaults to 86):
+        hop_length_to_sampling_rate (`int`, *optional*, defaults to 86):
             Hop length is length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
             For example, with sampling rate 44100, the hop length is 512, with 44100 / 512 = 86
-        n_fft (`int`, defaults to 2048):
+        n_fft (`int`, *optional*, defaults to 2048):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.

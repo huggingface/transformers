@@ -100,7 +100,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             overridden by `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
         apply_ocr (`bool`, *optional*, defaults to `True`):
@@ -109,7 +109,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used. Can be overridden by `ocr_lang` in `preprocess`.
-        tesseract_config (`str`, *optional*):
+        tesseract_config (`str`, *optional*, defaults to `""`):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
             Tesseract. For example: '--psm 6'. Can be overridden by `tesseract_config` in `preprocess`.
     """

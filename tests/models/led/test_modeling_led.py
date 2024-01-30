@@ -21,7 +21,14 @@ import unittest
 
 from transformers import LEDConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -363,13 +370,13 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = LEDForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
