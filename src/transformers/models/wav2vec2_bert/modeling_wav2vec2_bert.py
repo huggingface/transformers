@@ -15,6 +15,7 @@
 """ PyTorch Wav2Vec2-BERT model."""
 
 import math
+import warnings
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -39,6 +40,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_peft_available,
     logging,
 )
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
