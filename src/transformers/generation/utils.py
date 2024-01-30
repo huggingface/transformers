@@ -34,6 +34,7 @@ from ..models.auto import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
+    AutoTokenizer,
 )
 from ..models.auto.tokenization_auto import AutoTokenizer
 from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
@@ -1754,17 +1755,6 @@ class GenerationMixin:
 
     def heal_tokens(self, input_ids: torch.LongTensor) -> torch.LongTensor:
         r"""
-
-        Generates sequences of token ids for models with a language modeling head.
-
-        Parameters:
-            input_ids (`torch.LongTensor`): The sequence used as a prompt for the generation.
-
-        Return:
-            `torch.LongTensor` where each sequence has its tail token replaced with its appropriate extension.
-        """
-
-        from pygtrie import CharTrie
 
         Generates sequences of token ids for models with a language modeling head.
 
