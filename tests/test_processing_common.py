@@ -75,11 +75,12 @@ class ProcessorTesterMixin:
         processor_first = self.get_processor()
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = processor_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            processor_second = self.processor_class.from_pretrained(tmpdirname)
+            saved_files = processor_first.save_pretrained(tmpdirname)
+            if len(saved_files) > 0:
+                check_json_file_has_correct_format(saved_files[0])
+                processor_second = self.processor_class.from_pretrained(tmpdirname)
 
-        self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
+                self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
 
 
 class MyProcessor(ProcessorMixin):

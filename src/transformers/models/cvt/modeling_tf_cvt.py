@@ -77,7 +77,7 @@ class TFBaseModelOutputWithCLSToken(ModelOutput):
 
     last_hidden_state: tf.Tensor = None
     cls_token_value: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
 
 
 class TFCvtDropPath(tf.keras.layers.Layer):

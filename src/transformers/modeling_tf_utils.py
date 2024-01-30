@@ -1210,28 +1210,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return self.serving_output(output)
 
-    def eager_serving(self, inputs):
-        """
-        Method used for serving the model. This method is deprecated, and will be removed.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        warnings.warn(
-            "The function `eager_serving` is deprecated and will be removed in version 4.32.0 of Transformers",
-            FutureWarning,
-        )
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
     @property
     def input_signature(self) -> Dict[str, tf.TensorSpec]:
         """
         This property should return a dict mapping input names to tf.TensorSpec objects, representing the expected
-        shape and dtype for model inputs. It is used for both serving and for generating the dummy inputs used to build
-        the model.
+        shape and dtype for model inputs. It is used for both serving and for generating dummy inputs.
         """
         model_inputs = list(inspect.signature(self.call).parameters)
         sig = {}
@@ -2788,6 +2771,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
+                        "_raise_exceptions_for_gated_repo": False,
                         "_raise_exceptions_for_missing_entries": False,
                         "_commit_hash": commit_hash,
                     }

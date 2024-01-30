@@ -76,7 +76,7 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
     """
 
     last_hidden_states: torch.FloatTensor = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -110,9 +110,9 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    intermediate_activations: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    intermediate_activations: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
