@@ -768,6 +768,10 @@ class HFTracer(Tracer):
         model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
         device = model.device
         inputs_dict = {}
+
+        # when tracing a model with KV cache, we simply need to unsure that the KV cache length is larger than one to
+        # rightfully pass certain controlflows (Example: https://github.com/huggingface/transformers/blob/5c8d941d66734811d2ef6f57f15b44f7fb7a98c4/src/transformers/modeling_attn_mask_utils.py#L162).
+        # After tracing, the model can then still be used with arbitrary lengths different than the one used during tracing.
         kv_cache_length = 5
 
         if input_name in ["labels", "start_positions", "end_positions"]:
