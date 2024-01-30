@@ -235,10 +235,6 @@ class VMambaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_initialization(self):
         super().test_initialization()
 
-    # remove
-    def test_model_outputs_equivalence(self):
-        super().test_model_outputs_equivalence()
-
     def test_torch_fx(self):
         super().test_torch_fx()
 
