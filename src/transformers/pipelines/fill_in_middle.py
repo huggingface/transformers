@@ -32,9 +32,10 @@ SUPPORTED_MODELS = [
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class FIMPipeline(Pipeline):
+class FimPipeline(Pipeline):
     """
     Fill-in-the-middle Language generation pipeline. This pipeline predicts the middle part of a text given it's prefix and suffix
+
     Example:
     ```python
     >>> from transformers import pipeline
@@ -47,6 +48,7 @@ class FIMPipeline(Pipeline):
     >>> print(generator(PROMPT, do_sample=False))
     [{'generated_text': "\ndef fib(x: int) -> int:\n\tif x == 0:\n\t\treturn 0\n\tif x == 1:\n\t\treturn 1\n\telse:\n\t\treturn fib(x-1) + fib(x-2)\n"}]
     ```
+
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial). You can pass text
     generation parameters to this pipeline to control stopping criteria, decoding strategy, and more. Learn more about
     text generation parameters in [Text generation strategies](../generation_strategies) and [Text
@@ -58,7 +60,7 @@ class FIMPipeline(Pipeline):
     on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
     """
 
-    DEFAULT_MODE = "psm"
+    DEFAULT_INFILL_MODE = "psm"
     DEFAULT_INFILL_TOKEN = "<FILL_ME>"
     DEFAULT_PREFIX_TOKEN = "<fim_prefix>"
     DEFAULT_SUFFIX_TOKEN = "<fim_suffix>"
@@ -68,10 +70,14 @@ class FIMPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         # Check if the provided model is among the supported ones
         if self.model.name_or_path not in SUPPORTED_MODELS:
-            raise ValueError(f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task.")
+            raise ValueError(
+                f"The model '{self.model.name_or_path}' is not supported for the Fill-in-Middle task."
+            )
 
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+            if self.framework == "tf"
+            else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -84,7 +90,9 @@ class FIMPipeline(Pipeline):
 
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
-                preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
+                preprocess_params, forward_params, _ = self._sanitize_parameters(
+                    prefix=prefix, **self._forward_params
+                )
                 self._preprocess_params = {
                     **self._preprocess_params,
                     **preprocess_params,
@@ -124,7 +132,11 @@ class FIMPipeline(Pipeline):
         preprocess_params["infill_token"] = infill_token or self.DEFAULT_INFILL_TOKEN
 
         if mode is not None:
-            preprocess_params["mode"] = mode.lower() if mode.lower() in ["psm", "spm"] else self.DEFAULT_MODE
+            preprocess_params["mode"] = (
+                mode.lower()
+                if mode.lower() in ["psm", "spm"]
+                else self.DEFAULT_INFILL_MODE
+            )
         else:
             preprocess_params["mode"] = self.DEFAULT_MODE
 
@@ -154,21 +166,33 @@ class FIMPipeline(Pipeline):
 
         if return_full_text is not None and return_type is None:
             if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_full_text`")
+                raise ValueError(
+                    "`return_text` is mutually exclusive with `return_full_text`"
+                )
             if return_tensors is not None:
-                raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
-            return_type = ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+                raise ValueError(
+                    "`return_full_text` is mutually exclusive with `return_tensors`"
+                )
+            return_type = (
+                ReturnType.FULL_TEXT if return_full_text else ReturnType.NEW_TEXT
+            )
         if return_tensors is not None and return_type is None:
             if return_text is not None:
-                raise ValueError("`return_text` is mutually exclusive with `return_tensors`")
+                raise ValueError(
+                    "`return_text` is mutually exclusive with `return_tensors`"
+                )
             return_type = ReturnType.TENSORS
         if return_type is not None:
             postprocess_params["return_type"] = return_type
         if clean_up_tokenization_spaces is not None:
-            postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
+            postprocess_params[
+                "clean_up_tokenization_spaces"
+            ] = clean_up_tokenization_spaces
 
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            stop_sequence_ids = self.tokenizer.encode(
+                stop_sequence, add_special_tokens=False
+            )
             if len(stop_sequence_ids) > 1:
                 warnings.warn(
                     "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
@@ -195,7 +219,9 @@ class FIMPipeline(Pipeline):
         # Currently, codellama model variants support using only the "<FILL_ME>" token, so we won't overcomplicate things
         if "codellama" not in self.model.name_or_path.lower():
             # Extract prefix and suffix
-            input_prefix, input_suffix = self.extract_prefix_suffix(prompt_text, infill_token)
+            input_prefix, input_suffix = self.extract_prefix_suffix(
+                prompt_text, infill_token
+            )
 
             if mode == "psm":
                 prompt_text = (
@@ -228,7 +254,10 @@ class FIMPipeline(Pipeline):
             if "max_new_tokens" in generate_kwargs:
                 new_tokens = generate_kwargs["max_new_tokens"]
             else:
-                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
+                new_tokens = (
+                    generate_kwargs.get("max_length", self.model.config.max_length)
+                    - cur_len
+                )
                 if new_tokens < 0:
                     raise ValueError("We cannot infer how many new tokens are expected")
             if cur_len + new_tokens > self.tokenizer.model_max_length:
@@ -241,7 +270,9 @@ class FIMPipeline(Pipeline):
 
                 inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
                 if "attention_mask" in inputs:
-                    inputs["attention_mask"] = inputs["attention_mask"][:, -keep_length:]
+                    inputs["attention_mask"] = inputs["attention_mask"][
+                        :, -keep_length:
+                    ]
 
         return inputs
 
@@ -266,7 +297,9 @@ class FIMPipeline(Pipeline):
                 and generate_kwargs["generation_config"].max_new_tokens is not None
             )
             if not has_max_new_tokens:
-                generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.model.config.max_length
+                generate_kwargs["max_length"] = (
+                    generate_kwargs.get("max_length") or self.model.config.max_length
+                )
                 generate_kwargs["max_length"] += prefix_len
             has_min_new_tokens = "min_new_tokens" in generate_kwargs or (
                 "generation_config" in generate_kwargs

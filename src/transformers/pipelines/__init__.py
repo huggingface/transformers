@@ -27,18 +27,9 @@ from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..models.auto.configuration_auto import AutoConfig
-from ..models.auto.feature_extraction_auto import (
-    FEATURE_EXTRACTOR_MAPPING,
-    AutoFeatureExtractor,
-)
-from ..models.auto.image_processing_auto import (
-    IMAGE_PROCESSOR_MAPPING,
-    AutoImageProcessor,
-)
-from ..models.auto.modeling_auto import (
-    AutoModelForDepthEstimation,
-    AutoModelForImageToImage,
-)
+from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
+from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
+from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
@@ -73,7 +64,6 @@ from .conversational import Conversation, ConversationalPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
-from .fill_in_middle import FIMPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
@@ -81,19 +71,9 @@ from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
-from .question_answering import (
-    QuestionAnsweringArgumentHandler,
-    QuestionAnsweringPipeline,
-)
-from .table_question_answering import (
-    TableQuestionAnsweringArgumentHandler,
-    TableQuestionAnsweringPipeline,
-)
-from .text2text_generation import (
-    SummarizationPipeline,
-    Text2TextGenerationPipeline,
-    TranslationPipeline,
-)
+from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
+from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
+from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
@@ -106,10 +86,7 @@ from .token_classification import (
 from .video_classification import VideoClassificationPipeline
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
-from .zero_shot_classification import (
-    ZeroShotClassificationArgumentHandler,
-    ZeroShotClassificationPipeline,
-)
+from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
@@ -204,12 +181,7 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {
-            "model": {
-                "pt": ("distilbert-base-cased", "935ac13"),
-                "tf": ("distilbert-base-cased", "935ac13"),
-            }
-        },
+        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
         "type": "multimodal",
     },
     "text-classification": {
@@ -282,35 +254,14 @@ SUPPORTED_TASKS = {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {
-            "model": {
-                "pt": ("distilroberta-base", "ec58a5b"),
-                "tf": ("distilroberta-base", "ec58a5b"),
-            }
-        },
-        "type": "text",
-    },
-    "fill-in-middle": {
-        "impl": FIMPipeline,
-        "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "tf": (),
-        "default": {
-            "model": {
-                "pt": ("codellama/CodeLlama-7b-hf", "ec58a5b"),
-            }
-        },
+        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {
-            "model": {
-                "pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"),
-                "tf": ("t5-small", "d769bba"),
-            }
-        },
+        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -344,14 +295,8 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
-            "model": {
-                "pt": ("facebook/bart-large-mnli", "c626438"),
-                "tf": ("roberta-large-mnli", "130fb28"),
-            },
-            "config": {
-                "pt": ("facebook/bart-large-mnli", "c626438"),
-                "tf": ("roberta-large-mnli", "130fb28"),
-            },
+            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
         },
         "type": "text",
     },
@@ -383,10 +328,7 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM, AutoModelForCausalLM) if is_torch_available() else (),
         "default": {
-            "model": {
-                "pt": ("microsoft/DialoGPT-medium", "8bada3b"),
-                "tf": ("microsoft/DialoGPT-medium", "8bada3b"),
-            }
+            "model": {"pt": ("microsoft/DialoGPT-medium", "8bada3b"), "tf": ("microsoft/DialoGPT-medium", "8bada3b")}
         },
         "type": "text",
     },
@@ -473,11 +415,7 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {
-    "SpeechEncoderDecoderConfig",
-    "VisionEncoderDecoderConfig",
-    "VisionTextDualEncoderConfig",
-}
+MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -821,11 +759,7 @@ def pipeline(
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(
-            config,
-            _from_pipeline=task,
-            code_revision=code_revision,
-            **hub_kwargs,
-            **model_kwargs,
+            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
@@ -846,11 +780,7 @@ def pipeline(
                     model = adapter_config["base_model_name_or_path"]
 
         config = AutoConfig.from_pretrained(
-            model,
-            _from_pipeline=task,
-            code_revision=code_revision,
-            **hub_kwargs,
-            **model_kwargs,
+            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
         hub_kwargs["_commit_hash"] = config._commit_hash
 
@@ -1035,11 +965,7 @@ def pipeline(
                 tokenizer_kwargs.pop("torch_dtype", None)
 
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer_identifier,
-                use_fast=use_fast,
-                _from_pipeline=task,
-                **hub_kwargs,
-                **tokenizer_kwargs,
+                tokenizer_identifier, use_fast=use_fast, _from_pipeline=task, **hub_kwargs, **tokenizer_kwargs
             )
 
     if load_image_processor:
@@ -1101,8 +1027,7 @@ def pipeline(
                         decoder = BeamSearchDecoderCTC.load_from_dir(model_name)
                     else:
                         language_model_glob = os.path.join(
-                            BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY,
-                            "*",
+                            BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*"
                         )
                         alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
                         allow_patterns = [language_model_glob, alphabet_filename]
