@@ -29,6 +29,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -90,7 +91,7 @@ def scaled_dot_product_attention(q, k, v, mask, attention_mask=None, head_mask=N
     return output, attention_weights
 
 
-class TFMultiHeadAttention(tf.keras.layers.Layer):
+class TFMultiHeadAttention(keras.layers.Layer):
     def __init__(self, d_model_size, num_heads, output_attentions=False, **kwargs):
         super().__init__(**kwargs)
         self.num_heads = num_heads
@@ -99,11 +100,11 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
 
         self.depth = int(d_model_size / self.num_heads)
 
-        self.Wq = tf.keras.layers.Dense(d_model_size, name="Wq")
-        self.Wk = tf.keras.layers.Dense(d_model_size, name="Wk")
-        self.Wv = tf.keras.layers.Dense(d_model_size, name="Wv")
+        self.Wq = keras.layers.Dense(d_model_size, name="Wq")
+        self.Wk = keras.layers.Dense(d_model_size, name="Wk")
+        self.Wv = keras.layers.Dense(d_model_size, name="Wv")
 
-        self.dense = tf.keras.layers.Dense(d_model_size, name="dense")
+        self.dense = keras.layers.Dense(d_model_size, name="dense")
 
     def split_into_heads(self, x, batch_size):
         x = tf.reshape(x, (batch_size, -1, self.num_heads, self.depth))
@@ -160,12 +161,12 @@ class TFMultiHeadAttention(tf.keras.layers.Layer):
                 self.dense.build([None, None, self.d_model_size])
 
 
-class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
+class TFPointWiseFeedForwardLayer(keras.layers.Layer):
     def __init__(self, d_model_size, dff, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense_0 = tf.keras.layers.Dense(dff, activation="relu", name="0")
-        self.dense_2 = tf.keras.layers.Dense(d_model_size, name="2")
+        self.dense_0 = keras.layers.Dense(dff, activation="relu", name="0")
+        self.dense_2 = keras.layers.Dense(d_model_size, name="2")
         self.d_model_size = d_model_size
         self.dff = dff
 
@@ -187,7 +188,7 @@ class TFPointWiseFeedForwardLayer(tf.keras.layers.Layer):
                 self.dense_2.build([None, None, self.dff])
 
 
-class TFEncoderLayer(tf.keras.layers.Layer):
+class TFEncoderLayer(keras.layers.Layer):
     def __init__(
         self, d_model_size, num_heads, dff, rate=0.1, layer_norm_epsilon=1e-6, output_attentions=False, **kwargs
     ):
@@ -200,11 +201,11 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         )
         self.ffn = TFPointWiseFeedForwardLayer(d_model_size, dff, name="ffn")
 
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm1")
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm2")
+        self.layernorm1 = keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm1")
+        self.layernorm2 = keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layernorm2")
 
-        self.dropout1 = tf.keras.layers.Dropout(rate)
-        self.dropout2 = tf.keras.layers.Dropout(rate)
+        self.dropout1 = keras.layers.Dropout(rate)
+        self.dropout2 = keras.layers.Dropout(rate)
         self.d_model_size = d_model_size
 
     def call(self, x, mask, layer_past, attention_mask, head_mask, use_cache, output_attentions, training=False):
@@ -252,7 +253,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFCTRLMainLayer(tf.keras.layers.Layer):
+class TFCTRLMainLayer(keras.layers.Layer):
     config_class = CTRLConfig
 
     def __init__(self, config, **kwargs):
@@ -269,14 +270,14 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         self.pos_encoding = positional_encoding(config.n_positions, self.d_model_size)
 
-        self.w = tf.keras.layers.Embedding(
+        self.w = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.n_embd,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="w",
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.embd_pdrop)
+        self.dropout = keras.layers.Dropout(config.embd_pdrop)
         self.h = [
             TFEncoderLayer(
                 config.n_embd,
@@ -289,7 +290,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             )
             for i in range(config.n_layer)
         ]
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
     def get_input_embeddings(self):
         return self.w
@@ -476,7 +477,7 @@ CTRL_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -635,9 +636,9 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
                 self.transformer.build(None)
 
 
-class TFCTRLBiasLayer(tf.keras.layers.Layer):
+class TFCTRLBiasLayer(keras.layers.Layer):
     """
-    Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
+    Bias as a layer. It is used for serialization purposes: `keras.Model.save_weights` stores on a per-layer basis,
     so all weights have to be registered in a layer.
     """
 
@@ -812,7 +813,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="classifier",

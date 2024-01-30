@@ -31,6 +31,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    keras,
     shape_list,
     unpack_inputs,
 )
@@ -406,7 +407,7 @@ RAG_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a Tensorflow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
 
@@ -1275,9 +1276,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         """CrossEntropyLoss that ignores pad tokens"""
         # Matt: As written, this loss is not XLA-compatible, but it's doing some very weird things
         #       and I don't feel comfortable converting it.
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
-            reduction=tf.keras.losses.Reduction.SUM,
+            reduction=keras.losses.Reduction.SUM,
         )
 
         if from_logits is False:  # convert to logits
