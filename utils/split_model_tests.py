@@ -4,8 +4,8 @@ import os
 if __name__ == "__main__":
     tests = os.getcwd()
     model_tests = os.listdir(os.path.join(tests, "models"))
-    d1 = sorted(list(filter(os.path.isdir, os.listdir(tests))))
-    d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests])))
+    d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
+    d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
     d1.remove("models")
     d = d2[1:5] + d1[:2]
 
