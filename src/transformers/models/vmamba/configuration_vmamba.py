@@ -40,38 +40,22 @@ class VMambaConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the VMamba model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~VMambaModel`] or
-            [`~TFVMambaModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~VMambaModel`] or
-            [`~TFVMambaModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
-            The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        in_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        depths (`list`, *optional*, defaults to [2, 2, 9, 2]):
+            The number of VSS blocks per state. Default is the configuration for VMamba-Tiny.
+        dims (`list`, *optional*, defaults to [96, 192, 384, 768]):
+            Dimensionality for each layer. Default is the configuration for VMamba-Tiny.
+        d_state (`int`, *optional*, defaults to 16):
+            Dimensionality of the patch embeddings.
+        drop_rate (`int`, *optional*, defaults to 0):
+            Dropout rate.
+        drop_path_rate (`int`, *optional*, defaults to 0.1):
+            Stochastic depth decay
+        use_checkpoint (`bool`, *optional*, defaults to `False`):
+            Whether to use gradient checkpointing.
         Example:
 
     ```python
@@ -97,12 +81,8 @@ class VMambaConfig(PretrainedConfig):
         dims=[96, 192, 384, 768],
         d_state=16,
         drop_rate=0,
-        attn_drop_rate=0.0,
         drop_path_rate=0.1,
-        patch_norm=True,
         use_checkpoint=False,
-        ape=False, 
-        out_indices=(0, 1, 2, 3),
         **kwargs,
     ):
         self.patch_size = patch_size
@@ -111,8 +91,6 @@ class VMambaConfig(PretrainedConfig):
         self.dims = dims
         self.d_state = d_state
         self.drop_rate = drop_rate
-        self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
-        self.patch_norm = patch_norm
-        self.use_checkpoint = False
+        self.use_checkpoint = use_checkpoint
         super().__init__(**kwargs)
