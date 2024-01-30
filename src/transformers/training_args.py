@@ -1323,9 +1323,7 @@ class TrainingArguments:
 
     batch_eval_metrics: bool = field(
         default=False,
-        metadata={
-            "help": "Break eval metrics calculation into batches to save memory."
-        },
+        metadata={"help": "Break eval metrics calculation into batches to save memory."},
     )
 
     def __post_init__(self):
