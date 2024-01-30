@@ -375,7 +375,7 @@ class GPTJFlashAttention2(GPTJAttention):
         else:
             present = None
 
-        # The Falsh attention requires the input to have the shape
+        # The Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we need to keep the original shape for query and key, and reshape value
         # to have the correct shape.
