@@ -233,9 +233,9 @@ class RWKVWorldTokenizer(PreTrainedTokenizer):
     ) -> str:
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
-        first_segment = token_ids[:self.first_max_length]
+        first_segment = token_ids[: self.first_max_length]
         first_segment_cleaned = [token for token in first_segment if token != 0]
-        token_ids = first_segment_cleaned + token_ids[self.first_max_length:]
+        token_ids = first_segment_cleaned + token_ids[self.first_max_length :]
         if isinstance(token_ids, int):
             if token_ids in self.all_special_ids and skip_special_tokens:
                 return ""
