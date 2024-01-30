@@ -21,6 +21,7 @@ import unittest
 
 from transformers import VMambaConfig
 from transformers.models.auto.image_processing_auto import AutoImageProcessor
+from transformers.models.perceiver.image_processing_perceiver import PerceiverImageProcessor
 from transformers.models.vmamba.modeling_vmamba import VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST
 from transformers.testing_utils import (
     require_accelerate,
@@ -316,13 +317,13 @@ class VMambaModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+            PerceiverImageProcessor()
             if is_vision_available()
             else None
         )
     @slow
     def test_inference_image_classification_head(self):
-        model = VMambaForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        model = VMambaForImageClassification.from_pretrained("/home/derk/hf_checkpoints/").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -334,10 +335,9 @@ class VMambaModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.shape, expected_shape)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
+        expected_slice = torch.tensor([-1.5905,  1.6459, -0.3650]).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
 
     @slow
@@ -348,7 +348,7 @@ class VMambaModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = VMambaModel.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
+        model = VMambaModel.from_pretrained("/home/derk/hf_checkpoints/", torch_dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
         image = prepare_img()

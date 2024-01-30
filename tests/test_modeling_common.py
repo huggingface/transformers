@@ -1091,7 +1091,7 @@ class ModelTesterMixin:
                         not hasattr(model.config, "problem_type") or model.config.problem_type is None
                     ):
                         model.config.problem_type = "single_label_classification"
-                    
+
                     traced_model = symbolic_trace(model, input_names)
 
                     with torch.no_grad():
