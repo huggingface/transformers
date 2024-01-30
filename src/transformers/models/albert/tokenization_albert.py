@@ -267,7 +267,7 @@ class AlbertTokenizer(PreTrainedTokenizer):
             else:
                 current_sub_tokens.append(token)
                 prev_is_special = False
-        out_string += " "+self.sp_model.decode(current_sub_tokens)
+        out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
     def build_inputs_with_special_tokens(
