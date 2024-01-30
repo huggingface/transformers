@@ -1082,17 +1082,23 @@ class WhisperGenerationMixin:
                 lst.append(num)
             return lst
 
+        task = getattr(generation_config, "task", None)
+        language = getattr(generation_config, "language", None)
+
         if kwargs.get("forced_decoder_ids", None) is not None:
             forced_decoder_ids = kwargs["forced_decoder_ids"]
         elif hasattr(generation_config, "forced_decoder_ids") and generation_config.forced_decoder_ids is not None:
             forced_decoder_ids = generation_config.forced_decoder_ids
+
+            if language is None and task is None and forced_decoder_ids[0][1] is None:
+                logger.warning_once(
+                    "Due to a bug fix in https://github.com/huggingface/transformers/pull/28687 transcription using a multilingual Whisper will default to language detection followed by transcription instead of translation to English."
+                    "This might be a breaking change for your use case. If you want to instead always translate your audio to English, make sure to pass `language='en'`."
+                )
         elif hasattr(config, "forced_decoder_ids") and config.forced_decoder_ids is not None:
             forced_decoder_ids = config.forced_decoder_ids
         else:
             forced_decoder_ids = None
-
-        task = getattr(generation_config, "task", None)
-        language = getattr(generation_config, "language", None)
 
         if forced_decoder_ids is not None and task is not None:
             logger.info(
