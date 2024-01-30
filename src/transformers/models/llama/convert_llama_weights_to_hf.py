@@ -103,7 +103,7 @@ def write_model(model_path, input_base_path, model_size, llama_version, tokenize
         max_position_embeddings = 16384
     elif llama_version == "v2":
         max_position_embeddings = 4096
-    else: # defaults to v1 LLaMa
+    else:  # defaults to v1 LLaMa
         max_position_embeddings = 2048
 
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
