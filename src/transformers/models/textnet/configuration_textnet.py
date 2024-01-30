@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 the Fast authors and HuggingFace Inc. team.  All rights reserved.
+# Copyright 2024 the Fast authors and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,11 +45,6 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The num of channels in out for the initial convolution layer.
         stem_act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
-                                     [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3,
-                                     1], [1, 3], [3, 3]]]`):
-            The list of stagewise conv layer's kernel sizes.
-                                [2, 1, 1, 1], [2, 1, 1, 1], [2, 1, 1, 1]]`):
-            The list of stagewise conv layer's kernel strides.
         image_size (`int`, *optional*, defaults to `[640, 640]`):
             The size (resolution) of each image.
         conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):

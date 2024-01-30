@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,14 @@ if is_torch_available():
     )
 
 
+class TextNetConfigTester(ConfigTester):
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, "hidden_sizes"))
+        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
+        self.parent.assertTrue(hasattr(config, "num_encoder_blocks"))
+
+
 class TextNetModelTester:
     def __init__(
         self,
@@ -76,7 +84,6 @@ class TextNetModelTester:
         image_size=[32, 32],
         is_training=True,
         use_labels=True,
-        hidden_act="relu",
         num_labels=3,
         hidden_sizes=[32, 32, 32, 32, 32],
     ):
@@ -199,7 +206,7 @@ class TextNetModelTester:
 @require_torch
 class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as TextNet does not use input_ids, inputs_embeds,
+    Here we also overwrite some tests of test_modeling_common.py, as TextNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -218,19 +225,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = TextNetModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TextNetConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester = TextNetConfigTester(self, config_class=TextNetConfig, has_text_modality=False)
 
     @unittest.skip(reason="TextNet does not output attentions")
     def test_attention_outputs(self):

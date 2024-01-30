@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 the Fast authors and HuggingFace Inc. team.  All rights reserved.
+# Copyright 2024 the Fast authors and HuggingFace Inc. team.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,7 @@
 from typing import TYPE_CHECKING
 
 from ... import is_vision_available
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
