@@ -7590,6 +7590,48 @@ class SiglipVisionModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SigmaMoEForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SigmaMoEForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SigmaMoEForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SigmaMoELayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SigmaMoEModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SigmaMoEPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SpeechEncoderDecoderModel(metaclass=DummyObject):
     _backends = ["torch"]
 

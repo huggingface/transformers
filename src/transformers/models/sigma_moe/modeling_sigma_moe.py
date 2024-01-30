@@ -19,6 +19,8 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
+from torch import nn
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -74,7 +76,7 @@ def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
-    cu_seqlens = torch.nn.functional.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
     return (
         indices,
         cu_seqlens,
@@ -83,7 +85,7 @@ def _get_unpad_data(attention_mask):
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->SigmaMoE
-class SigmaMoERotaryEmbedding(torch.nn.Module):
+class SigmaMoERotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
@@ -95,9 +97,7 @@ class SigmaMoERotaryEmbedding(torch.nn.Module):
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings,
-            device=self.inv_freq.device,
-            dtype=torch.get_default_dtype(),
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
@@ -125,14 +125,7 @@ class SigmaMoERotaryEmbedding(torch.nn.Module):
 class SigmaMoELinearScalingRotaryEmbedding(SigmaMoERotaryEmbedding):
     """SigmaMoERotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-    ):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -152,14 +145,7 @@ class SigmaMoELinearScalingRotaryEmbedding(SigmaMoERotaryEmbedding):
 class SigmaMoEDynamicNTKScalingRotaryEmbedding(SigmaMoERotaryEmbedding):
     """SigmaMoERotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
-    def __init__(
-        self,
-        dim,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-    ):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
@@ -274,7 +260,6 @@ class SigmaMoEFeedForwardLayer(torch.nn.Module):
         return hidden_states, reg_loss
 
 
-# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention with Persimmon->SigmaMoE,persimmon->phi
 class SigmaMoEAttention(torch.nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -464,7 +449,6 @@ class SigmaMoEAttention(torch.nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.phi.modeling_phi.PhiFlashAttention2r with Phi->SigmaMoE
 class SigmaMoEFlashAttention2(SigmaMoEAttention):
     """
     SigmaMoE flash attention module. This module inherits from `SigmaMoEAttention` as the weights of the module stays untouched.
@@ -593,14 +577,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
-        self,
-        query_states,
-        key_states,
-        value_states,
-        attention_mask,
-        query_length,
-        dropout=0.0,
-        softmax_scale=None,
+        self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
     ):
         """
         Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
@@ -630,14 +607,9 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
         # Contains at least one padding token in the sequence
         if attention_mask is not None:
             batch_size = query_states.shape[0]
-            (
-                query_states,
-                key_states,
-                value_states,
-                indices_q,
-                cu_seq_lens,
-                max_seq_lens,
-            ) = self._upad_input(query_states, key_states, value_states, attention_mask, query_length)
+            query_states, key_states, value_states, indices_q, cu_seq_lens, max_seq_lens = self._upad_input(
+                query_states, key_states, value_states, attention_mask, query_length
+            )
 
             cu_seqlens_q, cu_seqlens_k = cu_seq_lens
             max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
@@ -658,12 +630,7 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
             attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(
-                query_states,
-                key_states,
-                value_states,
-                dropout,
-                softmax_scale=softmax_scale,
-                causal=causal,
+                query_states, key_states, value_states, dropout, softmax_scale=softmax_scale, causal=causal
             )
 
         return attn_output
@@ -674,17 +641,14 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
         batch_size, kv_seq_len, num_key_value_heads, head_dim = key_layer.shape
 
         key_layer = index_first_axis(
-            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
+            key_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         value_layer = index_first_axis(
-            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim),
-            indices_k,
+            value_layer.reshape(batch_size * kv_seq_len, num_key_value_heads, head_dim), indices_k
         )
         if query_length == kv_seq_len:
             query_layer = index_first_axis(
-                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim),
-                indices_k,
+                query_layer.reshape(batch_size * kv_seq_len, self.num_heads, head_dim), indices_k
             )
             cu_seqlens_q = cu_seqlens_k
             max_seqlen_in_batch_q = max_seqlen_in_batch_k
@@ -711,7 +675,6 @@ class SigmaMoEFlashAttention2(SigmaMoEAttention):
         )
 
 
-# Copied from transformers.models.phi.modeling_phi.PHI_ATTENTION_CLASSES
 SIGMA_MOE_ATTENTION_CLASSES = {
     "eager": SigmaMoEAttention,
     "flash_attention_2": SigmaMoEFlashAttention2,
@@ -1091,12 +1054,11 @@ class SigmaMoEModel(SigmaMoEPreTrainedModel):
 class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->SigmaMoE,bias=False->bias=True
     def __init__(self, config: SigmaMoEConfiguration):
         super().__init__(config)
         self.model = SigmaMoEModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = torch.nn.Linear(config.d_model, config.vocab_size, bias=True)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1221,12 +1183,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        **kwargs,
+        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
@@ -1239,7 +1196,7 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
@@ -1307,13 +1264,12 @@ class SigmaMoEForCausalLM(SigmaMoEPreTrainedModel):
     """,
     SIGMA_MOE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->SIGMA_MOE,Llama->SigmaMoE with self.transformer->self.model, transformer_outputs->model_outputs
 class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
     def __init__(self, config: SigmaMoEConfiguration):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.model = SigmaMoEModel(config)
-        self.score = torch.nn.Linear(config.d_model, self.num_labels, bias=False)
+        self.score = nn.Linear(config.d_model, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1429,7 +1385,6 @@ class SigmaMoEForSequenceClassification(SigmaMoEPreTrainedModel):
     """,
     SIGMA_MOE_START_DOCSTRING,
 )
-# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with MPT->SIGMA_MOE,Mpt->SigmaMoE,self.transformer->self.model,transformer_outputs->model_outputs
 class SigmaMoEForTokenClassification(SigmaMoEPreTrainedModel):
     def __init__(self, config: SigmaMoEConfiguration):
         super().__init__(config)

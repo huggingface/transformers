@@ -32,23 +32,6 @@ TODO - Talk about triton requirements?
 
 [[autodoc]] SigmaMoEConfiguration
 
-## SigmaMoETokenizer
-
-[[autodoc]] SigmaMoETokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-## SigmaMoETokenizerFast
-
-[[autodoc]] SigmaMoETokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
-
 ## SigmaMoEModel
 
 [[autodoc]] SigmaMoEModel
