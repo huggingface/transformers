@@ -90,10 +90,7 @@ class TextGenerationPipeline(Pipeline):
             if prefix is not None:
                 # Recalculate some generate_kwargs linked to prefix.
                 preprocess_params, forward_params, _ = self._sanitize_parameters(prefix=prefix, **self._forward_params)
-                self._preprocess_params = {
-                    **self._preprocess_params,
-                    **preprocess_params,
-                }
+                self._preprocess_params = {**self._preprocess_params, **preprocess_params}
                 self._forward_params = {**self._forward_params, **forward_params}
 
     def _sanitize_parameters(
@@ -107,28 +104,14 @@ class TextGenerationPipeline(Pipeline):
         handle_long_generation=None,
         stop_sequence=None,
         add_special_tokens=False,
-        truncation=None,
-        padding=False,
-        max_length=None,
         **generate_kwargs,
     ):
-        preprocess_params = {
-            "add_special_tokens": add_special_tokens,
-            "truncation": truncation,
-            "padding": padding,
-            "max_length": max_length,
-        }
-        if max_length is not None:
-            generate_kwargs["max_length"] = max_length
-
+        preprocess_params = {"add_special_tokens": add_special_tokens}
         if prefix is not None:
             preprocess_params["prefix"] = prefix
         if prefix:
             prefix_inputs = self.tokenizer(
-                prefix,
-                padding=False,
-                add_special_tokens=add_special_tokens,
-                return_tensors=self.framework,
+                prefix, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
 
@@ -225,23 +208,10 @@ class TextGenerationPipeline(Pipeline):
         return super().__call__(text_inputs, **kwargs)
 
     def preprocess(
-        self,
-        prompt_text,
-        prefix="",
-        handle_long_generation=None,
-        add_special_tokens=False,
-        truncation=None,
-        padding=False,
-        max_length=None,
-        **generate_kwargs,
+        self, prompt_text, prefix="", handle_long_generation=None, add_special_tokens=False, **generate_kwargs
     ):
         inputs = self.tokenizer(
-            prefix + prompt_text,
-            return_tensors=self.framework,
-            truncation=truncation,
-            padding=padding,
-            max_length=max_length,
-            add_special_tokens=add_special_tokens,
+            prefix + prompt_text, padding=False, add_special_tokens=add_special_tokens, return_tensors=self.framework
         )
         inputs["prompt_text"] = prompt_text
 
@@ -304,18 +274,9 @@ class TextGenerationPipeline(Pipeline):
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
         elif self.framework == "tf":
             generated_sequence = tf.reshape(generated_sequence, (in_b, out_b // in_b, *generated_sequence.shape[1:]))
-        return {
-            "generated_sequence": generated_sequence,
-            "input_ids": input_ids,
-            "prompt_text": prompt_text,
-        }
+        return {"generated_sequence": generated_sequence, "input_ids": input_ids, "prompt_text": prompt_text}
 
-    def postprocess(
-        self,
-        model_outputs,
-        return_type=ReturnType.FULL_TEXT,
-        clean_up_tokenization_spaces=True,
-    ):
+    def postprocess(self, model_outputs, return_type=ReturnType.FULL_TEXT, clean_up_tokenization_spaces=True):
         generated_sequence = model_outputs["generated_sequence"][0]
         input_ids = model_outputs["input_ids"]
         prompt_text = model_outputs["prompt_text"]
