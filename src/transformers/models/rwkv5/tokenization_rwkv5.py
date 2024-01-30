@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for RWKV5."""
 
-import json
 import os
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
@@ -29,7 +28,7 @@ from transformers.utils import PaddingStrategy, TensorType, logging, to_py_obj
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    pass
 
 logger = logging.get_logger(__name__)
 

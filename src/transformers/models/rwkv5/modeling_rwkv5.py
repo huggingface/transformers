@@ -31,8 +31,8 @@ from transformers.utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_ninja_available,
     is_bitsandbytes_available,
+    is_ninja_available,
     is_torch_cuda_available,
     logging,
 )
@@ -104,7 +104,7 @@ class WKV_5(torch.autograd.Function):
             out = torch.empty(
                 (Batch, SequenceLength, HiddenSize), device=receptance.device, dtype=torch.bfloat16, memory_format=torch.contiguous_format
             )
-            rwkv5_cuda_kernel.forward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, time_first, y, state)
+            rwkv5_cuda_kernel.forward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, time_first, out, state)
             return out, state
 
     @staticmethod
@@ -151,7 +151,7 @@ class WKV_5(torch.autograd.Function):
                 dtype=torch.bfloat16,
                 memory_format=torch.contiguous_format,
             )
-            rwkv5_cuda_kernel.backward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, e_time_decay, time_first, gout, greceptance, g_key, g_value, g_time_decay, gu)
+            rwkv5_cuda_kernel.backward(Batch, SequenceLength, HiddenSize, HeadSize, receptance, key, value, ee_time_decay, e_time_decay, time_first, gout, greceptance, g_key, g_value, g_time_decay, g_time_first)
             g_time_decay = torch.sum(g_time_decay, 0).view(HeadSize, HiddenSize // HeadSize)
             g_time_first = torch.sum(g_time_first, 0).view(HeadSize, HiddenSize // HeadSize)
             return (None, None, None, None, greceptance, g_key, g_value, g_time_decay, g_time_first)
