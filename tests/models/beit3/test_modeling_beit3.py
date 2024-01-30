@@ -611,7 +611,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         # forward pass
         output = model(
-            input_ids=torch.tensor(inputs["input_ids"]),
+            input_ids=inputs["input_ids"],
             pixel_values=inputs["pixel_values"].unsqueeze(0),
         )
         self.assertTrue(output.logits.shape == torch.Size([1, 2]))
