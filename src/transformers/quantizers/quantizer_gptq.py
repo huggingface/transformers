@@ -77,12 +77,12 @@ class GptqHfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if self.pre_quantized:
-            model = self.quantizer.post_init_model(model)
+            model = self.optimum_quantizer.post_init_model(model)
         else:
             if self.quantization_config.tokenizer is None:
                 self.quantization_config.tokenizer = model.name_or_path
 
-            self.quantizer.quantize_model(model, self.quantization_config.tokenizer)
+            self.optimum_quantizer.quantize_model(model, self.quantization_config.tokenizer)
             model.config.quantization_config = GPTQConfig.from_dict(self.optimum_quantizer.to_dict())
 
     @property
