@@ -23,7 +23,6 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
@@ -37,6 +36,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.backbone_utils import load_backbone
 from ..detr import DetrConfig
 from .configuration_maskformer import MaskFormerConfig
 from .configuration_maskformer_swin import MaskFormerSwinConfig
@@ -1428,14 +1428,13 @@ class MaskFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-
-        # TODD: add method to load pretrained weights of backbone
-        backbone_config = config.backbone_config
-        if backbone_config.model_type == "swin":
+        if hasattr(config, "backbone_config") and config.backbone_config.model_type == "swin":
             # for backwards compatibility
+            backbone_config = config.backbone_config
             backbone_config = MaskFormerSwinConfig.from_dict(backbone_config.to_dict())
             backbone_config.out_features = ["stage1", "stage2", "stage3", "stage4"]
-        self.encoder = AutoBackbone.from_config(backbone_config)
+            config.backbone_config = backbone_config
+        self.encoder = load_backbone(config)
 
         feature_channels = self.encoder.channels
         self.decoder = MaskFormerPixelDecoder(

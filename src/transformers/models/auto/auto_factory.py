@@ -488,6 +488,7 @@ class _BaseAutoModelClass:
                 resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
                     CONFIG_NAME,
+                    _raise_exceptions_for_gated_repo=False,
                     _raise_exceptions_for_missing_entries=False,
                     _raise_exceptions_for_connection_errors=False,
                     **hub_kwargs,
@@ -602,10 +603,6 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
         config = kwargs.pop("config", TimmBackboneConfig())
 
-        use_timm = kwargs.pop("use_timm_backbone", True)
-        if not use_timm:
-            raise ValueError("`use_timm_backbone` must be `True` for timm backbones")
-
         if kwargs.get("out_features", None) is not None:
             raise ValueError("Cannot specify `out_features` for timm backbones")
 
@@ -627,7 +624,8 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        if kwargs.get("use_timm_backbone", False):
+        use_timm_backbone = kwargs.pop("use_timm_backbone", False)
+        if use_timm_backbone:
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

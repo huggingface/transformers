@@ -1036,7 +1036,7 @@ class MLflowCallback(TrainerCallback):
                         f'Trainer is attempting to log a value of "{v}" of type {type(v)} for key "{k}" as a metric. '
                         "MLflow's log_metric() only accepts float and int types so we dropped this attribute."
                     )
-            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step)
+            self._ml_flow.log_metrics(metrics=metrics, step=state.global_step, synchronous=False)
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
@@ -1635,15 +1635,20 @@ class DVCLiveCallback(TrainerCallback):
             raise RuntimeError("DVCLiveCallback requires dvclive to be installed. Run `pip install dvclive`.")
         from dvclive import Live
 
-        self._log_model = log_model
-
         self._initialized = False
         self.live = None
         if isinstance(live, Live):
             self.live = live
-            self._initialized = True
         elif live is not None:
             raise RuntimeError(f"Found class {live.__class__} for live, expected dvclive.Live")
+
+        self._log_model = log_model
+        if self._log_model is None:
+            log_model_env = os.getenv("HF_DVCLIVE_LOG_MODEL", "FALSE")
+            if log_model_env.upper() in ENV_VARS_TRUE_VALUES:
+                self._log_model = True
+            elif log_model_env.lower() == "all":
+                self._log_model = "all"
 
     def setup(self, args, state, model):
         """
@@ -1659,12 +1664,6 @@ class DVCLiveCallback(TrainerCallback):
         from dvclive import Live
 
         self._initialized = True
-        if self._log_model is not None:
-            log_model_env = os.getenv("HF_DVCLIVE_LOG_MODEL")
-            if log_model_env.upper() in ENV_VARS_TRUE_VALUES:
-                self._log_model = True
-            elif log_model_env.lower() == "all":
-                self._log_model = "all"
         if state.is_world_process_zero:
             if not self.live:
                 self.live = Live()
