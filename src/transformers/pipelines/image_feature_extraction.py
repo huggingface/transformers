@@ -8,7 +8,14 @@ if is_vision_available():
     from ..image_utils import load_image
 
 
-@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
+@add_end_docstrings(
+    build_pipeline_init_args(has_image_processor=True),
+    """
+        image_processor_kwargs (`dict`, *optional*):
+                Additional dictionary of keyword arguments passed along to the image processor e.g.
+                {"size": {"height": 100, "width": 100}}
+    """,
+)
 class ImageFeatureExtractionPipeline(Pipeline):
     """
     Image feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
