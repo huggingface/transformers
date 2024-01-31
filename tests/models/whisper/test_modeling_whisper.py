@@ -25,6 +25,7 @@ import unittest
 
 import numpy as np
 import pytest
+from huggingface_hub import hf_hub_download
 
 import transformers
 from transformers import WhisperConfig
@@ -38,7 +39,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_flax_available, is_torch_available
+from transformers.utils import cached_property, is_flax_available, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -140,6 +141,10 @@ if is_torch_available():
                 raise ValueError("Dummy logit processor is incorrectly set up. Scores should not be all inf.")
 
             return scores
+
+
+if is_torchaudio_available():
+    import torchaudio
 
 
 if is_flax_available():
@@ -1258,7 +1263,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.arange(5)
+        prompt_ids = torch.arange(5).to(torch_device)
         language = "<|de|>"
         task = "translate"
         lang_id = 6
@@ -1281,7 +1286,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.asarray(range(5))
+        prompt_ids = torch.arange(5).to(torch_device)
         forced_decoder_ids = [(1, 6), (2, 7), (3, 8)]
 
         output = model.generate(
@@ -1298,26 +1303,66 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_generate_with_prompt_ids_max_length(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.max_target_positions = 5
+        config.max_target_positions = 7
 
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         input_features = input_dict["input_features"]
-        prompt_ids = np.asarray(range(4))
-        sliced_prompt_ids = prompt_ids[1:]
-        sliced_prompt_ids = sliced_prompt_ids[-config.max_target_positions // 2 - 1 :]
-        max_new_tokens = 5
+        decoder_input_ids = torch.arange(5).to(torch_device)
+        prompt_ids = decoder_input_ids[:4]
+        max_new_tokens = 8
 
         with self.assertRaisesRegex(
             ValueError,
-            f"The length of the sliced `prompt_ids` is {len(sliced_prompt_ids)}, and the `max_new_tokens` "
-            f"{max_new_tokens}. Thus, the combined length of the sliced `prompt_ids` and `max_new_tokens` is: "
-            f"{len(sliced_prompt_ids) + max_new_tokens}. This exceeds the `max_target_positions` of the Whisper model: "
-            f"{config.max_target_positions}. You should either reduce the length of your prompt, or reduce the "
-            f"value of `max_new_tokens`, so that their combined length is less that {config.max_target_positions}.",
+            f"The length of `decoder_input_ids` equal `prompt_ids` plus special start tokens is {decoder_input_ids.shape[-1]}, and the `max_new_tokens` "
+            f"is {max_new_tokens}. Thus, the combined length of "
+            f"`decoder_input_ids` and `max_new_tokens` is: {max_new_tokens + decoder_input_ids.shape[-1]}. This exceeds the "
+            f"`max_target_positions` of the Whisper model: {config.max_target_positions}. "
+            "You should either reduce the length of your prompt, or reduce the value of `max_new_tokens`, "
+            f"so that their combined length is less than {config.max_target_positions}.",
         ):
             model.generate(input_features, max_new_tokens=max_new_tokens, prompt_ids=prompt_ids)
 
         model.generate(input_features, max_new_tokens=1, prompt_ids=prompt_ids)
+
+    def test_generate_longform_with_prompt_ids(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = WhisperForConditionalGeneration(config).eval().to(torch_device)
+
+        prompt_ids = torch.arange(5).to(torch_device)
+        model.generation_config.no_timestamps_token_id = 11
+        model.generation_config.pad_token_id = 10
+
+        # make sure prompt token ids [0-9] can't be generated
+        model.generation_config.suppress_tokens = list(range(10))
+
+        input_features = input_dict["input_features"]
+
+        language = "<|de|>"
+        lang_id = 6
+
+        input_features = input_features.repeat(1, 1, 50)
+        attention_mask = torch.ones_like(input_features, dtype=torch.long)[:, 0]
+
+        for prompt_type in ["first-segment", "all-segments"]:
+            for task_id, task in enumerate(["translate", "transcribe"]):
+                task_id = 7 + task_id
+
+                model.generation_config.__setattr__("lang_to_id", {language: lang_id})
+                model.generation_config.__setattr__("task_to_id", {task: task_id})
+
+                output = model.generate(
+                    input_features,
+                    attention_mask=attention_mask,
+                    prompt_condition_type=prompt_type,
+                    max_new_tokens=5,
+                    task=task,
+                    language=language,
+                    prompt_ids=prompt_ids,
+                    condition_on_prev_tokens=True,
+                )
+                for row in output.tolist():
+                    # make sure no token below 10 is in generated output => this means for long-form prompt ids should NOT be returned
+                    assert not any(i in row for i in model.generation_config.suppress_tokens)
 
     def _check_longform_generate_single_batch(self, condition_on_prev_tokens):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1919,7 +1964,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             num_return_sequences=num_return_sequences,
         )
 
-        self.assertEqual(generate_outputs.sequences.shape, generate_outputs.token_timestamps.shape)
+        # task id and lang id prompts should not have timestamp tokens
+        self.assertEqual(generate_outputs.sequences.shape[-1] - 2, generate_outputs.token_timestamps.shape[-1])
 
         self.assertEqual(len(generate_outputs.sequences), num_return_sequences * num_samples)
 
@@ -1967,13 +2013,110 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
         output_without_prompt = model.generate(input_features)
-        prompt_ids = processor.get_prompt_ids("Leighton")
+        prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to(torch_device)
         output_with_prompt = model.generate(input_features, prompt_ids=prompt_ids)
 
         expected_without_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
         expected_with_prompt = "<|startofprev|> Leighton<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
-        self.assertEqual(processor.decode(output_without_prompt[0]), expected_without_prompt)
-        self.assertEqual(processor.decode(output_with_prompt[0]), expected_with_prompt)
+
+        output_without_prompt = processor.decode(output_without_prompt[0])
+        output_with_prompt = processor.decode(output_with_prompt[0])
+
+        self.assertEqual(output_without_prompt, expected_without_prompt)
+        self.assertEqual(output_with_prompt, expected_with_prompt)
+
+    @slow
+    def test_language_detection(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+        input_speech = self._load_datasamples(4)[-1:]
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        lang_id = model.detect_language(input_features)[0].item()
+
+        ids_to_lang = {v: k for k, v in model.generation_config.lang_to_id.items()}
+
+        assert ids_to_lang[lang_id] == "<|en|>"
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
+
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        lang_id = model.detect_language(input_features)[0].item()
+
+        assert ids_to_lang[lang_id] == "<|hi|>"
+
+    @slow
+    def test_default_multilingual_transcription_short_form(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model.to(torch_device)
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio).numpy()
+
+        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        # model.generation_config.forced_decoder_ids defaults to [1, null] for lang_token
+        sequences = model.generate(input_features)
+
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
+
+        assert (
+            transcription
+            == "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>"
+        )
+
+        # set forced_decoder_ids to English
+        model.generation_config.forced_decoder_ids[0][-1] = 50259
+
+        sequences = model.generate(input_features)
+        transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
+
+        assert (
+            transcription
+            == "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> MIRCHI MET, which is the name of the Bible.<|endoftext|>"
+        )
+
+    @slow
+    def test_default_multilingual_transcription_long_form(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v2")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v2")
+        model.to(torch_device)
+
+        audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
+
+        raw_audio, sr = torchaudio.load(audio)
+        input_speech = torchaudio.transforms.Resample(sr, 16_000)(raw_audio)
+
+        input_speech = input_speech.repeat(1, 10).numpy()
+        input_features = processor(
+            input_speech, return_tensors="pt", padding="longest", truncation=False
+        ).input_features.to(torch_device)
+
+        # model.generation_config.forced_decoder_ids defaults to [1, null] for lang_token
+        sequences = model.generate(input_features)
+
+        transcription = processor.batch_decode(sequences)[0]
+
+        assert transcription == " मिर्ची में कितने विबिन्द प्रजातियां हैं? मिर्ची में कितने विबिन्द प्रजातियां हैं?"
+
+        # set forced_decoder_ids to English
+        model.generation_config.forced_decoder_ids[0][-1] = 50259
+
+        sequences = model.generate(input_features)
+        transcription = processor.batch_decode(sequences)[0]
+
+        assert (
+            transcription
+            == " How many different species are there in the chilli? How many different species are there in the chili?"
+        )
 
     @slow
     def test_generate_with_prompt_ids_and_forced_decoder_ids(self):
@@ -1986,7 +2129,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         language = "de"
         expected_tokens = [f"<|{task}|>", f"<|{language}|>"]
         prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
         output = model.generate(input_features, task=task, language=language, prompt_ids=prompt_ids)
         text = processor.decode(output[0])
@@ -2002,7 +2145,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
         prompt = "test prompt"
-        prompt_ids = processor.get_prompt_ids(prompt)
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
 
         model.generation_config.forced_decoder_ids = None
         model.config.forced_decoder_ids = None
@@ -2033,7 +2176,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
-        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+        input_features = (
+            processor(sample["array"], return_tensors="pt").input_features.to(torch_device).to(torch.float16)
+        )
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2081,7 +2226,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
-        input_features = processor(sample["array"], return_tensors="pt").input_features.to("cuda").to(torch.float16)
+        input_features = (
+            processor(sample["array"], return_tensors="pt").input_features.to(torch_device).to(torch.float16)
+        )
 
         # warm up assisted decoding
         _ = model.generate(input_features, assistant_model=assistant_model)
@@ -2116,7 +2263,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2124,7 +2271,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
             "input_features"
         ]
-        input_features = input_features.to(device="cuda")
+        input_features = input_features.to(device=torch_device)
 
         result = model.generate(input_features, return_timestamps=True)
         decoded = processor.batch_decode(result, skip_special_tokens=True)
@@ -2146,14 +2293,64 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         assert is_increasing
 
     @slow
+    def test_whisper_longform_prompt_ids(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        model = model.to(torch_device)
+
+        prompt = "Mr. Kilter, Ruggedo."  # let's force Mr. Quilter -> Mr. Kilter
+        prompt_ids = processor.get_prompt_ids(prompt, return_tensors="pt").to(torch_device)
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
+        one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
+
+        first_text = ds["validation"][0]["text"].lower()
+        last_text = ds["validation"][-1]["text"].lower()
+
+        input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
+            "input_features"
+        ]
+        input_features = input_features.to(device=torch_device)
+
+        result = model.generate(
+            input_features,
+            prompt_ids=prompt_ids,
+            return_timestamps=True,
+            prompt_condition_type="first-segment",
+            condition_on_prev_tokens=True,
+        )
+        decoded_first_segment = processor.batch_decode(result, skip_special_tokens=True)
+
+        result = model.generate(
+            input_features,
+            prompt_ids=prompt_ids,
+            return_timestamps=True,
+            prompt_condition_type="all-segments",
+            condition_on_prev_tokens=True,
+        )
+        decoded_all_segments = processor.batch_decode(result, skip_special_tokens=True)
+
+        # show that first segment has quilter and last segment has ruggedo
+        assert "quilter" in first_text
+        assert "ruggedo" in last_text
+
+        # condition on first segment correctly changes to kilter in first segment, but does not transcribe "ruggedo" correctly
+        assert "kilter" in decoded_first_segment[0][: len(first_text)].lower()
+        assert "ruggedo" not in decoded_first_segment[0][-len(last_text) :].lower()
+
+        # condition on all-segment correctly changes to kilter in first segment and correctly transcribes "ruggedo"
+        assert "kilter" in decoded_all_segments[0][: len(first_text)].lower()
+        assert "ruggedo" in decoded_all_segments[0][-len(last_text) :].lower()
+
+    @slow
     def test_whisper_longform_single_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT = [""" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grieved doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of rocky Ithaca. Linnell's pictures are a sort of up-gards and atom paintings, and Mason's exquisite itals are as national as a jingo poem. Mr. Birk at Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. When Mr. John Collier gives his sitter a cheerful slap in the back, before he says like a shampooer and a Turkish bath, next man it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate an expression. On the general principles of art, Mr. Quilter writes with equal lucidity. He tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, there are two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures. Makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing upholsterer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man, and remarks was pleasing courtesy in felicitous grace that many faces are feeling. Unfortunately his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the tupper of painting. By Harry Quilter M. A. A man said to the universe, Sir, I exist. Sweat covered Breon's body trickling into the tight-lowing cloth that was the only german he wore. The cut on his chest still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators, retroveilities not worth thinking about. His instant panic was followed by a small sharp blow high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzers were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the twenties needed undisturbed rest. Therefore, nights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The twenties, he must have drawn his gun because the intruder said quickly, but that away you're being a fool. But there was silence then, and still wondering, Breon was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man with an apparently inexhaustible store of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Your man who entered the twenties had his own training tricks. They were appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported except at two points, the head and heels. This is physically impossible when conscious. Breon's death was in some ways easier than defeat. Breon's softly spoke the auto-hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. Our role looked amazed at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Breon saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our rogue. Breon sensed it and knew the fifth point was his. Then the powerful twist that's rested aside, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle without a bow, while poor Shaggy sits there, accooing dove. He has gone and gone for good, answered Polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has flooded disgrace, and your friends are asking for you. I begged Ruggido long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our gnomes, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, inquired Shaggy. In the metal forest. Where is that? The metal forest is in the great domed cavern, the largest and all-ard dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked Betsy thoughtfully. I don't believe Anne knew any magic, or she'd have worked it before. I do not know, confessed Shaggy. True, agreed Calico. Calico went to the big gong, and pounded on it, just as we're good to be used to do. But no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong, and then sat in the throne, wearing Regidos discarded Ruby Crown, and holding in his hand to scepter, which Regidos had so often thrown at his head."""]
+        EXPECTED_TEXT = [""" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similes drawn from eating and its results occur most readily to the mind. He has grieved doubts whether Sir Frederick Layton's work is really Greek after all, and can discover in it but little of rocky Ithaca. Linnell's pictures are a sort of up-gards and atom paintings, and Mason's exquisite itals are as national as a jingo poem. Mr. Birk at Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. When Mr. John Collier gives his sitter a cheerful slap in the back, before he says like a shampooer and a Turkish bath, next man it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate an expression. On the general principles of art, Mr. Quilter writes with equal lucidity. He tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, there are two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures. Makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing upholsterer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man, and remarks was pleasing courtesy in felicitous grace that many faces are feeling. Unfortunately his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the tupper of painting. By Harry Quilter M. A. A man said to the universe, Sir, I exist. Sweat covered Breon's body trickling into the tight-lowing cloth that was the only german he wore. The cut on his chest still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators, retroveilities not worth thinking about. His instant panic was followed by a small sharp blow high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzers were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the twenties needed undisturbed rest. Therefore, nights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The twenties, he must have drawn his gun because the intruder said quickly, but that away you're being a fool. But there was silence then, and still wondering, Breon was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man with an apparently inexhaustible store of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Your man who entered the twenties had his own training tricks. They were appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported except at two points, the head and heels. This is physically impossible when conscious. Breon's death was in some ways easier than defeat. Breon's softly spoke the auto-hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. Our role looked amazed at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Breon saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our rogue. Breon sensed it and knew the fifth point was his. Then the powerful twist that's rested aside, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle without a bow, while poor Shaggy sits there, accooing dove. He has gone and gone for good, answered Polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has flooded disgrace, and your friends are asking for you. I begged Ruggido long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our gnomes, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, inquired Shaggy. In the metal forest. Where is that? The metal forest is in the great domed cavern, the largest and all-ard dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked Betsy thoughtfully. I don't believe Anne knew any magic, or she'd have worked it before. I do not know, confessed Shaggy. True, agreed Calico. Calico went to the big gong and pounded on it, just as we're good to be used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing Regidos discarded Ruby crown, and holding in his hand to scepter which Regidos had so often thrown at his head."""]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2161,7 +2358,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processor(one_audio, return_tensors="pt", truncation=False, padding="longest")[
             "input_features"
         ]
-        input_features = input_features.to(device="cuda")
+        input_features = input_features.to(device=torch_device)
 
         gen_kwargs = {
             "return_timestamps": True,
@@ -2189,7 +2386,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2202,7 +2399,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2210,7 +2407,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2230,15 +2427,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_whisper_longform_multi_batch_prev_cond(self):
         # fmt: off
-        EXPECTED_TEXT_1 = [" Mr. Quilters manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca. The Nils, pictures are sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Berkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampooer and a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. On the general principles of art, Mr. Quilters writes with equal lucidity. Painting he tells us is of a different quality to mathematics and finish in art is adding more effect. As for etchings, there are of two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostorer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin, for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and solicitous grace that many phases of feeling only, unfortunately, his own work never does get good. Mr. Quilters has missed his chance, for he has failed even to make himself the tougher of painting. My hair equal to M.A. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment he wore. The cut on his chest still dripping blood. The ache of his overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not worth thinking about. His instant panic was followed by a small sharp blow, high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights and the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. To 20s, he must have drawn his gun because the intruder said quickly, but that away, you're being a fool. Out, the resoundance then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. Our red-haired mountain of a man, with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing, just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma as if the two were inexplicably linked into one. This strengthened enables someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the other hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled the maze at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our role. Brienne sensed it and knew the fifth point was his. Then the powerful twist that's right to the side, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stoutchanges as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace in your friends, they're asking for you. I begged Ruggano a long ago to send him away, but he would not do so. I also offered to help you run into escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard since shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our nooms, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico, whereas my brother now inquired shaggy in the metal forest. Where is that? The metal forest is in the great domed cavern, the largest and all our dominions replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked to Bedsey thoughtfully. I don't believe Anne knew any magic or she'd have worked before. I do not know, confessed shaggy. True, agreed Calico. Calico went to the big gong and pounded on it just as Ruggano used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing Ruggano's discarded ruby crown. And holding in his hand the scepter which Ruggano had so often thrown at his head."]
+        EXPECTED_TEXT_1 = [" Mr. Quilters manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca. The Nils, pictures are sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Berkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampooer and a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. On the general principles of art, Mr. Quilters writes with equal lucidity. Painting he tells us is of a different quality to mathematics and finish in art is adding more effect. As for etchings, there are of two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostorer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin, for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and solicitous grace that many phases of feeling only, unfortunately, his own work never does get good. Mr. Quilters has missed his chance, for he has failed even to make himself the tougher of painting. My hair equal to M.A. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment he wore. The cut on his chest still dripping blood. The ache of his overstrain dyes. Even the soaring arena around him with thousands of spectators, retrievalidies not worth thinking about. His instant panic was followed by a small sharp blow, high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights and the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance. And brand is the one I must see. Now stand aside. To 20s, he must have drawn his gun because the intruder said quickly. But that away, he'd be no fool. Out, the resoundance then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man, with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma as if the two were inexplicably linked into one. This strength that enables someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the other hypnotic phrases that triggered the process. In the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled the maze at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our role. Brienne sensed it and knew the fifth point was his. Then the powerful twist that's right to the side, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stoutchanges as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace in your friends, they're asking for you. I begged Ruggano a long ago to send him away, but he would not do so. I also offered to help you run into escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard since shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions, as well as our nooms, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico, whereas my brother now inquired shaggy in the metal forest. Where is that? The metal forest is in the great domed cavern, the largest and all our dominions replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked to Bedsey thoughtfully. I don't believe Anne knew any magic or she'd have worked before. I do not know, confessed shaggy. True, agreed Calico. Calico went to the big gong and pounded on it just as Ruggano used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing Ruggano's discarded ruby crown. And holding in his hand the scepter which Ruggano had so often thrown at his head."]
         EXPECTED_TEXT_2 = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and can discover in it but little of rocky Ithaca. Lennials, pictures are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Berkett Foster's landscapes smile at one much in the same way that Mr. Carker"]
-        EXPECTED_TEXT_3 = [" gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating in its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really Greek after all and can discover in it but little of rocky ithaka. Lennils, pictures, are a sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampooer and a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. Under general principles of art, Mr. Quilter writes with equal lucidity. Painting he tells us is of a different quality to mathematics and finish in art is adding more effect. As for etchings, thereof two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostoror. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin, for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and falseness graced that many phases of feeling, only unfortunately his own work never does get good. Mr. Quilter has missed his chance, for he has failed even to make himself the tougher of painting. By Harry Quilter M.A. A man said to the universe, Sir, I exist. Sweat-covered Breon's body trickling into the tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes. Even the soaring arena around him with thousands of spectators were trivealed, not worth thinking about. His instant panic was followed by a small sharp, blow high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong, measured rate. He was in reverie sliding out on the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights in the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The 20s, he must have drawn his gun because the intruder said quickly, but that away, he'll be in the fool. Out, there is silence then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. A red-haired mountain of a man, with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing, just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the autohydrotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled up the maze at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our ol' Brienne sensed it and knew the fifth point was his. Then the powerful twist that's right to decide, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stoutchains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace in your friends, they're asking for you. I begged Ruggano a long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard since shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions as well as our nooms, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Whereas my brother now, in Quaragejjegi, in the metal forest. Where is that? The metal forest is in the great Dome to Cavern, the largest and all our dominions, replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny remarked by the bad sea thoughtfully. I don't believe Anne knew any magic or she'd have worked it before. I do not know, confessed shaggy. True, a great Calico. Calico went to the big gong and pounded on it, just as we're good or used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing reggos, discarded ruby crown, and holding in his hand to scepter which reggos had so often thrown at his head."]
-        EXPECTED_TEXT_4 = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and can discover in it but little of rocky Ithaca. Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Berkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like a shampooer in a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. On the general principles of art, Mr. Quilter writes with equal lucidity. Painting he tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, thereof two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostorer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin, for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and solicitous grace that many phases of feeling only, unfortunately, his own work never does, get good. Mr. Quilter has missed his chance, for he has failed even to make himself the tougher of painting. By Harry Quilter, M.A. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators were trivialities not worth thinking about. His instant panic was followed by a small sharp blow, high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights and the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. To 20s, he must have drawn his gun because the intruder said quickly, but that away, you're being a fool. Out, there is silence then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. I've read here at Mountain of a Man, with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inexplicably linked into one. Just strengthed and enabled someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the autohydrotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled up the maze at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our ol' Brienne sensed it and knew the fifth point was his. Then the powerful twist that's right to the side, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. She has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stoutchanges as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace and your friends are asking for you. I begged Ruggano a long ago to send him away, but he would not do so. I also offered to help your brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard since shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions as well as our nooms, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico. Where is my brother now, in Quaragejji, in the metal forest? Where is that? The metal forest is in the great Dome to Cavern, the largest and all our dominions replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked a bit, see you thoughtfully. I don't believe Anne knew any magic or she'd have worked it before. I do not know, confessed shaggy. True, agreed Calico. Calico went to the big gong and pounded on it just as we're good we used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing reggos, discarded ruby crown and holding it his hand to scepter which reggo had so often thrown at his head."]
+        EXPECTED_TEXT_3 = [" gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating in its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins work is really Greek after all and can discover in it but little of rocky ithaka. Lennils, pictures, are a sort of upguards and atom paintings and Mason's exquisite itals are as national as a jingo poem. Mr. Birkut Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says like a shampooer and a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. Under general principles of art, Mr. Quilter writes with equal lucidity. Painting he tells us is of a different quality to mathematics and finish in art is adding more effect. As for etchings, thereof two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostoror. Near the fire, any ornaments spread brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and solicitous grace that many faces are feeling, only unfortunately his own work never does get good. Mr. Quilter has missed his chance. For he has failed even to make himself the tougher of painting. By Harry Quilter M.A. A man said to the universe, Sir, I exist. Sweat covered Brienne's body trickling into the tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes. Even the soaring arena around him with thousands of spectators, retrievalidies not worth thinking about. His instant panic was followed by a small sharp blow, high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered his muscles into complete relaxation. Only his heart and lungs worked on at a strong measured rate. He was in reverie, sliding out on the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights and the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance, and brand is the one I must see. Now stand aside. The 20s, he must have drawn his gun because the intruder said quickly, but that away here being a fool. Out, there is silence then, and still wondering, Brienne was once more asleep. 10 seconds, he asked the handler who was needing his aching muscles. I've read here at Mountain of a Man with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing, just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma as if the two were anextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne's softly spoke the odd hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled up the maze at the sudden fury of the attack, then smiled. He said it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from our ol' Brienne sensed it and knew the fifth point was his. Then the powerful twist that's right to decide, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stout chains as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace in your friends, they're asking for you. I begged Brienne to long ago to send him away, but he would not do so. I also offered to help you brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard, since Shaggy. He doesn't work at all. In fact, there's nothing he can do in these dominions as well as our nooms, whose numbers are so great that it worries us to keep them all busy. Not exactly, we've turned Calico, whereas my brother now inquired Shaggy in the metal forest. Where is that? The metal forest is in the great domed cavern, the largest and all our dominions replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked to bed see you thoughtfully. I don't believe Anne knew any magic or she'd have worked it before. I do not know, confessed Shaggy. True, agreed Calico. Calico went to the big gone and pounded on it, just as we're good or used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gone and then sat in the throne, wearing reggos, discarded ruby crown, and holding in his hand to scepter which reggos hand so often thrown at his head."]
+        EXPECTED_TEXT_4 = [" Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season of the year, with Christmas and roast beef looming before us, similarly drawn from eating and its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and can discover in it but little of rocky Ithaca. Lennils, pictures, are a sort of upguards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Berkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap on the back before he says, like a shampooer in a Turkish bath. Next man, it is obviously unnecessary for us to point out how luminous these criticisms are, how delicate and expression. On the general principles of art, Mr. Quilter writes with equal lucidity. Painting he tells us is of a different quality to mathematics, and finish in art is adding more effect. As for etchings, thereof two kinds, British and foreign. He laments most bitterly the divorce that has been made between decorative art and what we usually call pictures makes a customary appeal to the last judgment and reminds us that in the great days of art Michelangelo was the furnishing apostorer. Near the fire, any ornaments Fred brought home from India on the mental board. In fact, he is quite severe on Mr. Ruskin, for not recognizing that a picture should denote the frailty of man. And remarks with pleasing courtesy and solicitous grace that many phases of feeling only, unfortunately, his own work never does, get good. Mr. Quilter has missed his chance, for he has failed even to make himself the tougher of painting. By Harry Quilter, M.A. A man said to the universe, Sir, I exist. Sweat covered Breon's body, trickling into the tight-wing cloth that was the only garment you wore. The cut on his chest still dripping blood. The ache of his overstrained eyes, even the soaring arena around him with thousands of spectators were trivialities not worth thinking about. His instant panic was followed by a small sharp blow, high on his chest. One minute, a voice said, and a time buzzer sounded. A minute is not a very large measure of time, and his body needed every fraction of it. The buzzer's were triggered as muscles into complete relaxation. Only his heart and lungs worked on at a strong, measured rate. He was in reverie, sliding along the borders of consciousness. The contestants in the 20s needed undisturbed rest. Therefore, knights and the dormitories were as quiet as death. Particularly so, on this last night, when only two of the little cubicles were occupied, the thousands of others standing with dark empty doors. The other voice snapped with a harsh urgency, clearly used to command. I'm here because the matter is of utmost importance. And brand is the one I must see. Now stand aside. To 20s, he must have drawn his gun because the intruder said quickly, but that away, he could be no fool. Out, there was silence then, and still wondering, Brienne was once more asleep. Ten seconds, he asked the handler who was needing his aching muscles. I've read here at Mountain of a Man, with an apparently inexhaustible story of energy. There could be little art in this last and final round of fencing. Just thrust and parry and victory to the stronger. Every man who entered the 20s had his own training tricks. There appeared to be an immediate association with the death trauma, as if the two were inextricably linked into one. The strength that enables someone in a trance to hold his body stiff and unsupported, except at two points, the head and heels. This is physically impossible when conscious. Others had died before during the 20s, and death during the last round was, in some ways, easier than defeat. Breathing deeply, Brienne softly spoke the other hypnotic phrases that triggered the process. When the buzzer sounded, he pulled his foil from his second startled grasp and ran forward. I rolled the maze at the sudden fury of the attack, then smiled. He thought it was the last burst of energy. He knew how close they both were to exhaustion. Brienne saw something close to panic on his opponent's face when the man finally recognized his error. A wave of despair rolled out from Irohog. Brienne sensed it and knew the fifth point was his. Then the powerful twist that's for us to decide, in and under the guard, because he was sleeping instead of conquering, the lovely rose princess has become a fiddle with a bow, while poor shaggy sits there, a cooling dove. He has gone and gone for good, answered polychrome, who had managed to squeeze into the room beside the dragon, and had witnessed the occurrences with much interest. I have remained a prisoner only because I wished to be one. And with this, he stepped forward and burst the stoutchanges as easily as if they had been threads. The little girl had been asleep, but she heard the wraps and opened the door. The king has fled in disgrace in your friends, they are asking for you. I begged Ruggano a long ago to send him away, but he would not do so. I also offered to help you brother to escape, but he would not go. He eats and sleeps very steadily, replied the new king. I hope he doesn't work too hard since shaggy. He doesn't work at all. In fact, there is nothing he can do in these dominions, as well as our nooms, whose numbers are so great that it worries us to keep them all busy. And exactly we've turned Calico, where is my brother now in Quaragejji, in the metal forest? Where is that? The metal forest is in the great donned cavern, the largest and all our dominions replied Calico. Calico hesitated. However, if we look sharp, we may be able to discover one of these secret ways. Oh no, I'm quite sure he didn't. That's funny, remarked to Bedzeeth thoughtfully. I don't believe Anne knew any magic or she'd have worked before. I do not know, confessed shaggy. True, agreed Calico. Calico went to the big gong and pounded on it just as we're good to have used to do, but no one answered the summons. Having returned to the royal cavern, Calico first pounded the gong and then sat in the throne, wearing reggos, discarded ruby crown. And holding in his hand to scepter which reggos had so often thrown at his head."]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean")
         one_audio = np.concatenate([x["array"] for x in ds["validation"]["audio"]], dtype=np.float32)
@@ -2260,7 +2457,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, **gen_kwargs)
             decoded_single.append(processor.batch_decode(result, skip_special_tokens=True))
@@ -2288,7 +2485,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
@@ -2301,7 +2498,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         decoded_single = []
         for audio in audios:
             inputs = processor(audio, return_tensors="pt", truncation=False, sampling_rate=16_000)
-            inputs = inputs.to(device="cuda")
+            inputs = inputs.to(device=torch_device)
 
             result = model.generate(**inputs, return_timestamps=True)
             decoded_single += processor.batch_decode(result, skip_special_tokens=True)
@@ -2309,7 +2506,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         result = model.generate(**inputs, return_timestamps=True)
         decoded_all = processor.batch_decode(result, skip_special_tokens=True)
@@ -2328,14 +2525,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             " Folks, you watched this show, you know I spend most of my time right over there, carefully sorting through the days, big stories, and selecting only the most subtle, and unblemished ostrich and crocodile news leather, which I then entrust to artisan graduates of the Ickel Greg Waferandi, who carefully died them in a pallet of bright, zesty shades, and adorn them in the finest most topical inlay work, using hand tools and double magnifying glasses, then assemble them according to now classic and elegant geometry using our signature saddle stitching, and line it with bees, wax, coated linen, and finally attach a mallet hammered strap, perled hardware, and close-shet to create for you the one of a kind hope, kutur, earn-may is burkin bag that is my monologue, but sometimes, sometimes, sometimes. Sometimes, sometimes I wake up in the last car of an abandoned roller coaster at Kony Island, where I'm hiding from the triads, I have some engine lubricants out of a safe way bag and staggered down the shore to tear the sail off a beach sooner than I ripped the coaxial cable out of an RV and elderly couple from Utah, Hank, and Mabel Lovelyfokes, and use it to stitch the sail into a loose pouch like rock sack, and I stole a bag of a garbage truck to the junkyard, where I picked through to the debris for only the broken toys that make me the saddest, until I have loaded for you. The hobo fugitives bug out Bindle of news that is my segment.",
             " You know, folks, I spent a lot of time crafting for you a bespoke playlist of the day's big stories right over there. meticulously selecting the most topical chakra affirming scented candles, using Feng Shui, to perfectly align the joke energy in the exclusive boutique yoga retreat that is my monologue, but sometimes just sometimes, I go to the dumpster behind the waffle house at three in the morning, take off my shirt, cover myself and use fry oil, wrap my hands and some old duct tape I stole from a broken car window, pound a six pack of blueberry hard-seller and a second pill, as I stole from a park damsel, and it's then arm wrestle a raccoon in the back alley vision quest of news that is my segment.",
             " You know, folks, I spend most of my time right over there. Mining the days, biggest, most important stories, collecting the finest, most topical iron or hand hammering it into joke panels, then I craft sheets of bronze and blazing with patterns that tell an epic tale of conquest and glory. Then, using the Germanic tradition press, black process, I place thin sheets of foil against the scenes and by hammering or otherwise applying pressure from the back, I project these scenes into a pair of cheat cards and a face plate, and finally using fluted strips of white alloyed molding I divide the designs into framed panels and hold it all together using bronze rivets to create the beautiful and intimidating Anglo-Saxon battle helm that is my nightly monologue. Sometimes, sometimes, folks. Sometimes, just sometimes, I come to my senses fully naked on the deck of a pirate, beceived, melee, container ship that picked me up floating on the detainees. Then after I sunstroke in juice, realization of the crew of this ship plans to sell me and exchange for a bag of oranges to fight off scurvy, I lead a mutiny using only a PVC pipe in a pool chain that accepting my new role as captain and declaring myself king of the wind arc seas. I grab a dirty muck bucket covered in barnacles and a dornet with the teeth of the vanquished to create the softening wet pirate crown of news that is my segment. I'm going to use the white paper to create the softened white paper to create the softened white paper to create the softened white pirate crown of news that is my segment. Meanwhile.",
-            " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's newsiest, most topical flower eggs, milk and butter. And straining into a fine batter to make delicate and informative comedy pancakes, then I glaze them in the juice and zest of the most relevant midnight valencio oranges. And doubts at all, and I find delimane de voyage cognac, before from bang and basting them tables, I deserve you the James Beard Award worthy creeps to ZET. That is my nightly monologue, but sometimes sometimes folks I wake up in the baggage hole of Greyhound bus, it's being hoisted by the scrapyard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps, busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strained pair of sweatpants and as ovenmets to extract and serve the demented transients pound cake of news that is my segment. Me wild!",
-            " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from it a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labeled Keith Cole and extra. Sloering the concoction with caffeine pills and a microwave bread bowl, I screamed sing a prayer to Janice initiator of human life and God of transformation as a half horse, half man freak, seasons to life before me. And the hideous collection of loose animal parts and corrupted men tissue that is my segment. Meanwhile.",
+            " Folks, if you watch this show, you know I spend most of my time right over there carefully blending for you the day's newsiest, most topical flower eggs, milk and butter. And straining into a fine batter to make delicate and informative comedy pancakes, then I glaze them in the juice and zest of the most relevant midnight valencio oranges. And doubts at all, and I find delimane de voyage cognac, before from bang and basting them tables, I deserve you the James Beard Award worthy creeps to ZET. That is my nightly monologue, but sometimes sometimes folks I wake up in the baggage hole of Greyhound bus, it's being hoisted by the scrapyard claw toward the burn pit. Escape to a nearby abandoned price chopper where I scrounge for old bread scraps, busted open bags of starfruit candies and expired eggs. Chuck it all on a dirty hubcap and slap it over a tire fire before using the legs of a strained pair of sweatpants and as ovenmets to extract and serve the demented transients pound cake of news that is my segment.",
+            " Folks, if you watch the show and I hope you do, I spend a lot of time right over there. Tirelessly studying the lineage of the day's most important thoroughbred stories and whole-stiner headlines, working with the best trainers money can buy to rear their comedy offspring with a hand that is stern yet gentle into the triple crown winning equine specimen that is my nightly monologue. But sometimes sometimes folks I break into an unincorporated veterinary genetics lab. And grab whatever test tubes I can find and then under a grow light I got from it a discarded chia pet. I mixed the pill for DNA of a horse and whatever was in a tube labeled Keith Cole and extra. Sloering the concoction with caffeine pills and a microwave bread bowl, I screamed sing a prayer to Janice initiator of human life and God of transformation as a half horse, half man freak, seasons to life before me. And the hideous collection of loose animal parts and corrupted men tissue that is my segment.",
         ]
         # fmt: on
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
-        model = model.to("cuda")
+        model = model.to(torch_device)
 
         ds = load_dataset("distil-whisper/meanwhile", "default")["test"]
         ds = ds.cast_column("audio", Audio(sampling_rate=16000))
@@ -2348,7 +2545,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         inputs = processor(
             audios, return_tensors="pt", truncation=False, padding="longest", return_attention_mask=True
         )
-        inputs = inputs.to(device="cuda")
+        inputs = inputs.to(device=torch_device)
 
         gen_kwargs = {
             "return_timestamps": True,
