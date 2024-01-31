@@ -4678,6 +4678,13 @@ else:
             "FlaxMBartPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral"].extend(
+        [
+            "FlaxMistralForCausalLM",
+            "FlaxMistralModel",
+            "FlaxMistralPreTrainedModel",
+        ]
+    )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
@@ -8829,6 +8836,11 @@ if TYPE_CHECKING:
             FlaxMBartForSequenceClassification,
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
+        )
+        from .models.mistral import (
+            FlaxMistralForCausalLM,
+            FlaxMistralModel,
+            FlaxMistralPreTrainedModel,
         )
         from .models.mt5 import (
             FlaxMT5EncoderModel,
