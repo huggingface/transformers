@@ -7,7 +7,7 @@ on:
 
 env:
   NUM_SLICES: 1
-  FAKE_NUM_SLICES: 4
+  FAKE_NUM_SLICES: 64
 
 jobs:
   setup:
