@@ -132,10 +132,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             logger.info("target_dtype {target_dtype} is replaced by `torch.int8` for 8-bit BnB quantization")
         return torch.int8
 
-    def activate_module(
-        self,
-        module,
-    ):
+    def activate_module(self, module):
         """
         combines logic from _load_state_dict_into_meta_model and .integrations.bitsandbytes.py::set_module_quantized_tensor_to_device()
         needs aux items from state dicts, if found - removes them from unexpected_keys
@@ -186,6 +183,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         **kwargs,
     ):
         import bitsandbytes as bnb
+
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
@@ -222,10 +220,12 @@ class Bnb8BitHfQuantizer(HfQuantizer):
                 if isinstance(module, bnb.nn.modules.Linear8bitLt):
                     module.register_buffer(
                         "SCB",
-                        torch.empty(model._modules[name].weight.shape[0], dtype=torch.float32, device=torch.device("meta")),
+                        torch.empty(
+                            module.weight.shape[0], dtype=torch.float32, device=torch.device("meta")
+                        ),
                         persistent=True,
                     )
-        
+
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
