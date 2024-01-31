@@ -1153,7 +1153,7 @@ In the following, we will describe how to do so using a standard console, but yo
 2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
 
 ```bash
-$ gcloud config set account <your-email-adress>
+$ gcloud config set account <your-email-address>
 ```
 
 3. Let's also make sure the correct project is set in case your email is used for multiple gcloud projects:

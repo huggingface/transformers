@@ -1949,6 +1949,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
 
                 if mim_labels is not None:
                     mim_labels = mim_labels[pos_mask]
+                    bool_masked_pos = bool_masked_pos[pos_mask]
 
         # MMM Image Loss
         if multimodal_masked_embeddings is not None and self.mmm_image_weight > 0:
@@ -1956,8 +1957,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             end_index = image_masked_embeddings.size(1) - 1
             sequence_for_image = sequence_for_image[:, 2 : 2 + end_index, :]
 
-            if pos_mask is not None:
-                sequence_for_image = sequence_for_image[pos_mask]
             if mim_labels is not None:
                 mim_labels = self._resize_to_2d(mim_labels)
                 bool_masked_pos = self._resize_to_2d(bool_masked_pos)
@@ -1979,8 +1978,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         if multimodal_masked_embeddings is not None and self.mmm_text_weight > 0:
             sequence_for_text = multimodal_masked_embeddings
             sequence_for_text = sequence_for_text[:, -text_masked_embeddings.size(1) :, :]
-            if pos_mask is not None:
-                sequence_for_text = sequence_for_text[pos_mask]
 
             if mlm_labels is not None:
                 mlm_labels = self._resize_to_2d(mlm_labels)
