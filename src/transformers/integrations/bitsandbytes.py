@@ -171,11 +171,6 @@ def _replace_with_bnb_linear(
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
                         )
-                        model._modules[name].register_buffer(
-                            "SCB",                            
-                            torch.empty(model._modules[name].weight.shape[0], dtype=torch.float32, device=torch.device"meta"),
-                            persistent=True,
-                        )
                         has_been_replaced = True
                     else:
                         if (

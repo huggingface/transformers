@@ -161,9 +161,10 @@ class Bnb8BitHfQuantizer(HfQuantizer):
 
             module._parameters["weight"] = new_value
 
-        fp16_statistics = module._buffers.get("SCB", None)
-        if fp16_statistics is not None:
-            setattr(module.weight, "SCB", fp16_statistics.to(target_device))
+        if self.pre_quantized:
+            fp16_statistics = module._buffers.get("SCB", None)
+            if fp16_statistics is not None:
+                setattr(module.weight, "SCB", fp16_statistics.to(target_device))
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         import bitsandbytes as bnb
@@ -184,6 +185,7 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         keep_in_fp32_modules: List[str] = [],
         **kwargs,
     ):
+        import bitsandbytes as bnb
         from ..integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
         load_in_8bit_fp32_cpu_offload = self.quantization_config.llm_int8_enable_fp32_cpu_offload
@@ -214,6 +216,16 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         model = replace_with_bnb_linear(
             model, modules_to_not_convert=self.modules_to_not_convert, quantization_config=self.quantization_config
         )
+        # adding buffers for loading components
+        if self.pre_quantized:
+            for name, module in model.named_modules():
+                if isinstance(module, bnb.nn.modules.Linear8bitLt):
+                    module.register_buffer(
+                        "SCB",
+                        torch.empty(model._modules[name].weight.shape[0], dtype=torch.float32, device=torch.device("meta")),
+                        persistent=True,
+                    )
+        
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
