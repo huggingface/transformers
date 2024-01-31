@@ -76,11 +76,11 @@ def _trunc_normal_(tensor, mean, std, a, b):
 
     # Use inverse cdf transform for normal distribution to get truncated
     # standard normal
-    if tensor.dtype in [torch.bfloat16, torch.float16]:
-        og_dtype = tensor.dtype
+    if tensor.dtype == torch.float16:
+        # The `erfinv_` op is not (yet?) defined in float16
         tensor = tensor.to(torch.float32)
         tensor.erfinv_()
-        tensor = tensor.to(og_dtype)
+        tensor = tensor.to(torch.float16)
     else:
         tensor.erfinv_()
 
@@ -89,7 +89,13 @@ def _trunc_normal_(tensor, mean, std, a, b):
     tensor.add_(mean)
 
     # Clamp to ensure it's in the proper range
-    tensor.clamp_(min=a, max=b)
+    if tensor.dtype == torch.float16:
+        # The `clamp_` op is not (yet?) defined in float16
+        tensor = tensor.to(torch.float32)
+        tensor.clamp_(min=a, max=b)
+        tensor = tensor.to(torch.float16)
+    else:
+        tensor.clamp_(min=a, max=b)
 
 
 def trunc_normal_tf_(
@@ -494,7 +500,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
             nn.init.zeros_(module.attention.in_proj_bias.data)
         elif isinstance(module, SiglipModel):
-            logit_scale_init = torch.log(torch.tensor(1.0))
+            logit_scale_init = torch.tensor(0.0)
             module.logit_scale.data.fill_(logit_scale_init)
             module.logit_bias.data.zero_()
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
