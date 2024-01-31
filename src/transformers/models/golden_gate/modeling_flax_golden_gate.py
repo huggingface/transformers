@@ -134,6 +134,7 @@ def create_sinusoidal_positions(num_pos, dim):
     out = np.concatenate((np.sin(emb)[:, None, :], np.cos(emb)[:, None, :]), axis=-1)
     return jnp.array(out[:, :, :num_pos])
 
+
 # Copied from transformers.models.llama.modeling_flax_llama.rotate_half
 def rotate_half(tensor):
     """Rotates half the hidden dims of the input."""
@@ -141,6 +142,7 @@ def rotate_half(tensor):
         (-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1
     )
     return rotate_half_tensor
+
 
 # Copied from transformers.models.llama.modeling_flax_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
@@ -169,6 +171,7 @@ class FlaxGoldenGateRMSNorm(nn.Module):
 class FlaxGoldenGateRotaryEmbedding(nn.Module):
     config: GoldenGateConfig
     dtype: jnp.dtype = jnp.float32
+
     # Ignore copy
     def setup(self):
         head_dim = self.config.head_dim

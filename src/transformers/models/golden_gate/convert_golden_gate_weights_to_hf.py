@@ -17,7 +17,7 @@ import warnings
 
 import torch
 
-from transformers import FlaxGoldenGateForCausalLM, GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer
+from transformers import GoldenGateConfig, GoldenGateForCausalLM, GoldenGateTokenizer
 
 
 try:
@@ -72,7 +72,7 @@ def write_model(save_path, input_base_path, config, safe_serialization=True):
     head_dim = config.head_dim
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
-    model_state_dict = torch.load(os.path.join(input_base_path), map_location="cpu")["model_state_dict"]
+    model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
     model_state_dict.pop("freqs_cis")
 
     state_dict = {}
@@ -122,8 +122,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="/Users/arthurzucker/Work/golden_gate/ckpt/7b.ckpt",
-        help="Location of GoldenGate weights, which contains tokenizer.model and model folders",
+        help="Absolute path to the target GoldenGate weights.",
+        required=True,
+    )
+    parser.add_argument(
+        "--tokenizer_dir",
+        help="Location of GoldenGate tokenizer weights",
     )
     parser.add_argument(
         "--model_size",
@@ -136,54 +140,34 @@ def main():
         default="golden_gate_7b",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    parser.add_argument(
+        "--pickle_serialization",
+        help="Whether or not to save using `safetensors`.",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--convert_tokenizer",
+        help="Whether or not to convert the tokenizer as well.",
+        action="store_true",
+        default=False,
+    )
     args = parser.parse_args()
-    spm_path = os.path.join("/Users/arthurzucker/Work/golden_gate/code/tokenizer.model")
+
+    if args.convert_tokenizer:
+        if args.tokenizer_dir is None:
+            raise ValueError("Path to the tokenizer is required when passing --convert_tokenizer")
+
+        spm_path = os.path.join(args.tokenizer_dir)
+        write_tokenizer(spm_path, args.output_dir)
 
     config = CONFIG_MAPPING[args.model_size]
     write_model(
         config=config,
         input_base_path=args.input_dir,
         save_path=args.output_dir,
-        safe_serialization=args.safe_serialization,
+        safe_serialization=not args.pickle_serialization,
     )
-    write_tokenizer(spm_path, args.output_dir)
-
-    import random
-
-    import numpy as np
-
-    random.seed(12345)
-    np.random.seed(12345)
-    torch.manual_seed(12345)
-
-    tokenizer = GoldenGateTokenizerFast.from_pretrained(
-        args.output_dir, pad_token="<pad>", from_slow=True, eos_token="<eos>", bos_tokens="<bos>"
-    )
-    tokenizer.padding_side = "left"
-    model = GoldenGateForCausalLM.from_pretrained(
-        args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, torch_dtype=torch.bfloat16
-    )  # , low_cpu_mem_usage = True)
-    device = "cpu"
-    model = model.to(device)
-    model.generation_config.temperature = 1
-    model.generation_config.top_p = 1
-
-    outputs = model.generate(
-        torch.tensor([[2, 651, 6037, 576, 6081, 603]], device=device), do_sample=False, max_new_tokens=100
-    )
-    print(outputs)
-    print(tokenizer.batch_decode(outputs))
-    import jax.numpy as jnp
-
-    model = FlaxGoldenGateForCausalLM.from_pretrained(
-        args.output_dir, pad_token_id=0, eos_token_id=1, bos_token_id=2, from_pt=True, dtype=jnp.bfloat16
-    )
-
-    inputs = jnp.array([[2, 651, 6037, 576, 6081, 603]])
-    outputs = model.generate(inputs, do_sample=True, max_new_tokens=20)
-    print(outputs)
-    print(tokenizer.batch_decode(outputs.sequences))
 
 
 if __name__ == "__main__":
