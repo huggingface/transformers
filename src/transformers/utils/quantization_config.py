@@ -342,6 +342,8 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         """
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
+        output["load_in_4bit"] = self.load_in_4bit
+        output["load_in_8bit"] = self.load_in_8bit
 
         return output
 
