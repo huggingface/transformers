@@ -36,7 +36,7 @@ from ...modeling_tf_utils import (
     shape_list,
     unpack_inputs,
 )
-from ...tf_utils import invert_attention_mask
+from ...tf_utils import invert_attention_mask, scaled_dot_product_attention
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -725,10 +725,14 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.shape}"
                 )
 
-        attn_output = tf.keras.layers.Attention(
-            use_scale=True,
-            dropout=self.dropout,
-        )([query_states, value_states, key_states])
+        attn_output = scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
+            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+        )
 
         if attn_output.shape != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -743,7 +747,7 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         attn_weights = None
         if output_attentions:
             logger.warning_once(
-                "attn_weights are not extracted in tf.keras.layers.Attention. The model returns None instead"
+                "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
             )
 
         return attn_output, attn_weights, past_key_value
@@ -981,7 +985,7 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         attention_mask: Optional[tf.Tensor] = None,
         image_hidden_states: Optional[tf.Tensor] = None,
         image_attention_mask: Optional[tf.Tensor] = None,
-        cross_attention_gate: Optional[torch.Tensor] = None,
+        cross_attention_gate: Optional[tf.Tensor] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
