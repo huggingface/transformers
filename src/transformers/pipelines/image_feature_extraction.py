@@ -1,13 +1,14 @@
 from typing import Dict
 
-from ..utils import is_vision_available
-from .base import GenericTensor, Pipeline
+from ..utils import add_end_docstrings, is_vision_available
+from .base import GenericTensor, Pipeline, build_pipeline_init_args
 
 
 if is_vision_available():
     from ..image_utils import load_image
 
 
+@add_end_docstrings(build_pipeline_init_args(has_image_processor=True))
 class ImageFeatureExtractionPipeline(Pipeline):
     """
     Image feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
@@ -31,31 +32,6 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     All vision models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).
-
-    Arguments:
-        model ([`PreTrainedModel`] or [`TFPreTrainedModel`]):
-            The model that will be used by the pipeline to make predictions. This needs to be a model inheriting from
-            [`PreTrainedModel`] for PyTorch and [`TFPreTrainedModel`] for TensorFlow.
-        image_processor ([`PreTrainedImageProcessor`], *optional*):
-            The image processor that will be used by the pipeline to encode data for the model. This object inherits from
-            [`PreTrainedImageProcessor`].
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
-        framework (`str`, *optional*):
-            The framework to use, either `"pt"` for PyTorch or `"tf"` for TensorFlow. The specified framework must be
-            installed.
-
-            If no framework is specified, will default to the one currently installed. If no framework is specified and
-            both frameworks are installed, will default to the framework of the `model`, or to PyTorch if no model is
-            provided.
-        args_parser ([`~pipelines.ArgumentHandler`], *optional*):
-            Reference to the object in charge of parsing supplied pipeline parameters.
-        device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id.
-        torch_dtype (`str` or `torch.dtype`, *optional*):
-            Sent directly as `model_kwargs` (just a simpler shortcut) to use the available precision for this model
-            (`torch.float16`, `torch.bfloat16`, ... or `"auto"`).
     """
 
     def _sanitize_parameters(self, image_processor_kwargs=None, return_tensors=None, **kwargs):
