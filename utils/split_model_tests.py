@@ -37,10 +37,12 @@ import os
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--num_splits", type=int, default=1, help="the number of splits to split the extracted list of folders"
+        "--num_splits",
+        type=int,
+        default=1,
+        help="the number of splits into which the (flat) list of folders will be split.",
     )
     args = parser.parse_args()
 
