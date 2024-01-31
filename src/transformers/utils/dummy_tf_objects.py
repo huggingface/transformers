@@ -2993,10 +2993,3 @@ class WarmUp(metaclass=DummyObject):
 
 def create_optimizer(*args, **kwargs):
     requires_backends(create_optimizer, ["tf"])
-
-
-class TFTrainer(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
