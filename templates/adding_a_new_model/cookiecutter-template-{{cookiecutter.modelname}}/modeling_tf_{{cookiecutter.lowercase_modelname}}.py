@@ -50,6 +50,7 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -70,7 +71,7 @@ TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Embeddings(keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
@@ -81,8 +82,8 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
@@ -149,7 +150,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}SelfAttention(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
@@ -164,16 +165,16 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
 
@@ -267,15 +268,15 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}SelfOutput(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -286,7 +287,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Attention(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
@@ -327,11 +328,11 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Intermediate(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -348,15 +349,15 @@ class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Output(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -367,7 +368,7 @@ class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Layer(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
@@ -454,7 +455,7 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Encoder(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -524,11 +525,11 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -539,7 +540,7 @@ class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.lay
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -550,8 +551,8 @@ class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.lay
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(keras.layers.Layer):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
@@ -568,7 +569,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
 
         super().build(input_shape)
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -594,8 +595,8 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TF{{cookiecutter.camelcase_modelname}}MLMHead(keras.layers.Layer):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(config, input_embeddings, name="predictions")
@@ -607,7 +608,7 @@ class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}MainLayer(keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, add_pooling_layer: bool = True, **kwargs):
@@ -620,7 +621,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, name="encoder")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
@@ -811,7 +812,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
     Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
     usage and behavior.
 
@@ -991,7 +992,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.mlm.predictions
 
     @unpack_inputs
@@ -1064,7 +1065,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.mlm.predictions
 
     def prepare_inputs_for_generation(self, inputs, past_key_values=None, attention_mask=None, **model_kwargs):
@@ -1166,17 +1167,17 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
 
 
 
-class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.out_proj = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
@@ -1277,7 +1278,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         self.sequence_summary = TFSequenceSummary(
             config, config.initializer_range, name="sequence_summary"
         )
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
@@ -1383,8 +1384,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
         self.num_labels = config.num_labels
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
@@ -1456,7 +1457,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
         self.num_labels = config.num_labels
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
@@ -1623,7 +1624,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(tf.keras.layers.Embedding):
+class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -1639,7 +1640,7 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(tf.keras.
         return super().call(tf.cast(position_ids, dtype=tf.int32))
 
 
-class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Attention(keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -1655,16 +1656,16 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
@@ -1776,20 +1777,20 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
         self.self_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
+        self.fc1 = keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
         """
@@ -1826,7 +1827,7 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         return hidden_states, self_attn_weights
 
 
-class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -1837,11 +1838,11 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
             is_decoder=True,
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -1849,10 +1850,10 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
             name="encoder_attn",
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.encoder_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.fc1 = keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
         self,
@@ -1944,7 +1945,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use
     it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
@@ -2062,7 +2063,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
 
 @keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Encoder(keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -2072,10 +2073,10 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         config: {{cookiecutter.camelcase_modelname}}Config
     """
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
@@ -2088,7 +2089,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.layers = [TF{{cookiecutter.camelcase_modelname}}EncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        self.layernorm_embedding = keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -2215,7 +2216,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Decoder(keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TF{{cookiecutter.camelcase_modelname}}DecoderLayer`]
@@ -2225,7 +2226,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, embed_tokens: Optional[keras.layers.Embedding] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
@@ -2238,9 +2239,9 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         )
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
         self.layers = [TF{{cookiecutter.camelcase_modelname}}DecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        self.layernorm_embedding = keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
     def get_embed_tokens(self):
         return self.embed_tokens
@@ -2458,17 +2459,17 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}MainLayer(keras.layers.Layer):
     config_class = {{cookiecutter.camelcase_modelname}}Config
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
-        self.shared = tf.keras.layers.Embedding(
+        self.shared = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            embeddings_initializer=keras.initializers.TruncatedNormal(stddev=self.config.init_std),
             name="model.shared"
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
@@ -2637,9 +2638,9 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
-class BiasLayer(tf.keras.layers.Layer):
+class BiasLayer(keras.layers.Layer):
     """
-    Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
+    Bias as a layer. It is used for serialization purposes: `keras.Model.save_weights` stores on a per-layer basis,
     so all weights have to be registered in a layer.
     """
 
@@ -2811,9 +2812,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
 
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+        loss_fn = keras.losses.SparseCategoricalCrossentropy(
             from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
+            reduction=keras.losses.Reduction.NONE,
         )
         melted_labels = tf.reshape(labels, (-1,))
         active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)

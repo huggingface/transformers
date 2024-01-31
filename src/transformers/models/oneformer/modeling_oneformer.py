@@ -24,7 +24,6 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 
-from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,6 +36,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
+from ...utils.backbone_utils import load_backbone
 from .configuration_oneformer import OneFormerConfig
 
 
@@ -1478,8 +1478,7 @@ class OneFormerPixelLevelModule(nn.Module):
                 The configuration used to instantiate this model.
         """
         super().__init__()
-        backbone_config = config.backbone_config
-        self.encoder = AutoBackbone.from_config(backbone_config)
+        self.encoder = load_backbone(config)
         self.decoder = OneFormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> OneFormerPixelLevelModuleOutput:

@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
 
 
@@ -338,7 +338,7 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = AutoBackbone.from_config(config.backbone_config)
+        backbone = load_backbone(config)
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
@@ -942,7 +942,6 @@ class DetaClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetrConvEncoder->DetaBackboneWithPositionalEncodings,DeformableDetr->Deta
 class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
@@ -1029,7 +1028,6 @@ DETA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetr->Deta
 class DetaEncoder(DetaPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
