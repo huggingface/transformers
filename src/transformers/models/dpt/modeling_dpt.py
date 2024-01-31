@@ -1079,8 +1079,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
             self.backbone = load_backbone(config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
-        else:
-            self.backbone = load_backbone(config)
 
         # Neck
         self.neck = DPTNeck(config)
