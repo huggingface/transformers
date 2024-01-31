@@ -1044,6 +1044,7 @@ class DetaEncoder(DetaPreTrainedModel):
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([DetaEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
