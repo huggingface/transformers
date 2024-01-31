@@ -29,7 +29,7 @@ env:
 
 jobs:
   model_job:
-    name: Model tests
+    name: " "
     strategy:
       fail-fast: false
       matrix:
