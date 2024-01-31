@@ -592,7 +592,7 @@ class VMambaPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, nn.Linear):
             trunc_normal_(module.weight, std=.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.constant_(module.bias, 0)
@@ -663,7 +663,6 @@ class VMambaModel(VMambaPreTrainedModel):
                 depth=config.depths[i_layer],
                 d_state=math.ceil(dims[0] / 6) if config.d_state is None else config.d_state,  # 20240109
                 drop=config.drop_rate,
-                attn_drop=config.attn_drop_rate,
                 drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
                 norm_layer=torch.nn.LayerNorm,
                 downsample=VMambaPatchMerging2D if (i_layer < self.num_layers - 1) else None,
@@ -673,6 +672,10 @@ class VMambaModel(VMambaPreTrainedModel):
 
         self.norm = torch.nn.LayerNorm(self.num_features)
         self.avgpool = nn.AdaptiveAvgPool1d(1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
 
     def get_input_embeddings(self) -> VMambaPatchEmbed2D:
         return self.patch_embed
@@ -737,6 +740,10 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
         self.num_labels = config.num_labels
         self.vmamba = VMambaModel(config)
         self.head = nn.Linear(self.vmamba.num_features, self.num_labels) if self.num_labels > 0 else nn.Identity()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
 
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
