@@ -1036,8 +1036,8 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         hidden_states = hidden_states * mask
 
         # when there are no images the model is used in pure language mode
-        #gate = 0 if no_images else 1
-        hidden_states = residual +  self.act_cross_attn(self.alpha_cross_attn) * hidden_states
+        # gate = 0 if no_images else 1
+        hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1382,9 +1382,7 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         text_seq_len = shape_list(image_attention_mask)[1]
         image_attention_mask = tf.expand_dims(image_attention_mask, -1)
         image_attention_mask = tf.repeat(image_attention_mask, repeats=image_seq_len)
-        image_attention_mask = tf.reshape(
-                image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len)
-            )
+        image_attention_mask = tf.reshape(image_attention_mask, (batch_size, text_seq_len, num_images * image_seq_len))
 
         if image_hidden_states is not None:
             image_batch_size, image_sequence_length, _ = shape_list(image_hidden_states)
@@ -1395,7 +1393,9 @@ class TFIdeficsMainLayer(tf.keras.layers.Layer):
         else:
             image_attention_mask = None
 
-        cross_attention_gate = tf.squeeze(tf.cast(tf.reduce_any(image_attention_mask == 0, axis=-1), dtype=self.dtype), axis=1)
+        cross_attention_gate = tf.squeeze(
+            tf.cast(tf.reduce_any(image_attention_mask == 0, axis=-1), dtype=self.dtype), axis=1
+        )
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         # embed positions
