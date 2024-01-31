@@ -28,14 +28,22 @@ This script is required to be run under `tests` folder of `transformers` root di
 Assume we are under `transformers` root directory:
 ```bash
 cd tests
-python ../utils/split_model_tests.py
+python ../utils/split_model_tests.py --num_splits 64
 ```
 """
 
+import argparse
 import os
 
 
 if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--num_splits", type=int, default=1, help="the number of splits to split the extracted list of folders"
+    )
+    args = parser.parse_args()
+
     tests = os.getcwd()
     model_tests = os.listdir(os.path.join(tests, "models"))
     d1 = sorted(filter(os.path.isdir, os.listdir(tests)))
@@ -44,13 +52,12 @@ if __name__ == "__main__":
     d = d2 + d1
 
     num_jobs = len(d)
-    num_splits = int(os.getenv("NUM_SLICES", 1))
-    num_jobs_per_splits = num_jobs // num_splits
+    num_jobs_per_splits = num_jobs // args.num_splits
 
     model_splits = []
     end = 0
-    for idx in range(num_splits):
+    for idx in range(args.num_splits):
         start = end
-        end = start + num_jobs_per_splits + (1 if idx < num_jobs % num_splits else 0)
+        end = start + num_jobs_per_splits + (1 if idx < num_jobs % args.num_splits else 0)
         model_splits.append(d[start:end])
     print(model_splits)
