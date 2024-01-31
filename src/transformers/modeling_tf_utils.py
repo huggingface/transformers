@@ -41,6 +41,7 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, TFGenerationMixin
 from .tf_utils import (
+    convert_batch_encoding,
     expand_1d,
     load_attributes_from_hdf5_group,
     save_attributes_to_hdf5_group,
@@ -1154,6 +1155,36 @@ class TFPreTrainedModel(keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushT
 
     def get_config(self):
         return self.config.to_dict()
+
+    @functools.wraps(keras.Model.fit)
+    def fit(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().fit(*args, **kwargs)
+
+    @functools.wraps(keras.Model.train_on_batch)
+    def train_on_batch(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().train_on_batch(*args, **kwargs)
+
+    @functools.wraps(keras.Model.test_on_batch)
+    def test_on_batch(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().test_on_batch(*args, **kwargs)
+
+    @functools.wraps(keras.Model.predict_on_batch)
+    def predict_on_batch(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().predict_on_batch(*args, **kwargs)
+
+    @functools.wraps(keras.Model.predict)
+    def predict(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().predict(*args, **kwargs)
+
+    @functools.wraps(keras.Model.evaluate)
+    def evaluate(self, *args, **kwargs):
+        args, kwargs = convert_batch_encoding(*args, **kwargs)
+        return super().evaluate(*args, **kwargs)
 
     @classmethod
     def from_config(cls, config, **kwargs):
