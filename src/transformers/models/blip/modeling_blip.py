@@ -1189,7 +1189,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
 
         question_embeds = self.text_encoder(
             input_ids=input_ids,
@@ -1403,7 +1403,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long)
+        image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(image_embeds.device)
 
         if use_itm_head:
             question_embeds = self.text_encoder(
