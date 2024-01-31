@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(inputs.folder_slices)[0] }}
-    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
+    runs-on: [self-hosted, yih-dar-shieh-temp-runner-for-testing-workflow-file]
     steps:
       - name: Echo input and matrix info
         shell: bash

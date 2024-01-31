@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
-    runs-on: yih-dar-shieh-temp-runner-for-testing-workflow-file
+    runs-on: [self-hosted, yih-dar-shieh-temp-runner-for-testing-workflow-file]
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
