@@ -23,14 +23,14 @@ The Phi-1 model was proposed in [Textbooks Are All You Need](https://arxiv.org/a
 The Phi-1.5 model was proposed in [Textbooks Are All You Need II: phi-1.5 technical report](https://arxiv.org/abs/2309.05463) by Yuanzhi Li, Sébastien Bubeck, Ronen Eldan, Allie Del Giorno, Suriya Gunasekar and Yin Tat Lee.
 
 ### Summary
+
 In Phi-1 and Phi-1.5 papers, the authors showed how important the quality of the data is in training relative to the model size.
 They selected high quality "textbook" data alongside with synthetically generated data for training their small sized Transformer
 based model Phi-1 with 1.3B parameters. Despite this small scale, phi-1 attains pass@1 accuracy 50.6% on HumanEval and 55.5% on MBPP.
-They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable 
-to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability 
+They follow the same strategy for Phi-1.5 and created another 1.3B parameter model with performance on natural language tasks comparable
+to models 5x larger, and surpassing most non-frontier LLMs. Phi-1.5 exhibits many of the traits of much larger LLMs such as the ability
 to “think step by step” or perform some rudimentary in-context learning.
 With these two experiments the authors successfully showed the huge impact of quality of training data when training machine learning models.
-
 
 The abstract from the Phi-1 paper is the following:
 
@@ -60,16 +60,40 @@ including hallucinations and the potential for toxic and biased generations –e
 are seeing improvement on that front thanks to the absence of web data. We open-source phi-1.5 to
 promote further research on these urgent topics.*
 
-
 This model was contributed by [Susnato Dhar](https://huggingface.co/susnato).
-The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.co/microsoft/phi-1/blob/main/modeling_mixformer_sequential.py) and [here](https://huggingface.co/microsoft/phi-1_5/blob/main/modeling_mixformer_sequential.py) respectively.
 
+The original code for Phi-1, Phi-1.5 and Phi-2 can be found [here](https://huggingface.co/microsoft/phi-1), [here](https://huggingface.co/microsoft/phi-1_5) and [here](https://huggingface.co/microsoft/phi-2), respectively.
 
 ## Usage tips
 
 - This model is quite similar to `Llama` with the main difference in [`PhiDecoderLayer`], where they used [`PhiAttention`] and [`PhiMLP`] layers in parallel configuration.
 - The tokenizer used for this model is identical to the [`CodeGenTokenizer`].
 
+## How to use Phi-2
+
+<Tip warning={true}>
+
+Phi-2 has been integrated in the development version (4.37.0.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing one of the following:
+
+* When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
+
+* Update your local `transformers` to the development version: `pip uninstall -y transformers && pip install git+https://github.com/huggingface/transformers`. The previous command is an alternative to cloning and installing from the source.
+
+</Tip>
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> model = AutoModelForCausalLM.from_pretrained("microsoft/phi-2")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-2")
+
+>>> inputs = tokenizer('Can you help me write a formal email to a potential business partner proposing a joint venture?', return_tensors="pt", return_attention_mask=False)
+
+>>> outputs = model.generate(**inputs, max_length=30)
+>>> text = tokenizer.batch_decode(outputs)[0]
+>>> print(text)
+'Can you help me write a formal email to a potential business partner proposing a joint venture?\nInput: Company A: ABC Inc.\nCompany B: XYZ Ltd.\nJoint Venture: A new online platform for e-commerce'
+```
 
 ### Example :
 
@@ -77,8 +101,8 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
 >>> # define the model and tokenizer.
->>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev")
->>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+>>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
 
 >>> # feel free to change the prompt to your liking.
 >>> prompt = "If I were an AI that had just achieved"
@@ -92,7 +116,6 @@ The original code for Phi-1 and Phi-1.5 can be found [here](https://huggingface.
 >>> tokenizer.batch_decode(generated_output)[0]
 'If I were an AI that had just achieved a breakthrough in machine learning, I would be thrilled'
 ```
-
 
 ## Combining Phi and Flash Attention 2
 
@@ -111,8 +134,8 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import PhiForCausalLM, AutoTokenizer
 
 >>> # define the model and tokenizer and push the model and tokens to the GPU.
->>> model = PhiForCausalLM.from_pretrained("susnato/phi-1_5_dev", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
->>> tokenizer = AutoTokenizer.from_pretrained("susnato/phi-1_5_dev")
+>>> model = PhiForCausalLM.from_pretrained("microsoft/phi-1_5", torch_dtype=torch.float16, attn_implementation="flash_attention_2").to("cuda")
+>>> tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1_5")
 
 >>> # feel free to change the prompt to your liking.
 >>> prompt = "If I were an AI that had just achieved"
@@ -128,11 +151,12 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 ```
 
 ### Expected speedups
-Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `susnato/phi-1_dev` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
+
+Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `microsoft/phi-1` checkpoint and the Flash Attention 2 version of the model using a sequence length of 2048.
+
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/phi_1_speedup_plot.jpg">
 </div>
-
 
 ## PhiConfig
 
