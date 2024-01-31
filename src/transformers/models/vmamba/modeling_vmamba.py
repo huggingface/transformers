@@ -17,7 +17,6 @@
 
 import math
 import os
-import warnings
 from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
@@ -593,7 +592,7 @@ class VMambaPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            trunc_normal_(module.weight, std=.02)
+            trunc_normal_(module.weight, std=0.02)
             if isinstance(module, nn.Linear) and module.bias is not None:
                 nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.LayerNorm):
@@ -676,7 +675,6 @@ class VMambaModel(VMambaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-
     def get_input_embeddings(self) -> VMambaPatchEmbed2D:
         return self.patch_embed
 
@@ -743,7 +741,6 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
