@@ -181,7 +181,12 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
+        "default": {
+            "model": {
+                "pt": ("distilbert/distilbert-base-cased", "935ac13"),
+                "tf": ("distilbert/distilbert-base-cased", "935ac13"),
+            }
+        },
         "type": "multimodal",
     },
     "text-classification": {
@@ -190,8 +195,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
-                "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "pt": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "tf": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
             },
         },
         "type": "text",
@@ -214,8 +219,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert-base-cased-distilled-squad", "626af31"),
-                "tf": ("distilbert-base-cased-distilled-squad", "626af31"),
+                "pt": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
+                "tf": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
             },
         },
         "type": "text",
@@ -254,14 +259,21 @@ SUPPORTED_TASKS = {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
+        "default": {
+            "model": {
+                "pt": ("distilbert/distilroberta-base", "ec58a5b"),
+                "tf": ("distilbert/distilroberta-base", "ec58a5b"),
+            }
+        },
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
+        "default": {
+            "model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("google-t5/t5-small", "d769bba")}
+        },
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -270,9 +282,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "fr"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+            ("en", "de"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+            ("en", "ro"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
         },
         "type": "text",
     },
@@ -280,14 +292,14 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+        "default": {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608")}},
+        "default": {"model": {"pt": ("openai-community/gpt2", "6c0e608"), "tf": ("openai-community/gpt2", "6c0e608")}},
         "type": "text",
     },
     "zero-shot-classification": {
@@ -295,8 +307,14 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
-            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "model": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
+            "config": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
         },
         "type": "text",
     },
@@ -681,7 +699,7 @@ def pipeline(
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
     >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
     ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
