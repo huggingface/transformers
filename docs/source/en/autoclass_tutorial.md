@@ -72,7 +72,7 @@ For vision tasks, an image processor processes the image into the correct input 
     <figcaption class="mt-2 text-center text-sm text-gray-500">A Swin backbone with multiple stages for outputting a feature map.</figcaption>
 </div>
 
-The [`AutoBackbone`] lets you use pretrained models as backbones to get feature maps from different stages of the backbone. You should specify one of the following parameters in [`~AutoBackbone.from_pretrained`]:
+The [`AutoBackbone`] lets you use pretrained models as backbones to get feature maps from different stages of the backbone. You should specify one of the following parameters in [`~PretrainedConfig.from_pretrained`]:
 
 * `out_indices` is the index of the layer you'd like to get the feature map from
 * `out_features` is the name of the layer you'd like to get the feature map from

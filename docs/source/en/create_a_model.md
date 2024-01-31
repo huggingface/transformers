@@ -368,7 +368,7 @@ model = MaskFormerForInstanceSegmentation(config)
 </hfoption>
 </hfoptions>
 
-[timm](https://hf.co/docs/timm/index) models are loaded with `TimmBackbone` and `TimmBackboneConfig`.
+[timm](https://hf.co/docs/timm/index) models are loaded with [`TimmBackbone`] and [`TimmBackboneConfig`].
 
 ```python
 from transformers import TimmBackboneConfig, TimmBackbone
