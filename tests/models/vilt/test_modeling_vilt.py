@@ -227,7 +227,11 @@ class ViltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"visual-question-answering": ViltForQuestionAnswering} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"image-feature-extraction": ViltModel, "visual-question-answering": ViltForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
