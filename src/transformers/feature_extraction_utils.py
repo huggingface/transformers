@@ -135,8 +135,13 @@ class BatchFeature(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch  # noqa
 
+            def recursive_ndarray_check(value):
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    return recursive_ndarray_check(value[0])
+                return isinstance(value, np.ndarray)
+
             def as_tensor(value):
-                if isinstance(value, (list, tuple)) and len(value) > 0 and isinstance(value[0], np.ndarray):
+                if recursive_ndarray_check(value):
                     value = np.array(value)
                 return torch.tensor(value)
 
