@@ -281,7 +281,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text, **kwargs):
         """
-        Converts a string in a sequence of tokens (string), using the tokenizer.
+        Converts a string into a sequence of tokens (string), using the tokenizer.
         """
         if self.do_lower_case:
             text = text.upper()

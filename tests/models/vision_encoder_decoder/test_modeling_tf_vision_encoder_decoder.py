@@ -442,7 +442,7 @@ class TFVisionEncoderDecoderMixin:
         tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
         # Change it here to a scalar to match PyTorch models' loss
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
@@ -858,6 +858,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
                 pretrained_encoder_dir,
                 pretrained_decoder_dir,
             )
+            enc_dec_model.build_in_name_scope()
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)
             enc_dec_model = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)

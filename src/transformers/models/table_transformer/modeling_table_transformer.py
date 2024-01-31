@@ -37,7 +37,7 @@ from ...utils import (
     replace_return_docstrings,
     requires_backends,
 )
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_table_transformer import TableTransformerConfig
 
 
@@ -290,7 +290,7 @@ class TableTransformerConvEncoder(nn.Module):
                 **kwargs,
             )
         else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+PyTorch-independent utilities for the Trainer class.
 """
 
 import copy

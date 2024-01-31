@@ -21,10 +21,9 @@ import re
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
-from tensorflow.keras.layers import Dense
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_tf_utils import TFPreTrainedModel, unpack_inputs
+from ...modeling_tf_utils import TFPreTrainedModel, keras, unpack_inputs
 from ...tf_utils import shape_list
 from ...utils import (
     DUMMY_INPUTS,
@@ -159,7 +158,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
 # Copied from transformers.models.clip.modeling_tf_clip.contrastive_loss
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
-        tf.keras.metrics.sparse_categorical_crossentropy(
+        keras.metrics.sparse_categorical_crossentropy(
             y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
         )
     )
@@ -217,8 +216,8 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = Dense(self.projection_dim, use_bias=False, name="visual_projection")
-        self.text_projection = Dense(self.projection_dim, use_bias=False, name="text_projection")
+        self.visual_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="visual_projection")
+        self.text_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="text_projection")
         self.logit_scale = None
         self.config = config
 
@@ -227,7 +226,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             return
         self.built = True
         # Build in the build() method to make sure the names are right
-        initializer = tf.keras.initializers.Constant(self.config.logit_scale_init_value)
+        initializer = keras.initializers.Constant(self.config.logit_scale_init_value)
         self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
 
         if getattr(self, "visual_projection", None) is not None:
@@ -247,16 +246,16 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         # However, the name of that extra layer is the name of the MainLayer in the base model.
         if "vision_model" in tf_weight:
             if tf_weight.count("vision_model") == 1:
-                return re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight)
+                return (re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight),)
             elif tf_weight.count("vision_model") == 2:
-                return re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight)
+                return (re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight),)
             else:
                 raise ValueError(
                     f"Unexpected weight name {tf_weight}. Please file an issue on the"
                     " Transformers repo to let us know about this error!"
                 )
         elif "text_model" in tf_weight:
-            return re.sub(r"text_model\..*?\.", "text_model.", tf_weight)
+            return (re.sub(r"text_model\..*?\.", "text_model.", tf_weight),)
         else:
             return (tf_weight,)
 
@@ -598,7 +597,7 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
 
-        model.build()  # Ensure model is fully built
+        model.build_in_name_scope()  # Ensure model is fully built
 
         return model
 
