@@ -77,7 +77,7 @@ def _trunc_normal_(tensor, mean, std, a, b):
     # Use inverse cdf transform for normal distribution to get truncated
     # standard normal
     if tensor.dtype == torch.float16:
-        # The `erfinv_` op is not (yet?) defined in float16
+        # The `erfinv_` op is not (yet?) defined in float16+cpu
         tensor = tensor.to(torch.float32)
         tensor.erfinv_()
         tensor = tensor.to(torch.float16)
@@ -90,7 +90,7 @@ def _trunc_normal_(tensor, mean, std, a, b):
 
     # Clamp to ensure it's in the proper range
     if tensor.dtype == torch.float16:
-        # The `clamp_` op is not (yet?) defined in float16
+        # The `clamp_` op is not (yet?) defined in float16+cpu
         tensor = tensor.to(torch.float32)
         tensor.clamp_(min=a, max=b)
         tensor = tensor.to(torch.float16)
