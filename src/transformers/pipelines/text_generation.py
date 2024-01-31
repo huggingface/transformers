@@ -2,7 +2,7 @@ import enum
 import warnings
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
-from .base import PIPELINE_INIT_ARGS, Pipeline
+from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
@@ -20,7 +20,7 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
-@add_end_docstrings(PIPELINE_INIT_ARGS)
+@add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
 class TextGenerationPipeline(Pipeline):
     """
     Language generation pipeline using any `ModelWithLMHead`. This pipeline predicts the words that will follow a

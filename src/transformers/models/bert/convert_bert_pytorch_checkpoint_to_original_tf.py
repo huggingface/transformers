@@ -81,7 +81,7 @@ def convert_pytorch_checkpoint_to_tf(model: BertModel, ckpt_dir: str, model_name
             if any(x in var_name for x in tensors_to_transpose):
                 torch_tensor = torch_tensor.T
             tf_var = create_tf_var(tensor=torch_tensor, name=tf_name, session=session)
-            tf.keras.backend.set_value(tf_var, torch_tensor)
+            tf_var.assign(tf.cast(torch_tensor, tf_var.dtype))
             tf_weight = session.run(tf_var)
             print(f"Successfully created {tf_name}: {np.allclose(tf_weight, torch_tensor)}")
 
