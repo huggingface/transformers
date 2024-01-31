@@ -931,9 +931,9 @@ if __name__ == "__main__":
 
     arguments = sys.argv[1:][0]
     try:
-        models = ast.literal_eval(arguments)
+        folder_slices = ast.literal_eval(arguments)
         # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
-        models = [x.replace("models/", "models_") for x in models]
+        models = [x.replace("models/", "models_") for folders in folder_slices for x in folders]
     except SyntaxError:
         Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
