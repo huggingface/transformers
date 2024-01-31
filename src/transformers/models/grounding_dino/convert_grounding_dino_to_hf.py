@@ -280,7 +280,7 @@ def rename_key(dct, old, new):
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config):
+def read_in_q_k_v_encoder(state_dict, config):
     ########################################## VISION BACKBONE - START
     embed_dim = config.backbone_config.embed_dim
     for layer, depth in enumerate(config.backbone_config.depths):
@@ -311,6 +311,25 @@ def read_in_q_k_v(state_dict, config):
                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"
             ] = in_proj_bias[-hidden_size:]
     ########################################## VISION BACKBONE - END
+
+
+def read_in_q_k_v_decoder(state_dict, config):
+    hidden_size = config.hidden_size
+    for idx in range(config.decoder_layers):
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"model.decoder.layers.{idx}.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"model.decoder.layers.{idx}.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.decoder.layers.{idx}.self_attn.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"model.decoder.layers.{idx}.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+
+        state_dict[f"model.decoder.layers.{idx}.self_attn.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"model.decoder.layers.{idx}.self_attn.key.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
+
+        state_dict[f"model.decoder.layers.{idx}.self_attn.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"model.decoder.layers.{idx}.self_attn.value.bias"] = in_proj_bias[-hidden_size:]
 
 
 # We will verify our results on an image of cute cats
@@ -345,18 +364,24 @@ def convert_grounding_dino_checkpoint(args):
     original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["model"]
     original_state_dict = {k.replace("module.", ""): v for k, v in original_state_dict.items()}
 
+    for name, param in original_state_dict.items():
+        print(name, param.shape)
+
     # Rename keys
     new_state_dict = original_state_dict.copy()
     rename_keys = create_rename_keys(original_state_dict, config)
 
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
-    read_in_q_k_v(new_state_dict, config)
+    read_in_q_k_v_encoder(new_state_dict, config)
+    read_in_q_k_v_decoder(new_state_dict, config)
 
     # Load HF model
     model = GroundingDinoForObjectDetection(config)
     model.eval()
     missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
 
     # Load and process test image
     image = prepare_img()
@@ -374,7 +399,15 @@ def convert_grounding_dino_checkpoint(args):
 
     # Running forward
     with torch.no_grad():
-        _ = model(**inputs)
+        outputs = model(**inputs)
+
+    print(outputs.logits[0, :3, :3])
+
+    expected_slice = torch.tensor(
+        [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
+    )
+
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)

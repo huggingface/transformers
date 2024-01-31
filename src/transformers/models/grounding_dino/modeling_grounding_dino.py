@@ -1273,18 +1273,104 @@ class GroundingDinoEncoderLayer(nn.Module):
         )
 
 
+class GroundingDinoMultiheadAttention(nn.Module):
+    """Equivalent implementation of nn.MultiheadAttention with batch_first=True."""
+
+    def __init__(self, config):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size)
+
+        self.dropout = nn.Dropout(config.attention_dropout)
+
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        queries: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        mixed_query_layer = self.query(queries)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention:
+            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
+            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
+            attention_mask = encoder_attention_mask
+        else:
+            key_layer = self.transpose_for_scores(self.key(keys))
+            value_layer = self.transpose_for_scores(self.value(values))
+
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in GroundingDinoModel forward() function)
+            attention_scores = attention_scores + attention_mask
+
+        # Normalize the attention scores to probabilities.
+        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+
+        # This is actually dropping out entire tokens to attend to, which might
+        # seem a bit unusual, but is taken from the original Transformer paper.
+        attention_probs = self.dropout(attention_probs)
+
+        context_layer = torch.matmul(attention_probs, value_layer)
+
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
+
+        context_layer = self.out_proj(context_layer)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
 class GroundingDinoDecoderLayer(nn.Module):
     def __init__(self, config: GroundingDinoConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = nn.MultiheadAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            batch_first=True,
-        )
+        mha_config = copy.deepcopy(config)
+        mha_config.num_attention_heads = config.decoder_attention_heads
+        self.self_attn = GroundingDinoMultiheadAttention(mha_config)
+        # self.self_attn = nn.MultiheadAttention(
+        #     embed_dim=self.embed_dim,
+        #     num_heads=config.decoder_attention_heads,
+        #     dropout=config.attention_dropout,
+        #     batch_first=True,
+        # )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
@@ -1330,10 +1416,18 @@ class GroundingDinoDecoderLayer(nn.Module):
         residual = hidden_states
 
         # Self Attention
-        q = k = self.with_pos_embed(hidden_states, position_embeddings)
+        queries = keys = self.with_pos_embed(hidden_states, position_embeddings)
         hidden_states, self_attn_weights = self.self_attn(
-            query=q, key=k, value=hidden_states, attn_mask=self_attn_mask, average_attn_weights=False
+            queries=queries,
+            keys=keys,
+            values=hidden_states,
+            attention_mask=self_attn_mask,
+            output_attentions=True,
         )
+        # q = k = self.with_pos_embed(hidden_states, position_embeddings)
+        # hidden_states, self_attn_weights = self.self_attn(
+        #     query=q, key=k, value=hidden_states, attn_mask=self_attn_mask, average_attn_weights=False
+        # )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
