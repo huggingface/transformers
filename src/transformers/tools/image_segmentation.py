@@ -28,7 +28,7 @@ if is_vision_available():
 
 class ImageSegmentationTool(PipelineTool):
     description = (
-        "This is a tool that creates a segmentation mask of an image according to a label. It cannot create an image."
+        "This is a tool that creates a segmentation mask of an image according to a label. It cannot create an image. "
         "It takes two arguments named `image` which should be the original image, and `label` which should be a text "
         "describing the elements what should be identified in the segmentation mask. The tool returns the mask."
     )

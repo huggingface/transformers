@@ -149,11 +149,17 @@ were contributed by [ydshieh](https://github.com/ydshieh).
 
 [[autodoc]] EncoderDecoderConfig
 
+<frameworkcontent>
+<pt>
+
 ## EncoderDecoderModel
 
 [[autodoc]] EncoderDecoderModel
     - forward
     - from_encoder_decoder_pretrained
+
+</pt>
+<tf>
 
 ## TFEncoderDecoderModel
 
@@ -161,8 +167,14 @@ were contributed by [ydshieh](https://github.com/ydshieh).
     - call
     - from_encoder_decoder_pretrained
 
+</tf>
+<jax>
+
 ## FlaxEncoderDecoderModel
 
 [[autodoc]] FlaxEncoderDecoderModel
     - __call__
     - from_encoder_decoder_pretrained
+
+</jax>
+</frameworkcontent>

@@ -138,7 +138,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         self._tokenizer = SPMTokenizer(
             vocab_file, None, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
         )
-        unk_token = AddedToken(unk_token, normalized=True, lstrip=False, rstrip=False)
+        unk_token = AddedToken(unk_token, normalized=True, special=True) if isinstance(unk_token, str) else unk_token
         super().__init__(
             do_lower_case=do_lower_case,
             bos_token=bos_token,

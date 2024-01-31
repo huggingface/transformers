@@ -46,6 +46,7 @@ class BarkProcessor(ProcessorMixin):
             a list of `voice_preset_names`.
 
     """
+
     tokenizer_class = "AutoTokenizer"
     attributes = ["tokenizer"]
 
@@ -94,7 +95,7 @@ class BarkProcessor(ProcessorMixin):
                 proxies=kwargs.pop("proxies", None),
                 resume_download=kwargs.pop("resume_download", False),
                 local_files_only=kwargs.pop("local_files_only", False),
-                use_auth_token=kwargs.pop("use_auth_token", None),
+                token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
             )
             if speaker_embeddings_path is None:
@@ -190,7 +191,7 @@ class BarkProcessor(ProcessorMixin):
                 proxies=kwargs.pop("proxies", None),
                 resume_download=kwargs.pop("resume_download", False),
                 local_files_only=kwargs.pop("local_files_only", False),
-                use_auth_token=kwargs.pop("use_auth_token", None),
+                token=kwargs.pop("use_auth_token", None),
                 revision=kwargs.pop("revision", None),
             )
             if path is None:

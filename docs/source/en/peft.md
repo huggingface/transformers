@@ -98,7 +98,7 @@ You can use [`~peft.PeftModel.add_adapter`] to add a new adapter to a model with
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
-from peft import PeftConfig
+from peft import LoraConfig
 
 model_id = "facebook/opt-350m"
 model = AutoModelForCausalLM.from_pretrained(model_id)
@@ -207,6 +207,26 @@ To save your trained adapter and load it back:
 model.save_pretrained(save_dir)
 model = AutoModelForCausalLM.from_pretrained(save_dir)
 ```
+
+## Add additional trainable layers to a PEFT adapter
+
+You can also fine-tune additional trainable adapters on top of a model that has adapters attached by passing `modules_to_save` in your PEFT config. For example, if you want to also fine-tune the lm_head on top of a model with a LoRA adapter:
+
+```py
+from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
+from peft import LoraConfig
+
+model_id = "facebook/opt-350m"
+model = AutoModelForCausalLM.from_pretrained(model_id)
+
+lora_config = LoraConfig(
+    target_modules=["q_proj", "k_proj"],
+    modules_to_save=["lm_head"],
+)
+
+model.add_adapter(lora_config)
+```
+
 
 <!--
 TODO: (@younesbelkada @stevhliu)

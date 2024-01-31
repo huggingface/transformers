@@ -30,19 +30,15 @@ in collaboration with RISE and the WASP WARA for Media and Language. GPT-Sw3 has
 320B tokens in Swedish, Norwegian, Danish, Icelandic, English, and programming code. The model was pretrained using a
 causal language modeling (CLM) objective utilizing the NeMo Megatron GPT implementation.
 
-This model was contributed by [AI Sweden](https://huggingface.co/AI-Sweden).
+This model was contributed by [AI Sweden Models](https://huggingface.co/AI-Sweden-Models).
 
-The implementation uses the [GPT2Model](https://huggingface.co/docs/transformers/model_doc/gpt2) coupled
-with our `GPTSw3Tokenizer`. This means that `AutoTokenizer` and `AutoModelForCausalLM` map to our tokenizer
-implementation and the corresponding GPT2 model implementation respectively.
-*Note that sentencepiece is required to use our tokenizer and can be installed with:* `pip install transformers[sentencepiece]` or `pip install sentencepiece`
+## Usage example
 
-Example usage:
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
->>> tokenizer = AutoTokenizer.from_pretrained("AI-Sweden/gpt-sw3-356m")
->>> model = AutoModelForCausalLM.from_pretrained("AI-Sweden/gpt-sw3-356m")
+>>> tokenizer = AutoTokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
+>>> model = AutoModelForCausalLM.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
 
 >>> input_ids = tokenizer("Träd är fina för att", return_tensors="pt")["input_ids"]
 
@@ -52,11 +48,20 @@ Example usage:
 Träd är fina för att de är färgstarka. Men ibland är det fint
 ```
 
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
 - [Causal language modeling task guide](../tasks/language_modeling)
+
+<Tip>
+
+The implementation uses the `GPT2Model` coupled with our `GPTSw3Tokenizer`. Refer to [GPT2Model documentation](gpt2) 
+for API reference and examples.  
+
+Note that sentencepiece is required to use our tokenizer and can be installed with `pip install transformers[sentencepiece]` or `pip install sentencepiece`
+
+</Tip>
 
 ## GPTSw3Tokenizer
 

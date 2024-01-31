@@ -89,7 +89,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `['<s>NOTUSED', '</s>NOTUSED']`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<s>NOTUSED', '</s>NOTUSED', '<unk>NOTUSED']`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -127,12 +127,16 @@ class CamembertTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
+        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -144,11 +148,11 @@ class CamembertTokenizer(PreTrainedTokenizer):
         # sentencepiece vocabulary (this is the case for <s> and </s> and <unk>).
         # In this case it is recommended to properly set the tokens by hand.
         self._added_tokens_decoder = {
-            0: AddedToken("<s>NOTUSED"),
-            1: AddedToken(pad_token),
-            2: AddedToken("</s>NOTUSED"),
-            3: AddedToken(unk_token),
-            4: AddedToken("<unk>NOTUSED"),
+            0: AddedToken("<s>NOTUSED", special=True),
+            1: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
+            2: AddedToken("</s>NOTUSED", special=True),
+            3: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
+            4: AddedToken("<unk>NOTUSED", special=True),
         }
 
         self.fairseq_offset = 4  # 3 tokens are newly added, but the offset starts from 4

@@ -136,6 +136,7 @@ class BertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "bert"
 
     def __init__(

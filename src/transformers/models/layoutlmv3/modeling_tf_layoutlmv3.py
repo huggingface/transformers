@@ -36,6 +36,7 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -65,7 +66,7 @@ TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
-class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
+class TFLayoutLMv3PatchEmbeddings(keras.layers.Layer):
     """LayoutLMv3 image (patch) embeddings."""
 
     def __init__(self, config: LayoutLMv3Config, **kwargs):
@@ -75,7 +76,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
             if isinstance(config.patch_size, collections.abc.Iterable)
             else (config.patch_size, config.patch_size)
         )
-        self.proj = tf.keras.layers.Conv2D(
+        self.proj = keras.layers.Conv2D(
             filters=config.hidden_size,
             kernel_size=patch_sizes,
             strides=patch_sizes,
@@ -87,9 +88,10 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         )
         self.hidden_size = config.hidden_size
         self.num_patches = (config.input_size**2) // (patch_sizes[0] * patch_sizes[1])
+        self.config = config
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         pixel_values = tf.transpose(pixel_values, perm=[0, 2, 3, 1])
 
@@ -97,60 +99,69 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         embeddings = tf.reshape(embeddings, (-1, self.num_patches, self.hidden_size))
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "proj", None) is not None:
+            with tf.name_scope(self.proj.name):
+                self.proj.build([None, None, None, self.config.num_channels])
 
-class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
+
+class TFLayoutLMv3TextEmbeddings(keras.layers.Layer):
     """
     LayoutLMv3 text embeddings. Same as `RobertaEmbeddings` but with added spatial (layout) embeddings.
     """
 
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
-        self.word_embeddings = tf.keras.layers.Embedding(
+        self.word_embeddings = keras.layers.Embedding(
             config.vocab_size,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="word_embeddings",
         )
-        self.token_type_embeddings = tf.keras.layers.Embedding(
+        self.token_type_embeddings = keras.layers.Embedding(
             config.type_vocab_size,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="token_type_embeddings",
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.padding_token_index = config.pad_token_id
-        self.position_embeddings = tf.keras.layers.Embedding(
+        self.position_embeddings = keras.layers.Embedding(
             config.max_position_embeddings,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="position_embeddings",
         )
-        self.x_position_embeddings = tf.keras.layers.Embedding(
+        self.x_position_embeddings = keras.layers.Embedding(
             config.max_2d_position_embeddings,
             config.coordinate_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="x_position_embeddings",
         )
-        self.y_position_embeddings = tf.keras.layers.Embedding(
+        self.y_position_embeddings = keras.layers.Embedding(
             config.max_2d_position_embeddings,
             config.coordinate_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="y_position_embeddings",
         )
-        self.h_position_embeddings = tf.keras.layers.Embedding(
+        self.h_position_embeddings = keras.layers.Embedding(
             config.max_2d_position_embeddings,
             config.shape_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="h_position_embeddings",
         )
-        self.w_position_embeddings = tf.keras.layers.Embedding(
+        self.w_position_embeddings = keras.layers.Embedding(
             config.max_2d_position_embeddings,
             config.shape_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="w_position_embeddings",
         )
         self.max_2d_positions = config.max_2d_position_embeddings
+        self.config = config
 
     def calculate_spatial_position_embeddings(self, bbox: tf.Tensor) -> tf.Tensor:
         try:
@@ -260,8 +271,37 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "word_embeddings", None) is not None:
+            with tf.name_scope(self.word_embeddings.name):
+                self.word_embeddings.build(None)
+        if getattr(self, "token_type_embeddings", None) is not None:
+            with tf.name_scope(self.token_type_embeddings.name):
+                self.token_type_embeddings.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "position_embeddings", None) is not None:
+            with tf.name_scope(self.position_embeddings.name):
+                self.position_embeddings.build(None)
+        if getattr(self, "x_position_embeddings", None) is not None:
+            with tf.name_scope(self.x_position_embeddings.name):
+                self.x_position_embeddings.build(None)
+        if getattr(self, "y_position_embeddings", None) is not None:
+            with tf.name_scope(self.y_position_embeddings.name):
+                self.y_position_embeddings.build(None)
+        if getattr(self, "h_position_embeddings", None) is not None:
+            with tf.name_scope(self.h_position_embeddings.name):
+                self.h_position_embeddings.build(None)
+        if getattr(self, "w_position_embeddings", None) is not None:
+            with tf.name_scope(self.w_position_embeddings.name):
+                self.w_position_embeddings.build(None)
 
-class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
+
+class TFLayoutLMv3SelfAttention(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
         if config.hidden_size % config.num_attention_heads != 0:
@@ -275,25 +315,26 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.attention_score_normaliser = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="query",
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="key",
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="value",
         )
 
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.has_relative_attention_bias = config.has_relative_attention_bias
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
+        self.config = config
 
     def transpose_for_scores(self, x: tf.Tensor):
         shape = tf.shape(x)
@@ -309,7 +350,7 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
         """
         https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original tf.keras.layers.Softmax(axis=-1)(attention_scores). Seems the new
+        (PB-Relax). A replacement of the original keras.layers.Softmax(axis=-1)(attention_scores). Seems the new
         attention_probs will result in a slower speed and a little bias. Can use
         tf.debugging.assert_near(standard_attention_probs, cogview_attention_probs, atol=1e-08) for comparison. The
         smaller atol (e.g., 1e-08), the better.
@@ -372,17 +413,32 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+
 
 # Copied from models.roberta.modeling_tf_roberta.TFRobertaSelfOutput
-class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
+class TFLayoutLMv3SelfOutput(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -391,8 +447,19 @@ class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
-class TFLayoutLMv3Attention(tf.keras.layers.Layer):
+
+class TFLayoutLMv3Attention(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
         self.self_attention = TFLayoutLMv3SelfAttention(config, name="self")
@@ -421,13 +488,24 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "self_output", None) is not None:
+            with tf.name_scope(self.self_output.name):
+                self.self_output.build(None)
+
 
 # Copied from models.roberta.modeling_tf_bert.TFRobertaIntermediate
-class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
+class TFLayoutLMv3Intermediate(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -435,6 +513,7 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -442,17 +521,26 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from models.roberta.modeling_tf_bert.TFRobertaOutput
-class TFLayoutLMv3Output(tf.keras.layers.Layer):
+class TFLayoutLMv3Output(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -461,8 +549,19 @@ class TFLayoutLMv3Output(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
-class TFLayoutLMv3Layer(tf.keras.layers.Layer):
+
+class TFLayoutLMv3Layer(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
         self.attention = TFLayoutLMv3Attention(config, name="attention")
@@ -495,8 +594,22 @@ class TFLayoutLMv3Layer(tf.keras.layers.Layer):
         outputs = (layer_output,) + outputs
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
 
-class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
+
+class TFLayoutLMv3Encoder(keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -508,7 +621,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         if self.has_relative_attention_bias:
             self.rel_pos_bins = config.rel_pos_bins
             self.max_rel_pos = config.max_rel_pos
-            self.rel_pos_bias = tf.keras.layers.Dense(
+            self.rel_pos_bias = keras.layers.Dense(
                 units=config.num_attention_heads,
                 kernel_initializer=get_initializer(config.initializer_range),
                 use_bias=False,
@@ -518,13 +631,13 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         if self.has_spatial_attention_bias:
             self.max_rel_2d_pos = config.max_rel_2d_pos
             self.rel_2d_pos_bins = config.rel_2d_pos_bins
-            self.rel_pos_x_bias = tf.keras.layers.Dense(
+            self.rel_pos_x_bias = keras.layers.Dense(
                 units=config.num_attention_heads,
                 kernel_initializer=get_initializer(config.initializer_range),
                 use_bias=False,
                 name="rel_pos_x_bias",
             )
-            self.rel_pos_y_bias = tf.keras.layers.Dense(
+            self.rel_pos_y_bias = keras.layers.Dense(
                 units=config.num_attention_heads,
                 kernel_initializer=get_initializer(config.initializer_range),
                 use_bias=False,
@@ -558,7 +671,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
 
     def _cal_pos_emb(
         self,
-        dense_layer: tf.keras.layers.Dense,
+        dense_layer: keras.layers.Dense,
         position_ids: tf.Tensor,
         num_buckets: int,
         max_distance: int,
@@ -650,9 +763,27 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
                 value for value in [hidden_states, all_hidden_states, all_self_attentions] if value is not None
             )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "rel_pos_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_bias.name):
+                self.rel_pos_bias.build([None, None, self.rel_pos_bins])
+        if getattr(self, "rel_pos_x_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_x_bias.name):
+                self.rel_pos_x_bias.build([None, None, self.rel_2d_pos_bins])
+        if getattr(self, "rel_pos_y_bias", None) is not None:
+            with tf.name_scope(self.rel_pos_y_bias.name):
+                self.rel_pos_y_bias.build([None, None, self.rel_2d_pos_bins])
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
+class TFLayoutLMv3MainLayer(keras.layers.Layer):
     config_class = LayoutLMv3Config
 
     def __init__(self, config: LayoutLMv3Config, **kwargs):
@@ -665,18 +796,18 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         if config.visual_embed:
             self.patch_embed = TFLayoutLMv3PatchEmbeddings(config, name="patch_embed")
-            self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+            self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+            self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
             if config.has_relative_attention_bias or config.has_spatial_attention_bias:
                 image_size = config.input_size // config.patch_size
                 self.init_visual_bbox(image_size=(image_size, image_size))
 
-            self.norm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="norm")
+            self.norm = keras.layers.LayerNormalization(epsilon=1e-6, name="norm")
 
         self.encoder = TFLayoutLMv3Encoder(config, name="encoder")
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         if self.config.visual_embed:
             image_size = self.config.input_size // self.config.patch_size
             self.cls_token = self.add_weight(
@@ -694,9 +825,29 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
                 name="pos_embed",
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "patch_embed", None) is not None:
+            with tf.name_scope(self.patch_embed.name):
+                self.patch_embed.build(None)
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "norm", None) is not None:
+            with tf.name_scope(self.norm.name):
+                self.norm.build([None, None, self.config.hidden_size])
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -991,7 +1142,7 @@ LAYOUTLMV3_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1180,15 +1331,23 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
 
-class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
+
+class TFLayoutLMv3ClassificationHead(keras.layers.Layer):
     """
     Head for sentence-level classification tasks. Reference: RobertaClassificationHead
     """
 
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             activation="tanh",
             kernel_initializer=get_initializer(config.initializer_range),
@@ -1197,15 +1356,16 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(
+        self.dropout = keras.layers.Dropout(
             classifier_dropout,
             name="dropout",
         )
-        self.out_proj = tf.keras.layers.Dense(
+        self.out_proj = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="out_proj",
         )
+        self.config = config
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         outputs = self.dropout(inputs, training=training)
@@ -1213,6 +1373,20 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         outputs = self.dropout(outputs, training=training)
         outputs = self.out_proj(outputs)
         return outputs
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1317,6 +1491,17 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
+
 
 @add_start_docstrings(
     """
@@ -1336,15 +1521,16 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         self.num_labels = config.num_labels
 
         self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
         if config.num_labels < 10:
-            self.classifier = tf.keras.layers.Dense(
+            self.classifier = keras.layers.Dense(
                 config.num_labels,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="classifier",
             )
         else:
             self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
@@ -1439,6 +1625,20 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1567,3 +1767,14 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layoutlmv3", None) is not None:
+            with tf.name_scope(self.layoutlmv3.name):
+                self.layoutlmv3.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build(None)

@@ -67,7 +67,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         string2xsubs_seq = []
 
         for element in html_code.descendants:
-            if type(element) == bs4.element.NavigableString:
+            if isinstance(element, bs4.element.NavigableString):
                 if type(element.parent) != bs4.element.Tag:
                     continue
 

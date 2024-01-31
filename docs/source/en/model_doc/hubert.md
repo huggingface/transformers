@@ -36,15 +36,15 @@ state-of-the-art wav2vec 2.0 performance on the Librispeech (960h) and Libri-lig
 10h, 100h, and 960h fine-tuning subsets. Using a 1B parameter model, HuBERT shows up to 19% and 13% relative WER
 reduction on the more challenging dev-other and test-other evaluation subsets.*
 
-Tips:
+This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+
+# Usage tips
 
 - Hubert is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
 - Hubert model was fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded
   using [`Wav2Vec2CTCTokenizer`].
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
-
-## Documentation resources
+## Resources
 
 - [Audio classification task guide](../tasks/audio_classification)
 - [Automatic speech recognition task guide](../tasks/asr)
@@ -52,6 +52,9 @@ This model was contributed by [patrickvonplaten](https://huggingface.co/patrickv
 ## HubertConfig
 
 [[autodoc]] HubertConfig
+
+<frameworkcontent>
+<pt>
 
 ## HubertModel
 
@@ -68,6 +71,9 @@ This model was contributed by [patrickvonplaten](https://huggingface.co/patrickv
 [[autodoc]] HubertForSequenceClassification
     - forward
 
+</pt>
+<tf>
+
 ## TFHubertModel
 
 [[autodoc]] TFHubertModel
@@ -77,3 +83,6 @@ This model was contributed by [patrickvonplaten](https://huggingface.co/patrickv
 
 [[autodoc]] TFHubertForCTC
     - call
+
+</tf>
+</frameworkcontent>

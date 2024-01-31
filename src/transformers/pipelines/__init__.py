@@ -33,7 +33,10 @@ from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelFo
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
+    CONFIG_NAME,
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    cached_file,
+    extract_commit_hash,
     find_adapter_config_file,
     is_kenlm_available,
     is_offline_mode,
@@ -178,7 +181,12 @@ SUPPORTED_TASKS = {
         "impl": FeatureExtractionPipeline,
         "tf": (TFAutoModel,) if is_tf_available() else (),
         "pt": (AutoModel,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("distilbert-base-cased", "935ac13"), "tf": ("distilbert-base-cased", "935ac13")}},
+        "default": {
+            "model": {
+                "pt": ("distilbert/distilbert-base-cased", "935ac13"),
+                "tf": ("distilbert/distilbert-base-cased", "935ac13"),
+            }
+        },
         "type": "multimodal",
     },
     "text-classification": {
@@ -187,8 +195,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
-                "tf": ("distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "pt": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
+                "tf": ("distilbert/distilbert-base-uncased-finetuned-sst-2-english", "af0f99b"),
             },
         },
         "type": "text",
@@ -211,8 +219,8 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForQuestionAnswering,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("distilbert-base-cased-distilled-squad", "626af31"),
-                "tf": ("distilbert-base-cased-distilled-squad", "626af31"),
+                "pt": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
+                "tf": ("distilbert/distilbert-base-cased-distilled-squad", "626af31"),
             },
         },
         "type": "text",
@@ -251,14 +259,21 @@ SUPPORTED_TASKS = {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
         "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("distilroberta-base", "ec58a5b"), "tf": ("distilroberta-base", "ec58a5b")}},
+        "default": {
+            "model": {
+                "pt": ("distilbert/distilroberta-base", "ec58a5b"),
+                "tf": ("distilbert/distilroberta-base", "ec58a5b"),
+            }
+        },
         "type": "text",
     },
     "summarization": {
         "impl": SummarizationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("t5-small", "d769bba")}},
+        "default": {
+            "model": {"pt": ("sshleifer/distilbart-cnn-12-6", "a4f8f3e"), "tf": ("google-t5/t5-small", "d769bba")}
+        },
         "type": "text",
     },
     # This task is a special case as it's parametrized by SRC, TGT languages.
@@ -267,9 +282,9 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
         "default": {
-            ("en", "fr"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "de"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
-            ("en", "ro"): {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+            ("en", "fr"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+            ("en", "de"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
+            ("en", "ro"): {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
         },
         "type": "text",
     },
@@ -277,14 +292,14 @@ SUPPORTED_TASKS = {
         "impl": Text2TextGenerationPipeline,
         "tf": (TFAutoModelForSeq2SeqLM,) if is_tf_available() else (),
         "pt": (AutoModelForSeq2SeqLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("t5-base", "686f1db"), "tf": ("t5-base", "686f1db")}},
+        "default": {"model": {"pt": ("google-t5/t5-base", "686f1db"), "tf": ("google-t5/t5-base", "686f1db")}},
         "type": "text",
     },
     "text-generation": {
         "impl": TextGenerationPipeline,
         "tf": (TFAutoModelForCausalLM,) if is_tf_available() else (),
         "pt": (AutoModelForCausalLM,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("gpt2", "6c0e608"), "tf": ("gpt2", "6c0e608")}},
+        "default": {"model": {"pt": ("openai-community/gpt2", "6c0e608"), "tf": ("openai-community/gpt2", "6c0e608")}},
         "type": "text",
     },
     "zero-shot-classification": {
@@ -292,8 +307,14 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForSequenceClassification,) if is_tf_available() else (),
         "pt": (AutoModelForSequenceClassification,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
-            "config": {"pt": ("facebook/bart-large-mnli", "c626438"), "tf": ("roberta-large-mnli", "130fb28")},
+            "model": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
+            "config": {
+                "pt": ("facebook/bart-large-mnli", "c626438"),
+                "tf": ("FacebookAI/roberta-large-mnli", "130fb28"),
+            },
         },
         "type": "text",
     },
@@ -439,7 +460,8 @@ def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> st
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -677,7 +699,7 @@ def pipeline(
 
     >>> # Question answering pipeline, specifying the checkpoint identifier
     >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
+    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="bert-base-cased"
     ... )
 
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
@@ -692,17 +714,21 @@ def pipeline(
     use_auth_token = model_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
+    code_revision = kwargs.pop("code_revision", None)
+    commit_hash = kwargs.pop("_commit_hash", None)
+
     hub_kwargs = {
         "revision": revision,
         "token": token,
         "trust_remote_code": trust_remote_code,
-        "_commit_hash": None,
+        "_commit_hash": commit_hash,
     }
 
     if task is None and model is None:
@@ -727,20 +753,44 @@ def pipeline(
     if isinstance(model, Path):
         model = str(model)
 
+    if commit_hash is None:
+        pretrained_model_name_or_path = None
+        if isinstance(config, str):
+            pretrained_model_name_or_path = config
+        elif config is None and isinstance(model, str):
+            pretrained_model_name_or_path = model
+
+        if not isinstance(config, PretrainedConfig) and pretrained_model_name_or_path is not None:
+            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+            resolved_config_file = cached_file(
+                pretrained_model_name_or_path,
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                **hub_kwargs,
+            )
+            hub_kwargs["_commit_hash"] = extract_commit_hash(resolved_config_file, commit_hash)
+        else:
+            hub_kwargs["_commit_hash"] = getattr(config, "_commit_hash", None)
+
     # Config is the primordial information item.
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(
+            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
+        )
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
-            subfolder = hub_kwargs.get("subfolder", None)
+            # `find_adapter_config_file` doesn't accept `trust_remote_code`
+            _hub_kwargs = {k: v for k, v in hub_kwargs.items() if k != "trust_remote_code"}
             maybe_adapter_path = find_adapter_config_file(
                 model,
-                revision=revision,
-                token=use_auth_token,
-                subfolder=subfolder,
+                token=hub_kwargs["token"],
+                revision=hub_kwargs["revision"],
+                _commit_hash=hub_kwargs["_commit_hash"],
             )
 
             if maybe_adapter_path is not None:
@@ -748,7 +798,9 @@ def pipeline(
                     adapter_config = json.load(f)
                     model = adapter_config["base_model_name_or_path"]
 
-        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(
+            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
+        )
         hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
@@ -766,10 +818,10 @@ def pipeline(
     if task is None and model is not None:
         if not isinstance(model, str):
             raise RuntimeError(
-                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`."
+                "Inferring the task automatically requires to check the hub with a model_id defined as a `str`. "
                 f"{model} is not a valid model_id."
             )
-        task = get_task(model, use_auth_token)
+        task = get_task(model, token)
 
     # Retrieve the task
     if task in custom_tasks:
@@ -784,7 +836,10 @@ def pipeline(
                 )
             class_ref = targeted_task["impl"]
             pipeline_class = get_class_from_dynamic_module(
-                class_ref, model, revision=revision, use_auth_token=use_auth_token
+                class_ref,
+                model,
+                code_revision=code_revision,
+                **hub_kwargs,
             )
     else:
         normalized_task, targeted_task, task_options = check_task(task)

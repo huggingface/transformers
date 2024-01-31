@@ -91,6 +91,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
 
     params = read_json(os.path.join(input_base_path, "params.json"))
     num_shards = NUM_SHARDS[model_size]
+    params = params.get("model", params)
     n_layers = params["n_layers"]
     n_heads = params["n_heads"]
     n_heads_per_shard = n_heads // num_shards
@@ -109,7 +110,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
         tokenizer.save_pretrained(model_path)
     vocab_size = tokenizer.vocab_size if tokenizer_path is not None else 32000
 
-    if "n_kv_heads" in params:
+    if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
         num_local_key_value_heads = n_heads_per_shard // num_key_value_heads
         key_value_dim = dim // num_key_value_heads
@@ -124,7 +125,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
 
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
-    if model_size == "7B":
+    if num_shards == 1:
         # Not sharded
         # (The sharded implementation would also work, but this is simpler.)
         loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
@@ -138,7 +139,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
     index_dict = {"weight_map": {}}
     for layer_i in range(n_layers):
         filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
-        if model_size == "7B":
+        if num_shards == 1:
             # Unsharded
             state_dict = {
                 f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
@@ -222,7 +223,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
         torch.save(state_dict, os.path.join(tmp_model_path, filename))
 
     filename = f"pytorch_model-{n_layers + 1}-of-{n_layers + 1}.bin"
-    if model_size == "7B":
+    if num_shards == 1:
         # Unsharded
         state_dict = {
             "model.embed_tokens.weight": loaded["tok_embeddings.weight"],

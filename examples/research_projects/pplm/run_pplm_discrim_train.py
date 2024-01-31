@@ -490,8 +490,8 @@ if __name__ == "__main__":
         default="SST",
         choices=("SST", "clickbait", "toxic", "generic"),
         help=(
-            "dataset to train the discriminator on."
-            "In case of generic, the dataset is expected"
+            "dataset to train the discriminator on. "
+            "In case of generic, the dataset is expected "
             "to be a TSBV file with structure: class \\t text"
         ),
     )

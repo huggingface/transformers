@@ -44,7 +44,9 @@ formulation. Furthermore, XLNet integrates ideas from Transformer-XL, the state-
 pretraining. Empirically, under comparable experiment settings, XLNet outperforms BERT on 20 tasks, often by a large
 margin, including question answering, natural language inference, sentiment analysis, and document ranking.*
 
-Tips:
+This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/zihangdai/xlnet/).
+
+## Usage tips
 
 - The specific attention pattern can be controlled at training and test time using the `perm_mask` input.
 - Due to the difficulty of training a fully auto-regressive model over various factorization order, XLNet is pretrained
@@ -56,9 +58,7 @@ Tips:
 - XLNet is not a traditional autoregressive model but uses a training strategy that builds on that. It permutes the tokens in the sentence, then allows the model to use the last n tokens to predict the token n+1. Since this is all done with a mask, the sentence is actually fed in the model in the right order, but instead of masking the first n tokens for n+1, XLNet uses a mask that hides the previous tokens in some given permutation of 1,…,sequence length.
 - XLNet also uses the same recurrence mechanism as Transformer-XL to build long-term dependencies.
 
-This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The original code can be found [here](https://github.com/zihangdai/xlnet/).
-
-## Documentation resources
+## Resources
 
 - [Text classification task guide](../tasks/sequence_classification)
 - [Token classification task guide](../tasks/token_classification)
@@ -110,6 +110,9 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
 
+<frameworkcontent>
+<pt>
+
 ## XLNetModel
 
 [[autodoc]] XLNetModel
@@ -145,6 +148,9 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] XLNetForQuestionAnswering
     - forward
 
+</pt>
+<tf>
+
 ## TFXLNetModel
 
 [[autodoc]] TFXLNetModel
@@ -174,3 +180,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 
 [[autodoc]] TFXLNetForQuestionAnsweringSimple
     - call
+
+</tf>
+</frameworkcontent>

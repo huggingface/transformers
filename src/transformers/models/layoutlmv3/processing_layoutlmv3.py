@@ -43,6 +43,7 @@ class LayoutLMv3Processor(ProcessorMixin):
         tokenizer (`LayoutLMv3Tokenizer` or `LayoutLMv3TokenizerFast`, *optional*):
             An instance of [`LayoutLMv3Tokenizer`] or [`LayoutLMv3TokenizerFast`]. The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "LayoutLMv3ImageProcessor"
     tokenizer_class = ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast")

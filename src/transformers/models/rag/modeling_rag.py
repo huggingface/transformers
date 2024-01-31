@@ -120,14 +120,14 @@ class RetrievAugLMMarginOutput(ModelOutput):
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -210,14 +210,14 @@ class RetrievAugLMOutput(ModelOutput):
     context_input_ids: Optional[torch.LongTensor] = None
     context_attention_mask: Optional[torch.LongTensor] = None
     question_encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    question_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    question_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     generator_enc_last_hidden_state: Optional[torch.FloatTensor] = None
-    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_enc_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_enc_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_dec_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class RagPreTrainedModel(PreTrainedModel):
@@ -229,6 +229,7 @@ class RagPreTrainedModel(PreTrainedModel):
     generator, the encoder and generator are trainable while the retriever is just an indexed dataset.
 
     """
+
     config_class = RagConfig
     base_model_prefix = "rag"
 

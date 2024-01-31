@@ -227,7 +227,7 @@ the forum and making use of the [🤗 hub](http://huggingface.co/) to have a ver
 control for your models and training logs.
 - When debugging, it is important that the debugging cycle is kept as short as possible to 
 be able to effectively debug. *E.g.* if there is a problem with your training script, 
-you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html?highlight=streaming) or by selecting just the first 
+you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming?highlight=streaming) or by selecting just the first 
 X number of data samples after loading:
 
 ```python
@@ -1117,7 +1117,7 @@ params = model.init(key2, x)
 
 bytes_output = serialization.to_bytes(params)
 
-repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True)
+repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", token=True)
 with repo.commit("My cool Flax model :)"):
     with open("flax_model.msgpack", "wb") as f:
         f.write(bytes_output)
@@ -1153,7 +1153,7 @@ In the following, we will describe how to do so using a standard console, but yo
 2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
 
 ```bash
-$ gcloud config set account <your-email-adress>
+$ gcloud config set account <your-email-address>
 ```
 
 3. Let's also make sure the correct project is set in case your email is used for multiple gcloud projects:

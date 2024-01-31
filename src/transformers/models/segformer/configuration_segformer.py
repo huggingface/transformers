@@ -100,6 +100,7 @@ class SegformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "segformer"
 
     def __init__(

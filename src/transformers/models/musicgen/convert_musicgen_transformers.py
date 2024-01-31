@@ -88,32 +88,48 @@ def rename_state_dict(state_dict: OrderedDict, hidden_size: int) -> Tuple[Dict, 
 
 
 def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenDecoderConfig:
-    if checkpoint == "small":
+    if checkpoint == "small" or checkpoint == "facebook/musicgen-stereo-small":
         # default config values
         hidden_size = 1024
         num_hidden_layers = 24
         num_attention_heads = 16
-    elif checkpoint == "medium":
+    elif checkpoint == "medium" or checkpoint == "facebook/musicgen-stereo-medium":
         hidden_size = 1536
         num_hidden_layers = 48
         num_attention_heads = 24
-    elif checkpoint == "large":
+    elif checkpoint == "large" or checkpoint == "facebook/musicgen-stereo-large":
         hidden_size = 2048
         num_hidden_layers = 48
         num_attention_heads = 32
     else:
-        raise ValueError(f"Checkpoint should be one of `['small', 'medium', 'large']`, got {checkpoint}.")
+        raise ValueError(
+            "Checkpoint should be one of `['small', 'medium', 'large']` for the mono checkpoints, "
+            "or `['facebook/musicgen-stereo-small', 'facebook/musicgen-stereo-medium', 'facebook/musicgen-stereo-large']` "
+            f"for the stereo checkpoints, got {checkpoint}."
+        )
+
+    if "stereo" in checkpoint:
+        audio_channels = 2
+        num_codebooks = 8
+    else:
+        audio_channels = 1
+        num_codebooks = 4
+
     config = MusicgenDecoderConfig(
         hidden_size=hidden_size,
         ffn_dim=hidden_size * 4,
         num_hidden_layers=num_hidden_layers,
         num_attention_heads=num_attention_heads,
+        num_codebooks=num_codebooks,
+        audio_channels=audio_channels,
     )
     return config
 
 
 @torch.no_grad()
-def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
+def convert_musicgen_checkpoint(
+    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu", safe_serialization=False
+):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
@@ -146,18 +162,20 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=No
     model.enc_to_dec_proj.load_state_dict(enc_dec_proj_state_dict)
 
     # check we can do a forward pass
-    input_ids = torch.arange(0, 8, dtype=torch.long).reshape(2, -1)
-    decoder_input_ids = input_ids.reshape(2 * 4, -1)
+    input_ids = torch.arange(0, 2 * decoder_config.num_codebooks, dtype=torch.long).reshape(2, -1)
+    decoder_input_ids = input_ids.reshape(2 * decoder_config.num_codebooks, -1)
 
     with torch.no_grad():
         logits = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
-    if logits.shape != (8, 1, 2048):
+    if logits.shape != (2 * decoder_config.num_codebooks, 1, 2048):
         raise ValueError("Incorrect shape for logits")
 
     # now construct the processor
     tokenizer = AutoTokenizer.from_pretrained("t5-base")
-    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/encodec_32khz", padding_side="left")
+    feature_extractor = AutoFeatureExtractor.from_pretrained(
+        "facebook/encodec_32khz", padding_side="left", feature_size=decoder_config.audio_channels
+    )
 
     processor = MusicgenProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
@@ -173,12 +191,12 @@ def convert_musicgen_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=No
     if pytorch_dump_folder is not None:
         Path(pytorch_dump_folder).mkdir(exist_ok=True)
         logger.info(f"Saving model {checkpoint} to {pytorch_dump_folder}")
-        model.save_pretrained(pytorch_dump_folder)
+        model.save_pretrained(pytorch_dump_folder, safe_serialization=safe_serialization)
         processor.save_pretrained(pytorch_dump_folder)
 
     if repo_id:
         logger.info(f"Pushing model {checkpoint} to {repo_id}")
-        model.push_to_hub(repo_id)
+        model.push_to_hub(repo_id, safe_serialization=safe_serialization)
         processor.push_to_hub(repo_id)
 
 
@@ -189,7 +207,10 @@ if __name__ == "__main__":
         "--checkpoint",
         default="small",
         type=str,
-        help="Checkpoint size of the MusicGen model you'd like to convert. Can be one of: `['small', 'medium', 'large']`.",
+        help="Checkpoint size of the MusicGen model you'd like to convert. Can be one of: "
+        "`['small', 'medium', 'large']` for the mono checkpoints, or "
+        "`['facebook/musicgen-stereo-small', 'facebook/musicgen-stereo-medium', 'facebook/musicgen-stereo-large']` "
+        "for the stereo checkpoints.",
     )
     parser.add_argument(
         "--pytorch_dump_folder",
@@ -203,6 +224,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+    )
+    parser.add_argument(
+        "--safe_serialization",
+        action="store_true",
+        help="Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).",
     )
 
     args = parser.parse_args()

@@ -13,12 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+from transformers import AlbertForMaskedLM
 from transformers.testing_utils import require_torch
-from transformers.utils import ModelOutput
+from transformers.utils import ModelOutput, is_torch_available
+
+
+if is_torch_available():
+    import torch
+
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 
 
 @dataclass
@@ -126,23 +134,50 @@ class ModelOutputTester(unittest.TestCase):
     def test_torch_pytree(self):
         # ensure torch.utils._pytree treats ModelOutput subclasses as nodes (and not leaves)
         # this is important for DistributedDataParallel gradient synchronization with static_graph=True
-        import torch
-        import torch.utils._pytree
+        import torch.utils._pytree as pytree
+
+        x = ModelOutput({"a": 1.0, "c": 2.0})
+        self.assertFalse(pytree._is_leaf(x))
 
         x = ModelOutputTest(a=1.0, c=2.0)
-        self.assertFalse(torch.utils._pytree._is_leaf(x))
+        self.assertFalse(pytree._is_leaf(x))
 
         expected_flat_outs = [1.0, 2.0]
-        expected_tree_spec = torch.utils._pytree.TreeSpec(
-            ModelOutputTest, ["a", "c"], [torch.utils._pytree.LeafSpec(), torch.utils._pytree.LeafSpec()]
-        )
+        expected_tree_spec = pytree.TreeSpec(ModelOutputTest, ["a", "c"], [pytree.LeafSpec(), pytree.LeafSpec()])
 
-        actual_flat_outs, actual_tree_spec = torch.utils._pytree.tree_flatten(x)
+        actual_flat_outs, actual_tree_spec = pytree.tree_flatten(x)
         self.assertEqual(expected_flat_outs, actual_flat_outs)
         self.assertEqual(expected_tree_spec, actual_tree_spec)
 
-        unflattened_x = torch.utils._pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
+        unflattened_x = pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
         self.assertEqual(x, unflattened_x)
+
+        if is_torch_greater_or_equal_than_2_2:
+            self.assertEqual(
+                pytree.treespec_dumps(actual_tree_spec),
+                '[1, {"type": "tests.utils.test_model_output.ModelOutputTest", "context": ["a", "c"], "children_spec": [{"type": null, "context": null, "children_spec": []}, {"type": null, "context": null, "children_spec": []}]}]',
+            )
+
+    @require_torch
+    def test_export_serialization(self):
+        if not is_torch_greater_or_equal_than_2_2:
+            return
+
+        model_cls = AlbertForMaskedLM
+        model_config = model_cls.config_class()
+        model = model_cls(model_config)
+
+        input_dict = {"input_ids": torch.randint(0, 30000, (1, 512), dtype=torch.int64, requires_grad=False)}
+
+        ep = torch.export.export(model, (), input_dict)
+
+        buffer = io.BytesIO()
+        torch.export.save(ep, buffer)
+        buffer.seek(0)
+        loaded_ep = torch.export.load(buffer)
+
+        input_dict = {"input_ids": torch.randint(0, 30000, (1, 512), dtype=torch.int64, requires_grad=False)}
+        assert torch.allclose(model(**input_dict).logits, loaded_ep(**input_dict).logits)
 
 
 class ModelOutputTestNoDataclass(ModelOutput):

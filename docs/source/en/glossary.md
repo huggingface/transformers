@@ -100,7 +100,7 @@ reading the whole sentence but using a mask inside the model to hide the future 
 
 ### channel
 
-Color images are made up of some combination of values in three channels - red, green, and blue (RGB) - and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
+Color images are made up of some combination of values in three channels: red, green, and blue (RGB) and grayscale images only have one channel. In 🤗 Transformers, the channel can be the first or last dimension of an image's tensor: [`n_channels`, `height`, `width`] or [`height`, `width`, `n_channels`].
 
 ### connectionist temporal classification (CTC)
 
@@ -111,6 +111,13 @@ An algorithm which allows a model to learn without knowing exactly how the input
 A type of layer in a neural network where the input matrix is multiplied element-wise by a smaller matrix (kernel or filter) and the values are summed up in a new matrix. This is known as a convolutional operation which is repeated over the entire input matrix. Each operation is applied to a different segment of the input matrix. Convolutional neural networks (CNNs) are commonly used in computer vision.
 
 ## D
+
+### DataParallel (DP)
+
+Parallelism technique for training on multiple GPUs where the same setup is replicated multiple times, with each instance 
+receiving a distinct data slice. The processing is done in parallel and all setups are synchronized at the end of each training step.
+
+Learn more about how DataParallel works [here](perf_train_gpu_many#dataparallel-vs-distributeddataparallel).
 
 ### decoder input IDs
 
@@ -159,8 +166,7 @@ embeddings `[batch_size, sequence_length, config.intermediate_size]` can account
 use. The authors of [Reformer: The Efficient Transformer](https://arxiv.org/abs/2001.04451) noticed that since the
 computation is independent of the `sequence_length` dimension, it is mathematically equivalent to compute the output
 embeddings of both feed forward layers `[batch_size, config.hidden_size]_0, ..., [batch_size, config.hidden_size]_n`
-individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n =
-sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
+individually and concat them afterward to `[batch_size, sequence_length, config.hidden_size]` with `n = sequence_length`, which trades increased computation time against reduced memory use, but yields a mathematically
 **equivalent** result.
 
 For models employing the function [`apply_chunking_to_forward`], the `chunk_size` defines the number of output
@@ -181,7 +187,7 @@ The model head refers to the last layer of a neural network that accepts the raw
 
   * [`GPT2ForSequenceClassification`] is a sequence classification head - a linear layer - on top of the base [`GPT2Model`].
   * [`ViTForImageClassification`] is an image classification head - a linear layer on top of the final hidden state of the `CLS` token - on top of the base [`ViTModel`].
-  * [`Wav2Vec2ForCTC`] ia a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
+  * [`Wav2Vec2ForCTC`] is a language modeling head with [CTC](#connectionist-temporal-classification-(CTC)) on top of the base [`Wav2Vec2Model`].
 
 ## I
 
@@ -226,9 +232,7 @@ is added for "RA" and "M":
 ['A', 'Titan', 'R', '##T', '##X', 'has', '24', '##GB', 'of', 'V', '##RA', '##M']
 ```
 
-These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding
-the sentence to the tokenizer, which leverages the Rust implementation of [🤗
-Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
+These tokens can then be converted into IDs which are understandable by the model. This can be done by directly feeding the sentence to the tokenizer, which leverages the Rust implementation of [🤗 Tokenizers](https://github.com/huggingface/tokenizers) for peak performance.
 
 ```python
 >>> inputs = tokenizer(sequence)
@@ -340,6 +344,12 @@ A pipeline in 🤗 Transformers is an abstraction referring to a series of steps
 
 For more details, see [Pipelines for inference](https://huggingface.co/docs/transformers/pipeline_tutorial).
 
+### PipelineParallel (PP)
+
+Parallelism technique in which the model is split up vertically (layer-level) across multiple GPUs, so that only one or 
+several layers of the model are placed on a single GPU. Each GPU processes in parallel different stages of the pipeline 
+and working on a small chunk of the batch. Learn more about how PipelineParallel works [here](perf_train_gpu_many#from-naive-model-parallelism-to-pipeline-parallelism).
+
 ### pixel values
 
 A tensor of the numerical representations of an image that is passed to a model. The pixel values have a shape of [`batch_size`, `num_channels`, `height`, `width`], and are generated from an image processor.
@@ -371,7 +381,7 @@ self-supervised objective, which can be reading the text and trying to predict t
 modeling](#causal-language-modeling)) or masking some words and trying to predict them (see [masked language
 modeling](#masked-language-modeling-mlm)). 
 
-  Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
+Speech and vision models have their own pretraining objectives. For example, Wav2Vec2 is a speech model pretrained on a contrastive task which requires the model to identify the "true" speech representation from a set of "false" speech representations. On the other hand, BEiT is a vision model pretrained on a masked image modeling task which masks some of the image patches and requires the model to predict the masked patches (similar to the masked language modeling objective).
 
 ## R
 
@@ -410,6 +420,10 @@ An example of a semi-supervised learning approach is "self-training", in which a
 Models that generate a new sequence from an input, like translation models, or summarization models (such as
 [Bart](model_doc/bart) or [T5](model_doc/t5)).
 
+### Sharded DDP
+
+Another name for the foundational [ZeRO](#zero-redundancy-optimizer--zero-) concept as used by various other implementations of ZeRO.
+
 ### stride
 
 In [convolution](#convolution) or [pooling](#pooling), the stride refers to the distance the kernel is moved over a matrix. A stride of 1 means the kernel is moved one pixel over at a time, and a stride of 2 means the kernel is moved two pixels over at a time.
@@ -419,6 +433,14 @@ In [convolution](#convolution) or [pooling](#pooling), the stride refers to the 
 A form of model training that directly uses labeled data to correct and instruct model performance. Data is fed into the model being trained, and its predictions are compared to the known labels. The model updates its weights based on how incorrect its predictions were, and the process is repeated to optimize model performance.
 
 ## T
+
+### Tensor Parallelism (TP)
+
+Parallelism technique for training on multiple GPUs in which each tensor is split up into multiple chunks, so instead of 
+having the whole tensor reside on a single GPU, each shard of the tensor resides on its designated GPU. Shards gets 
+processed separately and in parallel on different GPUs and the results are synced at the end of the processing step. 
+This is what is sometimes called horizontal parallelism, as the splitting happens on horizontal level.
+Learn more about Tensor Parallelism [here](perf_train_gpu_many#tensor-parallelism).
 
 ### token
 
@@ -489,3 +511,12 @@ Self-attention based deep learning model architecture.
 ### unsupervised learning
 
 A form of model training in which data provided to the model is not labeled. Unsupervised learning techniques leverage statistical information of the data distribution to find patterns useful for the task at hand.
+
+## Z
+
+### Zero Redundancy Optimizer (ZeRO)
+
+Parallelism technique which performs sharding of the tensors somewhat similar to [TensorParallel](#tensor-parallelism-tp), 
+except the whole tensor gets reconstructed in time for a forward or backward computation, therefore the model doesn't need 
+to be modified. This method also supports various offloading techniques to compensate for limited GPU memory. 
+Learn more about ZeRO [here](perf_train_gpu_many#zero-data-parallelism).

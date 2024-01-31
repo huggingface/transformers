@@ -114,6 +114,7 @@ class MCTCTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mctct"
 
     def __init__(

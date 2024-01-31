@@ -179,7 +179,7 @@ class PeftAdapterMixin:
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
-                use_auth_token=token,
+                token=token,
                 **adapter_kwargs,
             )
 
@@ -190,7 +190,7 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
-            adapter_state_dict = load_peft_weights(peft_model_id, use_auth_token=token, **adapter_kwargs)
+            adapter_state_dict = load_peft_weights(peft_model_id, token=token, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
@@ -292,11 +292,12 @@ class PeftAdapterMixin:
             )
 
         from peft.tuners.tuners_utils import BaseTunerLayer
+        from peft.utils import ModulesToSaveWrapper
 
         _adapters_has_been_set = False
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayer):
+            if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
                 # For backward compatbility with previous PEFT versions
                 if hasattr(module, "set_adapter"):
                     module.set_adapter(adapter_name)
@@ -322,9 +323,10 @@ class PeftAdapterMixin:
             raise ValueError("No adapter loaded. Please load an adapter first.")
 
         from peft.tuners.tuners_utils import BaseTunerLayer
+        from peft.utils import ModulesToSaveWrapper
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayer):
+            if isinstance(module, (BaseTunerLayer, ModulesToSaveWrapper)):
                 # The recent version of PEFT need to call `enable_adapters` instead
                 if hasattr(module, "enable_adapters"):
                     module.enable_adapters(enabled=False)

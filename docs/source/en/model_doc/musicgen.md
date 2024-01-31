@@ -46,6 +46,16 @@ This model was contributed by [sanchit-gandhi](https://huggingface.co/sanchit-ga
 [here](https://github.com/facebookresearch/audiocraft). The pre-trained checkpoints can be found on the
 [Hugging Face Hub](https://huggingface.co/models?sort=downloads&search=facebook%2Fmusicgen-).
 
+## Usage tips
+
+- After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) , you can convert them using the **conversion script** available at
+`src/transformers/models/musicgen/convert_musicgen_transformers.py` with the following command:
+
+```bash
+python src/transformers/models/musicgen/convert_musicgen_transformers.py \
+    --checkpoint small --pytorch_dump_folder /output/path --safe_serialization 
+```
+
 ## Generation
 
 MusicGen is compatible with two generation modes: greedy and sampling. In practice, sampling leads to significantly
@@ -56,6 +66,11 @@ or by overriding the model's generation config (see below).
 Generation is limited by the sinusoidal positional embeddings to 30 second inputs. Meaning, MusicGen cannot generate more
 than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
 given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
+
+Transformers supports both mono (1-channel) and stereo (2-channel) variants of MusicGen. The mono channel versions 
+generate a single set of codebooks. The stereo versions generate 2 sets of codebooks, 1 for each channel (left/right), 
+and each set of codebooks is decoded independently through the audio compression model. The audio streams for each 
+channel are combined to give the final stereo output.
 
 ### Unconditional Generation
 

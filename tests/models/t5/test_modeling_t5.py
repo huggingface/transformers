@@ -891,6 +891,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     def test_disk_offload(self):
         pass
 
+    @unittest.skip("Does not support conversations.")
+    def test_pipeline_conversational(self):
+        pass
+
 
 class T5EncoderOnlyModelTester:
     def __init__(

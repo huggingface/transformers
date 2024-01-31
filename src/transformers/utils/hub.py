@@ -31,24 +31,32 @@ from uuid import uuid4
 import huggingface_hub
 import requests
 from huggingface_hub import (
+    _CACHED_NO_EXIST,
     CommitOperationAdd,
+    ModelCard,
+    ModelCardData,
+    constants,
     create_branch,
     create_commit,
     create_repo,
     get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
+    try_to_load_from_cache,
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HFValidationError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
     build_hf_headers,
     hf_raise_for_status,
+    send_telemetry,
 )
+from huggingface_hub.utils._deprecation import _deprecate_method
 from requests.exceptions import HTTPError
 
 from . import __version__, logging
@@ -74,38 +82,50 @@ def is_offline_mode():
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
+default_cache_path = constants.default_cache_path
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
-# New default cache, shared with the Datasets library
-hf_cache_home = os.path.expanduser(
-    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
-)
-default_cache_path = os.path.join(hf_cache_home, "hub")
+
+# Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
+# The best way to set the cache path is with the environment variable HF_HOME. For more details, checkout this
+# documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
+#
+# In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
+# to be set to the right value.
+#
+# TODO: clean this for v5?
+PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HF_HUB_CACHE)
+PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
     os.path.isdir(old_default_cache_path)
-    and not os.path.isdir(default_cache_path)
+    and not os.path.isdir(constants.HF_HUB_CACHE)
     and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
     logger.warning(
-        "In Transformers v4.0.0, the default path to cache downloaded models changed from"
-        " '~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have"
+        "In Transformers v4.22.0, the default path to cache downloaded models changed from"
+        " '~/.cache/torch/transformers' to '~/.cache/huggingface/hub'. Since you don't seem to have"
         " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
-        " '~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should"
+        " '~/.cache/huggingface/hub' to avoid redownloading models you have already in the cache. You should"
         " only see this message once."
     )
-    shutil.move(old_default_cache_path, default_cache_path)
+    shutil.move(old_default_cache_path, constants.HF_HUB_CACHE)
 
-PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
-PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-HUGGINGFACE_HUB_CACHE = os.getenv("HUGGINGFACE_HUB_CACHE", PYTORCH_TRANSFORMERS_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", HUGGINGFACE_HUB_CACHE)
-HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
+HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
-DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
+
+# Add deprecation warning for old environment variables.
+for key in ("PYTORCH_PRETRAINED_BERT_CACHE", "PYTORCH_TRANSFORMERS_CACHE", "TRANSFORMERS_CACHE"):
+    if os.getenv(key) is not None:
+        warnings.warn(
+            f"Using `{key}` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.",
+            FutureWarning,
+        )
+
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
@@ -125,8 +145,15 @@ HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_R
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
-# Return value when trying to load a file from cache but the file does not exist in the distant repo.
-_CACHED_NO_EXIST = object()
+
+def _get_cache_file_to_return(
+    path_or_repo_id: str, full_filename: str, cache_dir: Union[str, Path, None] = None, revision: Optional[str] = None
+):
+    # We try to see if we have a cached version (not up to date):
+    resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
+    if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
+        return resolved_file
+    return None
 
 
 def is_remote_url(url_or_filename):
@@ -134,6 +161,10 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
+# TODO: remove this once fully deprecated
+# TODO? remove from './examples/research_projects/lxmert/utils.py' as well
+# TODO? remove from './examples/research_projects/visual_bert/utils.py' as well
+@_deprecate_method(version="4.39.0", message="This method is outdated and does not support the new cache system.")
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     """
     Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape `(model_url,
@@ -204,7 +235,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
-    if DISABLE_TELEMETRY:
+    if constants.HF_HUB_DISABLE_TELEMETRY:
         return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
@@ -218,7 +249,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]):
+def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]) -> Optional[str]:
     """
     Extracts the commit hash from a resolved filename toward a cache file.
     """
@@ -230,73 +261,6 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
         return None
     commit_hash = search.groups()[0]
     return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
-
-
-def try_to_load_from_cache(
-    repo_id: str,
-    filename: str,
-    cache_dir: Union[str, Path, None] = None,
-    revision: Optional[str] = None,
-    repo_type: Optional[str] = None,
-) -> Optional[str]:
-    """
-    Explores the cache to return the latest cached file for a given revision if found.
-
-    This function will not raise any exception if the file in not cached.
-
-    Args:
-        cache_dir (`str` or `os.PathLike`):
-            The folder where the cached files lie.
-        repo_id (`str`):
-            The ID of the repo on huggingface.co.
-        filename (`str`):
-            The filename to look for inside `repo_id`.
-        revision (`str`, *optional*):
-            The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
-            provided either.
-        repo_type (`str`, *optional*):
-            The type of the repo.
-
-    Returns:
-        `Optional[str]` or `_CACHED_NO_EXIST`:
-            Will return `None` if the file was not cached. Otherwise:
-            - The exact path to the cached file if it's found in the cache
-            - A special value `_CACHED_NO_EXIST` if the file does not exist at the given commit hash and this fact was
-              cached.
-    """
-    if revision is None:
-        revision = "main"
-
-    if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
-
-    object_id = repo_id.replace("/", "--")
-    if repo_type is None:
-        repo_type = "model"
-    repo_cache = os.path.join(cache_dir, f"{repo_type}s--{object_id}")
-    if not os.path.isdir(repo_cache):
-        # No cache for this model
-        return None
-    for subfolder in ["refs", "snapshots"]:
-        if not os.path.isdir(os.path.join(repo_cache, subfolder)):
-            return None
-
-    # Resolve refs (for instance to convert main to the associated commit sha)
-    cached_refs = os.listdir(os.path.join(repo_cache, "refs"))
-    if revision in cached_refs:
-        with open(os.path.join(repo_cache, "refs", revision)) as f:
-            revision = f.read()
-
-    if os.path.isfile(os.path.join(repo_cache, ".no_exist", revision, filename)):
-        return _CACHED_NO_EXIST
-
-    cached_shas = os.listdir(os.path.join(repo_cache, "snapshots"))
-    if revision not in cached_shas:
-        # No cache for this revision and we won't try to return a random revision
-        return None
-
-    cached_file = os.path.join(repo_cache, "snapshots", revision, filename)
-    return cached_file if os.path.isfile(cached_file) else None
 
 
 def cached_file(
@@ -312,11 +276,12 @@ def cached_file(
     subfolder: str = "",
     repo_type: Optional[str] = None,
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    _raise_exceptions_for_gated_repo: bool = True,
     _raise_exceptions_for_missing_entries: bool = True,
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: Optional[str] = None,
     **deprecated_kwargs,
-):
+) -> Optional[str]:
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
 
@@ -368,17 +333,21 @@ def cached_file(
     ```python
     # Download a model weight from the Hub and cache it.
     model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
-    ```"""
+    ```
+    """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     # Private arguments
+    #     _raise_exceptions_for_gated_repo: if False, do not raise an exception for gated repo error but return
+    #         None.
     #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
     #         None.
     #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
@@ -441,6 +410,9 @@ def cached_file(
             local_files_only=local_files_only,
         )
     except GatedRepoError as e:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if resolved_file is not None or not _raise_exceptions_for_gated_repo:
+            return resolved_file
         raise EnvironmentError(
             "You are trying to access a gated repo.\nMake sure to request access at "
             f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
@@ -460,12 +432,13 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
         ) from e
     except LocalEntryNotFoundError as e:
-        # We try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
-        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if (
+            resolved_file is not None
+            or not _raise_exceptions_for_missing_entries
+            or not _raise_exceptions_for_connection_errors
+        ):
             return resolved_file
-        if not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors:
-            return None
         raise EnvironmentError(
             f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
             f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
@@ -482,18 +455,21 @@ def cached_file(
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
         ) from e
     except HTTPError as err:
-        # First we try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
-        if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
+        resolved_file = _get_cache_file_to_return(path_or_repo_id, full_filename, cache_dir, revision)
+        if resolved_file is not None or not _raise_exceptions_for_connection_errors:
             return resolved_file
-        if not _raise_exceptions_for_connection_errors:
-            return None
-
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-
+    except HFValidationError as e:
+        raise EnvironmentError(
+            f"Incorrect path_or_model_id: '{path_or_repo_id}'. Please provide either the path to a local folder or the repo_id of a model on the Hub."
+        ) from e
     return resolved_file
 
 
+# TODO: deprecate `get_file_from_repo` or document it differently?
+#       Docstring is exactly the same as `cached_repo` but behavior is slightly different. If file is missing or if
+#       there is a connection error, `cached_repo` will return None while `get_file_from_repo` will raise an error.
+#       IMO we should keep only 1 method and have a single `raise_error` argument (to be discussed).
 def get_file_from_repo(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
@@ -559,11 +535,13 @@ def get_file_from_repo(
     tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
     # This model does not have a tokenizer config so the result will be None.
     tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
-    ```"""
+    ```
+    """
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -580,6 +558,7 @@ def get_file_from_repo(
         revision=revision,
         local_files_only=local_files_only,
         subfolder=subfolder,
+        _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
     )
@@ -603,10 +582,11 @@ def download_url(url, proxies=None):
         f"Using `from_pretrained` with the url of a file (here {url}) is deprecated and won't be possible anymore in"
         " v5 of Transformers. You should host your file on the Hub (hf.co) instead and use the repository ID. Note"
         " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
-        " multiple processes (each process will download the file in a different temporary file)."
+        " multiple processes (each process will download the file in a different temporary file).",
+        FutureWarning,
     )
-    tmp_file = tempfile.mkstemp()[1]
-    with open(tmp_file, "wb") as f:
+    tmp_fd, tmp_file = tempfile.mkstemp()
+    with os.fdopen(tmp_fd, "wb") as f:
         http_get(url, f, proxies=proxies)
     return tmp_file
 
@@ -632,7 +612,8 @@ def has_file(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -724,6 +705,7 @@ class PushToHubMixin:
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         revision: str = None,
+        commit_description: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -778,6 +760,7 @@ class PushToHubMixin:
             repo_id=repo_id,
             operations=operations,
             commit_message=commit_message,
+            commit_description=commit_description,
             token=token,
             create_pr=create_pr,
             revision=revision,
@@ -790,10 +773,12 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
         token: Optional[Union[bool, str]] = None,
-        max_shard_size: Optional[Union[int, str]] = "10GB",
+        max_shard_size: Optional[Union[int, str]] = "5GB",
         create_pr: bool = False,
-        safe_serialization: bool = False,
+        safe_serialization: bool = True,
         revision: str = None,
+        commit_description: str = None,
+        tags: Optional[List[str]] = None,
         **deprecated_kwargs,
     ) -> str:
         """
@@ -814,16 +799,21 @@ class PushToHubMixin:
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
-            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
-                by a unit (like `"5MB"`).
+                by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
+                Google Colab instances without any CPU OOM issues.
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `False`):
+            safe_serialization (`bool`, *optional*, defaults to `True`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
+            tags (`List[str]`, *optional*):
+                List of tags to push on the Hub.
 
         Examples:
 
@@ -840,9 +830,11 @@ class PushToHubMixin:
         ```
         """
         use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
         if use_auth_token is not None:
             warnings.warn(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
             )
             if token is not None:
                 raise ValueError(
@@ -883,6 +875,11 @@ class PushToHubMixin:
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
+        # Create a new empty model card and eventually tag it
+        model_card = create_and_tag_model_card(
+            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
+        )
+
         if use_temp_dir is None:
             use_temp_dir = not os.path.isdir(working_dir)
 
@@ -892,6 +889,9 @@ class PushToHubMixin:
             # Save all files.
             self.save_pretrained(work_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
 
+            # Update model card if needed:
+            model_card.save(os.path.join(work_dir, "README.md"))
+
             return self._upload_modified_files(
                 work_dir,
                 repo_id,
@@ -900,6 +900,7 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
                 revision=revision,
+                commit_description=commit_description,
             )
 
 
@@ -932,13 +933,10 @@ def send_example_telemetry(example_name, *example_args, framework="pytorch"):
             script_name = script_name.replace("_no_trainer", "")
             data["dataset_name"] = f"{script_name}-{args_as_dict['task_name']}"
 
-    headers = {"user-agent": http_user_agent(data)}
-    try:
-        r = requests.head(HUGGINGFACE_CO_EXAMPLES_TELEMETRY, headers=headers)
-        r.raise_for_status()
-    except Exception:
-        # We don't want to error in case of connection errors of any kind.
-        pass
+    # Send telemetry in the background
+    send_telemetry(
+        topic="examples", library_name="transformers", library_version=__version__, user_agent=http_user_agent(data)
+    )
 
 
 def convert_file_size_to_int(size: Union[int, str]):
@@ -1004,7 +1002,8 @@ def get_checkpoint_shard_files(
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
-            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
         )
         if token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
@@ -1110,6 +1109,43 @@ def extract_info_from_url(url):
     return {"repo": cache_repo, "revision": revision, "filename": filename}
 
 
+def create_and_tag_model_card(
+    repo_id: str,
+    tags: Optional[List[str]] = None,
+    token: Optional[str] = None,
+    ignore_metadata_errors: bool = False,
+):
+    """
+    Creates or loads an existing model card and tags it.
+
+    Args:
+        repo_id (`str`):
+            The repo_id where to look for the model card.
+        tags (`List[str]`, *optional*):
+            The list of tags to add in the model card
+        token (`str`, *optional*):
+            Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
+        ignore_metadata_errors (`str`):
+            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
+            the process. Use it at your own risk.
+    """
+    try:
+        # Check if the model card is present on the remote repo
+        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
+    except EntryNotFoundError:
+        # Otherwise create a simple model card from template
+        model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
+        card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")
+        model_card = ModelCard.from_template(card_data, model_description=model_description)
+
+    if tags is not None:
+        for model_tag in tags:
+            if model_tag not in model_card.data.tags:
+                model_card.data.tags.append(model_tag)
+
+    return model_card
+
+
 def clean_files_for(file):
     """
     Remove, if they exist, file, file.json and file.lock
@@ -1149,7 +1185,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
     if new_cache_dir is None:
         new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        # Migrate from old cache in .cache/huggingface/hub
+        # Migrate from old cache in .cache/huggingface/transformers
         old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
         if os.path.isdir(str(old_cache)):
             cache_dir = str(old_cache)
@@ -1242,7 +1278,7 @@ if cache_version < 1 and cache_is_not_empty:
             "`transformers.utils.move_cache()`."
         )
     try:
-        if TRANSFORMERS_CACHE != default_cache_path:
+        if TRANSFORMERS_CACHE != constants.HF_HUB_CACHE:
             # Users set some env variable to customize cache storage
             move_cache(TRANSFORMERS_CACHE, TRANSFORMERS_CACHE)
         else:

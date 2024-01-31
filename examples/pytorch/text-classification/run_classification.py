@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.38.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -82,7 +82,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "The name of the text column in the input dataset or a CSV/JSON file."
+                "The name of the text column in the input dataset or a CSV/JSON file. "
                 'If not specified, will use the "sentence" column for single/multi-label classifcation task.'
             )
         },
@@ -120,7 +120,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": (
-                "The name of the label column in the input dataset or a CSV/JSON file."
+                "The name of the label column in the input dataset or a CSV/JSON file. "
                 'If not specified, will use the "label" column for single/multi-label classifcation task'
             )
         },
@@ -240,7 +240,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=None,
         metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
         },
     )
     trust_remote_code: bool = field(
@@ -248,7 +248,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -286,7 +286,10 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
         if model_args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token
@@ -315,7 +318,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
@@ -393,7 +396,7 @@ def main():
             )
 
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if data_args.remove_splits is not None:
         for split in data_args.remove_splits.split(","):
@@ -542,7 +545,7 @@ def main():
                 "run. You can ignore this if you are doing finetuning."
             )
         model.config.label2id = label_to_id
-        model.config.id2label = {id: label for label, id in config.label2id.items()}
+        model.config.id2label = {id: label for label, id in label_to_id.items()}
     elif not is_regression:  # classification, but not training
         logger.info("using label infos in the model config")
         logger.info("label2id: {}".format(model.config.label2id))
@@ -552,7 +555,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -630,23 +633,23 @@ def main():
 
     if data_args.metric_name is not None:
         metric = (
-            evaluate.load(data_args.metric_name, config_name="multilabel")
+            evaluate.load(data_args.metric_name, config_name="multilabel", cache_dir=model_args.cache_dir)
             if is_multi_label
-            else evaluate.load(data_args.metric_name)
+            else evaluate.load(data_args.metric_name, cache_dir=model_args.cache_dir)
         )
         logger.info(f"Using metric {data_args.metric_name} for evaluation.")
     else:
         if is_regression:
-            metric = evaluate.load("mse")
+            metric = evaluate.load("mse", cache_dir=model_args.cache_dir)
             logger.info("Using mean squared error (mse) as regression score, you can use --metric_name to overwrite.")
         else:
             if is_multi_label:
-                metric = evaluate.load("f1", config_name="multilabel")
+                metric = evaluate.load("f1", config_name="multilabel", cache_dir=model_args.cache_dir)
                 logger.info(
                     "Using multilabel F1 for multi-label classification task, you can use --metric_name to overwrite."
                 )
             else:
-                metric = evaluate.load("accuracy")
+                metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
                 logger.info("Using accuracy as classification score, you can use --metric_name to overwrite.")
 
     def compute_metrics(p: EvalPrediction):
@@ -655,7 +658,7 @@ def main():
             preds = np.squeeze(preds)
             result = metric.compute(predictions=preds, references=p.label_ids)
         elif is_multi_label:
-            preds = np.array([np.where(p > 0.5, 1, 0) for p in preds])
+            preds = np.array([np.where(p > 0, 1, 0) for p in preds])  # convert logits to multi-hot encoding
             # Micro F1 is commonly used in multi-label classification
             result = metric.compute(predictions=preds, references=p.label_ids, average="micro")
         else:
@@ -721,7 +724,10 @@ def main():
         if is_regression:
             predictions = np.squeeze(predictions)
         elif is_multi_label:
-            predictions = np.array([np.where(p > 0.5, 1, 0) for p in predictions])
+            # Convert logits to multi-hot encoding. We compare the logits to 0 instead of 0.5, because the sigmoid is not applied.
+            # You can also pass `preprocess_logits_for_metrics=lambda logits, labels: nn.functional.sigmoid(logits)` to the Trainer
+            # and set p > 0.5 below (less efficient in this case)
+            predictions = np.array([np.where(p > 0, 1, 0) for p in predictions])
         else:
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")

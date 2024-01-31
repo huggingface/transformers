@@ -149,10 +149,10 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self.merges_file = merges_file
 
         self.encoder = {}
-        self.encoder[bos_token] = 0
-        self.encoder[pad_token] = 1
-        self.encoder[eos_token] = 2
-        self.encoder[unk_token] = 3
+        self.encoder[str(bos_token)] = 0
+        self.encoder[str(pad_token)] = 1
+        self.encoder[str(eos_token)] = 2
+        self.encoder[str(unk_token)] = 3
 
         self.add_from_file(vocab_file)
 

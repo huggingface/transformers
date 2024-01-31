@@ -397,17 +397,11 @@ class ViTEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -466,10 +460,6 @@ class ViTPreTrainedModel(PreTrainedModel):
                 mean=0.0,
                 std=self.config.initializer_range,
             ).to(module.cls_token.dtype)
-
-    def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
-        if isinstance(module, ViTEncoder):
-            module.gradient_checkpointing = value
 
 
 VIT_START_DOCSTRING = r"""
@@ -698,7 +688,7 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
             raise ValueError(
                 "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
-                "the reconstructed image has the same dimensions as the input."
+                "the reconstructed image has the same dimensions as the input. "
                 f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
             )
 

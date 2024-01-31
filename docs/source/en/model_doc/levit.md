@@ -38,7 +38,9 @@ alt="drawing" width="600"/>
 
 <small> LeViT Architecture. Taken from the <a href="https://arxiv.org/abs/2104.01136">original paper</a>.</small>
 
-Tips:
+This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/facebookresearch/LeViT).
+
+## Usage tips
 
 - Compared to ViT, LeViT models use an additional distillation head to effectively learn from a teacher (which, in the LeViT paper, is a ResNet like-model). The distillation head is learned through backpropagation under supervision of a ResNet like-model. They also draw inspiration from convolution neural networks to use activation maps with decreasing resolutions to increase the efficiency.
 - There are 2 ways to fine-tune distilled models, either (1) in a classic way, by only placing a prediction head on top
@@ -62,8 +64,6 @@ Tips:
 - [`LevitForImageClassificationWithTeacher`] currently supports only inference and not training or fine-tuning.
 - You can check out demo notebooks regarding inference as well as fine-tuning on custom data [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/VisionTransformer)
   (you can just replace [`ViTFeatureExtractor`] by [`LevitImageProcessor`] and [`ViTForImageClassification`] by [`LevitForImageClassification`] or [`LevitForImageClassificationWithTeacher`]).
-
-This model was contributed by [anugunj](https://huggingface.co/anugunj). The original code can be found [here](https://github.com/facebookresearch/LeViT).
 
 ## Resources
 
@@ -89,7 +89,6 @@ If you're interested in submitting a resource to be included here, please feel f
 
   [[autodoc]] LevitImageProcessor
     - preprocess
-
 
 ## LevitModel
 

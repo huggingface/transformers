@@ -45,7 +45,10 @@ self-supervised loss that focuses on modeling inter-sentence coherence, and show
 with multi-sentence inputs. As a result, our best model establishes new state-of-the-art results on the GLUE, RACE, and
 SQuAD benchmarks while having fewer parameters compared to BERT-large.*
 
-Tips:
+This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
+[kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
+
+## Usage tips
 
 - ALBERT is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather
   than the left.
@@ -57,16 +60,66 @@ Tips:
 Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and B (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have been swapped or not.
 
 
+
 This model was contributed by [lysandre](https://huggingface.co/lysandre). This model jax version was contributed by
 [kamalkraj](https://huggingface.co/kamalkraj). The original code can be found [here](https://github.com/google-research/ALBERT).
 
-## Documentation resources
 
-- [Text classification task guide](../tasks/sequence_classification)
-- [Token classification task guide](../tasks/token_classification)
-- [Question answering task guide](../tasks/question_answering)
-- [Masked language modeling task guide](../tasks/masked_language_modeling)
-- [Multiple choice task guide](../tasks/multiple_choice)
+## Resources
+
+
+The resources provided in the following sections consist of a list of official Hugging Face and community (indicated by 🌎) resources to help you get started with AlBERT. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+
+<PipelineTag pipeline="text-classification"/>
+
+
+- [`AlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification).
+
+
+- [`TFAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification).
+
+- [`FlaxAlbertForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb).
+- Check the [Text classification task guide](../tasks/sequence_classification) on how to use the model.
+
+
+<PipelineTag pipeline="token-classification"/>
+
+
+- [`AlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification).
+
+
+- [`TFAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
+
+
+
+- [`FlaxAlbertForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification).
+- [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
+- Check the [Token classification task guide](../tasks/token_classification) on how to use the model.
+
+<PipelineTag pipeline="fill-mask"/>
+
+- [`AlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`TFAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
+- [`FlaxAlbertForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb).
+- [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
+- Check the [Masked language modeling task guide](../tasks/masked_language_modeling) on how to use the model.
+
+<PipelineTag pipeline="question-answering"/>
+
+- [`AlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
+- [`TFAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
+- [`FlaxAlbertForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering).
+- [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
+- Check the [Question answering task guide](../tasks/question_answering) on how to use the model.
+
+**Multiple choice**
+
+- [`AlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
+- [`TFAlbertForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb).
+
+- Check the  [Multiple choice task guide](../tasks/multiple_choice) on how to use the model.
+
 
 ## AlbertConfig
 
@@ -89,6 +142,9 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 [[autodoc]] models.albert.modeling_albert.AlbertForPreTrainingOutput
 
 [[autodoc]] models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
+
+<frameworkcontent>
+<pt>
 
 ## AlbertModel
 
@@ -123,6 +179,10 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 [[autodoc]] AlbertForQuestionAnswering
     - forward
+
+</pt>
+
+<tf>
 
 ## TFAlbertModel
 
@@ -159,6 +219,9 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 [[autodoc]] TFAlbertForQuestionAnswering
     - call
 
+</tf>
+<jax>
+
 ## FlaxAlbertModel
 
 [[autodoc]] FlaxAlbertModel
@@ -193,3 +256,8 @@ This model was contributed by [lysandre](https://huggingface.co/lysandre). This 
 
 [[autodoc]] FlaxAlbertForQuestionAnswering
     - __call__
+
+</jax>
+</frameworkcontent>
+
+

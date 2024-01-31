@@ -112,8 +112,8 @@ if __name__ == "__main__":
         type=float,
         required=False,
         help=(
-            "For `magnitude` and `topK`, it is the level of remaining weights (in %) in the fine-pruned model."
-            "For `sigmoied_threshold`, it is the threshold \tau against which the (sigmoied) scores are compared."
+            "For `magnitude` and `topK`, it is the level of remaining weights (in %) in the fine-pruned model. "
+            "For `sigmoied_threshold`, it is the threshold \tau against which the (sigmoied) scores are compared. "
             "Not needed for `l0`"
         ),
     )

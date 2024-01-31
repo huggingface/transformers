@@ -153,9 +153,9 @@ class T5Tokenizer(PreTrainedTokenizer):
         legacy=None,
         **kwargs,
     ) -> None:
-        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
-        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
-        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True)
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -167,7 +167,9 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         if additional_special_tokens is not None:
             extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
-            if extra_ids > 0 and extra_ids != len(extra_tokens):
+            if len(extra_tokens) < 1:
+                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
+            elif extra_ids > 0 and extra_ids != len(extra_tokens):
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
@@ -181,7 +183,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self._added_tokens_decoder = {}
         for i in range(len(extra_tokens)):
             self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
-                f"<extra_id_{i}>", single_word=True, lstrip=True, rstrip=True, special=True
+                f"<extra_id_{i}>", single_word=False, lstrip=True, rstrip=True, special=True, normalized=False
             )
 
         if legacy is None:
@@ -189,7 +191,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
+                " means, and thoroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True

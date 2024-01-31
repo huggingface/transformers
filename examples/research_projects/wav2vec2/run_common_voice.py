@@ -80,8 +80,8 @@ class ModelArguments:
         default=0.05,
         metadata={
             "help": (
-                "Propability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Propability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
             )
         },

@@ -28,6 +28,7 @@ from PIL import Image
 from torchvision.transforms import (
     CenterCrop,
     Compose,
+    Lambda,
     Normalize,
     RandomHorizontalFlip,
     RandomResizedCrop,
@@ -56,7 +57,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.35.0.dev0")
+check_min_version("4.38.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -110,6 +111,14 @@ class DataTrainingArguments:
             )
         },
     )
+    image_column_name: str = field(
+        default="image",
+        metadata={"help": "The name of the dataset column containing the image data. Defaults to 'image'."},
+    )
+    label_column_name: str = field(
+        default="label",
+        metadata={"help": "The name of the dataset column containing the labels. Defaults to 'label'."},
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and (self.train_dir is None and self.validation_dir is None):
@@ -155,7 +164,7 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=None,
         metadata={
-            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
         },
     )
     trust_remote_code: bool = field(
@@ -163,7 +172,7 @@ class ModelArguments:
         metadata={
             "help": (
                 "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
         },
@@ -172,12 +181,6 @@ class ModelArguments:
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
-
-
-def collate_fn(examples):
-    pixel_values = torch.stack([example["pixel_values"] for example in examples])
-    labels = torch.tensor([example["labels"] for example in examples])
-    return {"pixel_values": pixel_values, "labels": labels}
 
 
 def main():
@@ -194,7 +197,10 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.use_auth_token is not None:
-        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
         if model_args.token is not None:
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         model_args.token = model_args.use_auth_token
@@ -222,7 +228,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
@@ -251,7 +257,6 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
             token=model_args.token,
         )
     else:
@@ -264,8 +269,26 @@ def main():
             "imagefolder",
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
         )
+
+    dataset_column_names = dataset["train"].column_names if "train" in dataset else dataset["validation"].column_names
+    if data_args.image_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--image_column_name {data_args.image_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--image_column_name` to the correct audio column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
+    if data_args.label_column_name not in dataset_column_names:
+        raise ValueError(
+            f"--label_column_name {data_args.label_column_name} not found in dataset '{data_args.dataset_name}'. "
+            "Make sure to set `--label_column_name` to the correct text column - one of "
+            f"{', '.join(dataset_column_names)}."
+        )
+
+    def collate_fn(examples):
+        pixel_values = torch.stack([example["pixel_values"] for example in examples])
+        labels = torch.tensor([example[data_args.label_column_name] for example in examples])
+        return {"pixel_values": pixel_values, "labels": labels}
 
     # If we don't have a validation split, split off a percentage of train as validation.
     data_args.train_val_split = None if "validation" in dataset.keys() else data_args.train_val_split
@@ -276,14 +299,14 @@ def main():
 
     # Prepare label mappings.
     # We'll include these in the model's config to get human readable labels in the Inference API.
-    labels = dataset["train"].features["labels"].names
+    labels = dataset["train"].features[data_args.label_column_name].names
     label2id, id2label = {}, {}
     for i, label in enumerate(labels):
         label2id[label] = str(i)
         id2label[str(i)] = label
 
     # Load the accuracy metric from the datasets package
-    metric = evaluate.load("accuracy")
+    metric = evaluate.load("accuracy", cache_dir=model_args.cache_dir)
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
@@ -325,7 +348,11 @@ def main():
         size = image_processor.size["shortest_edge"]
     else:
         size = (image_processor.size["height"], image_processor.size["width"])
-    normalize = Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+    normalize = (
+        Normalize(mean=image_processor.image_mean, std=image_processor.image_std)
+        if hasattr(image_processor, "image_mean") and hasattr(image_processor, "image_std")
+        else Lambda(lambda x: x)
+    )
     _train_transforms = Compose(
         [
             RandomResizedCrop(size),
@@ -346,13 +373,15 @@ def main():
     def train_transforms(example_batch):
         """Apply _train_transforms across a batch."""
         example_batch["pixel_values"] = [
-            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]
+            _train_transforms(pil_img.convert("RGB")) for pil_img in example_batch[data_args.image_column_name]
         ]
         return example_batch
 
     def val_transforms(example_batch):
         """Apply _val_transforms across a batch."""
-        example_batch["pixel_values"] = [_val_transforms(pil_img.convert("RGB")) for pil_img in example_batch["image"]]
+        example_batch["pixel_values"] = [
+            _val_transforms(pil_img.convert("RGB")) for pil_img in example_batch[data_args.image_column_name]
+        ]
         return example_batch
 
     if training_args.do_train:

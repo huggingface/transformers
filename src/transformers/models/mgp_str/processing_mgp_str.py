@@ -49,6 +49,7 @@ class MgpstrProcessor(ProcessorMixin):
         tokenizer ([`MgpstrTokenizer`], *optional*):
             The tokenizer is a required input.
     """
+
     attributes = ["image_processor", "char_tokenizer"]
     image_processor_class = "ViTImageProcessor"
     char_tokenizer_class = "MgpstrTokenizer"

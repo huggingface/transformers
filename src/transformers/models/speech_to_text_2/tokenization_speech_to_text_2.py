@@ -199,7 +199,7 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         if self.bpe_ranks is None:
             raise ValueError(
                 "This tokenizer was instantiated without a `merges.txt` file, so"
-                " that it can only be used for decoding, not for encoding."
+                " that it can only be used for decoding, not for encoding. "
                 "Make sure to provide `merges.txt` file at instantiation to enable "
                 "encoding."
             )

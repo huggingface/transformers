@@ -466,10 +466,6 @@ class RwkvPreTrainedModel(PreTrainedModel):
                 module.time_mix_key.data = torch.pow(time_weight, ratio_1_to_almost0)
                 module.time_mix_receptance.data = torch.pow(time_weight, ratio_1_to_almost0)
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, RwkvModel):
-            module.gradient_checkpointing = value
-
 
 @dataclass
 class RwkvOutput(ModelOutput):
@@ -497,8 +493,8 @@ class RwkvOutput(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -530,8 +526,8 @@ class RwkvCausalLMOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 RWKV_START_DOCSTRING = r"""
@@ -676,16 +672,8 @@ class RwkvModel(RwkvPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, use_cache=use_cache, output_attentions=output_attentions)
-
-                    return custom_forward
-
-                hidden_states, state, attentions = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block), hidden_states, state
+                hidden_states, state, attentions = self._gradient_checkpointing_func(
+                    block.__call__, hidden_states, state, use_cache, output_attentions
                 )
             else:
                 hidden_states, state, attentions = block(
@@ -789,6 +777,24 @@ class RwkvForCausalLM(RwkvPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.head = new_embeddings
+
+    def generate(self, *args, **kwargs):
+        # Thin wrapper to raise exceptions when trying to generate with methods that manipulate `past_key_values`.
+        # RWKV is one of the few models that don't have it (it has `state` instead, which has different properties and
+        # usage).
+        try:
+            gen_output = super().generate(*args, **kwargs)
+        except AttributeError as exc:
+            # Expected exception: "AttributeError: '(object name)' object has no attribute 'past_key_values'"
+            if "past_key_values" in str(exc):
+                raise AttributeError(
+                    "You tried to call `generate` with a decoding strategy that manipulates `past_key_values`. RWKV "
+                    "doesn't have that attribute, try another generation strategy instead. For the available "
+                    "generation strategies, check this doc: https://huggingface.co/docs/transformers/en/generation_strategies#decoding-strategies"
+                )
+            else:
+                raise exc
+        return gen_output
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
