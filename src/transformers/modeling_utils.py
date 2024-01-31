@@ -796,16 +796,17 @@ def _load_state_dict_into_meta_model(
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
             state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
-        elif (
-            hf_quantizer is None
-            or (not hf_quantizer.requires_parameters_quantization)
-            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
-        ):
+        # elif (
+        #     hf_quantizer is None
+        #     or (not hf_quantizer.requires_parameters_quantization)
+        #     or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
+        # ):
+        else:
             # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-        else:
-            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            # TODO: consider removing used param_parts from state_dict before return
+        # else:
+        # hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+        # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
 
