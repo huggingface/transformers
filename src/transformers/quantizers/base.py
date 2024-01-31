@@ -15,7 +15,6 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
 from ..utils import is_torch_available
-from ..utils.import_utils import _is_package_available
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -63,8 +62,6 @@ class HfQuantizer(ABC):
                 f" You explicitly passed `pre_quantized=False` meaning your model weights are not quantized. Make sure to "
                 f"pass `pre_quantized=True` while knowing what you are doing."
             )
-
-        self.check_packages_compatibility()
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         """
@@ -151,25 +148,6 @@ class HfQuantizer(ABC):
         If no explicit check are needed, simply return nothing.
         """
         return
-
-    def check_packages_compatibility(self):
-        """
-        Check the compatibility of the quantizer with respect to the current environment. Loops over all packages
-        name under `self.required_packages` and checks if that package is available.
-        """
-        if self.required_packages is not None:
-            non_available_packages = []
-            for package_name in self.required_packages:
-                is_package_available = _is_package_available(package_name)
-                if not is_package_available:
-                    non_available_packages.append(package_name)
-
-            if len(non_available_packages) > 0:
-                raise ValueError(
-                    f"The packages {self.required_packages} are required to use {self.__class__.__name__}"
-                    f" the following packages are missing in your environment: {non_available_packages}, please make sure"
-                    f" to install them in order to use the quantizer."
-                )
 
     def preprocess_model(self, model: "PreTrainedModel", **kwargs):
         """
