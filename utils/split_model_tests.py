@@ -8,7 +8,7 @@ if __name__ == "__main__":
     d2 = sorted(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))
     d1.remove("models")
     d = d2 + d1
-    d = d[:64]
+    d = d[:256]
 
     num_jobs = len(d)
     num_splits = int(os.getenv("NUM_SLICES", 2))
