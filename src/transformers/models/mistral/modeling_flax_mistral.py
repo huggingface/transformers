@@ -318,12 +318,9 @@ class FlaxMistralAttention(nn.Module):
             key_states, value_states, attention_mask = self._concatenate_to_cache(
                 key_states, value_states, query_states, attention_mask
             )
-        batch_size, seq_length, num_heads, head_dim = key_states.shape
-        key_states = jnp.tile(key_states[:, :, :, None, :], (1, 1, 1, self.num_key_value_groups, 1))
-        key_states = key_states.reshape(batch_size, seq_length, num_heads * self.num_key_value_groups, head_dim)
-        value_states = jnp.tile(value_states[:, :, :, None, :], (1, 1, 1, self.num_key_value_groups, 1))
-        value_states = value_states.reshape(batch_size, seq_length, num_heads * self.num_key_value_groups, head_dim)
-
+        key_states = jnp.repeat(key_states, self.num_key_value_groups, axis=2)
+        value_states = jnp.repeat(value_states, self.num_key_value_groups, axis=2)
+        
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
