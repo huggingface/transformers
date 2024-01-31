@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,13 +20,12 @@ Fill-in-the middle (FIM) objective on a text file or a dataset.
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=text-generation
 """
-# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
+# You should adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import logging
 import math
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from itertools import chain
 from typing import Optional
@@ -162,7 +161,7 @@ class ModelArguments:
         },
     )
     attn_implementation: Optional[str] = field(
-        default=None, metadata={"help": ("The attention implementation to use. ")}
+        default="sdpa", metadata={"help": ("The attention implementation to use. ")}
     )
 
     def __post_init__(self):
