@@ -19,6 +19,7 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
+from ..utils.quantization_config import AWQLinearVersion
 from ..utils import is_accelerate_available, is_auto_awq_available, is_torch_available, logging
 
 
@@ -94,6 +95,11 @@ class AwqQuantizer(HfQuantizer):
 
             model = fuse_awq_modules(model, self.quantization_config)
             model._awq_is_fused = True  # TODO: consider storing this flag in model.config instead
+        
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            from ..integrations import post_init_awq_exllama_modules
+            
+            model = post_init_awq_exllama_modules(model)
 
     @property
     def is_serializable(self):
@@ -101,6 +107,11 @@ class AwqQuantizer(HfQuantizer):
         if self.quantization_config.do_fuse:
             logger.warning("You cannot save an AWQ model that uses fused modules!")
             return False
+
+        if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
+            logger.warning("You cannot save an AWQ model that uses Exllama backend!")
+            return False
+        
         return True
 
     @property
