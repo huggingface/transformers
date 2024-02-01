@@ -15,24 +15,28 @@
 
 
 import itertools
+import math
 import os
 import random
 import tempfile
 import unittest
-import math
 
 import numpy as np
-from datasets import load_dataset
 
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_librosa, require_torchaudio
-from transformers.utils.import_utils import is_torch_available, is_librosa_available, is_torchaudio_available
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_librosa,
+    require_torch,
+    require_torchaudio,
+)
+from transformers.utils.import_utils import is_librosa_available, is_torch_available, is_torchaudio_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_torch_available():
     import torch
-    
+
 if is_torchaudio_available() and is_librosa_available():
     from transformers import MusicgenMelodyFeatureExtractor
 
@@ -53,6 +57,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
             values[-1].append(rng.random() * scale)
 
     return values
+
 
 # Copied from tests.models.musicgen.test_modeling_musicgen.get_bip_bip
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
@@ -161,6 +166,7 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         input_values = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_values
         self.assertTrue(input_values.ndim == 3)
         self.assertTrue(input_values.shape[0] == 3)
+        # Ignore copy
         self.assertTrue(input_values.shape[-1] == feature_extractor.feature_size)
 
         # Test not batched input
@@ -181,14 +187,13 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-            
+
     def test_call_from_demucs(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        
+
         # (batch_size, num_stems, channel_size, audio_length)
         inputs = torch.rand([4, 5, 2, 44000])
-        
 
         # Test feature size
         input_values = feature_extractor(inputs, padding=True, return_tensors="np").input_values
@@ -214,13 +219,11 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
             pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
-
     def test_integration(self):
         EXPECTED_INPUT_FEATURES = torch.zeros([2, 8, 12])
         EXPECTED_INPUT_FEATURES[0, :6, 9] = 1
         EXPECTED_INPUT_FEATURES[0, 6:, 0] = 1
         EXPECTED_INPUT_FEATURES[1, :, 9] = 1
-
 
         input_speech = [get_bip_bip(duration=0.5), get_bip_bip(duration=1.0)]
         feature_extractor = MusicgenMelodyFeatureExtractor()

@@ -166,8 +166,8 @@ class MusicgenMelodyDecoderTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest with Musicgen->MusicgenMelody
 @require_torch
+# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest with Musicgen->MusicgenMelody
 class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
     greedy_sample_model_classes = (
@@ -452,6 +452,7 @@ class MusicgenMelodyTester:
         num_filters=4,
         codebook_size=128,
         conditional_seq_length=3,
+        chroma_length=24,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -473,6 +474,7 @@ class MusicgenMelodyTester:
         self.num_filters = num_filters
         self.codebook_size = codebook_size
         self.conditional_seq_length = conditional_seq_length
+        self.chroma_length = chroma_length
         self.encoder_seq_length = conditional_seq_length + seq_length
 
     def prepare_config_and_inputs(self):
@@ -510,7 +512,9 @@ class MusicgenMelodyTester:
             num_codebooks=self.num_codebooks,
             tie_word_embeddings=False,
         )
-        config = MusicgenMelodyConfig.from_sub_models_config(text_encoder_config, audio_decoder_config, decoder_config)
+        config = MusicgenMelodyConfig.from_sub_models_config(
+            text_encoder_config, audio_decoder_config, decoder_config, chroma_length=self.chroma_length
+        )
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -518,8 +522,8 @@ class MusicgenMelodyTester:
         return config, inputs_dict
 
 
-# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody
 @require_torch
+# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody
 class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
     greedy_sample_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
@@ -536,14 +540,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     # Ignore copy
     def _check_output_with_attentions(self, outputs, config, input_ids, decoder_input_ids):
-        text_encoder_config = config.text_encoder
         decoder_config = config.decoder
 
         decoder_attentions = outputs["attentions"]
         num_decoder_layers = decoder_config.num_hidden_layers
         self.assertEqual(len(decoder_attentions), num_decoder_layers)
 
-        output_shape = decoder_input_ids.shape[-1] + input_ids.shape[-1]
+        output_shape = decoder_input_ids.shape[-1] + input_ids.shape[-1] + self.model_tester.chroma_length
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
             (decoder_config.num_attention_heads, output_shape, output_shape),
@@ -730,13 +733,13 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             expected_num_layers = self.model_tester.num_hidden_layers
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = self.model_tester.conditional_seq_length
+            seq_length = self.model_tester.conditional_seq_length + self.model_tester.chroma_length
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
 
-            seq_length = self.model_tester.encoder_seq_length
+            seq_length = self.model_tester.encoder_seq_length + self.model_tester.chroma_length
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             hidden_states = outputs.hidden_states
             self.assertIsInstance(hidden_states, (list, tuple))
@@ -1150,16 +1153,21 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
             ).logits
 
         # fmt: off
-        EXPECTED_LOGITS = torch.tensor(
-            [
-                -0.9708, -3.0149, -4.6415, -1.4754, -0.2786, -2.3523, -2.6049, -6.7467,
-                -1.0206, -3.2984, -3.3968, -1.5108, -1.5786, -3.1493, -1.1503, -0.0545,
-            ]
-        )
+        EXPECTED_LOGITS = torch.tensor([
+            1.1100, -2.1065, -3.7699, -0.7102,  1.3707, -1.7028, -2.6802, -6.0367,
+            1.0504, -2.5358, -4.3497,  0.7338,  0.4823, -2.5260,  1.2717,  1.5427
+        ])
         # fmt: on
+        EXPECTED_OUTPUT_LENGTH = input_ids.shape[1] + 1 + self.model.config.chroma_length
 
-        self.assertTrue(logits.shape == (input_ids.shape[0] * model.decoder.num_codebooks, input_ids.shape[1] + 1, model.decoder.config.vocab_size))
-        self.assertTrue(torch.allclose(logits[0, 0, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        logits_shape = (
+            input_ids.shape[0] * model.decoder.num_codebooks,
+            EXPECTED_OUTPUT_LENGTH,
+            model.decoder.config.vocab_size,
+        )
+
+        self.assertTrue(logits.shape == logits_shape)
+        self.assertTrue(torch.allclose(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
     @slow
     def test_logits_text_audio_prompt(self):
@@ -1178,24 +1186,30 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # prepare the audio encoder inputs
         input_values = inputs.input_values.to(torch_device)
 
+        # prepare the decoder inputs
+        pad_token_id = model.generation_config.pad_token_id
+        decoder_input_ids = (
+            torch.ones((input_ids.shape[0] * model.decoder.num_codebooks, 1), dtype=torch.long).to(torch_device)
+            * pad_token_id
+        )
+
         with torch.no_grad():
             logits = model(
                 input_ids,
                 attention_mask=attention_mask,
                 input_values=input_values,
+                decoder_input_ids=decoder_input_ids,
             ).logits
 
         # fmt: off
-        EXPECTED_LOGITS = torch.tensor(
-            [
-                0.1841, -2.9324, -0.7898, 0.1857, 0.4971, -2.8685, -1.6525, -1.6541,
-                2.7757, -2.5942, -3.0959, -1.0120, -1.0147, -0.4605, -0.8885, 0.6820,
-            ]
-        )
+        EXPECTED_LOGITS = torch.tensor([
+        [ 0.7479,  0.3742,  0.6253, -7.9405,  0.7105, -6.9995,  0.7792, -3.0482],
+        [-2.7905,  0.7492, -0.2556, -8.1586, -1.6740,  0.5771, -8.3650, -0.0908]
+        ])
         # fmt: on
 
-        self.assertTrue(logits.shape == (8, 50, 2048))
-        self.assertTrue(torch.allclose(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        self.assertTrue(logits.shape == (8, 240, 2048))
+        self.assertTrue(torch.allclose(logits[1:3, -1, 32:40].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
     @slow
     def test_generate_unconditional_greedy(self):
@@ -1205,19 +1219,19 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         unconditional_inputs = self.processor.get_unconditional_inputs(num_samples=1)
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
-        output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=5, guidance_scale=1.0)
+        output_values = model.generate(**unconditional_inputs, do_sample=False, max_new_tokens=10, guidance_scale=1.0)
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                1.2742e-04, -8.0480e-05,  5.5788e-04,  1.0401e-03,  2.6547e-04,
-                1.5587e-05, -1.4211e-04, -9.7308e-05,  6.4503e-04,  5.0903e-04,
-                9.6475e-04,  1.0499e-03,  3.7205e-05, -5.3652e-04, -3.6579e-04, -2.5679e-04
+                1.2741e-04, -8.0466e-05,  5.5789e-04,  1.0402e-03,  2.6547e-04,
+                1.5587e-05, -1.4210e-04, -9.7303e-05,  6.4504e-04,  5.0903e-04,
+                9.6474e-04,  1.0498e-03,  3.7210e-05, -5.3652e-04, -3.6579e-04, -2.5678e-04
             ]
         )
         # fmt: on
 
-        self.assertTrue(output_values.shape == (1, 1, 3200))
+        self.assertTrue(output_values.shape == (1, 1, 4480))
         self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
 
     @slow
@@ -1229,7 +1243,10 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         unconditional_inputs = place_dict_on_device(unconditional_inputs, device=torch_device)
 
         set_seed(0)
-        output_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=10, guidance_scale=1.0)
+
+        output_values = model.generate(
+            **unconditional_inputs, do_sample=True, max_new_tokens=10, guidance_scale=1.0, temperature=1.0, top_k=250
+        )
 
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
@@ -1311,7 +1328,13 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
 
         set_seed(0)
         output_values = model.generate(
-            input_ids, attention_mask=attention_mask, do_sample=True, guidance_scale=None, max_new_tokens=10
+            input_ids,
+            attention_mask=attention_mask,
+            do_sample=True,
+            guidance_scale=None,
+            max_new_tokens=10,
+            temperature=1.0,
+            top_k=250,
         )
 
         # fmt: off
@@ -1342,16 +1365,15 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_VALUES = torch.tensor(
             [
-                0.3066,  0.2950,  0.2514,  0.1770,  0.0798, -0.0045, -0.0275, -0.0277,
-                -0.0105,  0.0124,  0.0259,  0.0357,  0.0395,  0.0405,  0.0355,  0.0443
+                -1.1999e-04, -2.2303e-04,  4.6296e-04,  1.0524e-03,  2.4827e-04,
+                -4.0294e-05, -1.2468e-04,  4.9846e-05,  7.1484e-04,  4.4198e-04,
+                7.9063e-04,  8.8141e-04, -6.1807e-05, -6.1856e-04, -3.6235e-04, -2.7226e-04
             ]
         )
         # fmt: on
 
-        self.assertTrue(
-            output_values.shape == (2, 1, 36480)
-        )  # input values take shape 32000 and we generate from there
-        self.assertTrue(torch.allclose(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES, atol=1e-4))
+        self.assertTrue(output_values.shape == (2, 1, 4480))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
 
 
 @require_torch
@@ -1388,8 +1410,8 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
 
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (1, 2, 5760))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, atol=1e-4))
-        self.assertTrue(torch.allclose(output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, atol=1e-4))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, atol=6e-4))
+        self.assertTrue(torch.allclose(output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, atol=6e-4))
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -1405,22 +1427,21 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
         output_values = model.generate(**inputs, do_sample=False, guidance_scale=3.0, max_new_tokens=12)
 
         # fmt: off
-        EXPECTED_VALUES_LEFT = torch.tensor(
+        EXPECTED_VALUES_LEFT_FIRST_SAMPLE = torch.tensor(
             [
-                0.1204,  0.1186,  0.0851,  0.0662,  0.0061, -0.0470, -0.0263, -0.0277,
-                -0.0197, -0.0104, -0.0145, -0.0061, -0.0016,  0.0100,  0.0050,  0.0187
+                -0.0862, -0.1021, -0.0936, -0.0754, -0.0616, -0.0456, -0.0354, -0.0298,
+                -0.0036,  0.0222,  0.0523,  0.0660,  0.0496,  0.0356,  0.0457,  0.0769
             ]
         )
-        EXPECTED_VALUES_RIGHT = torch.tensor(
+        EXPECTED_VALUES_RIGHT_SECOND_SAMPLE = torch.tensor(
             [
-                -0.0019, -0.0095, -0.0176, -0.0258, -0.0339, -0.0424, -0.0461, -0.0497,
-                -0.0535, -0.0537, -0.0551, -0.0538, -0.0508, -0.0518, -0.0547, -0.0596
+                -0.0327, -0.0450, -0.0264, -0.0278, -0.0365, -0.0272, -0.0401, -0.0574,
+                -0.0413, -0.0508, -0.0269, -0.0323, -0.0762, -0.1115, -0.1390, -0.0790
             ]
         )
         # fmt: on
 
         # (bsz, channels, seq_len)
-        self.assertTrue(output_values.shape == (2, 2, 37760))
-        # input values take shape 32000 and we generate from there - we check the last (generated) values
-        self.assertTrue(torch.allclose(output_values[0, 0, -16:].cpu(), EXPECTED_VALUES_LEFT, atol=1e-4))
-        self.assertTrue(torch.allclose(output_values[0, 1, -16:].cpu(), EXPECTED_VALUES_RIGHT, atol=1e-4))
+        self.assertTrue(output_values.shape == (2, 2, 5760))
+        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT_FIRST_SAMPLE, atol=1e-4))
+        self.assertTrue(torch.allclose(output_values[1, 1, :16].cpu(), EXPECTED_VALUES_RIGHT_SECOND_SAMPLE, atol=1e-4))

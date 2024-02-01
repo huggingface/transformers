@@ -22,7 +22,7 @@ import numpy as np
 
 from transformers import T5Tokenizer, T5TokenizerFast
 from transformers.testing_utils import require_sentencepiece, require_torch
-from transformers.utils.import_utils import is_torchaudio_available, is_librosa_available, is_torch_available
+from transformers.utils.import_utils import is_librosa_available, is_torch_available, is_torchaudio_available
 
 
 if is_torch_available():
@@ -52,7 +52,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 @require_sentencepiece
-# Copied from tests.models.musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask
+# Copied from tests.models.musicgen.test_processing_musicgen.MusicgenProcessorTest with Musicgen->MusicgenMelody, Encodec->MusicgenMelody, padding_mask->attention_mask
 class MusicgenMelodyProcessorTest(unittest.TestCase):
     def setUp(self):
         # Ignore copy
@@ -84,7 +84,9 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, MusicgenMelodyFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = MusicgenMelodyProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = MusicgenMelodyProcessor(
+            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
@@ -161,11 +163,10 @@ class MusicgenMelodyProcessorTest(unittest.TestCase):
 
         processor = MusicgenMelodyProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
-        attention_mask = np.zeros((3,20))
+        attention_mask = np.zeros((3, 20))
         attention_mask[0, -5:] = 1
         attention_mask[1, -20:] = 1
         attention_mask[2, -10:] = 1
-        
 
         generated_speech = np.asarray(floats_list((3, 20)))[:, None, :]
         decoded_audios = processor.batch_decode(generated_speech, attention_mask=attention_mask)
