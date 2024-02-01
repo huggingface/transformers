@@ -66,7 +66,7 @@ Mistral-instruct是有使用这些token进行训练的，但BlenderBot没有。
 
 正如您在上面的示例中所看到的，聊天模板非常容易使用。只需构建一系列带有`role`和`content`键的消息，
 然后将其传递给[`~PreTrainedTokenizer.apply_chat_template`]方法。
-另外，在将聊天模板用作模型预测的输入时，还建议使用`add_generation_prompt=True`来添加[generation prompt](#什么是"generation prompts"?)。
+另外，在将聊天模板用作模型预测的输入时，还建议使用`add_generation_prompt=True`来添加[generation prompt](#什么是generation-prompts)。
 
 这是一个准备`model.generate()`的示例，使用`Zephyr`模型：
 
