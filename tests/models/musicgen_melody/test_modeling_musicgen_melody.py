@@ -166,8 +166,8 @@ class MusicgenMelodyDecoderTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
+
 @require_torch
-# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenDecoderTest with Musicgen->MusicgenMelody
 class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
     greedy_sample_model_classes = (
@@ -523,12 +523,12 @@ class MusicgenMelodyTester:
 
 
 @require_torch
-# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody
+# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody, musicgen->musicgen_melody, audio_encoder->audio_decoder, EncoderDecoder->DecoderOnly
 class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
     greedy_sample_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-audio": MusicgenMelodyForConditionalGeneration} if is_torch_available() else {}
-    test_pruning = False  # training is not supported yet for Musicgen Melody
+    test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
     # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
@@ -577,6 +577,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             )
         self._check_output_with_attentions(outputs, config, input_ids, decoder_input_ids)
 
+    # Ignore copy
     def check_musicgen_melody_model_output_attentions_from_config(
         self,
         model_class,
@@ -631,7 +632,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             self.check_musicgen_melody_model_output_attentions(model_class, config, **inputs_dict)
             self.check_musicgen_melody_model_output_attentions_from_config(model_class, config, **inputs_dict)
 
-    # override since we have a specific forward signature for musicgen
+    # override since we have a specific forward signature for musicgen_melody
+    # Ignore copy
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -680,6 +682,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     # override since changing `output_hidden_states` / `output_attentions` from the top-level model config won't work
+    # Ignore copy
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_encoder.output_hidden_states = True
@@ -730,17 +733,22 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             hidden_states = outputs.conditional_hidden_states
 
+            # Ignore copy
             expected_num_layers = self.model_tester.num_hidden_layers
             self.assertEqual(len(hidden_states), expected_num_layers)
 
+            # Ignore copy
             seq_length = self.model_tester.conditional_seq_length + self.model_tester.chroma_length
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
 
+            # Ignore copy
             seq_length = self.model_tester.encoder_seq_length + self.model_tester.chroma_length
+            # Ignore copy
             expected_num_layers = self.model_tester.num_hidden_layers + 1
+            # Ignore copy
             hidden_states = outputs.hidden_states
             self.assertIsInstance(hidden_states, (list, tuple))
             self.assertEqual(len(hidden_states), expected_num_layers)
@@ -812,7 +820,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         decoder_input_ids = decoder_input_ids[: batch_size * config.decoder.num_codebooks, :]
         return config, input_ids, attention_mask, decoder_input_ids, max_length
 
-    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen (input / outputs are
+    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
     # different modalities -> different shapes)
     def _greedy_generate(
         self,
@@ -859,12 +867,14 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                # Ignore copy
                 **model_kwargs,
             )
         return output_greedy, output_generate
 
-    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen (input / outputs are
+    # override since the `input_ids` cannot be used as the `decoder_input_ids` for musicgen_melody (input / outputs are
     # different modalities -> different shapes)
+    # Ignore copy
     def _sample_generate(
         self,
         model,

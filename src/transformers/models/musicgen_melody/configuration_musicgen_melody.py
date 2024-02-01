@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 MUSICGEN_MELODY_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/musicgen-melody": "https://huggingface.co/facebook/musicgen-melody/resolve/main/config.json",
+    "ylacombe/musicgen-melody": "https://huggingface.co/ylacombe/musicgen-melody/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
     Musicgen Melody decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
-    [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
+    [ylacombe/musicgen-melody](https://huggingface.co/ylacombe/musicgen-melody) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -75,11 +75,11 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
             Whether input and output word embeddings should be tied.
             Number of channels in the audio data. Either 1 for mono or 2 for stereo. Stereo models generate a separate
             audio stream for the left/right output channels. Mono models generate a single audio stream output.
-        audio_channels (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        pad_token_id (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        bos_token_id (`<fill_type>`, *optional*, defaults to 2048): <fill_docstring>
-        eos_token_id (`<fill_type>`, *optional*): <fill_docstring>
-        tie_word_embeddings (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        audio_channels (`int`, *optional*, defaults to 1): Number of audio channels used by the model (either mono or stereo).
+        pad_token_id (`int`, *optional*, defaults to 2048): The id of the *padding* token.
+        bos_token_id (`int`, *optional*, defaults to 2048): The id of the *beginning-of-sequence* token.
+        eos_token_id (`int`, *optional*): The id of the *end-of-sequence* token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether to tie word embeddings with the text encoder.
     """
 
     model_type = "musicgen_melody_decoder"
@@ -142,14 +142,16 @@ class MusicgenMelodyConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
     Musicgen Melody model according to the specified arguments, defining the text encoder, audio decoder and Musicgen Melody decoder
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
+    [ylacombe/musicgen-melody](https://huggingface.co/ylacombe/musicgen-melody) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        num_chroma (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
-        chroma_length (`<fill_type>`, *optional*, defaults to 235): <fill_docstring>
+        num_chroma (`int`, *optional*, defaults to 12): Number of chroma bins to use.
+        chroma_length (`int`, *optional*, defaults to 235):
+            Maximum chroma duration if audio is used to condition the model. Corresponds to the maximum duration used during training.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
@@ -167,7 +169,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     MusicgenMelodyConfig,
     ...     MusicgenMelodyDecoderConfig,
     ...     T5Config,
-    ...     EncodecConfig, # TODO: add  Demucs
+    ...     EncodecConfig,
     ...     MusicgenMelodyForConditionalGeneration,
     ... )
 
@@ -180,7 +182,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     text_encoder_config, audio_decoder_config, decoder_config
     ... )
 
-    >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the facebook/musicgen-melody style configuration
+    >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the ylacombe/musicgen-melody style configuration
     >>> model = MusicgenMelodyForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -202,8 +204,8 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_chroma=12,  # TODO: add to
-        chroma_length=235,  # TODO: DO NOT REMOVE chroma duration used during training. This is later used for correct padding in case we are using chroma as prefix.
+        num_chroma=12,
+        chroma_length=235,
         **kwargs,
     ):
         super().__init__(**kwargs)

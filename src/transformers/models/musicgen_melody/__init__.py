@@ -32,14 +32,6 @@ _import_structure = {
 }
 
 try:
-    if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
-
-try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
@@ -53,6 +45,14 @@ else:
         "MusicgenMelodyPreTrainedModel",
     ]
 
+try:
+    if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
+
 
 if TYPE_CHECKING:
     from .configuration_musicgen_melody import (
@@ -61,14 +61,6 @@ if TYPE_CHECKING:
         MusicgenMelodyDecoderConfig,
     )
     from .processing_musicgen_melody import MusicgenMelodyProcessor
-
-    try:
-        if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -83,6 +75,14 @@ if TYPE_CHECKING:
             MusicgenMelodyModel,
             MusicgenMelodyPreTrainedModel,
         )
+
+    try:
+        if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
 
 
 else:

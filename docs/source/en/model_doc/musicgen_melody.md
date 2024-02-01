@@ -44,6 +44,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 ## MusicgenMelodyFeatureExtractor
 
 [[autodoc]] MusicgenMelodyFeatureExtractor
+    - _extract_stem_indices
 
 ## MusicgenMelodyConfig
 

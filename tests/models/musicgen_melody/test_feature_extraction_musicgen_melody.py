@@ -93,7 +93,7 @@ class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
         self.sampling_rate = sampling_rate
         self.return_attention_mask = return_attention_mask
         self.feature_size = feature_size
-        self.n_chroma = feature_size
+        self.num_chroma = feature_size
 
     def prepare_feat_extract_dict(self):
         return {
@@ -154,7 +154,6 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         dict_second = feat_extract_second.to_dict()
         self.assertEqual(dict_first, dict_second)
 
-    # Copied from tests.models.seamless_m4t.test_feature_extraction_seamless_m4t.SeamlessM4TFeatureExtractionTest.test_call with input_features->input_values
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())

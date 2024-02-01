@@ -436,6 +436,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForCausalLM"),
         ("mpt", "MptForCausalLM"),
         ("musicgen", "MusicgenForCausalLM"),
+        ("musicgen_melody", "MusicgenMelodyForCausalLM"),
         ("mvp", "MvpForCausalLM"),
         ("open-llama", "OpenLlamaForCausalLM"),
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
@@ -1084,6 +1085,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         # Model for Text-To-Waveform mapping
         ("bark", "BarkModel"),
         ("musicgen", "MusicgenForConditionalGeneration"),
+        ("musicgen_melody", "MusicgenMelodyForConditionalGeneration"),
         ("seamless_m4t", "SeamlessM4TForTextToSpeech"),
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vits", "VitsModel"),
