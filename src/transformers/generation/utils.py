@@ -1403,7 +1403,7 @@ class GenerationMixin:
                     "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
                     " Make sure it has a `_setup_cache` function."
                 )
-            self._setup_cache(cache_cls, batch_siz=batch_size, max_cache_len=generation_config.max_length)
+            self._setup_cache(cache_cls, max_batch_size=batch_size, max_cache_len=generation_config.max_length)
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 

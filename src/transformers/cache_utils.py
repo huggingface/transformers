@@ -325,15 +325,15 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size, sequence_length, device) -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = config.max_position_embeddings if sequence_length is None else sequence_length
+        self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
         self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float32
         
-        cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
+        cache_shape = (max_batch_size,  self.num_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device = device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype,  device = device)
         

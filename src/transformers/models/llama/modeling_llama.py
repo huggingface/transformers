@@ -834,9 +834,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _setup_cache(self, cache_cls, max_batch_size, sequence_length: Optional[int] = None):
+    def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         for layer in self.model.layers:
-            layer.self_attn.past_key_value = cache_cls(self.config, max_batch_size, sequence_length, device=layer.self_attn.o_proj.weight.device)
+            layer.self_attn.past_key_value = cache_cls(self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device)
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
