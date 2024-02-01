@@ -109,7 +109,7 @@ class VitMatteConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_config is not None:
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         self.backbone_config = backbone_config

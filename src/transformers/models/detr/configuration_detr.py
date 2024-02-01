@@ -191,9 +191,9 @@ class DetrConfig(PretrainedConfig):
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")
 
-        if backbone_kwargs is not None and backbone_config is not None:
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
-        
+
         if not use_timm_backbone:
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")

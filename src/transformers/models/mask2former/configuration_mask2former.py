@@ -192,7 +192,7 @@ class Mask2FormerConfig(PretrainedConfig):
                 out_features=["stage1", "stage2", "stage3", "stage4"],
             )
 
-        if backbone_kwargs is not None and backbone_config is not None:
+        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
             raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
 
         if isinstance(backbone_config, dict):
