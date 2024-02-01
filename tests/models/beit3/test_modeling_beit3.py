@@ -660,11 +660,11 @@ class BeitModelIntegrationTest(unittest.TestCase):
             return_loss=True,
         )
 
-        expected = np.array([[51.757538, 51.757538], [45.77479, 45.77479]])
-        np.testing.assert_allclose(outputs.logits_per_image.detach().numpy(), expected)
-        np.testing.assert_allclose(outputs.logits_per_text.detach().numpy(), expected.T)
+        expected = torch.tensor([[51.757538, 51.757538], [45.77479, 45.77479]])
+        self.assertTrue(torch.allclose(outputs.logits_per_image, expected))
+        self.assertTrue(torch.allclose(outputs.logits_per_text, expected.T))
         self.assertEqual(round(float(outputs.loss.detach().numpy()), 4), 1.8435)
 
-        actual_probabilites = outputs.logits_per_image.softmax(dim=0).detach().numpy()
-        expected_probabilties = np.array([[0.9974844, 0.9974844], [0.0025155, 0.0025155]])
-        np.testing.assert_almost_equal(actual_probabilites, expected_probabilties)
+        actual_probabilites = outputs.logits_per_image.softmax(dim=0)
+        expected_probabilties = torch.tensor([[0.9974844, 0.9974844], [0.0025155, 0.0025155]])
+        self.assertTrue(torch.allclose(actual_probabilites, expected_probabilties,rtol=1e-04))
