@@ -669,24 +669,34 @@ class Qwen2SdpaAttention(Qwen2Attention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            kv_seq_len += past_key_value.get_usable_length()  # add what was seen
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
+        past_seen_tokens = kv_seq_len - key_states.shape[-2]
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                )
+        if attention_mask is not None and attention_mask.dim() == 2:
+            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
+            # mask out padding and unsqueeze in head position
+            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
+            causal_mask = causal_mask.unsqueeze(1)
+        elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
+            causal_mask = attention_mask
+        else:
+            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
+
+        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
+        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -699,14 +709,13 @@ class Qwen2SdpaAttention(Qwen2Attention):
             query_states,
             key_states,
             value_states,
-            attn_mask=attention_mask,
+            attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=False,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = attn_output.view(bsz, q_len, self.hidden_size)
 
         attn_output = self.o_proj(attn_output)
 

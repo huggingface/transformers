@@ -339,7 +339,7 @@ class StaticCache(Cache):
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
 
-        self._seen_tokens = 0
+        self.seen_tokens = 0
 
     def update(
         self,
@@ -374,16 +374,12 @@ class StaticCache(Cache):
         k_out[:, :, position_ids] = key_states
         v_out[:, :, position_ids] = value_states
 
-        self._seen_tokens += key_states.shape[-2]
+        self.seen_tokens += key_states.shape[-2]
         return k_out, v_out
-
-    @property
-    def seen_tokens(self):
-        return self._seen_tokens
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
-        return self._seen_tokens
+        return self.seen_tokens
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
