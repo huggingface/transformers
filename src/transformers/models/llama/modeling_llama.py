@@ -378,7 +378,6 @@ class LlamaAttention(nn.Module):
                 )
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            # self.causal_mask[None, new_cache_positions, :key_states.shape[-2]] is it faster
             causal_mask = self.causal_mask[None, past_seen_tokens:past_seen_tokens+q_len, :key_states.shape[-2]].repeat(bsz, 1, 1)
             # mask out padding and unsqueeze in head position
             causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
