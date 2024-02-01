@@ -205,27 +205,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
-        valid_processor_keys = {
-            "do_resize",
-            "size",
-            "size_divisor",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_center_crop",
-            "do_pad",
-            "pad_and_return_pixel_mask",
-            "return_tensors",
-        }
-
-        unused_keys = set(kwargs.keys()) - valid_processor_keys
-        if unused_keys:
-            unused_key_str = ", ".join(unused_keys)
-            logger.info(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
-
+        
         if pad_and_return_pixel_mask:
             do_pad = pad_and_return_pixel_mask
 
@@ -430,6 +410,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         pad_and_return_pixel_mask: Optional[bool] = None,
+        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -487,6 +468,32 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 Whether to pad the image to the (max_height, max_width) in the batch. If `True`, a pixel mask is also
                 created and returned. Deprecated version of do_pad.
         """
+        valid_processor_keys = {
+            "images",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "do_pad",
+            "do_center_crop",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+            "pad_and_return_pixel_mask",
+        }
+
+        unused_keys = set(kwargs.keys()) - valid_processor_keys
+        if unused_keys:
+            unused_key_str = ", ".join(unused_keys)
+            logger.info(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
+
+
+
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
