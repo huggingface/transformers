@@ -53,10 +53,9 @@ if is_torch_available():
         set_seed,
     )
     from transformers.generation import (
-        GreedySearchDecoderOnlyOutput,
+        GenerateDecoderOnlyOutput,
         InfNanRemoveLogitsProcessor,
         LogitsProcessorList,
-        SampleDecoderOnlyOutput,
     )
 
 
@@ -964,8 +963,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
@@ -989,8 +988,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
     def test_sample_generate(self):
         for model_class in self.greedy_sample_model_classes:
@@ -1055,8 +1054,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_sample, SampleDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
+            self.assertIsInstance(output_sample, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
     def test_generate_without_input_ids(self):
         config, _, _, _, max_length = self._get_input_ids_and_config()
@@ -1104,8 +1103,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
 

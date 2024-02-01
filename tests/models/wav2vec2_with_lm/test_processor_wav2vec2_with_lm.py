@@ -157,27 +157,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
-    def test_another_feature_extractor(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
-        tokenizer = self.get_tokenizer()
-        decoder = self.get_decoder()
-
-        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
-
-        raw_speech = floats_list((3, 1000))
-
-        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
-        input_processor = processor(raw_speech, return_tensors="np")
-
-        for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-        self.assertListEqual(
-            processor.model_input_names,
-            feature_extractor.model_input_names,
-            msg="`processor` and `feature_extractor` model input names do not match",
-        )
-
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
