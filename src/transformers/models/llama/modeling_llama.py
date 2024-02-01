@@ -665,7 +665,7 @@ class LlamaSdpaAttention(LlamaAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         past_seen_tokens = kv_seq_len-key_states.shape[-2]
-        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len)
+        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len, device=key_states.device)
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids":new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
