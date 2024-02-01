@@ -38,6 +38,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -199,7 +200,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     return emb
 
 
-class TFViTMAEEmbeddings(tf.keras.layers.Layer):
+class TFViTMAEEmbeddings(keras.layers.Layer):
     """
     Construct the CLS token, position and patch embeddings.
 
@@ -298,7 +299,7 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
         return embeddings, mask, ids_restore
 
 
-class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
+class TFViTMAEPatchEmbeddings(keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -318,7 +319,7 @@ class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.config = config
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             filters=hidden_size,
             kernel_size=patch_size,
             strides=patch_size,
@@ -343,7 +344,7 @@ class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
 
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         # shape = (batch_size, in_height, in_width, in_channels=num_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
@@ -367,7 +368,7 @@ class TFViTMAEPatchEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->ViTMAE
-class TFViTMAESelfAttention(tf.keras.layers.Layer):
+class TFViTMAESelfAttention(keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -382,16 +383,16 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
@@ -458,7 +459,7 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->ViTMAE
-class TFViTMAESelfOutput(tf.keras.layers.Layer):
+class TFViTMAESelfOutput(keras.layers.Layer):
     """
     The residual connection is defined in TFViTMAELayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -467,10 +468,10 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -489,7 +490,7 @@ class TFViTMAESelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->ViTMAE
-class TFViTMAEAttention(tf.keras.layers.Layer):
+class TFViTMAEAttention(keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -529,11 +530,11 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->ViTMAE
-class TFViTMAEIntermediate(tf.keras.layers.Layer):
+class TFViTMAEIntermediate(keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -559,14 +560,14 @@ class TFViTMAEIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with ViT->ViTMAE
-class TFViTMAEOutput(tf.keras.layers.Layer):
+class TFViTMAEOutput(keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -586,7 +587,7 @@ class TFViTMAEOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTLayer with ViT->ViTMAE
-class TFViTMAELayer(tf.keras.layers.Layer):
+class TFViTMAELayer(keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: ViTMAEConfig, **kwargs):
@@ -596,12 +597,8 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         self.intermediate = TFViTMAEIntermediate(config, name="intermediate")
         self.vit_output = TFViTMAEOutput(config, name="output")
 
-        self.layernorm_before = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_before"
-        )
-        self.layernorm_after = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_after"
-        )
+        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
+        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
         self.config = config
 
     def call(
@@ -658,7 +655,7 @@ class TFViTMAELayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->ViTMAE
-class TFViTMAEEncoder(tf.keras.layers.Layer):
+class TFViTMAEEncoder(keras.layers.Layer):
     def __init__(self, config: ViTMAEConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -713,7 +710,7 @@ class TFViTMAEEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFViTMAEMainLayer(tf.keras.layers.Layer):
+class TFViTMAEMainLayer(keras.layers.Layer):
     config_class = ViTMAEConfig
 
     def __init__(self, config: ViTMAEConfig, **kwargs):
@@ -723,9 +720,9 @@ class TFViTMAEMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFViTMAEEmbeddings(config, name="embeddings")
         self.encoder = TFViTMAEEncoder(config, name="encoder")
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
@@ -814,7 +811,7 @@ VIT_MAE_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -948,10 +945,10 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
                 self.vit.build(None)
 
 
-class TFViTMAEDecoder(tf.keras.layers.Layer):
+class TFViTMAEDecoder(keras.layers.Layer):
     def __init__(self, config, num_patches, **kwargs):
         super().__init__(**kwargs)
-        self.decoder_embed = tf.keras.layers.Dense(config.decoder_hidden_size, name="decoder_embed")
+        self.decoder_embed = keras.layers.Dense(config.decoder_hidden_size, name="decoder_embed")
 
         decoder_config = deepcopy(config)
         decoder_config.hidden_size = config.decoder_hidden_size
@@ -962,8 +959,8 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
             TFViTMAELayer(decoder_config, name=f"decoder_layers.{j}") for j in range(config.decoder_num_hidden_layers)
         ]
 
-        self.decoder_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
-        self.decoder_pred = tf.keras.layers.Dense(
+        self.decoder_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
+        self.decoder_pred = keras.layers.Dense(
             config.patch_size**2 * config.num_channels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder_pred",

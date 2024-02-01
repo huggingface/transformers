@@ -23,7 +23,6 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -36,6 +35,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ...utils.backbone_utils import load_backbone
 from .configuration_mask2former import Mask2FormerConfig
 
 
@@ -860,7 +860,7 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=x.dtype, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=x.device).type_as(x)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1376,7 +1376,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        self.encoder = AutoBackbone.from_config(config.backbone_config)
+        self.encoder = load_backbone(config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -2129,7 +2129,7 @@ class Mask2FormerPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, Mask2FormerPixelDecoderEncoderMultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
-            thetas = torch.arange(module.n_heads, dtype=torch.float32) * (2.0 * math.pi / module.n_heads)
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / module.n_heads)
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
             grid_init = (
                 (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
