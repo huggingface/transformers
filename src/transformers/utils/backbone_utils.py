@@ -288,7 +288,7 @@ class BackboneConfigMixin:
         return output
 
 
-def load_backbone(config, **kwargs):
+def load_backbone(config):
     """
     Loads the backbone model from a config object.
 
