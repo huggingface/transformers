@@ -361,7 +361,7 @@ class LlamaAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         past_seen_tokens = kv_seq_len-key_states.shape[-2]
-        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len)
+        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len, device=key_states.device)
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids":new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -371,21 +371,16 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attn_weights.size() != (bsz, self.num_heads, q_len, key_states.shape[-2]):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz, self.num_heads, q_len, key_states.shape[-2])}, but is"
-                f" {attn_weights.size()}"
-                )
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, past_seen_tokens:past_seen_tokens+q_len, :key_states.shape[-2]].repeat(bsz, 1, 1)
+            causal_mask = self.causal_mask[None, new_cache_positions, :key_states.shape[-2]].repeat(bsz, 1, 1)
             # mask out padding and unsqueeze in head position
             causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
             causal_mask = causal_mask.unsqueeze(1)
         elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, past_seen_tokens:past_seen_tokens+q_len, :key_states.shape[-2]]
+            causal_mask = self.causal_mask[None, None, new_cache_positions, :key_states.shape[-2]]
 
         causal_mask = 1-causal_mask.to(hidden_states.dtype)
         causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
