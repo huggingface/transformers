@@ -18,9 +18,9 @@ Processor class for BridgeTower.
 
 from typing import Dict, List, Optional, Union
 
-from ...image_utils import ChannelDimension
+from ...image_utils import ChannelDimension, PILImageResampling
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy, TextInput, PreTokenizedInput
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 
 
@@ -50,11 +50,11 @@ class BridgeTowerProcessor(ProcessorMixin):
     def __call__(
         self,
         images,
-        text:Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]=None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         size_divisor: Optional[int] = None,
-        resample: "PILImageResampling" = None,
+        resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,

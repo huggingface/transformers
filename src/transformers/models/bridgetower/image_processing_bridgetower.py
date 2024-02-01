@@ -128,7 +128,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to 288):
+        size (`Dict[str, int]` *optional*, defaults to `{'shortest_edge': 288}`):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
@@ -161,9 +161,27 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image to the `(max_height, max_width)` of the images in the batch. Can be overridden by
             the `do_pad` parameter in the `preprocess` method.
-        pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
+        pad_and_return_pixel_mask (`bool`, *optional*):
             Deprecated. Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
             Sets do_pad.
+        return_tensors (`str` or `TensorType`, *optional*):
+            The type of tensors to return. Can be one of:
+            - Unset: Return a list of `np.ndarray`.
+            - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+            - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+            - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+            - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+        data_format (`ChannelDimension` or `str`, *optional*, defaults to `"channels_first"`):
+            The channel dimension format for the output image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - Unset: Use the channel dimension format of the input image.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image. If unset, the channel dimension format is inferred
+            from the input image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
     """
 
     model_input_names = ["pixel_values"]
@@ -187,7 +205,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
-
         valid_processor_keys = {
             "do_resize",
             "size",
@@ -201,7 +218,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             "do_center_crop",
             "do_pad",
             "pad_and_return_pixel_mask",
-            "return_tensors"
+            "return_tensors",
         }
 
         unused_keys = set(kwargs.keys()) - valid_processor_keys
@@ -394,7 +411,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             data["pixel_mask"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-    
+
     def preprocess(
         self,
         images: ImageInput,
@@ -483,7 +500,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         return_tensors = return_tensors if return_tensors is not None else self.return_tensors
         input_data_format = input_data_format if input_data_format is not None else self.input_data_format
         data_format = data_format if data_format is not None else self.data_format
-        
+
         size = size if size is not None else self.size
 
         size = get_size_dict(size, default_to_square=False)
