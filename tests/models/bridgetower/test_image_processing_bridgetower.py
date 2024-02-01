@@ -70,6 +70,7 @@ class BridgeTowerImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
+            "do_center_crop": self.do_center_crop,
             "size": self.size,
             "size_divisor": self.size_divisor,
         }
