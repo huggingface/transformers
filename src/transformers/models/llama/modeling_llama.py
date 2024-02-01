@@ -358,7 +358,7 @@ class LlamaAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length()  # add what was seen
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
@@ -655,7 +655,7 @@ class LlamaSdpaAttention(LlamaAttention):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length()  # add what was seen
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
