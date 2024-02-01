@@ -74,6 +74,7 @@ T5_SMALL = "t5-small"
 T5_TINY = "patrickvonplaten/t5-tiny-random"
 GPT2_TINY = "sshleifer/tiny-gpt2"
 GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
+LLAMA_TINY = "HuggingFaceM4/tiny-random-LlamaForCausalLM"
 
 
 def load_json(path):
@@ -368,6 +369,29 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             model.config.max_position_embeddings, model.config.rotary_dim
         )
         self.assertTrue(torch.allclose(bad_torch_sin_cos, good_torch_sin_cos))
+
+    def test_rope_bf16(self):
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+            "bf16": {"enabled": True},
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with LoggingLevel(logging.INFO):
+            with mockenv_context(**self.dist_env_1_gpu):
+                logger = logging.get_logger("transformers.modeling_utils")
+                with CaptureLogger(logger) as cl:
+                    model = AutoModel.from_pretrained(LLAMA_TINY)
+        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+        breakpoint()
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):

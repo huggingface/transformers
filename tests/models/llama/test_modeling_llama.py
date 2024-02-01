@@ -505,6 +505,46 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
             self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
+    @require_torch_gpu
+    def test_rope_casting(self):
+        """
+        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are resilient to model casting
+        strategy (`.to()` or `torch_dtype`).
+        """
+        model_1 = LlamaForCausalLM.from_pretrained(
+            "HuggingFaceM4/tiny-random-LlamaForCausalLM",
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        )
+        model_2 = LlamaForCausalLM.from_pretrained(
+            "HuggingFaceM4/tiny-random-LlamaForCausalLM",
+            device_map="auto",
+        ).to(torch.bfloat16)
+        config = model_1.config
+        rope_cls = model_1.model.layers[0].self_attn.rotary_emb.__class__
+
+        # Tests that a forward pass with inputs *smaller* than the initialized length work as expected. Note that, in
+        # this case, model_2's sin/cos buffers are bfloat16 (and not float32 as in model_1) due to the explicit `.to()`
+        # cast
+        input_ids = torch.randint(0, config.vocab_size, (1, 1)).to(model_1.device)
+        model_1_out = model_1(input_ids)
+        model_2_out = model_2(input_ids)
+        self.assertTrue(torch.allclose(model_1_out.logits, model_2_out.logits))
+        rope_fp32 = rope_cls(
+            dim=config.hidden_size // config.num_attention_heads,
+            max_position_embeddings=config.max_position_embeddings,
+            base=config.rope_theta
+        )
+
+
+        # Tests that a forward pass with inputs *larger* than the initialized length work correctly. In this case, the
+        # sin/cos buffers are recomputed, and will be float32 in both models.
+        input_ids = torch.randint(0, 32000, (1, 2049)).to(model_1.device)
+        model_1_out = model_1(input_ids)
+        model_2_out = model_2(input_ids)
+        self.assertTrue(torch.allclose(model_1_out.logits, model_2_out.logits))
+        check_sin_cos()
+
 
 @require_torch
 class LlamaIntegrationTest(unittest.TestCase):
