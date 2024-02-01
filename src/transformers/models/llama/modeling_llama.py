@@ -29,7 +29,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -286,7 +286,7 @@ class LlamaAttention(nn.Module):
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
         causal_mask = torch.tril(
-            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1, dtype=torch.bool)
+            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1, dtype=torch.long)
         )
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
@@ -695,8 +695,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            # The q_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case q_len == 1.
-            is_causal=self.is_causal and attention_mask is None and q_len > 1,
+            is_causal=True,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -983,10 +982,19 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
                 use_cache = False
 
-        use_legacy_cache = False  # not isinstance(past_key_values, Cache)
+        past_key_values_length = 0
+        if use_cache:
+            use_legacy_cache = not isinstance(past_key_values, Cache)
+            if use_legacy_cache:
+                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+            past_key_values_length = past_key_values.get_usable_length(seq_length)
+
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
+            position_ids = torch.arange(
+                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
