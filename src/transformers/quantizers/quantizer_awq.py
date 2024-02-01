@@ -99,7 +99,7 @@ class AwqQuantizer(HfQuantizer):
         if self.quantization_config.version == AWQLinearVersion.EXLLAMA:
             from ..integrations import post_init_awq_exllama_modules
 
-            model = post_init_awq_exllama_modules(model)
+            model = post_init_awq_exllama_modules(model, self.quantization_config.exllama_config)
 
     @property
     def is_serializable(self):

@@ -611,7 +611,7 @@ class AwqConfig(QuantizationConfigMixin):
             Whether to use zero point quantization.
         version (`AWQLinearVersion`, *optional*, defaults to `AWQLinearVersion.GEMM`):
             The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
-            GEMV is better (e.g. < 8 )
+            GEMV is better (e.g. < 8 ). GEMM models are compatible with Exllama kernels.
         backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
             The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
             that quantize their own models using `llm-awq` library.
@@ -625,6 +625,10 @@ class AwqConfig(QuantizationConfigMixin):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
             Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
+        exllama_config (`Dict[str, Any]`, *optional*):
+            You can specify the version of the exllama kernel through the `version` key, the maximum sequence
+            length through the `max_input_len` key, and the maximum batch size through the `max_batch_size` key.
+            Defaults to `{"version": 2, "max_input_len": 2048, "max_batch_size": 8}` if unset.
     """
 
     def __init__(
@@ -638,6 +642,7 @@ class AwqConfig(QuantizationConfigMixin):
         fuse_max_seq_len: Optional[int] = None,
         modules_to_fuse: Optional[dict] = None,
         modules_to_not_convert: Optional[List] = None,
+        exllama_config: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AWQ
@@ -656,6 +661,9 @@ class AwqConfig(QuantizationConfigMixin):
         else:
             self.do_fuse = do_fuse
         self.fuse_max_seq_len = fuse_max_seq_len
+
+        if self.version == AWQLinearVersion.EXLLAMA and exllama_config is None:
+            self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
 
         self.post_init()
 
@@ -731,7 +739,7 @@ class AwqConfig(QuantizationConfigMixin):
 
         if self.version == AWQLinearVersion.EXLLAMA:
             awq_version_supports_exllama = False
-            MIN_AWQ_VERSION = "0.1.9"
+            MIN_AWQ_VERSION = "0.2.0"
             if is_auto_awq_available():
                 awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
                     MIN_AWQ_VERSION
@@ -741,6 +749,11 @@ class AwqConfig(QuantizationConfigMixin):
                 raise ValueError(
                     f"You current version of `autoawq` does not support exllama backend, "
                     f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
+                )
+
+            if self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
+                raise ValueError(
+                    f"Only supported exllama versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {self.exllama_config}"
                 )
 
     def get_loading_attributes(self):

@@ -19,6 +19,7 @@ from ..utils.quantization_config import (
     AwqBackendPackingMethod,
     AwqConfig,
     AWQLinearVersion,
+    ExllamaVersion,
 )
 
 
@@ -104,11 +105,18 @@ def replace_with_awq_linear(
 
             target_cls = WQLinear_GEMV
         elif quantization_config.version == AWQLinearVersion.EXLLAMA:
-            from awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+            if quantization_config.exllama_config["version"] == ExllamaVersion.ONE:
+                from awq.modules.linear.exllama import WQLinear_Exllama
 
-            target_cls = WQLinear_ExllamaV2
+                target_cls = WQLinear_Exllama
+            elif quantization_config.exllama_config["version"] == ExllamaVersion.TWO:
+                from awq.modules.linear.exllamav2 import WQLinear_ExllamaV2
+
+                target_cls = WQLinear_ExllamaV2
+            else:
+                raise ValueError(f"Unrecognized Exllama version: {quantization_config.exllama_config['version']}")
         else:
-            raise ValueError(f"Unsupported AWQLinearVersion: {quantization_config.version}")
+            raise ValueError(f"Unrecognized AWQ version: {quantization_config.version}")
     else:
         from awq.quantize.qmodule import WQLinear
 
@@ -388,16 +396,26 @@ def _fuse_awq_attention_layers(model, module, modules_to_fuse, current_module_na
         del q_proj, k_proj, v_proj, o_proj
 
 
-def post_init_awq_exllama_modules(model):
+def post_init_awq_exllama_modules(model, exllama_config):
     """
     Runs post init for Exllama layers which performs:
         - Weights unpacking, reordering and repacking
         - Devices scratch space allocation
     """
-    from awq.modules.linear.exllamav2 import exllamav2_post_init
 
-    # default values for exllamav2 from
-    # https://github.com/AutoGPTQ/AutoGPTQ/blob/6ba14f17ef73c161c2c4707cbf0b41e569a9c6dd/auto_gptq/nn_modules/qlinear/qlinear_exllamav2.py#L171
-    model = exllamav2_post_init(model, max_input_len=2048, max_batch_size=8)
+    if exllama_config["version"] == ExllamaVersion.ONE:
+        from awq.modules.linear.exllama import exllama_post_init
+
+        model = exllama_post_init(model)
+    elif exllama_config["version"] == ExllamaVersion.TWO:
+        from awq.modules.linear.exllamav2 import exllamav2_post_init
+
+        model = exllamav2_post_init(
+            model,
+            max_input_len=exllama_config["max_input_len"],
+            max_batch_size=exllama_config["max_batch_size"],
+        )
+    else:
+        raise ValueError(f"Unrecognized Exllama version: {exllama_config['version']}")
 
     return model
