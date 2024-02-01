@@ -249,7 +249,7 @@ By default, [`AutoTokenizer`] will try to load a fast tokenizer. You can disable
 
 </Tip>
 
-## Image Processor
+## Image processor
 
 An image processor processes vision inputs. It inherits from the base [`~image_processing_utils.ImageProcessingMixin`] class.
 
@@ -311,7 +311,73 @@ ViTImageProcessor {
 }
 ```
 
-## Feature Extractor
+## Backbone
+
+<div style="text-align: center">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Backbone.png">
+</div>
+
+Computer vision models consist of a backbone, neck, and head. The backbone extracts features from an input image, the neck combines and enhances the extracted features, and the head is used for the main task (e.g., object detection). Start by initializing a backbone in the model config and specify whether you want to load pretrained weights or load randomly initialized weights. Then you can pass the model config to the model head.
+
+For example, to load a [ResNet](../model_doc/resnet) backbone into a [MaskFormer](../model_doc/maskformer) model with an instance segmentation head:
+
+<hfoptions id="backbone">
+<hfoption id="pretrained weights">
+
+Set `use_pretrained_backbone=True` to load pretrained ResNet weights for the backbone.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=True) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+You could also load the backbone config separately and then pass it to the model config.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+backbone_config = ResNetConfig.from_pretrained("microsoft/resnet-50")
+config = MaskFormerConfig(backbone_config=backbone_config)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+</hfoption>
+<hfoption id="random weights">
+
+Set `use_pretrained_backbone=False` to randomly initialize a ResNet backbone.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+config = MaskFormerConfig(backbone="microsoft/resnet50", use_pretrained_backbone=False) # backbone and neck config
+model = MaskFormerForInstanceSegmentation(config) # head
+```
+
+You could also load the backbone config separately and then pass it to the model config.
+
+```py
+from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, ResNetConfig
+
+backbone_config = ResNetConfig()
+config = MaskFormerConfig(backbone_config=backbone_config)
+model = MaskFormerForInstanceSegmentation(config)
+```
+
+</hfoption>
+</hfoptions>
+
+[timm](https://hf.co/docs/timm/index) models are loaded with [`TimmBackbone`] and [`TimmBackboneConfig`].
+
+```python
+from transformers import TimmBackboneConfig, TimmBackbone
+
+backbone_config = TimmBackboneConfig("resnet50")
+model = TimmBackbone(config=backbone_config)
+```
+
+## Feature extractor
 
 A feature extractor processes audio inputs. It inherits from the base [`~feature_extraction_utils.FeatureExtractionMixin`] class, and may also inherit from the [`SequenceFeatureExtractor`] class for processing audio inputs.
 
@@ -356,7 +422,6 @@ Wav2Vec2FeatureExtractor {
   "sampling_rate": 8000
 }
 ```
-
 
 ## Processor
 
