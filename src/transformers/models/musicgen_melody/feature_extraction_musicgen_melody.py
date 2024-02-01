@@ -100,7 +100,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         self.chunk_length = chunk_length
         self.n_samples = chunk_length * sampling_rate
         self.sampling_rate = sampling_rate
-        self.chroma_filters = torch.from_numpy(chroma(sr=sampling_rate, n_fft=n_fft, tuning=0, num_chroma=num_chroma))
+        self.chroma_filters = torch.from_numpy(chroma(sr=sampling_rate, n_fft=n_fft, tuning=0, n_chroma=num_chroma))
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft, win_length=n_fft, hop_length=hop_length, power=2, center=True, pad=0, normalized=True
         )
