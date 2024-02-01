@@ -45,7 +45,7 @@ class TextNetConfig(BackboneConfigMixin, PretrainedConfig):
             The num of channels in out for the initial convolution layer.
         stem_act_func (`str`, *optional*, defaults to `"relu"`):
             The activation function for the initial convolution layer.
-        image_size (`int`, *optional*, defaults to `[640, 640]`):
+        image_size (`Tuple[int, int]`, *optional*, defaults to `[640, 640]`):
             The size (resolution) of each image.
         conv_layer_kernel_sizes (`List[List[List[int]]]`, *optional*, defaults to `[[[3, 3], [3, 3], [3, 3]], [[3, 3], [1, 3], [3, 3], [3, 1]], [[3, 3], [3, 3], [3, 1], [1, 3]], [[3, 3], [3, 1], [1, 3], [3, 3]]]`):
             A list of stage wise kernel sizes.
