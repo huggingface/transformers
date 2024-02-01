@@ -1274,7 +1274,7 @@ class GroundingDinoEncoderLayer(nn.Module):
 
 
 class GroundingDinoMultiheadAttention(nn.Module):
-    """Equivalent implementation of nn.MultiheadAttention with batch_first=True."""
+    """Equivalent implementation of nn.MultiheadAttention with `batch_first=True`."""
 
     def __init__(self, config):
         super().__init__()
@@ -1307,26 +1307,11 @@ class GroundingDinoMultiheadAttention(nn.Module):
         keys: torch.Tensor,
         values: torch.Tensor,
         attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        mixed_query_layer = self.query(queries)
-
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        else:
-            key_layer = self.transpose_for_scores(self.key(keys))
-            value_layer = self.transpose_for_scores(self.value(values))
-
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer = self.transpose_for_scores(self.query(queries))
+        key_layer = self.transpose_for_scores(self.key(keys))
+        value_layer = self.transpose_for_scores(self.value(values))
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -1365,24 +1350,14 @@ class GroundingDinoDecoderLayer(nn.Module):
         mha_config = copy.deepcopy(config)
         mha_config.num_attention_heads = config.decoder_attention_heads
         self.self_attn = GroundingDinoMultiheadAttention(mha_config)
-        # self.self_attn = nn.MultiheadAttention(
-        #     embed_dim=self.embed_dim,
-        #     num_heads=config.decoder_attention_heads,
-        #     dropout=config.attention_dropout,
-        #     batch_first=True,
-        # )
+
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention text
-        self.encoder_attn_text = nn.MultiheadAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            batch_first=True,
-        )
+        self.encoder_attn_text = GroundingDinoMultiheadAttention(mha_config)
         self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
         self.encoder_attn = GroundingDinoMultiscaleDeformableAttention(
@@ -1424,10 +1399,6 @@ class GroundingDinoDecoderLayer(nn.Module):
             attention_mask=self_attn_mask,
             output_attentions=True,
         )
-        # q = k = self.with_pos_embed(hidden_states, position_embeddings)
-        # hidden_states, self_attn_weights = self.self_attn(
-        #     query=q, key=k, value=hidden_states, attn_mask=self_attn_mask, average_attn_weights=False
-        # )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -1436,12 +1407,13 @@ class GroundingDinoDecoderLayer(nn.Module):
         second_residual = hidden_states
 
         # Cross-Attention Text
+        queries = self.with_pos_embed(hidden_states, position_embeddings)
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
-            query=self.with_pos_embed(hidden_states, position_embeddings),
-            key=text_encoder_hidden_states,
-            value=text_encoder_hidden_states,
-            key_padding_mask=text_encoder_attention_mask,
-            average_attn_weights=False,
+            queries=queries,
+            keys=text_encoder_hidden_states,
+            values=text_encoder_hidden_states,
+            attention_mask=text_encoder_attention_mask,
+            output_attentions=True,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
