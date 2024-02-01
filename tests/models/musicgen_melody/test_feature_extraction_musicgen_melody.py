@@ -122,8 +122,12 @@ class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
+@require_librosa
+@require_torchaudio
 class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = MusicgenMelodyFeatureExtractor
+    feature_extraction_class = (
+        MusicgenMelodyFeatureExtractor if is_torchaudio_available() and is_librosa_available() else None
+    )
 
     def setUp(self):
         self.feat_extract_tester = MusicgenMelodyFeatureExtractionTester(self)

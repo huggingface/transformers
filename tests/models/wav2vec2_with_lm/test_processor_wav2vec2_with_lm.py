@@ -25,7 +25,7 @@ import numpy as np
 from datasets import load_dataset
 from parameterized import parameterized
 
-from transformers import AutoFeatureExtractor, AutoProcessor
+from transformers import AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode, require_torch, require_torchaudio, slow

@@ -277,8 +277,8 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
@@ -303,8 +303,8 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
     # override since we don't expect the outputs of `.generate` and `.sample` to be the same, since we perform
     # additional post-processing in the former
@@ -371,8 +371,8 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_sample, SampleDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
+            self.assertIsInstance(output_sample, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
     def test_greedy_generate_stereo_outputs(self):
         for model_class in self.greedy_sample_model_classes:
@@ -390,8 +390,8 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 return_dict_in_generate=True,
             )
 
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_greedy, GenerateDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
             self.assertNotIn(config.pad_token_id, output_generate)
 
