@@ -286,7 +286,7 @@ class LlamaAttention(nn.Module):
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
         causal_mask = torch.tril(
-            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1)
+            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1, dtype=torch.bool)
         )
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
