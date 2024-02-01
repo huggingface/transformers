@@ -24,7 +24,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from ..cache_utils import Cache, DynamicCache, StaticCache
+from ..cache_utils import Cache, DynamicCache, StaticCache, SinkCache
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..modeling_outputs import CausalLMOutputWithPast, Seq2SeqLMOutput
 from ..models.auto import (
@@ -92,6 +92,11 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
+ALL_CACHE_CLASSES_MAPPING = {
+    "static": StaticCache, 
+    "dynamic": DynamicCache, 
+    "sink": SinkCache, 
+}
 
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
@@ -1322,14 +1327,6 @@ class GenerationMixin:
         )
         batch_size = inputs_tensor.shape[0]
 
-        ALL_CACHE_CLASSES = {
-            "static": StaticCache
-        }
-        if generation_config.cache_implementation in ALL_CACHE_CLASSES and not model_kwargs.get("past_key_values", False):
-            cache_cls = ALL_CACHE_CLASSES[generation_config.cache_implementation]
-            self._setup_cache(cache_cls, batch_size)
-            model_kwargs["past_key_values"] = cache_cls(self.config, max_batch_size=batch_size)
-            
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
@@ -1397,6 +1394,17 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
+
+        # if we don't pass `past_key_values` and a cache_implementation is specified
+        if generation_config.cache_implementation in ALL_CACHE_CLASSES_MAPPING and not model_kwargs.get("past_key_values", False):
+            cache_cls = ALL_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
+            if not callable(getattr(self,"_setup_cache", None)):
+                raise ValueError(
+                    "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
+                    " Make sure it has a `_setup_cache` function."
+                )
+            self._setup_cache(cache_cls, batch_siz=batch_size, max_cache_len=generation_config.max_length)
+
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode

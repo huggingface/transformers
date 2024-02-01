@@ -3,7 +3,7 @@ from .configuration_utils import PretrainedConfig
 import torch
 
 from dataclasses import dataclass
-
+        
 @dataclass
 class Cache:
     """
@@ -325,17 +325,15 @@ class SinkCache(Cache):
 
 class StaticCache(Cache):
 
-    def __init__(self, config: PretrainedConfig, max_batch_size, device = "cuda:2") -> None:
+    def __init__(self, config: PretrainedConfig, max_batch_size, sequence_length, device) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
-        self.max_sequence_length = config.max_position_embeddings if config.max_sequence_length is None else config.max_sequence_length 
+        self.max_sequence_length = config.max_position_embeddings if sequence_length is None else sequence_length
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float16
+        self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float32
         
-
         cache_shape = (max_batch_size,  self.num_heads, self.max_sequence_length, self.head_dim)
-        # FIXME our format should be the followingm, but most of our nlp model apply transpose operation on the k and v so we can't 
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device = device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype,  device = device)
         
@@ -366,8 +364,6 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         position_ids = cache_kwargs.get("position_ids")
-        # position_ids = cache_kwargs.get("position_ids")[0] is faster?
-        # position_ids = torch.arange(self.seen_tokens, self.seen_tokens + key_states.shape[-2], device=key_states.device)
         
         k_out = self.key_cache
         v_out = self.value_cache
