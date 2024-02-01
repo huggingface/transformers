@@ -52,7 +52,8 @@ class VitMatteConfig(PretrainedConfig):
             Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
             library.
         backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to the backbone constructor e.g. `{'out_indices': (0, 1, 2, 3)}`.
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         hidden_size (`int`, *optional*, defaults to 384):
             The number of input channels of the decoder.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -99,8 +100,10 @@ class VitMatteConfig(PretrainedConfig):
 
         if use_pretrained_backbone:
             raise ValueError("Pretrained backbones are not supported yet.")
+
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
             backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
@@ -116,7 +119,7 @@ class VitMatteConfig(PretrainedConfig):
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs if backbone_kwargs is not None else {}
+        self.backbone_kwargs = backbone_kwargs
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
