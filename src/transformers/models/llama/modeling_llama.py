@@ -838,6 +838,10 @@ class LlamaPreTrainedModel(PreTrainedModel):
         for layer in self.model.layers:
             layer.self_attn.past_key_value = cache_cls(self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device)
 
+    def _reset_cache(self):
+        for layer in self.model.layers:
+            layer.self_attn.past_key_value = None
+
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
