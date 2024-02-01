@@ -16,7 +16,6 @@
 
 
 import math
-import os
 from functools import partial
 from typing import Callable, Optional, Tuple, Union
 
@@ -29,7 +28,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
     BaseModelOutput,
-    ImageClassifierOutput,
     ImageClassifierOutputWithNoAttention,
 )
 from ...modeling_utils import PreTrainedModel
@@ -51,6 +49,7 @@ VMAMBA_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "vmamba",
     # See all VMamba models at https://huggingface.co/models?filter=vmamba
 ]
+
 
 def selective_scan_ref(
     u, delta, A, B, C, D=None, z=None, delta_bias=None, delta_softplus=False, return_last_state=False
@@ -509,7 +508,6 @@ class VMambaPreTrainedModel(PreTrainedModel):
     """
 
     config_class = VMambaConfig
-    load_tf_weights = load_tf_weights_in_vmamba
     base_model_prefix = "vmamba"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
@@ -670,7 +668,7 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
     @add_start_docstrings_to_model_forward(VMAMBA_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         # checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         # expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -680,7 +678,7 @@ class VMambaForImageClassification(VMambaPreTrainedModel):
         labels: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
