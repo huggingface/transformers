@@ -54,17 +54,17 @@ BEIT3_START_DOCSTRING = r"""
 
 BEIT3_MODEL = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 indicates the token is **not masked**,
@@ -77,12 +77,12 @@ BEIT3_MODEL = r"""
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
-        vision_masked_position (`torch.LongTensor` of shape pixel_values):
+        vision_masked_position (`torch.LongTensor` of shape pixel_values, *optional*):
             Padding mask for input tokens , of same shape as `pixel_values`
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-        past_key_values (`Tuple`):
+        past_key_values (`Tuple`, *optional*):
             A Tuple containing the incremental states layerwise.This can be used to when generating next token in
             case of image captioning.
         output_hidden_states (`bool`, *optional*):
@@ -158,20 +158,20 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
             - 0 indicates the token is **masked**.
-        language_masked_pos (`torch.LongTensor` of shape `({0})`):
+        language_masked_pos (`torch.LongTensor` of shape `({0})`, *optional*):
             language_masked_pos for denoting tokens for captioning
 
             - 1 indicates the token is **present**,
             - 0 indicates the token is **absent**.
-        text_len (`torch.LongTensor` of shape `({0})`):
+        text_len (`torch.LongTensor` of shape `({0})`, *optional*):
             Length of text for captioning, this is the length of the final caption to be generated, includes the
             input_ids and tokens marked as 64001 (token id marked as to be filled).
-        past_key_values (`Tuple`):
+        past_key_values (`Tuple`, *optional*):
             A Tuple containing the incremental states layerwise
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -228,7 +228,7 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`BeitImageProcessor.__call__`] for details.
-        attention_mask (`torch.LongTensor` of shape `({0})`):
+        attention_mask (`torch.LongTensor` of shape `({0})`, *optional*):
             Padding mask for input tokens , of same shape as `input_ids`
 
             - 1 indicates the token is **not masked**,
@@ -304,6 +304,33 @@ class Beit3MLP(nn.Module):
         hidden_states = self.norm2(hidden_states)
         hidden_states = self.act(hidden_states)
         return self.dense2(hidden_states)
+
+
+class Beit3FeedForwardNetwork(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.activation_fn = get_activation(config.activation_fn)
+        self.activation_dropout = nn.Dropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.dropout)
+        self.fc1 = nn.Linear(self.embed_dim, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, self.embed_dim)
+        self.ffn_layernorm = (
+            LayerNorm(config.intermediate_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        x_shape = hidden_states.shape
+        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states.float()).type_as(hidden_states)
+        hidden_states = self.activation_dropout(hidden_states)
+        if self.ffn_layernorm is not None:
+            hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = hidden_states.view(x_shape)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class Beit3MultiwayFeedForwardNetwork(nn.Module):
@@ -467,8 +494,8 @@ class Beit3MultiheadAttention(nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
         past_key_values: Optional[Tuple[torch.Tensor]] = None,
-        key_padding_mask: torch.Tensor = None,
         attention_mask: torch.Tensor = None,
+        image_text_attention_mask: torch.Tensor = None,
         multiway_split_position=-1,
         output_attentions: bool = None,
     ):
@@ -506,16 +533,16 @@ class Beit3MultiheadAttention(nn.Module):
 
         attn_weights = torch.bmm(query, key.transpose(1, 2))
 
-        if attention_mask is not None:
-            attention_mask = attention_mask.unsqueeze(0)
-            attn_weights += attention_mask
+        if image_text_attention_mask is not None:
+            image_text_attention_mask = image_text_attention_mask.unsqueeze(0)
+            attn_weights += image_text_attention_mask
 
-        if key_padding_mask is not None:
-            key_padding_mask = 1 - key_padding_mask.type_as(query)
+        if attention_mask is not None:
+            attention_mask = 1 - attention_mask.type_as(query)
 
             attn_weights = attn_weights.view(batch_size, self.num_heads, target_length, src_len)
             attn_weights = attn_weights.masked_fill(
-                key_padding_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
+                attention_mask.unsqueeze(1).unsqueeze(2).to(torch.bool),
                 float("-inf"),
             )
             attn_weights = attn_weights.view(batch_size * self.num_heads, target_length, src_len)
@@ -534,33 +561,6 @@ class Beit3MultiheadAttention(nn.Module):
         outputs = (attn, attn_probs) if output_attentions else (attn,)
 
         return outputs
-
-
-class Beit3FeedForwardNetwork(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.embed_dim = config.hidden_size
-        self.activation_fn = get_activation(config.activation_fn)
-        self.activation_dropout = nn.Dropout(config.activation_dropout)
-        self.dropout = nn.Dropout(config.dropout)
-        self.fc1 = nn.Linear(self.embed_dim, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, self.embed_dim)
-        self.ffn_layernorm = (
-            LayerNorm(config.intermediate_size, eps=config.layer_norm_eps) if config.sub_layernorm else None
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        x_shape = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states.float()).type_as(hidden_states)
-        hidden_states = self.activation_dropout(hidden_states)
-        if self.ffn_layernorm is not None:
-            hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = hidden_states.view(x_shape)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
 
 
 class Beit3EncoderLayer(nn.Module):
@@ -597,8 +597,8 @@ class Beit3EncoderLayer(nn.Module):
             query=hidden_states,
             key=hidden_states,
             value=hidden_states,
-            attention_mask=image_text_mask,
-            key_padding_mask=attention_mask,
+            image_text_attention_mask=image_text_mask,
+            attention_mask=attention_mask,
             past_key_values=past_key_values,
             multiway_split_position=split_position,
             output_attentions=output_attentions,
@@ -791,15 +791,15 @@ class Beit3Model(Beit3PreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        pixel_values=None,
-        attention_mask=None,
-        image_text_mask=None,
-        vision_masked_position=None,
-        past_key_values=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
+        input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        image_text_mask: Optional[torch.FloatTensor] = None,
+        vision_masked_position: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple] = None,
+        output_hidden_states: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[torch.LongTensor] = None,
+        return_dict: Optional[torch.LongTensor] = None,
     ):
         r"""
         Returns:
@@ -904,13 +904,13 @@ class Beit3ForImagesAndTextClassification(Beit3PreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        pixel_values,
-        attention_mask=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
-        labels=None,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.LongTensor] = None,
     ):
         r"""
         Returns:
@@ -1016,7 +1016,7 @@ class Beit3ForImageClassification(Beit3PreTrainedModel):
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1116,12 +1116,12 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        pixel_values,
-        attention_mask=None,
-        language_masked_pos=None,
-        text_len=None,
-        past_key_values=None,
+        input_ids: torch.LongTensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        language_masked_pos: Optional[torch.LongTensor] = None,
+        text_len: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1254,8 +1254,8 @@ class Beit3ForQuestionAnswering(Beit3PreTrainedModel):
     def forward(
         self,
         input_ids,
-        pixel_values,
-        attention_mask=None,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
