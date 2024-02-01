@@ -392,6 +392,7 @@ OBJECTS_TO_IGNORE = [
     "MraConfig",
     "MusicgenDecoderConfig",
     "MusicgenForConditionalGeneration",
+    "MusicgenMelodyForConditionalGeneration",
     "MvpConfig",
     "MvpTokenizerFast",
     "MT5Tokenizer",

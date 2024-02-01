@@ -1365,6 +1365,11 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
     "The composite Musicgen Melody model with a text and audio conditional models, a MusicgenMelody decoder and an audio decoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_MELODY_START_DOCSTRING,
+    """
+        text_encoder (`Optional[PreTrainedModel]`, *optional*): Text encoder.
+        audio_decoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
+        decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
+    """,
 )
 class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
     config_class = MusicgenMelodyConfig
@@ -1373,7 +1378,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
     def __init__(
         self,
-        config: Optional[MusicgenMelodyConfig] = None,
+        config: MusicgenMelodyConfig = None,
         text_encoder: Optional[PreTrainedModel] = None,
         audio_decoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
@@ -2136,7 +2141,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 Custom stopping criteria that complement the default stopping criteria built from arguments and a
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            synced_gpus (`bool`, *optional*, defaults to `False`):
+            synced_gpus (`bool`, *optional*):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
