@@ -11,7 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib.metadata
 from typing import TYPE_CHECKING
+
+from packaging import version
 
 from .base import HfQuantizer
 
@@ -89,6 +92,8 @@ class AwqQuantizer(HfQuantizer):
             )
 
     def _process_model_after_weight_loading(self, model):
+        model._is_quantized_training_enabled = self.is_trainable
+
         if self.quantization_config.do_fuse:
             from ..integrations import fuse_awq_modules
 
@@ -105,6 +110,5 @@ class AwqQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self):
-        # AWQ does not support neither QAT (Quantization Aware Training or PEFT yet.)
-        # TODO: if this is supported in the future, do a version check here.
-        return False
+        MIN_AWQ_VERSION = "0.1.7"
+        return version.parse(importlib.metadata.version("autoawq")) >= version.parse(MIN_AWQ_VERSION)
