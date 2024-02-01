@@ -21,11 +21,13 @@ from ..utils.quantization_config import (
     GPTQConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
+    TorchFp8Config,
 )
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
+from .quantizer_torch_fp8 import TorchFp8Quantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -33,6 +35,7 @@ AUTO_QUANTIZER_MAPPING = {
     "bitsandbytes_4bit": Bnb4BitHfQuantizer,
     "bitsandbytes_8bit": Bnb8BitHfQuantizer,
     "gptq": GptqHfQuantizer,
+    "torch_fp8": TorchFp8Quantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -40,6 +43,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitsandbytes_4bit": BitsAndBytesConfig,
     "bitsandbytes_8bit": BitsAndBytesConfig,
     "gptq": GPTQConfig,
+    "torch_fp8": TorchFp8Config,
 }
 
 

@@ -144,6 +144,7 @@ _tokenizers_available = _is_package_available("tokenizers")
 _torchaudio_available = _is_package_available("torchaudio")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available = _is_package_available("torchvision")
+_torch_fp8_available = _is_package_available("float8_experimental")
 
 
 _torch_version = "N/A"
@@ -249,6 +250,10 @@ if _torch_available:
 
 def is_kenlm_available():
     return _kenlm_available
+
+
+def is_torch_fp8_available():
+    return _torch_fp8_available
 
 
 def is_cv2_available():
