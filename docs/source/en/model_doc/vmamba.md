@@ -35,3 +35,8 @@ This model was contributed by [dmus](https://huggingface.co/dmus). The original 
 
 [[autodoc]] VMambaModel
     - forward
+
+## ViTForImageClassification
+
+[[autodoc]] VMambaForImageClassification
+    - forward
