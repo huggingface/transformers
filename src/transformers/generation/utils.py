@@ -2931,21 +2931,10 @@ class GenerationMixin:
                         f"Currently generation for {self.__class__.__name__} is not supported "
                         f"for `low_memory beam_search`. Please open an issue on GitHub if you need this feature."
                     )
-
-                inputs_per_sub_batches = _split_model_inputs(
-                    model_inputs, split_size=batch_size, full_batch_size=batch_beam_size
-                )
-                outputs_per_sub_batch = [
-                    self(
-                        **inputs_per_sub_batch,
-                        return_dict=True,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                    )
-                    for inputs_per_sub_batch in inputs_per_sub_batches
-                ]
-
-                outputs = stack_model_outputs(outputs_per_sub_batch)
+                #
+                # minibatch_size=batch_size
+                # outputs = minibatch_forward(self, model_inputs, minibatch_size, batch_beam_size, output_attentions, output_hidden_states)
+                outputs = auto_minibatch_forward(self, model_inputs, batch_beam_size, output_attentions, output_hidden_states)
 
             else:  # Unchanged original behavior
                 outputs = self(
@@ -4814,3 +4803,72 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
 
     # Return a new object of the inferred class with the concatenated attributes
     return model_output_cls(**concatenated_data)
+
+
+def minibatch_forward(model, model_inputs, mini_batch_size:int, batch_size:int, output_attentions:bool, output_hidden_states:bool):
+    """
+    Splits the model inputs into sub-batches, processes each sub-batch through the model,
+    and stacks the outputs.
+
+    Args:
+        model_inputs (dict): The inputs to the model.
+        mini_batch_size (int): The size of each batch to process.
+        batch_beam_size (int): The full batch size when considering beams.
+        output_attentions (bool): Whether to return attention outputs.
+        output_hidden_states (bool): Whether to return hidden states.
+
+    Returns:
+        The stacked model outputs.
+    """
+    # Split the model inputs into sub-batches
+    inputs_per_sub_batches = _split_model_inputs(
+        model_inputs, split_size=mini_batch_size, full_batch_size=batch_size
+    )
+
+    # Process each sub-batch through the model
+    outputs_per_sub_batch = [
+        model(
+            **inputs_per_sub_batch,
+            return_dict=True,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        for inputs_per_sub_batch in inputs_per_sub_batches
+    ]
+
+    # Stack the model outputs
+    outputs = stack_model_outputs(outputs_per_sub_batch)
+    return outputs
+
+def auto_minibatch_forward(model, model_inputs, batch_size:int, output_attentions:bool, output_hidden_states:bool):
+    """
+    Splits the model inputs into sub-batches, processes each sub-batch through the model,
+    and stacks the outputs.
+
+    Args:
+        model_inputs (dict): The inputs to the model.
+        mini_batch_size (int): The size of each batch to process.
+        batch_beam_size (int): The full batch size when considering beams.
+        output_attentions (bool): Whether to return attention outputs.
+        output_hidden_states (bool): Whether to return hidden states.
+
+    Returns:
+        The stacked model outputs.
+    """
+    try_split_size= batch_size
+
+    # try, except while loop
+    while try_split_size > 0:
+        try:
+            outputs = minibatch_forward(model, model_inputs, try_split_size, batch_size, output_attentions, output_hidden_states)
+            break
+        except RuntimeError as e:
+            if "out of memory" in str(e) and try_split_size > 1:
+                try_split_size = try_split_size//2
+                torch.cuda.empty_cache()
+            # if try_split_size is already 1, raise the error because we can't split further
+            else:
+                raise e
+
+    return outputs
+
