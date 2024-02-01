@@ -64,7 +64,7 @@ class MambaConfig(PretrainedConfig):
         rescale_every (`int`, *optional*, defaults to 6):
             At inference, the hidden states (and weights of the correponding output layers) are divided by 2 every
             `rescale_every` layer. If set to 0 or a negative number, no rescale is done.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether or not to tie the word embeddings with the input token embeddings.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last state.
@@ -100,7 +100,7 @@ class MambaConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=0,
         rescale_every=6,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         use_cache=True,
         **kwargs,
     ):

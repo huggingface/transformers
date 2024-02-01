@@ -642,16 +642,16 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.mamba = MambaModel(config)
-        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.head
+        return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
-        self.head = new_embeddings
+        self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
         # only last token for inputs_ids if the state is passed along.
