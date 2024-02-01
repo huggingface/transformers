@@ -668,14 +668,9 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, None, new_cache_positions , : key_states.shape[-2]].repeat(bsz,1,  1, 1)
-            batch, sequence, _, _ = torch.where(1-attention_mask[:, :, None, None])
-            causal_mask[batch,:,:,sequence] = torch.finfo(hidden_states.dtype).min
-
-            # causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
-            # # mask out padding and unsqueeze in head position
-            # causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
-            # causal_mask = causal_mask.unsqueeze(1)
+            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1, 1)
+            mask = causal_mask[..., :kv_seq_len].eq(False) * (attention_mask[:, None, None, :].eq(False))
+            causal_mask[..., :kv_seq_len].contiguous().masked_fill(mask, torch.finfo(hidden_states.dtype).min)
 
         elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
             causal_mask = attention_mask
