@@ -702,6 +702,7 @@ src/transformers/models/mt5/modeling_flax_mt5.py
 src/transformers/models/mt5/modeling_mt5.py
 src/transformers/models/mt5/modeling_tf_mt5.py
 src/transformers/models/musicgen/convert_musicgen_transformers.py
+src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py
 src/transformers/models/mvp/modeling_mvp.py
 src/transformers/models/nezha/modeling_nezha.py
 src/transformers/models/nllb_moe/configuration_nllb_moe.py
