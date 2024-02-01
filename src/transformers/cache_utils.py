@@ -384,8 +384,10 @@ class StaticCache(Cache):
 
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
-        return self.max_sequence_length
-    
+        return self.max_cache_len
+
+
+
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""
         device = self.key_cache.device
