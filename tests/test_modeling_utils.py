@@ -35,9 +35,9 @@ from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForSequenceClassification,
+    LlamaConfig,
     OwlViTForObjectDetection,
     PretrainedConfig,
-    LlamaConfig,
     is_torch_available,
     logging,
 )
