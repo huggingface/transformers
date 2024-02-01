@@ -1451,6 +1451,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
+        # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
         out = pipe(
@@ -1460,11 +1461,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             out,
             {
-                "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.02)},
-                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
-                ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+                "chunks": [{"timestamp": (0.58, None), "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं"}],
             },
         )
 

@@ -30,6 +30,7 @@ from ....modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -56,7 +57,7 @@ TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class TFPositionalEmbedding(tf.keras.layers.Layer):
+class TFPositionalEmbedding(keras.layers.Layer):
     def __init__(self, demb, **kwargs):
         super().__init__(**kwargs)
 
@@ -73,7 +74,7 @@ class TFPositionalEmbedding(tf.keras.layers.Layer):
             return pos_emb[:, None, :]
 
 
-class TFPositionwiseFF(tf.keras.layers.Layer):
+class TFPositionwiseFF(keras.layers.Layer):
     def __init__(self, d_model, d_inner, dropout, pre_lnorm=False, layer_norm_epsilon=1e-5, init_std=0.02, **kwargs):
         super().__init__(**kwargs)
 
@@ -81,14 +82,14 @@ class TFPositionwiseFF(tf.keras.layers.Layer):
         self.d_inner = d_inner
         self.dropout = dropout
 
-        self.layer_1 = tf.keras.layers.Dense(
+        self.layer_1 = keras.layers.Dense(
             d_inner, kernel_initializer=get_initializer(init_std), activation=tf.nn.relu, name="CoreNet_._0"
         )
-        self.drop_1 = tf.keras.layers.Dropout(dropout)
-        self.layer_2 = tf.keras.layers.Dense(d_model, kernel_initializer=get_initializer(init_std), name="CoreNet_._3")
-        self.drop_2 = tf.keras.layers.Dropout(dropout)
+        self.drop_1 = keras.layers.Dropout(dropout)
+        self.layer_2 = keras.layers.Dense(d_model, kernel_initializer=get_initializer(init_std), name="CoreNet_._3")
+        self.drop_2 = keras.layers.Dropout(dropout)
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
 
         self.pre_lnorm = pre_lnorm
 
@@ -116,7 +117,7 @@ class TFPositionwiseFF(tf.keras.layers.Layer):
         return output
 
 
-class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
+class TFRelPartialLearnableMultiHeadAttn(keras.layers.Layer):
     def __init__(
         self,
         n_head,
@@ -140,17 +141,17 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         self.dropout = dropout
         self.output_attentions = output_attentions
 
-        self.qkv_net = tf.keras.layers.Dense(
+        self.qkv_net = keras.layers.Dense(
             3 * n_head * d_head, kernel_initializer=get_initializer(init_std), use_bias=False, name="qkv_net"
         )
 
-        self.drop = tf.keras.layers.Dropout(dropout)
-        self.dropatt = tf.keras.layers.Dropout(dropatt)
-        self.o_net = tf.keras.layers.Dense(
+        self.drop = keras.layers.Dropout(dropout)
+        self.dropatt = keras.layers.Dropout(dropatt)
+        self.o_net = keras.layers.Dense(
             d_model, kernel_initializer=get_initializer(init_std), use_bias=False, name="o_net"
         )
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=layer_norm_epsilon, name="layer_norm")
 
         self.scale = 1 / (d_head**0.5)
 
@@ -163,7 +164,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
             self.r_r_bias = None
             self.r_w_bias = None
 
-        self.r_net = tf.keras.layers.Dense(
+        self.r_net = keras.layers.Dense(
             self.n_head * self.d_head, kernel_initializer=get_initializer(init_std), use_bias=False, name="r_net"
         )
 
@@ -268,7 +269,7 @@ class TFRelPartialLearnableMultiHeadAttn(tf.keras.layers.Layer):
         return outputs
 
 
-class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
+class TFRelPartialLearnableDecoderLayer(keras.layers.Layer):
     def __init__(
         self,
         n_head,
@@ -320,7 +321,7 @@ class TFRelPartialLearnableDecoderLayer(tf.keras.layers.Layer):
         return outputs
 
 
-class TFTransfoEmbeddings(tf.keras.layers.Layer):
+class TFTransfoEmbeddings(keras.layers.Layer):
     def __init__(self, vocab_size, emb_size, init_std, **kwargs):
         super().__init__(**kwargs)
 
@@ -341,7 +342,7 @@ class TFTransfoEmbeddings(tf.keras.layers.Layer):
         return tf.gather(self.weight, inputs)
 
 
-class TFAdaptiveEmbedding(tf.keras.layers.Layer):
+class TFAdaptiveEmbedding(keras.layers.Layer):
     def __init__(self, n_token, d_embed, d_proj, cutoffs, div_val=1, init_std=0.02, sample_softmax=False, **kwargs):
         super().__init__(**kwargs)
 
@@ -418,7 +419,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFTransfoXLMainLayer(tf.keras.layers.Layer):
+class TFTransfoXLMainLayer(keras.layers.Layer):
     config_class = TransfoXLConfig
 
     def __init__(self, config, **kwargs):
@@ -447,7 +448,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             name="word_emb",
         )
 
-        self.drop = tf.keras.layers.Dropout(config.dropout)
+        self.drop = keras.layers.Dropout(config.dropout)
 
         self.n_layer = config.n_layer
         self.mem_len = config.mem_len
@@ -773,7 +774,7 @@ TRANSFO_XL_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -1022,7 +1023,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.score = tf.keras.layers.Dense(
+        self.score = keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.init_range),
             name="score",

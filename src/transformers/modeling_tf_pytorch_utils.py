@@ -260,7 +260,6 @@ def load_pytorch_state_dict_in_tf2_model(
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
     import tensorflow as tf
-    from keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -360,7 +359,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
         tf_loaded_numel += tensor_size(array)
 
-        K.set_value(symbolic_weight, array)
+        symbolic_weight.assign(tf.cast(array, symbolic_weight.dtype))
         del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
 
