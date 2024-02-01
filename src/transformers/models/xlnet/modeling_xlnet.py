@@ -1020,7 +1020,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
     def relative_positional_encoding(self, qlen, klen, bsz=None):
         # create relative positional encoding.
-        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.float)
+        freq_seq = torch.arange(0, self.d_model, 2.0, dtype=torch.int64).float()
         inv_freq = 1 / torch.pow(10000, (freq_seq / self.d_model))
 
         if self.attn_type == "bi":
@@ -1033,8 +1033,8 @@ class XLNetModel(XLNetPreTrainedModel):
             raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
-            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.float)
-            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.float)
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
+            bwd_pos_seq = torch.arange(-beg, -end, 1.0, dtype=torch.int64).float()
 
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
@@ -1049,7 +1049,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
             pos_emb = torch.cat([fwd_pos_emb, bwd_pos_emb], dim=1)
         else:
-            fwd_pos_seq = torch.arange(beg, end, -1.0)
+            fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.int64).float()
             if self.clamp_len > 0:
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)

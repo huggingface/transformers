@@ -102,6 +102,8 @@ python convert_hf_to_openai.py \
     - save_vocabulary
     - batch_decode
     - decode
+    - basic_normalize
+    - normalize
 
 ## WhisperTokenizerFast
 
@@ -113,6 +115,8 @@ python convert_hf_to_openai.py \
     - save_vocabulary
     - batch_decode
     - decode
+    - basic_normalize
+    - normalize
 
 ## WhisperFeatureExtractor
 
