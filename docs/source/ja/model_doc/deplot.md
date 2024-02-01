@@ -50,7 +50,7 @@ print(processor.decode(predictions[0], skip_special_tokens=True))
 
 ## Fine-tuning
 
-To fine-tune DePlot, refer to the pix2struct [fine-tuning notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb). For `Pix2Struct` models, we have found out that fine-tuning the model with Adafactor and cosine learning rate scheduler leads to faster convergence:
+DePlot を微調整するには、pix2struct [微調整ノートブック](https://github.com/huggingface/notebooks/blob/main/examples/image_captioning_pix2struct.ipynb) を参照してください。 `Pix2Struct` モデルの場合、Adafactor とコサイン学習率スケジューラを使用してモデルを微調整すると、収束が高速化されることがわかりました。
 ```python
 from transformers.optimization import Adafactor, get_cosine_schedule_with_warmup
 
