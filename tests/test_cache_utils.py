@@ -15,14 +15,22 @@
 
 import unittest
 
-from transformers import set_seed
-from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch, require_torch_gpu, slow
 from parameterized import parameterized
+
+from transformers import set_seed
+from transformers.testing_utils import is_torch_available, require_auto_gptq, require_torch
+
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, LlamaForCausalLM, SinkCache, StaticCache
+    from transformers import (
+        AutoModelForCausalLM,
+        AutoTokenizer,
+        DynamicCache,
+        LlamaForCausalLM,
+        SinkCache,
+    )
 
 
 @require_torch
@@ -230,74 +238,39 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(decoded[0].endswith(last_output))
 
-    @parameterized.expand(["eager", "sdpa","flash_attention_2"])
-    def test_static_cache_greedy(self, attn_implementation):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left", pad_token = "<s>")
+    @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
+    def test_static_cache_greedy_sampling(self, attn_implementation):
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left", pad_token="<s>")
         model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16, attn_implementation=attn_implementation,
+            "meta-llama/Llama-2-7b-hf",
+            device_map="auto",
+            torch_dtype=torch.float16,
+            attn_implementation=attn_implementation,
         )
-        
+        inputs = tokenizer(
+            ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
+        ).to(model.device)
+
         # Set the generation config to use static cache
         model.generation_config.cache_implementation = "static"
-        model.generation_config.max_sequence_length = 4096
-        
-        
-        inputs = tokenizer(["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt").to(model.device)
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = ["The best color is the one that makes you feel good.\nThe", "We should not undermind the issues at hand.\nI think the issue is that the people"]
+        expected_text = [
+            "The best color is the one that makes you feel good.\nThe",
+            "We should not undermind the issues at hand.\nI think the issue is that the people",
+        ]
         self.assertListEqual(decoded, expected_text)
 
         compiled_model = torch.compile(model)
-        gen_out = compiled_model.generate(**inputs, do_sample=False, max_new_tokens=10)
+        model.forward = compiled_model
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
-        
 
         model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
 
-        EXPECTED_CAUSAL_MASK = torch.tensor(
-            [
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.],
-                [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0., 0.]
-            ],device='mps:0'
-        ) # fmt: skip
-        
     def test_static_cache_beam_search(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", padding_side="left")
-        model = AutoModelForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="auto", torch_dtype=torch.float16
-        )
-        cache = StaticCache(model.config, model.config.num_layers, 2, 4096, model.config.num_head, model.config.head_dim)
-
-        inputs = tokenizer(["The best color is"], return_tensors="pt").to(model.device)
-        gen_out = model.generate(
-            **inputs,
-            do_sample=False,
-            max_new_tokens=20,
-            num_beams=2,
-            num_return_sequences=2,
-        )
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = [
-            "The best color is the one that makes you feel good.\nThe best color is the one that makes you feel good",
-            "The best color is the one that suits you.\nThe best color is the one that suits you. The",
-        ]
-        self.assertListEqual(decoded, expected_text)
+        raise NotImplementedError("TODO @gante static cache's does not support beam search yet")

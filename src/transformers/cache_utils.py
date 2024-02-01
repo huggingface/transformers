@@ -1,9 +1,11 @@
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
-from .configuration_utils import PretrainedConfig
+
 import torch
 
-from dataclasses import dataclass
-        
+from .configuration_utils import PretrainedConfig
+
+
 @dataclass
 class Cache:
     """
@@ -323,21 +325,21 @@ class SinkCache(Cache):
             device = self.value_cache[layer_idx].device
             self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-class StaticCache(Cache):
 
+class StaticCache(Cache):
     def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.dtype = config.torch_dtype if config.torch_dtype  is not None else torch.float32
-        
-        cache_shape = (max_batch_size,  self.num_heads, self.max_cache_len, self.head_dim)
-        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device = device)
-        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype,  device = device)
-        
-        self._seen_tokens = 0 
+        self.dtype = config.torch_dtype if config.torch_dtype is not None else torch.float32
+
+        cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
+        self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+        self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
+
+        self._seen_tokens = 0
 
     def update(
         self,
@@ -348,6 +350,7 @@ class StaticCache(Cache):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
+        It is VERY important to index using a tensor, otherwise you introduce a copy to the device.
 
         Parameters:
             key_states (`torch.Tensor`):
@@ -364,7 +367,7 @@ class StaticCache(Cache):
             A tuple containing the updated key and value states.
         """
         position_ids = cache_kwargs.get("position_ids")
-        
+
         k_out = self.key_cache
         v_out = self.value_cache
 
@@ -376,7 +379,7 @@ class StaticCache(Cache):
 
     @property
     def seen_tokens(self):
-        return  self._seen_tokens
+        return self._seen_tokens
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
@@ -385,8 +388,6 @@ class StaticCache(Cache):
     def get_max_length(self) -> Optional[int]:
         """Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length."""
         return self.max_cache_len
-
-
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorders the cache for beam search, given the selected beam indices."""

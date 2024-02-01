@@ -29,10 +29,10 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_13
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -47,7 +47,6 @@ from .configuration_llama import LlamaConfig
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # noqa
-
 
 
 logger = logging.get_logger(__name__)
@@ -65,6 +64,8 @@ def _get_unpad_data(attention_mask):
         cu_seqlens,
         max_seqlen_in_batch,
     )
+
+
 class LlamaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -282,9 +283,11 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
         self._init_rope()
-        
+
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.tril(torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1))
+        causal_mask = torch.tril(
+            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1)
+        )
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
     def _init_rope(self):
@@ -355,15 +358,14 @@ class LlamaAttention(nn.Module):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_seq_length() # add what was seen
+            kv_seq_len += past_key_value.get_seq_length()  # add what was seen
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        past_seen_tokens = kv_seq_len-key_states.shape[-2]
-        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len, device=key_states.device)
+        past_seen_tokens = kv_seq_len - key_states.shape[-2]
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids":new_cache_positions}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
@@ -371,18 +373,17 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, new_cache_positions, :key_states.shape[-2]].repeat(bsz, 1, 1)
+            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
             # mask out padding and unsqueeze in head position
-            causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
+            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
             causal_mask = causal_mask.unsqueeze(1)
-        elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
+        elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, new_cache_positions, :key_states.shape[-2]]
+            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
 
-        causal_mask = 1-causal_mask.to(hidden_states.dtype)
+        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
         causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
         attn_weights = attn_weights + causal_mask
 
@@ -654,31 +655,31 @@ class LlamaSdpaAttention(LlamaAttention):
         kv_seq_len = key_states.shape[-2]
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_seq_length() # add what was seen
+            kv_seq_len += past_key_value.get_seq_length()  # add what was seen
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        past_seen_tokens = kv_seq_len-key_states.shape[-2]
-        new_cache_positions = torch.arange(past_seen_tokens,past_seen_tokens+q_len, device=key_states.device)
+        past_seen_tokens = kv_seq_len - key_states.shape[-2]
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "position_ids":new_cache_positions}  # Specific to RoPE models
+            cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, new_cache_positions, :key_states.shape[-2]].repeat(bsz, 1, 1)
+            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
             # mask out padding and unsqueeze in head position
-            causal_mask[:,:q_len,:kv_seq_len].mul_(attention_mask[:,None,:])
+            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
             causal_mask = causal_mask.unsqueeze(1)
-        elif attention_mask is not None and attention_mask.dim() == 4: # user defined causal mask
+        elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, new_cache_positions, :key_states.shape[-2]]
+            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
 
-        causal_mask = 1-causal_mask.to(hidden_states.dtype)
+        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
         causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -830,11 +831,14 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         for layer in self.model.layers:
-            layer.self_attn.past_key_value = cache_cls(self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device)
+            layer.self_attn.past_key_value = cache_cls(
+                self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device
+            )
 
     def _reset_cache(self):
         for layer in self.model.layers:
             layer.self_attn.past_key_value = None
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -979,7 +983,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
                 use_cache = False
 
-        use_legacy_cache = False # not isinstance(past_key_values, Cache)
+        use_legacy_cache = False  # not isinstance(past_key_values, Cache)
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
             position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
