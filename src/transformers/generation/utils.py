@@ -4840,6 +4840,8 @@ def minibatch_forward(model, model_inputs, mini_batch_size:int, batch_size:int, 
     outputs = stack_model_outputs(outputs_per_sub_batch)
     return outputs
 
+# Global variable to cache the optimal batch size for low memory beam search
+optimal_low_mem_beam_search_bs = None
 def auto_minibatch_forward(model, model_inputs, batch_size:int, output_attentions:bool, output_hidden_states:bool):
     """
     Splits the model inputs into sub-batches, processes each sub-batch through the model,
@@ -4847,20 +4849,21 @@ def auto_minibatch_forward(model, model_inputs, batch_size:int, output_attention
 
     Args:
         model_inputs (dict): The inputs to the model.
-        mini_batch_size (int): The size of each batch to process.
-        batch_beam_size (int): The full batch size when considering beams.
+        batch_size (int): The full batch size when considering beams.
         output_attentions (bool): Whether to return attention outputs.
         output_hidden_states (bool): Whether to return hidden states.
 
     Returns:
         The stacked model outputs.
     """
-    try_split_size= batch_size
+    global optimal_low_mem_beam_search_bs
+    try_split_size = batch_size if optimal_low_mem_beam_search_bs is None else optimal_low_mem_beam_search_bs
 
     # try, except while loop
     while try_split_size > 0:
         try:
             outputs = minibatch_forward(model, model_inputs, try_split_size, batch_size, output_attentions, output_hidden_states)
+            optimal_low_mem_beam_search_bs = try_split_size
             break
         except RuntimeError as e:
             if "out of memory" in str(e) and try_split_size > 1:
