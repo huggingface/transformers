@@ -38,11 +38,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import (
-        TextNetBackbone,
-        TextNetForImageClassification,
-        TextNetModel
-    )
+    from transformers import TextNetBackbone, TextNetForImageClassification, TextNetModel
 
 
 class TextNetConfigTester(ConfigTester):
