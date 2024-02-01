@@ -137,6 +137,9 @@ class MaskFormerConfig(PretrainedConfig):
         if backbone_config is not None and backbone is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
+        if backbone_kwargs is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
         if backbone_config is None and backbone is None:
             # fall back to https://huggingface.co/microsoft/swin-base-patch4-window12-384-in22k
             backbone_config = SwinConfig(

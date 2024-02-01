@@ -140,6 +140,9 @@ class ViTHybridConfig(PretrainedConfig):
                 "embedding_dynamic_padding": True,
             }
 
+        if backbone_kwargs is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+
         if isinstance(backbone_config, dict):
             if "model_type" in backbone_config:
                 backbone_config_class = CONFIG_MAPPING[backbone_config["model_type"]]
