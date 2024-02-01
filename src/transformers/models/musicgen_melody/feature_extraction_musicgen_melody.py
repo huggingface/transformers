@@ -123,7 +123,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         norm_chroma[:] = 0
         norm_chroma.scatter_(dim=-1, index=idx, value=1)
 
-        return norm_chroma.numpy()
+        return norm_chroma.int()
 
     def _extract_stem_indices(self, audio, stem_indices=torch.tensor([3, 2]), input_sampling_rate=44000):
         """

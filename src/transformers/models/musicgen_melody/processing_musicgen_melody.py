@@ -47,7 +47,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
     # Copied from transformers.models.musicgen.processing_musicgen.MusicgenProcessor.get_decoder_prompt_ids
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         return self.tokenizer.get_decoder_prompt_ids(task=task, language=language, no_timestamps=no_timestamps)
-        
+
     def __call__(self, audio=None, text=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `audio`
@@ -83,7 +83,6 @@ class MusicgenMelodyProcessor(ProcessorMixin):
             inputs = self.tokenizer(text, **kwargs)
         if audio is not None:
             audio_inputs = self.feature_extractor(audio, sampling_rate=sampling_rate, **kwargs)
-
 
         if text is None:
             return audio_inputs
@@ -149,7 +148,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         return audio_values
 
     def get_unconditional_inputs(self, num_samples=1, return_tensors="pt"):
-        """ # TODO: update,
+        """# TODO: update,
         Helper function to get null inputs for unconditional generation, enabling the model to be used without the
         feature extractor or tokenizer.
 
@@ -168,9 +167,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
         >>> audio_samples = model.generate(**unconditional_inputs, max_new_tokens=256)
         ```"""
-        inputs = self.tokenizer("", return_tensors=return_tensors, return_attention_mask=True)
+        inputs = self.tokenizer([""] * num_samples, return_tensors=return_tensors, return_attention_mask=True)
         inputs["attention_mask"][:] = 0
-        
-        inputs["input_values"] =  self.feature_extractor(np.zeros((num_samples, 1)), return_tensors=return_tensors)["input_values"]
 
         return inputs

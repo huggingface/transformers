@@ -130,8 +130,7 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenMelodyDecoderConf
 
 
 @torch.no_grad()
-def convert_musicgen_melody_checkpoint(
-    checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
+def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, repo_id=None, device="cpu"):
     fairseq_model = MusicGen.get_pretrained(checkpoint, device=device)
     decoder_config = decoder_config_from_checkpoint(checkpoint)
 
@@ -214,7 +213,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint",
-        default="facebook/musicgen-stereo-melody-large", # TODO: "facebook/musicgen-melody",
+        default="facebook/musicgen-stereo-melody-large",  # TODO: "facebook/musicgen-melody",
         type=str,
         help="Checkpoint size of the Musicgen Melody model you'd like to convert. Can be one of: "
         "`['facebook/musicgen-melody', 'facebook/musicgen-melody-large']` for the mono checkpoints, or "
@@ -229,13 +228,14 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", default="musicgen-stereo-melody-large", type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub",
+        default="musicgen-stereo-melody-large",
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
     )
 
     args = parser.parse_args()
-    convert_musicgen_melody_checkpoint(
-        args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device
-    )
+    convert_musicgen_melody_checkpoint(args.checkpoint, args.pytorch_dump_folder, args.push_to_hub, args.device)

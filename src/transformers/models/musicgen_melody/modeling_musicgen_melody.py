@@ -30,7 +30,6 @@ from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, 
 from ...generation.stopping_criteria import StoppingCriteriaList
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPast,
     ModelOutput,
 )
@@ -689,24 +688,22 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
         if conditional_hidden_states is not None:
             # take care of attention masks
             if conditional_attention_mask is not None and attention_mask is None:
-                attention_mask = torch.ones(inputs_embeds.shape[:2], device = inputs_embeds.device)
-            
+                attention_mask = torch.ones(inputs_embeds.shape[:2], device=inputs_embeds.device)
+
             if attention_mask is not None:
                 if conditional_attention_mask is None:
-                    conditional_attention_mask = torch.ones(conditional_hidden_states.shape[:2], device = attention_mask.device)
+                    conditional_attention_mask = torch.ones(
+                        conditional_hidden_states.shape[:2], device=attention_mask.device
+                    )
                 attention_mask = torch.cat([conditional_attention_mask, attention_mask], dim=1)
-            
 
             # fuse conditional_hidden_states and inputs_embeds
             inputs_embeds = torch.cat([conditional_hidden_states, inputs_embeds], dim=1)
 
-            
-            
-
         # TODO: check if it makes sense and if the original implementation does it
 
         input_shape = inputs_embeds.size()[:-1]
-        
+
         # TODO: not causal for because of conditioning - yes causal for ?
         attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -1779,6 +1776,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         }
 
         if conditional_hidden_states is None:
+            conditional_hidden_states = inputs_embeds
             if inputs_embeds is None and input_ids is not None:
                 encoder_outputs = self.text_encoder(
                     input_ids=input_ids,
@@ -1799,14 +1797,22 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             if attention_mask is not None and conditional_hidden_states is not None:
                 conditional_hidden_states = conditional_hidden_states * attention_mask[..., None]
 
-            # TODO: change condition to enter
+            # set a default audio conditional hidden states if text is not None
+            if conditional_hidden_states is not None and input_values is None:
+                input_values = torch.zeros(
+                    (conditional_hidden_states.shape[0], 1, self.config.num_chroma),
+                    device=self.device,
+                    dtype=self.dtype,
+                )
+                input_values[:, :, 0] = 1
+
             if input_values is not None:
                 audio_hidden_states = input_values
 
                 # optionally project audio_hidden_states ->
                 # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
                 if self.config.num_chroma != self.decoder.config.hidden_size:
-                    audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
+                    audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states.to(self.dtype))
 
                 # pad or truncate to config.chroma_length
                 if audio_hidden_states.shape[1] < self.config.chroma_length:
@@ -1818,10 +1824,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     conditional_hidden_states = torch.cat([audio_hidden_states, conditional_hidden_states], dim=1)
                 else:
                     conditional_hidden_states = audio_hidden_states
-                    
-                    
 
-                # TODO: same for AUDIO attention_mask ? (padding mask ?)
+                if attention_mask is not None:
+                    attention_mask = torch.cat(
+                        [torch.ones(audio_hidden_states.shape[:2], device=self.device), attention_mask], dim=1
+                    )
 
         if (labels is not None) and (decoder_input_ids is None and decoder_inputs_embeds is None):
             decoder_input_ids = shift_tokens_right(
@@ -1851,9 +1858,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         if not return_dict:
             if loss is not None:
-                return (loss,) + decoder_outputs + encoder_outputs  # TODO
+                return (loss,) + decoder_outputs + (conditional_hidden_states,)
             else:
-                return decoder_outputs + encoder_outputs  # TODO
+                return decoder_outputs + (conditional_hidden_states,)
 
         # TODO change this -> want to have conditional hidden states, audio hidden states, text hidden states, and attention mask
         # and tradioinal LM outputs (with encoder/decoder)
@@ -1978,7 +1985,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         guidance_scale: Optional[float] = None,
     ) -> Dict[str, Any]:
         conditional_hidden_states = None
-        conditional_attention_mask = model_kwargs.get("attention_mask", None)
+        conditional_attention_mask = model_kwargs.pop("attention_mask")
 
         # 1. condition on text
         if inputs_tensor is not None:
@@ -2006,6 +2013,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             model_input_name = model_input_name if model_input_name is not None else self.text_encoder.main_input_name
             encoder_kwargs["return_dict"] = True
             encoder_kwargs[model_input_name] = inputs_tensor
+            if conditional_attention_mask is not None:
+                encoder_kwargs["attention_mask"] = conditional_attention_mask
             conditional_hidden_states = encoder(**encoder_kwargs).last_hidden_state
 
             # optionally project conditional_hidden_states
@@ -2021,30 +2030,33 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     conditional_attention_mask = torch.concatenate(
                         [conditional_attention_mask, torch.zeros_like(conditional_attention_mask)], dim=0
                     )
+            if conditional_attention_mask is not None:
+                conditional_hidden_states = conditional_hidden_states * conditional_attention_mask[..., None]
 
         # 2. condition on audio
         audio_hidden_states = model_kwargs.get("input_values", None)
-        if inputs_tensor is not None and audio_hidden_states is None:
-            audio_hidden_states = torch.zeros((inputs_tensor.shape[0], 1, self.config.num_chroma), device = self.device, dtype=self.dtype)
-            audio_hidden_states[:, 0] = 1
-        
+
+        if inputs_tensor is not None:
+            if audio_hidden_states is not None:
+                null_audio_hidden_states = torch.zeros_like(audio_hidden_states)
+            else:
+                null_audio_hidden_states = torch.zeros(
+                    (inputs_tensor.shape[0], 1, self.config.num_chroma), device=self.device, dtype=self.dtype
+                )
+            null_audio_hidden_states[:, :, 0] = 1
+
+            if audio_hidden_states is None:
+                audio_hidden_states = null_audio_hidden_states
+
         if audio_hidden_states is not None:
+            # for classifier free guidance we need to add a 'null' input to our audio hidden states
+            if guidance_scale is not None and guidance_scale > 1:
+                audio_hidden_states = torch.concatenate([audio_hidden_states, null_audio_hidden_states], dim=0)
+
             # optionally project audio_hidden_states ->
             # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
             if self.config.num_chroma != self.decoder.config.hidden_size:
-                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
-
-            # for classifier free guidance we need to add a 'null' input to our encoder hidden states
-            if guidance_scale is not None and guidance_scale > 1:
-                audio_hidden_states = torch.concatenate(
-                    [audio_hidden_states, torch.zeros_like(audio_hidden_states)], dim=0
-                )
-                if "audio_attention_mask" in model_kwargs:
-                    audio_attention_mask = torch.concatenate(
-                        [model_kwargs["audio_attention_mask"], torch.zeros_like(model_kwargs["audio_attention_mask"])],
-                        dim=0,
-                    )
-                    n_repeat = audio_attention_mask  # TODO
+                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states.to(self.dtype))
 
             # pad or truncate to config.chroma_length
             if audio_hidden_states.shape[1] < self.config.chroma_length:
@@ -2058,10 +2070,13 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 conditional_hidden_states = audio_hidden_states
 
             if conditional_attention_mask is not None:
-                conditional_attention_mask = torch.cat([torch.ones(audio_hidden_states.shape[:2], device = self.device), conditional_attention_mask], dim=1)
+                # TODO: remove
+                conditional_attention_mask = torch.cat(
+                    [torch.ones(audio_hidden_states.shape[:2], device=self.device), conditional_attention_mask], dim=1
+                )
 
         model_kwargs["conditional_hidden_states"] = conditional_hidden_states
-        model_kwargs["attention_mask"] = conditional_attention_mask
+        # model_kwargs["attention_mask"] = None # conditional_attention_mask # TODO
 
         return model_kwargs
 
@@ -2410,7 +2425,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             return outputs
         else:
             return output_values
-        
+
     def _update_model_kwargs_for_generation(
         self,
         outputs: ModelOutput,
