@@ -34,8 +34,10 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForSequenceClassification,
     OwlViTForObjectDetection,
     PretrainedConfig,
+    LlamaConfig,
     is_torch_available,
     logging,
 )
@@ -201,6 +203,7 @@ if is_tf_available():
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
+TINY_LLAMA = "seanmor5/tiny-llama-test"
 
 
 def check_models_equal(model1, model2):
@@ -299,6 +302,15 @@ class ModelUtilsTest(TestCasePlus):
             with CaptureLogger(logger) as cl:
                 BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+    @require_accelerate
+    def test_model_from_pretrained_with_none_quantization_config(self):
+        model = None
+        # Needs device_map for low_cpu_mem trigger & missing keys in base model load to trigger.
+        model = AutoModelForSequenceClassification.from_pretrained(
+            TINY_LLAMA, config=LlamaConfig.from_pretrained(TINY_LLAMA), device_map="auto", quantization_config=None
+        )
+        self.assertIsNotNone(model)
 
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a

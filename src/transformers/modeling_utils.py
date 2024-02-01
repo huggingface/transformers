@@ -3727,12 +3727,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 if param.device == torch.device("meta"):
                     value = torch.empty(*param.size(), dtype=target_dtype)
-                    if hf_quantizer is not None and (
+                    if (hf_quantizer is None or
                         getattr(hf_quantizer, "requires_parameters_quantization", False)
                         or not hf_quantizer.check_quantized_param(
                             model, param_value=value, param_name=key, state_dict={}
-                        )
-                    ):
+                        )):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
