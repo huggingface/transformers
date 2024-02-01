@@ -202,3 +202,17 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             revision="c5ef64c71905caeccde0e4462ef3f9077224c524",
             sequences=sequences,
         )
+
+    def test_encode_decode(self):
+        tokenizer = SpeechT5Tokenizer.from_pretrained("microsoft/speecht5_tts")
+
+        tokens = tokenizer.tokenize("a = b")
+        self.assertEqual(tokens, ["▁", "a", "▁", "=", "▁", "b"])
+
+        # the `'='` is unknown.
+        ids = tokenizer.convert_tokens_to_ids(tokens)
+        self.assertEqual(ids, [4, 7, 4, 3, 4, 25])
+
+        # let's make sure decoding with the special unknown tokens preserves spaces
+        ids = tokenizer.encode("a = b")
+        self.assertEqual(tokenizer.decode(ids), "a <unk> b</s>")

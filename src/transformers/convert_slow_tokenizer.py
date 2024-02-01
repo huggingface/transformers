@@ -355,6 +355,48 @@ class HerbertConverter(Converter):
         return tokenizer
 
 
+class Qwen2Converter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                unk_token=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                byte_fallback=False,
+            )
+        )
+
+        tokenizer.normalizer = normalizers.NFC()
+
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(
+                    Regex(
+                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+                    ),
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
+                    use_regex=False,
+                ),
+            ]
+        )
+
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
+
+        return tokenizer
+
+
 class RobertaConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -510,15 +552,22 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        _normalizers = [
+            normalizers.Strip(left=False, right=True),  # stripping is important
+            normalizers.Replace(Regex(" {2,}"), "▁"),
+        ]
         if not precompiled_charsmap:
-            return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
+            return normalizers.Sequence(_normalizers)
         else:
-            return normalizers.Sequence(
-                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-            )
+            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        prepend_scheme = "always"
+        if hasattr(self.original_tokenizer, "legacy") and not self.original_tokenizer.legacy:
+            prepend_scheme = "first"
+        return pre_tokenizers.Metaspace(
+            replacement=replacement, add_prefix_space=add_prefix_space, prepend_scheme=prepend_scheme
+        )
 
     def post_processor(self):
         return None
@@ -1289,6 +1338,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "NllbTokenizer": NllbConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "Qwen2Tokenizer": Qwen2Converter,
     "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,

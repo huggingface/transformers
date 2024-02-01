@@ -55,7 +55,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.37.0.dev0")
+check_min_version("4.38.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
@@ -106,7 +106,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
                 "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
                 "execute code present on the Hub on your local machine."
             )
@@ -559,7 +559,11 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # 11. Write Training Stats and push to hub.
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
+    finetuned_from = model_args.model_name_or_path
+    # If from a local directory, don't set `finetuned_from` as this is required to be a valid repo. id on the Hub.
+    if os.path.isdir(finetuned_from):
+        finetuned_from = None
+    kwargs = {"finetuned_from": finetuned_from, "tasks": "contrastive-image-text-modeling"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:

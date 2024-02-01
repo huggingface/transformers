@@ -209,14 +209,14 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         encoding = image_processing(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
-        expected_shape = torch.Size([1, 3, 800, 1066])
+        expected_shape = torch.Size([1, 3, 800, 1056])
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
         self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
 
         # verify area
-        expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
+        expected_area = torch.tensor([5832.7256, 11144.6689, 484763.2500, 829269.8125, 146579.4531, 164177.6250])
         self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
@@ -236,7 +236,7 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         expected_orig_size = torch.tensor([480, 640])
         self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
         # verify size
-        expected_size = torch.tensor([800, 1066])
+        expected_size = torch.tensor([800, 1056])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
     @slow
@@ -255,14 +255,14 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         encoding = image_processing(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values
-        expected_shape = torch.Size([1, 3, 800, 1066])
+        expected_shape = torch.Size([1, 3, 800, 1056])
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
         self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
 
         # verify area
-        expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
+        expected_area = torch.tensor([146591.5000, 163974.2500, 480092.2500, 11187.0000, 5824.5000, 7562.5000])
         self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
@@ -279,11 +279,11 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
         self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
         # verify masks
-        expected_masks_sum = 822873
+        expected_masks_sum = 815161
         self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
         self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
         # verify size
-        expected_size = torch.tensor([800, 1066])
+        expected_size = torch.tensor([800, 1056])
         self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))

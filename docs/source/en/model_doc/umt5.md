@@ -100,6 +100,11 @@ Refer to [T5's documentation page](t5) for more tips, code examples and notebook
 [[autodoc]] UMT5ForSequenceClassification
     - forward
 
+## UMT5ForTokenClassification
+
+[[autodoc]] UMT5ForTokenClassification
+    - forward
+
 ## UMT5ForQuestionAnswering
 
 [[autodoc]] UMT5ForQuestionAnswering
