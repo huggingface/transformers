@@ -39,7 +39,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_accelerate_available, is_torchvision_available, logging, requires_backends
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_deta import DetaConfig
 
 
@@ -338,7 +338,7 @@ class DetaBackboneWithPositionalEncodings(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        backbone = AutoBackbone.from_config(config.backbone_config)
+        backbone = load_backbone(config)
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
@@ -401,7 +401,7 @@ class DetaSinePositionEmbedding(nn.Module):
             y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -526,7 +526,7 @@ class DetaMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -942,7 +942,6 @@ class DetaClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrPreTrainedModel with DeformableDetrConvEncoder->DetaBackboneWithPositionalEncodings,DeformableDetr->Deta
 class DetaPreTrainedModel(PreTrainedModel):
     config_class = DetaConfig
     base_model_prefix = "model"
@@ -1028,7 +1027,6 @@ DETA_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetr->Deta
 class DetaEncoder(DetaPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1159,7 +1157,6 @@ class DetaEncoder(DetaPreTrainedModel):
         )
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoder with DeformableDetr->Deta,Deformable DETR->DETA
 class DetaDecoder(DetaPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DetaDecoderLayer`].
@@ -1450,7 +1447,7 @@ class DetaModel(DetaPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
         proposals = proposals.sigmoid() * scale

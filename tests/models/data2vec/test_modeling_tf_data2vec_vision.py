@@ -39,6 +39,7 @@ if is_tf_available():
         TFData2VecVisionForSemanticSegmentation,
         TFData2VecVisionModel,
     )
+    from transformers.modeling_tf_utils import keras
     from transformers.models.data2vec.modeling_tf_data2vec_vision import (
         TF_DATA2VEC_VISION_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
@@ -216,9 +217,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -365,7 +366,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                         key: val for key, val in prepared_for_class.items() if key not in label_names
                     }
                     self.assertGreater(len(inputs_minus_labels), 0)
-                    model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True)
+                    model.compile(optimizer=keras.optimizers.SGD(0.0), run_eagerly=True)
 
                     # Make sure the model fits without crashing regardless of where we pass the labels
                     history1 = model.fit(

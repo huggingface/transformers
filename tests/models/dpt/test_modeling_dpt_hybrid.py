@@ -130,6 +130,7 @@ class DPTModelTester:
             initializer_range=self.initializer_range,
             is_hybrid=self.is_hybrid,
             backbone_config=backbone_config,
+            backbone=None,
             backbone_featmap_shape=self.backbone_featmap_shape,
             neck_hidden_sizes=self.neck_hidden_sizes,
         )

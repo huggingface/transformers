@@ -119,6 +119,14 @@ LOCALIZED_READMES = {
             "अनुसंधान पत्र {paper_title_link} के साथ जारी किया गया"
         ),
     },
+    "README_fr.md": {
+        "start_prompt": "🤗 Transformers fournit actuellement les architectures suivantes",
+        "end_prompt": "1. Vous souhaitez contribuer avec un nouveau modèle ?",
+        "format_model_list": (
+            "**[{title}]({model_link})** (de {paper_affiliations}) publié dans l'article {paper_title_link} par"
+            "{paper_authors}.{supplements}"
+        ),
+    },
 }
 
 
@@ -1061,6 +1069,7 @@ MODELS_NOT_IN_README = [
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
     "CLIPVisionModel",
+    "SiglipVisionModel",
 ]
 
 # Template for new entries to add in the main README when we have missing models.

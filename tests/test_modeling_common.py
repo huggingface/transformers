@@ -84,6 +84,8 @@ from transformers.utils import (
     is_accelerate_available,
     is_flax_available,
     is_tf_available,
+    is_torch_bf16_available_on_device,
+    is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
@@ -101,7 +103,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.modeling_utils import no_init_weights
+    from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
 
@@ -118,7 +120,7 @@ if is_flax_available():
     )
 
 if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
+    from transformers.utils.fx import _FX_SUPPORTED_MODELS_WITH_KV_CACHE, symbolic_trace
 
 
 def _config_zero_init(config):
@@ -481,6 +483,40 @@ class ModelTesterMixin:
                 max_diff = torch.max(torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]))
                 self.assertLessEqual(max_diff.item(), 1e-3, msg=f"{key} not identical")
 
+    def test_fast_init_tied_embeddings(self):
+        class MyClass(PreTrainedModel):
+            config_class = PretrainedConfig
+            _tied_weights_keys = ["output_embeddings.weight"]
+
+            def __init__(self, config=None):
+                super().__init__(config if config is not None else PretrainedConfig())
+                self.input_embeddings = nn.Embedding(10, 10)
+                self.output_embeddings = nn.Linear(10, 10, bias=False)
+                self.tie_weights()
+
+            def get_output_embeddings(self):
+                return self.output_embeddings
+
+            def set_output_embeddings(self, output_embeddings):
+                self.output_embeddings = output_embeddings
+
+            def get_input_embeddings(self):
+                return self.input_embeddings
+
+            def set_input_embeddings(self, input_embeddings):
+                self.input_embeddings = input_embeddings
+
+            def _init_weights(self, module):
+                if module is self.output_embeddings:
+                    raise ValueError("unnecessarily initialized tied output embedding!")
+
+        model = MyClass()
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            # throws if it initializes the tied output_embeddings
+            MyClass.from_pretrained(tmpdirname)
+
     def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if config.__class__ not in MODEL_MAPPING:
@@ -535,6 +571,54 @@ class ModelTesterMixin:
                             torch.abs(model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key])
                         ).item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+    def test_torch_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if config.__class__ not in MODEL_MAPPING:
+            return
+        base_class = MODEL_MAPPING[config.__class__]
+
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
+
+        for model_class in self.all_model_classes:
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            base_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class_copy._init_weights = _mock_init_weights
+            base_class_copy.init_weights = _mock_all_init_weights
+
+            model = model_class(config)
+            state_dict = model.state_dict()
+
+            def check_equal(loaded):
+                for key in state_dict.keys():
+                    max_diff = torch.max(
+                        state_dict()[key] ^ loaded[key]
+                        if isinstance(state_dict[key], torch.BoolTensor)
+                        else torch.abs(state_dict[key] - loaded[key])
+                    ).item()
+                    self.assertLessEqual(max_diff, 1e-6, msg=f"{key} not identical")
+
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pytorch_model.bin")
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=True)
+                check_equal(load_state_dict(pt_checkpoint_path))
+                torch.save(state_dict, pt_checkpoint_path, _use_new_zipfile_serialization=False)
+                check_equal(load_state_dict(pt_checkpoint_path))
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -956,7 +1040,9 @@ class ModelTesterMixin:
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
-            return
+            self.skipTest(
+                f"Either torch.fx is not available, or the model type {config.model_type} is not compatible with torch.fx"
+            )
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.return_dict = False
@@ -967,110 +1053,144 @@ class ModelTesterMixin:
             model.eval()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=output_loss)
 
-            try:
-                if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-                    labels = inputs.get("labels", None)
-                    input_names = [
-                        "attention_mask",
-                        "decoder_attention_mask",
-                        "decoder_input_ids",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                    ]
-                    if labels is not None:
-                        input_names.append("labels")
+            # We may want to test several inputs (various shapes, etc.).
+            inputs_to_test = [inputs]
 
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
+            if model.config.is_encoder_decoder:
+                model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                labels = inputs.get("labels", None)
+                input_names = [
+                    "attention_mask",
+                    "decoder_attention_mask",
+                    "decoder_input_ids",
+                    "input_features",
+                    "input_ids",
+                    "input_values",
+                ]
+                if labels is not None:
+                    input_names.append("labels")
+            else:
+                input_names = [
+                    "attention_mask",
+                    "bbox",
+                    "input_features",
+                    "input_ids",
+                    "input_values",
+                    "pixel_values",
+                    "token_type_ids",
+                    "visual_feats",
+                    "visual_pos",
+                ]
 
+                labels = inputs.get("labels", None)
+                start_positions = inputs.get("start_positions", None)
+                end_positions = inputs.get("end_positions", None)
+                if labels is not None:
+                    input_names.append("labels")
+                if start_positions is not None:
+                    input_names.append("start_positions")
+                if end_positions is not None:
+                    input_names.append("end_positions")
+
+                if model.config.model_type in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
+                    input_names.append("past_key_values")
+
+                    # Generally model_tester.prepare_config_and_inputs_for_common seem not to generate past key values inputs.
+                    if "past_key_values" not in inputs:
+                        batch_size = inputs[next(iter(inputs))].shape[0]
+                        num_heads = model.config.num_attention_heads
+                        head_dim = model.config.hidden_size // model.config.num_attention_heads
+
+                        cache_shape = (batch_size, num_heads, 0, head_dim)
+                        empty_pkv = tuple(
+                            (
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                            )
+                            for i in range(model.config.num_hidden_layers)
+                        )
+
+                        cache_length = 9
+                        cache_shape = (batch_size, num_heads, cache_length, head_dim)
+                        non_empty_pkv = tuple(
+                            (
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                                torch.rand(cache_shape, dtype=torch.float, device=torch_device),
+                            )
+                            for i in range(model.config.num_hidden_layers)
+                        )
+
+                        inps = copy.deepcopy(inputs_to_test[0])
+
+                        inputs_to_test[0]["past_key_values"] = empty_pkv
+
+                        inps["past_key_values"] = non_empty_pkv
+                        inputs_to_test.append(inps)
+
+                        past_mask = torch.ones(batch_size, cache_length, device=torch_device, dtype=torch.float)
+                        inputs_to_test[1]["attention_mask"] = torch.cat(
+                            (past_mask, inputs_to_test[1]["attention_mask"]), dim=1
+                        )
+
+            for inps in inputs_to_test:
+                filtered_inputs = {k: v for (k, v) in inps.items() if k in input_names}
+                input_names = list(filtered_inputs.keys())
+
+                if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
+                    not hasattr(model.config, "problem_type") or model.config.problem_type is None
+                ):
+                    model.config.problem_type = "single_label_classification"
+
+                traced_model = symbolic_trace(model, input_names)
+
+                with torch.no_grad():
+                    traced_output = traced_model(**filtered_inputs)
                     model_output = model(**filtered_inputs)
 
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                else:
-                    input_names = [
-                        "attention_mask",
-                        "bbox",
-                        "input_features",
-                        "input_ids",
-                        "input_values",
-                        "pixel_values",
-                        "token_type_ids",
-                        "visual_feats",
-                        "visual_pos",
-                    ]
+                def flatten_output(output):
+                    flatten = []
+                    for x in output:
+                        if isinstance(x, (tuple, list)):
+                            flatten += flatten_output(x)
+                        elif not isinstance(x, torch.Tensor):
+                            continue
+                        else:
+                            flatten.append(x)
+                    return flatten
 
-                    labels = inputs.get("labels", None)
-                    start_positions = inputs.get("start_positions", None)
-                    end_positions = inputs.get("end_positions", None)
-                    if labels is not None:
-                        input_names.append("labels")
-                    if start_positions is not None:
-                        input_names.append("start_positions")
-                    if end_positions is not None:
-                        input_names.append("end_positions")
-
-                    filtered_inputs = {k: v for (k, v) in inputs.items() if k in input_names}
-                    input_names = list(filtered_inputs.keys())
-
-                    if model.__class__.__name__ in set(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES.values()) and (
-                        not hasattr(model.config, "problem_type") or model.config.problem_type is None
-                    ):
-                        model.config.problem_type = "single_label_classification"
-
-                    traced_model = symbolic_trace(model, input_names)
-                    traced_output = traced_model(**filtered_inputs)
-                    model_output = model(**filtered_inputs)
-
-            except Exception as e:
-                self.fail(f"Couldn't trace module: {e}")
-
-            def flatten_output(output):
-                flatten = []
-                for x in output:
-                    if isinstance(x, (tuple, list)):
-                        flatten += flatten_output(x)
-                    elif not isinstance(x, torch.Tensor):
-                        continue
-                    else:
-                        flatten.append(x)
-                return flatten
-
-            model_output = flatten_output(model_output)
-            traced_output = flatten_output(traced_output)
-            num_outputs = len(model_output)
-
-            for i in range(num_outputs):
-                self.assertTrue(
-                    torch.allclose(model_output[i], traced_output[i]),
-                    f"traced {i}th output doesn't match model {i}th output for {model_class}",
-                )
-
-            # Test that the model can be serialized and restored properly
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
-                try:
-                    with open(pkl_file_name, "wb") as f:
-                        pickle.dump(traced_model, f)
-                    with open(pkl_file_name, "rb") as f:
-                        loaded = pickle.load(f)
-                except Exception as e:
-                    self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
-
-                loaded_output = loaded(**filtered_inputs)
-                loaded_output = flatten_output(loaded_output)
+                model_output = flatten_output(model_output)
+                traced_output = flatten_output(traced_output)
+                num_outputs = len(model_output)
 
                 for i in range(num_outputs):
                     self.assertTrue(
-                        torch.allclose(model_output[i], loaded_output[i]),
-                        f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                        torch.allclose(model_output[i], traced_output[i]),
+                        f"traced {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
-            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
-            # (Even with this call, there are still memory leak by ~0.04MB)
-            self.clear_torch_jit_class_registry()
+                # Test that the model can be serialized and restored properly
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    pkl_file_name = os.path.join(tmp_dir_name, "model.pkl")
+                    try:
+                        with open(pkl_file_name, "wb") as f:
+                            pickle.dump(traced_model, f)
+                        with open(pkl_file_name, "rb") as f:
+                            loaded = pickle.load(f)
+                    except Exception as e:
+                        self.fail(f"Couldn't serialize / deserialize the traced model: {e}")
+
+                    loaded_output = loaded(**filtered_inputs)
+                    loaded_output = flatten_output(loaded_output)
+
+                    for i in range(num_outputs):
+                        self.assertTrue(
+                            torch.allclose(model_output[i], loaded_output[i]),
+                            f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
+                        )
+
+                # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+                # (Even with this call, there are still memory leak by ~0.04MB)
+                self.clear_torch_jit_class_registry()
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -3310,8 +3430,13 @@ class ModelTesterMixin:
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_device == "cpu" and torch_dtype == "float16":
-            self.skipTest("float16 not supported on cpu")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
+            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+            self.skipTest(
+                f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
+            )
 
         # Not sure whether it's fine to put torch.XXX in a decorator if torch is not available so hacking it here instead.
         if torch_dtype == "float16":
@@ -3328,7 +3453,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-6,
             ("cuda", True, torch.bfloat16): 1e-2,
             ("cuda", True, torch.float16): 5e-3,
@@ -3340,7 +3465,7 @@ class ModelTesterMixin:
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
-            ("cuda", False, torch.float16): 1e-3,
+            ("cuda", False, torch.float16): 5e-3,
             ("cuda", True, torch.float32): 1e-4,
             ("cuda", True, torch.bfloat16): 3e-2,
             ("cuda", True, torch.float16): 5e-3,
