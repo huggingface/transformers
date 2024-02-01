@@ -194,9 +194,7 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_vision_available,
     requires_backends,
-    tf_required,
     torch_only_method,
-    torch_required,
 )
 from .peft_utils import (
     ADAPTER_CONFIG_NAME,
@@ -219,6 +217,7 @@ SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 IMAGE_PROCESSOR_NAME = FEATURE_EXTRACTOR_NAME
+PROCESSOR_NAME = "processor_config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 

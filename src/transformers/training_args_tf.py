@@ -25,6 +25,8 @@ logger = logging.get_logger(__name__)
 if is_tf_available():
     import tensorflow as tf
 
+    from .modeling_tf_utils import keras
+
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
@@ -195,7 +197,7 @@ class TFTrainingArguments(TrainingArguments):
 
         # Set to float16 at first
         if self.fp16:
-            tf.keras.mixed_precision.set_global_policy("mixed_float16")
+            keras.mixed_precision.set_global_policy("mixed_float16")
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -216,7 +218,7 @@ class TFTrainingArguments(TrainingArguments):
             if tpu:
                 # Set to bfloat16 in case of TPU
                 if self.fp16:
-                    tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
+                    keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)

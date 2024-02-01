@@ -24,7 +24,7 @@ import subprocess
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any, Tuple, Union
@@ -64,6 +64,7 @@ USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
+# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
@@ -358,6 +359,14 @@ def is_torch_fp16_available_on_device(device):
     try:
         x = torch.zeros(2, 2, dtype=torch.float16).to(device)
         _ = x @ x
+
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
+
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
         # most backends should return `RuntimeError` however this is not guaranteed.
@@ -1301,40 +1310,6 @@ class DummyObject(type):
         if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    warnings.warn(
-        "The method `torch_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    warnings.warn(
-        "The method `tf_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):
