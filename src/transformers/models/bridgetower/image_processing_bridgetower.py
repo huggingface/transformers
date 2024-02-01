@@ -205,7 +205,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
         **kwargs,
     ) -> None:
-        
         if pad_and_return_pixel_mask:
             do_pad = pad_and_return_pixel_mask
 
@@ -491,8 +490,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         if unused_keys:
             unused_key_str = ", ".join(unused_keys)
             logger.info(f"Unused or unrecognized configuration parameters: {unused_key_str}.")
-
-
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         size_divisor = size_divisor if size_divisor is not None else self.size_divisor
