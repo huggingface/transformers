@@ -285,9 +285,7 @@ class LlamaAttention(nn.Module):
         self._init_rope()
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask = torch.tril(
-            torch.full((self.max_position_embeddings, self.max_position_embeddings), fill_value=1, dtype=torch.long)
-        )
+        causal_mask=torch.triu(torch.full((self.max_position_embeddings, self.max_position_embeddings),  fill_value=torch.finfo(config.torch_dtype).min, dtype=config.torch_dtype),diagonal=1)
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
     def _init_rope(self):
@@ -670,17 +668,19 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
-            # mask out padding and unsqueeze in head position
-            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
-            causal_mask = causal_mask.unsqueeze(1)
+            causal_mask = self.causal_mask[None, None, new_cache_positions , : key_states.shape[-2]].repeat(bsz,1,  1, 1)
+            batch, sequence, _, _ = torch.where(1-attention_mask[:, :, None, None])
+            causal_mask[batch,:,:,sequence] = torch.finfo(hidden_states.dtype).min
+
+            # causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
+            # # mask out padding and unsqueeze in head position
+            # causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
+            # causal_mask = causal_mask.unsqueeze(1)
+
         elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
             causal_mask = attention_mask
         else:
-            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
-
-        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
-        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
+            causal_mask = None
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -695,7 +695,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=False,
+            is_causal=causal_mask is None,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
