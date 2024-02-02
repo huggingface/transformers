@@ -177,7 +177,7 @@ def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
             missing_packages.append(imp)
 
     if len(missing_packages) > 0:
-        raise ImportError(
+        warnings.warn(
             "This modeling file requires the following packages that were not found in your environment: "
             f"{', '.join(missing_packages)}. Run `pip install {' '.join(missing_packages)}`"
         )
