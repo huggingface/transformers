@@ -189,11 +189,12 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len):
         self.max_seq_len_cached = seq_len
-
         if seq_len > self.max_position_embeddings:
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
+        else:
+            base = self.base
         inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim))
         t = torch.arange(self.max_seq_len_cached, device="cpu", dtype=torch.int64).float()
 
