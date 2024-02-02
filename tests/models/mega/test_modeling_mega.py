@@ -541,7 +541,9 @@ class MegaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_pipeline_fill_mask()
 
     # TODO: @ydshieh
-    @is_flaky(description="Sometimes gives `RuntimeError: probability tensor contains either `inf`, `nan` or element < 0`")
+    @is_flaky(
+        description="Sometimes gives `RuntimeError: probability tensor contains either `inf`, `nan` or element < 0`"
+    )
     def test_pipeline_text_generation(self):
         super().test_pipeline_text_generation()
 
