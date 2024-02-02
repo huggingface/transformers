@@ -410,7 +410,6 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
             self.additional_fc = tf.keras.layers.Dense(
                 units=out_additional_features, use_bias=bias, name="additional_fc"
             )
-        self.bias = bias
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         output = tf.linalg.matmul(inputs, self.weight)
@@ -457,20 +456,13 @@ class TFIdeficsDecoupledLinear(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             shape=(self.in_features, self.out_features), trainable=not self.partially_freeze, name="weight"
         )
-        if self.bias:
+        if self.use_bias:
             self.bias = self.add_weight(shape=(self.out_features,), trainable=not self.partially_freeze, name="bias")
         else:
             self.bias = None
         if getattr(self, "additional_fc", None) is not None:
             with tf.name_scope(self.additional_fc.name):
                 self.additional_fc.build(self.in_features)
-        self.weight = self.add_weight(
-            shape=(self.in_features, self.out_features), trainable=not self.partially_freeze, name="weight"
-        )
-        if self.use_bias:
-            self.bias = self.add_weight(shape=(self.out_features,), trainable=not self.partially_freeze, name="bias")
-        else:
-            self.bias = None
 
 
 def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
