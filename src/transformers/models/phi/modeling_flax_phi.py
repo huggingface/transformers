@@ -157,7 +157,7 @@ def apply_rotary_pos_emb(tensor, sin_pos, cos_pos):
     return (tensor * cos_pos) + (rotate_half(tensor) * sin_pos)
 
 
-class FlaxLlamaRMSNorm(nn.Module):
+class FlaxPhiRMSNorm(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -175,7 +175,7 @@ class FlaxLlamaRMSNorm(nn.Module):
         return self.weight * jnp.asarray(hidden_states, dtype=self.dtype)
 
 
-class FlaxLlamaRotaryEmbedding(nn.Module):
+class FlaxPhiRotaryEmbedding(nn.Module):
     config: PhiConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -198,18 +198,13 @@ class FlaxLlamaRotaryEmbedding(nn.Module):
         return key, query
 
 
-def main():
-
-    # in PyTorch implementation, where is the causal mask applied?
-    # is it expected that the mask is passed from outside?
-
+def check_attention():
     from transformers.models.phi.convert import jax2pt, pt2jax
-    # config = PhiConfig(max_position_embeddings=128, hidden_size=64)
     config = PhiConfig()
     batch_size = 1; seq_len = 10; hidden_size = config.hidden_size
     n_heads = config.num_attention_heads; head_size = hidden_size // n_heads
     rng = jax.random.PRNGKey(0)
-    x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
+    # x = jax.random.normal(rng, (batch_size, config.num_attention_heads, seq_len, head_size))
     hidden_states = jax.random.normal(rng, (batch_size, seq_len, hidden_size))
     attn_mask = jnp.ones((batch_size, seq_len))
     position_ids = jnp.arange(0, seq_len, dtype=jnp.int32).reshape(1, -1)
@@ -221,6 +216,7 @@ def main():
 
     # debug
     from transformers.models.phi.modeling_phi import PhiAttention
+    from transformers.modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
     self = PhiAttention(config, layer_idx=0)
     self.q_proj.weight.data = jax2pt(variables["params"]["q_proj"]["kernel"].T)
     self.q_proj.bias.data = jax2pt(variables["params"]["q_proj"]["bias"])
@@ -233,10 +229,15 @@ def main():
 
     hidden_states, attn_mask, position_ids = map(jax2pt, (hidden_states, attn_mask, position_ids))
 
-    attn_mask = torch.ones(1, 1, 10, 10)
+    # JAX version applies causal mask inside the layer, but PyTorch version requires it
+    # to be passed from outside
+    attn_mask = _prepare_4d_causal_attention_mask(
+        attn_mask, (batch_size, seq_len), hidden_states, 0
+    )
     pt_out = self(hidden_states, attn_mask, position_ids)[0]
 
-    jnp.allclose(out, pt2jax(pt_out), atol=0.001)
+    # TODO: test with cache
+    assert jnp.allclose(out, pt2jax(pt_out), atol=1e-2)
 
 
 class FlaxPhiAttention(nn.Module):
@@ -264,7 +265,7 @@ class FlaxPhiAttention(nn.Module):
         self.dense = dense_layer()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
+        self.rotary_emb = FlaxPhiRotaryEmbedding(config, dtype=self.dtype)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -314,6 +315,7 @@ class FlaxPhiAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
+        # 1. compute query, key and value, split heads
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -323,13 +325,9 @@ class FlaxPhiAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
-        # # [batch_size, seq_length, num_heads, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
-        # query = jnp.swapaxes(query, 1, 2)
-        # key = jnp.swapaxes(key, 1, 2)
-        # value = jnp.swapaxes(value, 1, 2)
-
+        # 2. apply rotaty embedding
+        # split query and key along the head_dim into rotating and not rotating parts
         rot_emb_split_dim = int(self.config.partial_rotary_factor * query.shape[-1])
-        # Partial rotary embedding
         query_rot, query_pass = (
             query[..., : rot_emb_split_dim],
             query[..., rot_emb_split_dim :],
@@ -338,24 +336,18 @@ class FlaxPhiAttention(nn.Module):
             key[..., : rot_emb_split_dim],
             key[..., rot_emb_split_dim :],
         )
+
+        # query_rot and key_rot have size:
         # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-        # query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, position_ids)
         query_rot, key_rot = self.rotary_emb(query_rot, key_rot, position_ids)
 
+        # concatenate the two parts back
         # [batch_size, seq_length, num_heads, head_dim]
         query = jnp.concatenate((query_rot, query_pass), axis=-1)
         key = jnp.concatenate((key_rot, key_pass), axis=-1)
 
-        # dev note: so far query and key are equivalent to that in PyTorch implementation
-        # up to jnp.swapaxes(query, 1, 2)
-
-        # global QUERY
-        # global KEY
-        # QUERY, KEY = query, key
-
-
+        # 3. compute causal_mask taking into account cached past values
         query_length, key_length = query.shape[1], key.shape[1]
-
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
@@ -368,6 +360,7 @@ class FlaxPhiAttention(nn.Module):
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
 
+        # 4. add causal mask to the attention (padding) mask
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
 
@@ -375,14 +368,13 @@ class FlaxPhiAttention(nn.Module):
         if not deterministic and self.config.attention_dropout > 0.0:
             dropout_rng = self.make_rng("dropout")
 
+        # 5. add past values from cache
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
 
-        global KEY, VALUE, ATTENTION_MASK
-        KEY, VALUE, ATTENTION_MASK = key, value, attention_mask
-
+        # 6. apply attention
         # transform boolean mask into float mask
         attention_bias = lax.select(
             attention_mask > 0,
@@ -402,25 +394,15 @@ class FlaxPhiAttention(nn.Module):
             dtype=attention_dtype,
         )
 
-        global ATTN_WEIGHTS
-        ATTN_WEIGHTS = attn_weights
-
         if self.attention_softmax_in_fp32:
             attn_weights = attn_weights.astype(self.dtype)
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
 
-        # TODO: swap axes back to [bsz, seq_len, num_heads, head_dim]
-        # isn't einsum above already doing it?
-
+        # 7. merge heads and compute output projection
+        # [batch_size, seq_length, num_heads, head_dim] -> [batch_size, seq_length, hidden_dim]
         attn_output = self._merge_heads(attn_output)
-
-        global ATTN_WO_DENSE
-        ATTN_WO_DENSE = attn_output
-
         attn_output = self.dense(attn_output)
-
-
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
@@ -454,9 +436,9 @@ class FlaxLlamaDecoderLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.input_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.input_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
         self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
         self.mlp = FlaxLlamaMLP(self.config, dtype=self.dtype)
 
     def __call__(
@@ -684,7 +666,7 @@ class FlaxLlamaModule(nn.Module):
             dtype=self.dtype,
         )
         self.layers = FlaxLlamaLayerCollection(self.config, dtype=self.dtype)
-        self.norm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.norm = FlaxPhiRMSNorm(self.config, dtype=self.dtype)
 
     def __call__(
         self,
