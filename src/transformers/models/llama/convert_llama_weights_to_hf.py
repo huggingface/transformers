@@ -104,6 +104,7 @@ def write_model(
     if base > 10000.0:
         max_position_embeddings = 16384
     else:
+        # Depending on the Llama version, the default max_position_embeddings has different values.
         if llama_version == 1:
             max_position_embeddings = 2048
         elif llama_version == 2:
@@ -311,6 +312,7 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
+    # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
         "--llama_version",
         choices=[1, 2],
