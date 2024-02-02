@@ -371,18 +371,7 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
-            # mask out padding and unsqueeze in head position
-            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
-            causal_mask = causal_mask.unsqueeze(1)
-        elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
-            causal_mask = attention_mask
-        else:
-            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
-
-        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
-        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
+        causal_mask = attention_mask[...,new_cache_positions,  : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -667,24 +656,14 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, None, new_cache_positions , : key_states.shape[-2]].repeat(bsz,1,  1, 1)
-            batch, sequence, _, _ = torch.where(1-attention_mask[:, :, None, None])
-            causal_mask[batch,:,:,sequence] = torch.finfo(hidden_states.dtype).min
-
-            # causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
-            # # mask out padding and unsqueeze in head position
-            # causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
-            # causal_mask = causal_mask.unsqueeze(1)
-
-        elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
-            causal_mask = attention_mask
+        if attention_mask is not None:  # user defined causal mask
+            causal_mask = attention_mask[..., new_cache_positions, : key_states.shape[-2]]
         else:
             causal_mask = None
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and attention_mask is not None:
+        if query_states.device.type == "cuda" and causal_mask is not None:
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
@@ -695,7 +674,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=causal_mask is None,
+            is_causal=causal_mask is None and q_len>1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -938,6 +917,10 @@ class LlamaModel(LlamaPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
+        causal_mask=torch.triu(torch.full((config.max_position_embeddings, config.max_position_embeddings),  fill_value=torch.finfo(config.torch_dtype).min, dtype=config.torch_dtype),diagonal=1)
+        self.register_buffer("causal_mask", causal_mask, persistent=False)
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -999,6 +982,11 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        causal_mask = self.causal_mask[None, None, :,:].repeat(batch_size, 1, 1, 1)
+        if attention_mask is not None and attention_mask.dim()==2:
+            paddin_mask = causal_mask[..., :attention_mask.shape[-1]].eq(False) * attention_mask[:, None, None, :].eq(False)
+            causal_mask[..., :attention_mask.shape[-1]] = causal_mask[..., :attention_mask.shape[-1]].masked_fill(paddin_mask, torch.finfo(inputs_embeds.dtype).min)
+
         # embed positions
         hidden_states = inputs_embeds
 
@@ -1015,7 +1003,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1024,7 +1012,7 @@ class LlamaModel(LlamaPreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
