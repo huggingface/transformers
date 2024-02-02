@@ -17,7 +17,9 @@ from typing import Dict, Iterable, Optional, Union
 
 import numpy as np
 
+from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_transforms import center_crop, normalize, rescale
+from .image_utils import ChannelDimension
 from .utils import copy_func, logging
 
 from .image_processing_base import ImageProcessingMixin, BatchFeature

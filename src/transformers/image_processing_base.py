@@ -19,13 +19,13 @@ import json
 import os
 import warnings
 from io import BytesIO
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
 
-from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .dynamic_module_utils import custom_object_save
+from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
@@ -35,12 +35,15 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     is_vision_available,
+    logging,
 )
 
 
 if is_vision_available():
     from PIL import Image
 
+
+logger = logging.get_logger(__name__)
 
 
 # TODO: Move BatchFeature to be imported by both image_processing_utils and image_processing_utils

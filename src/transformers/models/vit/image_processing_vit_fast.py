@@ -14,37 +14,63 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
-from typing import Dict, List, Optional, Union
+from dataclasses import dataclass
+from functools import cache
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from ..image_utils import ChannelDimension
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import to_channel_dimension_format
+from ...image_processing_utils import get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     is_scaled_image,
     make_list_of_images,
-    to_numpy_array,
-    valid_images,
 )
 from ...utils import TensorType, logging
-from ...utils.import_utils import is_torchvision_available
+from ...utils.import_utils import is_torch_available, is_vision_available
+
 
 logger = logging.get_logger(__name__)
 
 
-if is_torchvision_available():
-    from torchvision.transforms import Resize, Compose, ToTensor, Normalize, Lambda
+if is_torch_available():
+    import torch
+
+if is_vision_available():
+    from PIL import Image
+    from torchvision.transforms import Compose, InterpolationMode, Normalize, Resize, ToTensor
 
 
+pil_torch_interpolation_mapping = {
+    PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+    PILImageResampling.BOX: InterpolationMode.BOX,
+    PILImageResampling.BILINEAR: InterpolationMode.BILINEAR,
+    PILImageResampling.HAMMING: InterpolationMode.HAMMING,
+    PILImageResampling.BICUBIC: InterpolationMode.BICUBIC,
+    PILImageResampling.LANCZOS: InterpolationMode.LANCZOS,
+    PILImageResampling.NEAREST: InterpolationMode.NEAREST,
+}
 
-class ViTImageProcessorFast(BaseImageProcessor):
+
+@dataclass(frozen=True)
+class SizeDict:
+    height: int = None
+    width: int = None
+    longest_edge: int = None
+    shortest_edge: int = None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SizeDict.")
+
+
+class ViTImageProcessorFast(BaseImageProcessorFast):
     r"""
     Constructs a ViT image processor.
 
@@ -76,7 +102,16 @@ class ViTImageProcessorFast(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
-    _transform_params = ["do_resize", "do_rescale", "do_normalize", "size", "resample", "rescale_factor", "image_mean", "image_std"]
+    _transform_params = [
+        "do_resize",
+        "do_rescale",
+        "do_normalize",
+        "size",
+        "resample",
+        "rescale_factor",
+        "image_mean",
+        "image_std",
+    ]
 
     def __init__(
         self,
@@ -101,7 +136,8 @@ class ViTImageProcessorFast(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self._transform_settings = self.set_transforms(
+        self._transform_settings = {}
+        self.set_transforms(
             do_resize=do_resize,
             do_rescale=do_rescale,
             do_normalize=do_normalize,
@@ -111,91 +147,54 @@ class ViTImageProcessorFast(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
         )
-
-    def _set_transform_settings(self, **kwargs):
-        settings = {}
-        for k, v in kwargs.items():
-            if v not in self._transform_params:
-                raise ValueError(f"Invalid transform parameter {k}={v}.")
-            settings[k] = v
-        self._transform_settings = settings
-
-    def __same_transforms_settings(self, **kwargs):
-        """
-        Check if the current settings are the same as the current transforms.
-        """
-        for key, value in kwargs.items():
-            if value not in self._transform_settings or value != self._transform_settings[key]:
-                return False
-        return True
 
     def _build_transforms(
         self,
         do_resize: bool,
-        size_dict: Dict[str, int],
+        size: Dict[str, int],
         resample: PILImageResampling,
         do_rescale: bool,
+        rescale_factor: float,  # dummy
         do_normalize: bool,
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
-        data_format: Union[str, ChannelDimension],
     ) -> Compose:
         transforms = []
         if do_resize:
-            # FIXME - convert the interpolation mode to the pytorch equivalent
-            transforms.append(Resize(size_dict["height"], size_dict["width"], interpolation=resample))
+            transforms.append(
+                Resize((size["height"], size["width"]), interpolation=pil_torch_interpolation_mapping[resample])
+            )
         if do_rescale:
             transforms.append(ToTensor())
         if do_normalize:
             transforms.append(Normalize(image_mean, image_std))
-        if data_format is not None and data_format == ChannelDimension.LAST:
-            transforms.append(Lambda(lambda x: x.permute(1, 2, 0)))
         return Compose(transforms)
 
-    def set_transforms(
+    @cache
+    def _validate_input_arguments(
         self,
+        return_tensors: Union[str, TensorType],
         do_resize: bool,
-        do_rescale: bool,
-        do_normalize: bool,
         size: Dict[str, int],
         resample: PILImageResampling,
+        do_rescale: bool,
         rescale_factor: float,
+        do_normalize: bool,
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
         data_format: Union[str, ChannelDimension],
     ):
-        if self.__same_transforms_settings(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        ):
-            return self._transforms
-        transforms = self._build_transforms(
-            do_resize=do_resize,
-            size_dict=size_dict,
-            resample=resample,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            data_format=data_format,
-        )
-        self._set_transform_settings(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-        self._transforms = transforms
+        if return_tensors != "pt":
+            raise ValueError("Only returning PyTorch tensors is currently supported.")
+
+        if data_format != ChannelDimension.FIRST:
+            raise ValueError("Only channel first data format is currently supported.")
+
+        if do_resize and size is None:
+            raise ValueError("Size must be specified if do_resize is True.")
+
+        if do_rescale and rescale_factor is None:
+            raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
     def preprocess(
         self,
@@ -264,14 +263,24 @@ class ViTImageProcessorFast(BaseImageProcessor):
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
+        size = size if size is not None else self.size
+        # Make hashable for cache
+        size = SizeDict(**size)
+        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
+        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
+        images = make_list_of_images(images)
 
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
+        if do_rescale:
+            if isinstance(images[0], np.ndarray) and is_scaled_image(images[0]):
+                raise ValueError(
+                    "Images are expected to have pixel values in the range [0, 255] when do_rescale=True. "
+                    "Got pixel values in the range [0, 1]."
+                )
+            elif not isinstance(images[0], Image.Image):
+                raise ValueError("Images must be of type PIL.Image.Image or np.ndarray when do_rescale=True.")
 
-        if not self.__same_transforms_settings(
+        self._maybe_update_transforms(
             do_resize=do_resize,
             do_rescale=do_rescale,
             do_normalize=do_normalize,
@@ -280,47 +289,14 @@ class ViTImageProcessorFast(BaseImageProcessor):
             rescale_factor=rescale_factor,
             image_mean=image_mean,
             image_std=image_std,
-        ):
-            self.set_transforms(
-                do_resize=do_resize,
-                do_rescale=do_rescale,
-                do_normalize=do_normalize,
-                size=size,
-                resample=resample,
-                rescale_factor=rescale_factor,
-                image_mean=image_mean,
-                image_std=image_std,
-            )
+        )
+        transformed_images = [self._transforms(image) for image in images]
 
-        transformed_images = self._transforms(images)
+        data = {"pixel_values": torch.vstack(transformed_images)}
+        return data
 
-        size = size if size is not None else self.size
-        size_dict = get_size_dict(size)
-
-        images = make_list_of_images(images)
-
-        if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
-
-        if do_resize and size is None:
-            raise ValueError("Size must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        data = {"pixel_values": images}
-        return BatchFeature(data=data, tensor_type=return_tensors)
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
+        result.pop("_transforms", None)
+        result.pop("_transform_settings", None)
+        return result
