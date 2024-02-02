@@ -35,7 +35,6 @@ from transformers import (
     AutoConfig,
     AutoModel,
     AutoModelForSequenceClassification,
-    LlamaConfig,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -203,7 +202,7 @@ if is_tf_available():
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
-TINY_LLAMA = "seanmor5/tiny-llama-test"
+TINY_MISTRAL = "hf-internal-testing/tiny-random-MistralForCausalLM"
 
 
 def check_models_equal(model1, model2):
@@ -308,7 +307,7 @@ class ModelUtilsTest(TestCasePlus):
         model = None
         # Needs device_map for low_cpu_mem trigger & missing keys in base model load to trigger.
         model = AutoModelForSequenceClassification.from_pretrained(
-            TINY_LLAMA, config=LlamaConfig.from_pretrained(TINY_LLAMA), device_map="auto", quantization_config=None
+            TINY_MISTRAL, device_map="auto", quantization_config=None
         )
         self.assertIsNotNone(model)
 
