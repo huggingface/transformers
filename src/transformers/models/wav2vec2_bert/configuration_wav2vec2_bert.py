@@ -14,8 +14,6 @@
 # limitations under the License.
 """ Wav2Vec2Bert model configuration"""
 
-import functools
-import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -311,4 +309,5 @@ class Wav2Vec2BertConfig(PretrainedConfig):
 
     @property
     def inputs_to_logits_ratio(self):
-        return 1
+        # Logic behind the ratio: https://github.com/huggingface/transformers/pull/28821#issuecomment-1923723958
+        return self.feature_projection_input_dim * 2
