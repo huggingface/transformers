@@ -14,26 +14,26 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# What 🤗 Transformers can do
+# Lo que 🤗 Transformers puede hacer
 
-🤗 Transformers is a library of pretrained state-of-the-art models for natural language processing (NLP), computer vision, and audio and speech processing tasks. Not only does the library contain Transformer models, but it also has non-Transformer models like modern convolutional networks for computer vision tasks. If you look at some of the most popular consumer products today, like smartphones, apps, and televisions, odds are that some kind of deep learning technology is behind it. Want to remove a background object from a picture taken by your smartphone? This is an example of a panoptic segmentation task (don't worry if you don't know what this means yet, we'll describe it in the following sections!). 
+🤗 Transformers es una biblioteca de modelos preentrenados de última generación para procesamiento del lenguaje natural (PLN), visión por computadora y tareas de procesamiento de audio y voz. No solo contiene modelos Transformer, sino también modelos no Transformer como redes convolucionales modernas para tareas de visión por computadora. Si observas algunos de los productos de consumo más populares hoy en día, como teléfonos inteligentes, aplicaciones y televisores, es probable que haya alguna tecnología de aprendizaje profundo detrás. ¿Quieres quitar un objeto de fondo de una foto tomada por tu teléfono inteligente? Este es un ejemplo de una tarea de segmentación panóptica (no te preocupes si aún no sabes qué significa, ¡lo describiremos en las siguientes secciones!).
 
-This page provides an overview of the different speech and audio, computer vision, and NLP tasks that can be solved with the 🤗 Transformers library in just three lines of code!
+Esta página proporciona una descripción general de las diferentes tareas de procesamiento de audio y voz, visión por computadora y PLN que se pueden resolver con la biblioteca 🤗 Transformers en solo tres líneas de código.
 
 ## Audio
 
-Audio and speech processing tasks are a little different from the other modalities mainly because audio as an input is a continuous signal. Unlike text, a raw audio waveform can't be neatly split into discrete chunks the way a sentence can be divided into words. To get around this, the raw audio signal is typically sampled at regular intervals. If you take more samples within an interval, the sampling rate is higher, and the audio more closely resembles the original audio source.
+Las tareas de procesamiento de audio y voz son un poco diferentes de las otras modalidades principalmente porque el audio como entrada es una señal continua. A diferencia del texto, una forma de onda de audio cruda no se puede dividir ordenadamente en fragmentos discretos de la misma manera en que una oración puede dividirse en palabras. Para superar esto, la señal de audio cruda generalmente se muestrea a intervalos regulares. Si tomas más muestras dentro de un intervalo, la tasa de muestreo es mayor y el audio se asemeja más a la fuente de audio original.
 
-Previous approaches preprocessed the audio to extract useful features from it. It is now more common to start audio and speech processing tasks by directly feeding the raw audio waveform to a feature encoder to extract an audio representation. This simplifies the preprocessing step and allows the model to learn the most essential features.
+Enfoques anteriores preprocesaban el audio para extraer características útiles. Ahora es más común comenzar las tareas de procesamiento de audio y voz alimentando directamente la forma de onda de audio cruda a un codificador de características para extraer una representación de audio. Esto simplifica el paso de preprocesamiento y permite que el modelo aprenda las características más esenciales.
 
-### Audio classification
+### Clasificación de audio
 
-Audio classification is a task that labels audio data from a predefined set of classes. It is a broad category with many specific applications, some of which include:
+La clasificación de audio es una tarea que etiqueta datos de audio con un conjunto predefinido de clases. Es una categoría amplia con muchas aplicaciones específicas, algunas de las cuales incluyen:
 
-* acoustic scene classification: label audio with a scene label ("office", "beach", "stadium")
-* acoustic event detection: label audio with a sound event label ("car horn", "whale calling", "glass breaking")
-* tagging: label audio containing multiple sounds (birdsongs, speaker identification in a meeting)
-* music classification: label music with a genre label ("metal", "hip-hop", "country")
+* clasificación de escena acústica: etiquetar audio con una etiqueta de escena ("oficina", "playa", "estadio")
+* detección de eventos acústicos: etiquetar audio con una etiqueta de evento de sonido ("bocina de automóvil", "llamada de ballena", "cristal rompiéndose")
+* etiquetado: etiquetar audio que contiene varios sonidos (canto de pájaros, identificación de altavoces en una reunión)
+* clasificación de música: etiquetar música con una etiqueta de género ("metal", "hip-hop", "country")
 
 ```py
 >>> from transformers import pipeline
@@ -48,11 +48,11 @@ Audio classification is a task that labels audio data from a predefined set of c
  {'score': 0.0903, 'label': 'ang'}]
 ```
 
-### Automatic speech recognition
+### Reconocimiento automático del habla
 
-Automatic speech recognition (ASR) transcribes speech into text. It is one of the most common audio tasks due partly to speech being such a natural form of human communication. Today, ASR systems are embedded in "smart" technology products like speakers, phones, and cars. We can ask our virtual assistants to play music, set reminders, and tell us the weather. 
+El reconocimiento automático del habla (ASR, por sus siglas en inglés) transcribe el habla a texto. Es una de las tareas de audio más comunes, en parte debido a que el habla es una forma natural de comunicación humana. Hoy en día, los sistemas ASR están integrados en productos de tecnología "inteligente" como altavoces, teléfonos y automóviles. Podemos pedirle a nuestros asistentes virtuales que reproduzcan música, establezcan recordatorios y nos informen sobre el clima.
 
-But one of the key challenges Transformer architectures have helped with is in low-resource languages. By pretraining on large amounts of speech data, finetuning the model on only one hour of labeled speech data in a low-resource language can still produce high-quality results compared to previous ASR systems trained on 100x more labeled data.
+Pero uno de los desafíos clave que las arquitecturas Transformer han ayudado a superar es en los idiomas con recursos limitados. Al preentrenar con grandes cantidades de datos de habla, afinar el modelo solo con una hora de datos de habla etiquetados en un idioma con recursos limitados aún puede producir resultados de alta calidad en comparación con los sistemas ASR anteriores entrenados con 100 veces más datos etiquetados.
 
 ```py
 >>> from transformers import pipeline
