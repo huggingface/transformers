@@ -2466,6 +2466,10 @@ class Trainer:
             # Maybe delete some older checkpoints.
             if self.args.should_save:
                 self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+        elif self.is_local_process_zero():
+            # Clean up the remaining staging checkpoint folders on other nodes
+            if staging_output_dir != output_dir and os.path.exists(staging_output_dir):
+                shutil.rmtree(staging_output_dir)
 
         self.args.distributed_state.wait_for_everyone()
 
