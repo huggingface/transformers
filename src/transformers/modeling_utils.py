@@ -3736,7 +3736,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
 
-        # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
+        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
             if not ignore_mismatched_sizes:
                 if remove_prefix_from_model:
