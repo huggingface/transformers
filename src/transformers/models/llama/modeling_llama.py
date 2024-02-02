@@ -128,9 +128,9 @@ class LlamaRotaryEmbedding(nn.Module):
         self.base = base
 
         # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(seq_len=max_position_embeddings)
+        self._set_cos_sin_cache(seq_len=max_position_embeddings, device=device, dtype=torch.get_default_dtype())
 
-    def _set_cos_sin_cache(self, seq_len):
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         inv_freq = 1.0 / (
             self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim)
@@ -140,17 +140,13 @@ class LlamaRotaryEmbedding(nn.Module):
         freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()
-        self.sin_cached = emb.sin()
+        self.register_buffer("cos_cached", emb.cos().to(dtype=dtype, device=device), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype=dtype, device=device), persistent=False)
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len)
-
-        # Move to the target device if needed. This line prevents repeated device copies, if sin/cos haven't changed.
-        self.sin_cached = self.sin_cached.to(x.device)
-        self.cos_cached = self.cos_cached.to(x.device)
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
             self.cos_cached[:seq_len].to(x),
@@ -163,9 +159,9 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base)
+        super().__init__(dim, max_position_embeddings, base, device)
 
-    def _set_cos_sin_cache(self, seq_len):
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         inv_freq = 1.0 / (
             self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim)
@@ -176,8 +172,8 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()
-        self.sin_cached = emb.sin()
+        self.register_buffer("cos_cached", emb.cos().to(dtype=dtype, device=device), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype=dtype, device=device), persistent=False)
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
@@ -185,9 +181,9 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base)
+        super().__init__(dim, max_position_embeddings, base, device)
 
-    def _set_cos_sin_cache(self, seq_len):
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
         if seq_len > self.max_position_embeddings:
             base = self.base * (
@@ -201,8 +197,8 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
         freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.cos_cached = emb.cos()
-        self.sin_cached = emb.sin()
+        self.register_buffer("cos_cached", emb.cos().to(dtype=dtype, device=device), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype=dtype, device=device), persistent=False)
 
 
 def rotate_half(x):
