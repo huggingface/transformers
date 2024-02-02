@@ -997,9 +997,7 @@ class LlamaModel(LlamaPreTrainedModel):
                 
         causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1)
         if attention_mask is not None and attention_mask.dim() == 2:
-            paddin_mask = causal_mask[..., : attention_mask.shape[-1]].eq(False) * attention_mask[:, None, None, :].eq(
-                False
-            )
+            paddin_mask = causal_mask[..., : attention_mask.shape[-1]].eq(0.) * attention_mask[:, None, None, :].eq(0.)
             causal_mask[..., : attention_mask.shape[-1]] = causal_mask[..., : attention_mask.shape[-1]].masked_fill(
                 paddin_mask, torch.finfo(inputs_embeds.dtype).min
             )
