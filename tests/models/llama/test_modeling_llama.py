@@ -548,23 +548,44 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         def compare_rope(test_dtype, dim, max_position_embeddings, base):
             with torch.device("cuda"):
-                rope_gpu = LlamaRotaryEmbedding(
+                rope_gpu_init = LlamaRotaryEmbedding(
                     dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cuda"
                 )
-            rope_cpu = LlamaRotaryEmbedding(
+            rope_cpu_init = LlamaRotaryEmbedding(
                 dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cpu"
             )
             # Despite the `with` statement and the `device` argument (that exists for backwards compatibility), the
-            # sin/cos tensors are on CPU in both cases.
-            self.assertTrue(rope_cpu.sin_cached.device == torch.device("cpu"))
-            self.assertTrue(rope_gpu.sin_cached.device == torch.device("cpu"))
+            # sin/cos tensors are set on CPU in both cases.
+            def check_cache(rope_a, rope_b, expected_device="cpu"):
+                self.assertTrue(expected_device in str(rope_a.sin_cached.device))
+                self.assertTrue(expected_device in str(rope_b.sin_cached.device))
+                self.assertTrue(rope_a.sin_cached.dtype == torch.float32)
+                self.assertTrue(rope_b.sin_cached.dtype == torch.float32)
+                self.assertTrue(torch.allclose(rope_a.sin_cached, rope_b.sin_cached))
+                self.assertTrue(torch.allclose(rope_a.cos_cached, rope_b.cos_cached))
 
-            # Moving to the desired dtype and device (as in the forward pass of the embeddings) has the same results
-            # regardless of the device set at the creation of the sin/cos tensors.
-            rope_cpu = rope_cpu.to(device="cuda", dtype=test_dtype)
-            rope_gpu = rope_gpu.to(device="cuda", dtype=test_dtype)
-            max_sin_diff = (rope_gpu.sin_cached - rope_cpu.sin_cached).abs().max()
-            max_cos_diff = (rope_gpu.cos_cached - rope_cpu.cos_cached).abs().max()
+            check_cache(rope_gpu_init, rope_cpu_init)
+
+            # Moving the rope instance with `.to()` does not move the sin/cos tensors to the device nor changes its
+            # type
+            rope_cpu_init = rope_cpu_init.to(device="cuda", dtype=test_dtype)
+            rope_gpu_init = rope_gpu_init.to(device="cuda", dtype=test_dtype)
+            check_cache(rope_cpu_init, rope_gpu_init)
+
+            # However, running the forward pass will move the sin/cos cache to the input device, to prevent repeated
+            # copies to the target device. The type of the cache remains unchanged, but the output dtype will match
+            # the input dtype.
+            test_input = torch.rand((1, 1), device="cuda", dtype=test_dtype)
+            fwd_cos_cpu_init, fwd_sin_cpu_init = rope_cpu_init(test_input, seq_len=max_position_embeddings)
+            fwd_cos_gpu_init, fwd_sin_gpu_init = rope_gpu_init(test_input, seq_len=max_position_embeddings)
+            check_cache(rope_cpu_init, rope_gpu_init, expected_device="cuda")
+            self.assertTrue("cuda" in str(fwd_cos_cpu_init.device))
+            self.assertTrue("cuda" in str(fwd_cos_gpu_init.device))
+            self.assertTrue(fwd_cos_cpu_init.dtype == test_dtype)
+            self.assertTrue(fwd_cos_gpu_init.dtype == test_dtype)
+
+            max_sin_diff = (fwd_sin_cpu_init - fwd_sin_gpu_init).abs().max()
+            max_cos_diff = (fwd_cos_cpu_init - fwd_cos_gpu_init).abs().max()
             max_diff = max(max_sin_diff, max_cos_diff)
             self.assertEqual(max_diff, 0.0)
 
