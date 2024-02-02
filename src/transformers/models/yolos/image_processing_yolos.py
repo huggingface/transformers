@@ -930,36 +930,22 @@ class YolosImageProcessor(BaseImageProcessor):
         new_annotation = {}
         new_annotation["size"] = output_image_size
 
-        input_height, input_width = input_image_size
-        output_height, output_width = output_image_size
         for key, value in annotation.items():
-            if key == "boxes":
-                boxes = value
-                boxes *= np.asarray(
-                    [
-                        input_width / output_width,
-                        input_height / output_height,
-                        input_width / output_width,
-                        input_height / output_height,
-                    ],
-                    dtype=np.float32,
-                )
-                new_annotation["boxes"] = boxes
-            elif key == "masks":
+            if key == "masks":
                 masks = value
-                # FIXME - check the value to pad with here
                 masks = pad(
-                    masks[:, None],
+                    masks,
                     padding,
                     mode=PaddingMode.CONSTANT,
                     constant_values=0,
-                    input_data_format=ChannelDimension.LAST,
+                    input_data_format=ChannelDimension.FIRST,
                 )
                 masks = safe_squeeze(masks, 1)
                 new_annotation["masks"] = masks
             elif key == "size":
                 new_annotation["size"] = output_image_size
             else:
+                # Boxes are not in relative format and don't need to be updated
                 new_annotation[key] = value
         return new_annotation
 
