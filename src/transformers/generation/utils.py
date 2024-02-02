@@ -4847,7 +4847,9 @@ def sequential_bs_forward(
 optimal_low_mem_beam_search_bs = None
 
 
-def auto_sequential_bs_forward(model, model_inputs, batch_size: int, output_attentions: bool, output_hidden_states: bool):
+def auto_sequential_bs_forward(
+    model, model_inputs, batch_size: int, output_attentions: bool, output_hidden_states: bool
+):
     """
     Splits the model inputs into sub-batches, processes each sub-batch through the model,
     and stacks the outputs.
