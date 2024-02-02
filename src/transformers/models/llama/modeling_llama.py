@@ -988,7 +988,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # support going beyond `max_position_embedding`
         if past_key_values_length+seq_length>self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2*self.causal_mask.shape[-1],2*self.causal_mask.shape[-1]),fill_value=inputs_embeds.dtype.min)
+            causal_mask = torch.full((2*self.causal_mask.shape[-1],2*self.causal_mask.shape[-1]),fill_value=torch.finfo(inputs_embeds.dtype).min)
             self.register_buffer("causal_mask", torch.triu(causal_mask,diagonal=1), persistent=False)
             logger.warning(
                 "You are going above the `max_position_embedding` you should set `max_position_embedding` accordingly. This will no longer be supported"
