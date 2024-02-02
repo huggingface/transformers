@@ -10,4 +10,3 @@ class BaseImageProcessorFast(ImageProcessingMixin):
 
     def preprocess(self, images, **kwargs):
         raise NotImplementedError
-

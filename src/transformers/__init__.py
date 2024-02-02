@@ -1317,7 +1317,7 @@ else:
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
-    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor", "ViTImageProcessorFast"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
@@ -6054,7 +6054,7 @@ if TYPE_CHECKING:
         from .models.tvp import TvpImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
-        from .models.vit import ViTFeatureExtractor, ViTImageProcessor
+        from .models.vit import ViTFeatureExtractor, ViTImageProcessor, ViTImageProcessorFast
         from .models.vit_hybrid import ViTHybridImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
