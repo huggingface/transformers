@@ -180,14 +180,14 @@ Al igual que las tareas de clasificación en cualquier modalidad, la clasificaci
 [{'score': 0.9991, 'label': 'POSITIVE'}]
 ```
 
-### Token classification
+### Clasificación de tokens
 
-In any NLP task, text is preprocessed by separating the sequence of text into individual words or subwords. These are known as [tokens](glossary#token). Token classification assigns each token a label from a predefined set of classes. 
+En cualquier tarea de NLP, el texto se procesa separando la secuencia de texto en palabras o subpalabras individuales. Estas se conocen como [tokens](glossary#token). La clasificación de tokens asigna a cada token una etiqueta de un conjunto predefinido de clases.
 
-Two common types of token classification are:
+Dos tipos comunes de clasificación de tokens son:
 
-* named entity recognition (NER): label a token according to an entity category like organization, person, location or date. NER is especially popular in biomedical settings, where it can label genes, proteins, and drug names.
-* part-of-speech tagging (POS): label a token according to its part-of-speech like noun, verb, or adjective. POS is useful for helping translation systems understand how two identical words are grammatically different (bank as a noun versus bank as a verb).
+* reconocimiento de entidades nombradas (NER, por sus siglas en inglés): etiquetar un token según una categoría de entidad como organización, persona, ubicación o fecha. NER es especialmente popular en entornos biomédicos, donde puede etiquetar genes, proteínas y nombres de medicamentos
+* etiquetado de partes del discurso (POS, por sus siglas en inglés): etiquetar un token según su parte del discurso, como sustantivo, verbo o adjetivo. POS es útil para ayudar a los sistemas de traducción a comprender cómo dos palabras idénticas son gramaticalmente diferentes (por ejemplo, "corte" como sustantivo versus "corte" como verbo)
 
 ```py
 >>> from transformers import pipeline
@@ -215,15 +215,14 @@ Two common types of token classification are:
 {'entity': 'I-LOC', 'score': 0.9992, 'index': 12, 'word': 'City', 'start': 51, 'end': 55}
 ```
 
-### Question answering
+### Respuestas a preguntas
 
-Question answering is another token-level task that returns an answer to a question, sometimes with context (open-domain) and other times without context (closed-domain). This task happens whenever we ask a virtual assistant something like whether a restaurant is open. It can also provide customer or technical support and help search engines retrieve the relevant information you're asking for. 
+Responder preguntas es otra tarea a nivel de tokens que devuelve una respuesta a una pregunta, a veces con contexto (dominio abierto) y otras veces sin contexto (dominio cerrado). Esta tarea ocurre cuando le preguntamos algo a un asistente virtual, como si un restaurante está abierto. También puede proporcionar soporte al cliente o técnico y ayudar a los motores de búsqueda a recuperar la información relevante que estás buscando.
 
-There are two common types of question answering:
+Hay dos tipos comunes de respuestas a preguntas:
 
-* extractive: given a question and some context, the answer is a span of text from the context the model must extract
-* abstractive: given a question and some context, the answer is generated from the context; this approach is handled by the [`Text2TextGenerationPipeline`] instead of the [`QuestionAnsweringPipeline`] shown below
-
+* extractivas: dada una pregunta y algún contexto, la respuesta es un fragmento de texto del contexto que el modelo debe extraer
+* abstractivas: dada una pregunta y algún contexto, la respuesta se genera a partir del contexto; este enfoque lo maneja la [`Text2TextGenerationPipeline`] en lugar del [`QuestionAnsweringPipeline`] que se muestra a continuación
 
 ```py
 >>> from transformers import pipeline
@@ -239,14 +238,14 @@ There are two common types of question answering:
 score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 ```
 
-### Summarization
+### Resumir
 
-Summarization creates a shorter version of a text from a longer one while trying to preserve most of the meaning of the original document. Summarization is a sequence-to-sequence task; it outputs a shorter text sequence than the input. There are a lot of long-form documents that can be summarized to help readers quickly understand the main points. Legislative bills, legal and financial documents, patents, and scientific papers are a few examples of documents that could be summarized to save readers time and serve as a reading aid.
+Al resumir se crea una versión más corta de un texto más largo mientras intenta preservar la mayor parte del significado del documento original. Resumir es una tarea de secuencia a secuencia; produce una secuencia de texto más corta que la entrada. Hay muchos documentos de formato largo que se pueden resumir para ayudar a los lectores a comprender rápidamente los puntos principales. Proyectos de ley legislativos, documentos legales y financieros, patentes y artículos científicos son algunos ejemplos de documentos que podrían resumirse para ahorrar tiempo a los lectores y servir como ayuda para la lectura.
 
-Like question answering, there are two types of summarization:
+Al igual que en las respuestas a preguntas, hay dos tipos de resumen:
 
-* extractive: identify and extract the most important sentences from the original text
-* abstractive: generate the target summary (which may include new words not in the input document) from the original text; the [`SummarizationPipeline`] uses the abstractive approach
+* extractiva: identifica y extrae las oraciones más importantes del texto original
+* abstractiva: genera el resumen objetivo (que puede incluir nuevas palabras no presentes en el documento de entrada) a partir del texto original; el [`SummarizationPipeline`] utiliza el enfoque abstractivo
 
 ```py
 >>> from transformers import pipeline
@@ -258,11 +257,11 @@ Like question answering, there are two types of summarization:
 [{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
 ```
 
-### Translation
+### Traducción
 
-Translation converts a sequence of text in one language to another. It is important in helping people from different backgrounds communicate with each other, help translate content to reach wider audiences, and even be a learning tool to help people learn a new language. Along with summarization, translation is a sequence-to-sequence task, meaning the model receives an input sequence and returns a target output sequence. 
+La traducción convierte una secuencia de texto en un idioma a otro. Es importante para ayudar a personas de diferentes orígenes a comunicarse entre sí, traducir contenido para llegar a audiencias más amplias e incluso ser una herramienta de aprendizaje para ayudar a las personas a aprender un nuevo idioma. Al igual que resumir, la traducción es una tarea de secuencia a secuencia, lo que significa que el modelo recibe una secuencia de entrada y devuelve una secuencia de salida objetivo.
 
-In the early days, translation models were mostly monolingual, but recently, there has been increasing interest in multilingual models that can translate between many pairs of languages.
+En sus primeros días, los modelos de traducción eran principalmente monolingües, pero recientemente ha habido un creciente interés en modelos multilingües que pueden traducir entre muchas combinaciones de idiomas.
 
 ```py
 >>> from transformers import pipeline
@@ -273,13 +272,13 @@ In the early days, translation models were mostly monolingual, but recently, the
 [{'translation_text': "Hugging Face est une tribune communautaire de l'apprentissage des machines."}]
 ```
 
-### Language modeling
+### Modelado de lenguaje
 
-Language modeling is a task that predicts a word in a sequence of text. It has become a very popular NLP task because a pretrained language model can be finetuned for many other downstream tasks. Lately, there has been a lot of interest in large language models (LLMs) which demonstrate zero- or few-shot learning. This means the model can solve tasks it wasn't explicitly trained to do! Language models can be used to generate fluent and convincing text, though you need to be careful since the text may not always be accurate.
+El modelado de lenguaje es una tarea que predice una palabra en una secuencia de texto. Se ha vuelto una tarea de NLP muy popular porque un modelo de lenguaje preentrenado puede ser afinado para muchas otras tareas secundarias. Últimamente, ha habido mucho interés en modelos de lenguaje grandes (LLM, por sus siglas en inglés) que demuestran aprendizaje de cero o con pocas muestras (zero- or few-shot learning). ¡Esto significa que el modelo puede resolver tareas para las cuales no fue entrenado explícitamente! Los modelos de lenguaje se pueden utilizar para generar texto fluido y convincente, aunque debes tener cuidado, ya que el texto no siempre puede ser preciso.
 
-There are two types of language modeling:
+Hay dos tipos de modelado de lenguaje:
 
-* causal: the model's objective is to predict the next token in a sequence, and future tokens are masked
+* causal: el objetivo del modelo es predecir el próximo token en una secuencia, y los tokens futuros están enmascarados
 
     ```py
     >>> from transformers import pipeline
@@ -289,8 +288,8 @@ There are two types of language modeling:
     >>> generator(prompt)  # doctest: +SKIP
     ```
 
-* masked: the model's objective is to predict a masked token in a sequence with full access to the tokens in the sequence
-    
+* enmascarado: el objetivo del modelo es predecir un token enmascarado en una secuencia con acceso completo a los tokens en la secuencia
+
     ```py
     >>> text = "Hugging Face is a community-based open-source <mask> for machine learning."
     >>> fill_mask = pipeline(task="fill-mask")
@@ -313,13 +312,13 @@ There are two types of language modeling:
 
 ## Multimodal
 
-Multimodal tasks require a model to process multiple data modalities (text, image, audio, video) to solve a particular problem. Image captioning is an example of a multimodal task where the model takes an image as input and outputs a sequence of text describing the image or some properties of the image. 
+Las tareas multimodales requieren que un modelo procese múltiples modalidades de datos (texto, imagen, audio, video) para resolver un problema particular. La descripción de imágenes es un ejemplo de una tarea multimodal en la que el modelo toma una imagen como entrada y produce una secuencia de texto que describe la imagen o algunas propiedades de la imagen.
 
-Although multimodal models work with different data types or modalities, internally, the preprocessing steps help the model convert all the data types into embeddings (vectors or list of numbers that holds meaningful information about the data). For a task like image captioning, the model learns relationships between image embeddings and text embeddings.
+Aunque los modelos multimodales trabajan con diferentes tipos de datos o modalidades, internamente, los pasos de preprocesamiento ayudan al modelo a convertir todos los tipos de datos en embeddings (vectores o listas de números que contienen información significativa sobre los datos). Para una tarea como la descripción de imágenes, el modelo aprende las relaciones entre los embeddings de imágenes y los embeddings de texto.
 
-### Document question answering
+### Respuestas a preguntas de documentos
 
-Document question answering is a task that answers natural language questions from a document. Unlike a token-level question answering task which takes text as input, document question answering takes an image of a document as input along with a question about the document and returns an answer. Document question answering can be used to parse structured documents and extract key information from it. In the example below, the total amount and change due can be extracted from a receipt.
+Las respuestas a preguntas de documentos es una tarea que responde preguntas en lenguaje natural a partir de un documento. A diferencia de una tarea de respuestas a preguntas a nivel de token que toma texto como entrada, las respuestas a preguntas de documentos toman una imagen de un documento como entrada junto con una pregunta sobre el documento y devuelven una respuesta. Las respuestas a preguntas de documentos pueden usarse para analizar documentos estructurados y extraer información clave de ellos. En el ejemplo a continuación, el monto total y el cambio debido se pueden extraer de un recibo.
 
 ```py
 >>> from transformers import pipeline
@@ -338,4 +337,11 @@ Document question answering is a task that answers natural language questions fr
 [{'score': 0.8531, 'answer': '17,000', 'start': 4, 'end': 4}]
 ```
 
-Hopefully, this page has given you some more background information about all the types of tasks in each modality and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
+Con suerte, esta página te ha proporcionado más información de fondo sobre todos los tipos de tareas en cada modalidad y la importancia práctica de cada una. En la próxima [sección](https://huggingface.co/docs/transformers/tasks_explained), aprenderás **cómo** 🤗 Transformers trabaja para resolver estas tareas.
+
+<!--
+TO DO:
+
+Update this link "En la próxima [sección](https://huggingface.co/docs/transformers/tasks_explained),..."
+when the translation of "tasks_explained.md" was carried out.
+-->
