@@ -2934,7 +2934,7 @@ class GenerationMixin:
                 #
                 # minibatch_size=batch_size
                 # outputs = minibatch_forward(self, model_inputs, minibatch_size, batch_beam_size, output_attentions, output_hidden_states)
-                outputs = auto_minibatch_forward(
+                outputs = auto_sequential_bs_forward(
                     self, model_inputs, batch_beam_size, output_attentions, output_hidden_states
                 )
 
@@ -4807,7 +4807,7 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     return model_output_cls(**concatenated_data)
 
 
-def minibatch_forward(
+def sequential_bs_forward(
     model, model_inputs, mini_batch_size: int, batch_size: int, output_attentions: bool, output_hidden_states: bool
 ):
     """
@@ -4847,7 +4847,7 @@ def minibatch_forward(
 optimal_low_mem_beam_search_bs = None
 
 
-def auto_minibatch_forward(model, model_inputs, batch_size: int, output_attentions: bool, output_hidden_states: bool):
+def auto_sequential_bs_forward(model, model_inputs, batch_size: int, output_attentions: bool, output_hidden_states: bool):
     """
     Splits the model inputs into sub-batches, processes each sub-batch through the model,
     and stacks the outputs.
@@ -4867,7 +4867,7 @@ def auto_minibatch_forward(model, model_inputs, batch_size: int, output_attentio
     # try, except while loop
     while try_split_size > 0:
         try:
-            outputs = minibatch_forward(
+            outputs = sequential_bs_forward(
                 model, model_inputs, try_split_size, batch_size, output_attentions, output_hidden_states
             )
             optimal_low_mem_beam_search_bs = try_split_size
