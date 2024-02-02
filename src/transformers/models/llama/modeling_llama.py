@@ -805,10 +805,10 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
         
-        if max_cache_len>self.causal_mask.shape[-1]:
+        if max_cache_len>self.model.causal_mask.shape[-1]:
             causal_mask = torch.full((max_cache_len, max_cache_len),fill_value=torch.finfo(self.config.torch_dtype).min,dtype=self.config.torch_dtype)
             causal_mask = torch.triu(causal_mask,diagonal=1)
-            self.register_buffer("causal_mask", causal_mask, persistent=False)
+            self.model.register_buffer("causal_mask", causal_mask, persistent=False)
                 
         for layer in self.model.layers:
             layer.self_attn.past_key_value = cache_cls(
