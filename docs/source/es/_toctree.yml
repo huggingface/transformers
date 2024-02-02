@@ -81,7 +81,7 @@
   - local: glossary
     title: Glosario
   - local: task_summary
-    title: Qué puede hacer 🤗 Transformers
+    title: Lo que 🤗 Transformers puede hacer
   - local: pad_truncation
     title: Relleno y truncamiento
   - local: bertology
