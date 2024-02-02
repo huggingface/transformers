@@ -285,7 +285,14 @@ class LlamaAttention(nn.Module):
         self._init_rope()
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask=torch.triu(torch.full((self.max_position_embeddings, self.max_position_embeddings),  fill_value=torch.finfo(config.torch_dtype).min, dtype=config.torch_dtype),diagonal=1)
+        causal_mask = torch.triu(
+            torch.full(
+                (self.max_position_embeddings, self.max_position_embeddings),
+                fill_value=torch.finfo(config.torch_dtype).min,
+                dtype=config.torch_dtype,
+            ),
+            diagonal=1,
+        )
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
     def _init_rope(self):
@@ -371,7 +378,7 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        causal_mask = attention_mask[...,new_cache_positions,  : key_states.shape[-2]]
+        causal_mask = attention_mask[...,past_seen_tokens:past_seen_tokens + q_len,  : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -657,7 +664,7 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
         if attention_mask is not None:  # user defined causal mask
-            causal_mask = attention_mask[..., new_cache_positions, : key_states.shape[-2]]
+            causal_mask = attention_mask[:,:, past_seen_tokens:past_seen_tokens+q_len, : key_states.shape[-2]]
         else:
             causal_mask = None
 
@@ -674,7 +681,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=causal_mask is None and q_len>1,
+            is_causal=causal_mask is None and q_len > 1,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -918,7 +925,14 @@ class LlamaModel(LlamaPreTrainedModel):
         self.post_init()
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        causal_mask=torch.triu(torch.full((config.max_position_embeddings, config.max_position_embeddings),  fill_value=torch.finfo(config.torch_dtype).min, dtype=config.torch_dtype),diagonal=1)
+        causal_mask = torch.triu(
+            torch.full(
+                (config.max_position_embeddings, config.max_position_embeddings),
+                fill_value=torch.finfo(config.torch_dtype).min,
+                dtype=config.torch_dtype,
+            ),
+            diagonal=1,
+        )
         self.register_buffer("causal_mask", causal_mask, persistent=False)
 
     def get_input_embeddings(self):
@@ -982,10 +996,14 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        causal_mask = self.causal_mask[None, None, :,:].repeat(batch_size, 1, 1, 1)
-        if attention_mask is not None and attention_mask.dim()==2:
-            paddin_mask = causal_mask[..., :attention_mask.shape[-1]].eq(False) * attention_mask[:, None, None, :].eq(False)
-            causal_mask[..., :attention_mask.shape[-1]] = causal_mask[..., :attention_mask.shape[-1]].masked_fill(paddin_mask, torch.finfo(inputs_embeds.dtype).min)
+        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1)
+        if attention_mask is not None and attention_mask.dim() == 2:
+            paddin_mask = causal_mask[..., : attention_mask.shape[-1]].eq(False) * attention_mask[:, None, None, :].eq(
+                False
+            )
+            causal_mask[..., : attention_mask.shape[-1]] = causal_mask[..., : attention_mask.shape[-1]].masked_fill(
+                paddin_mask, torch.finfo(inputs_embeds.dtype).min
+            )
 
         # embed positions
         hidden_states = inputs_embeds
