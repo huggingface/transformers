@@ -304,7 +304,6 @@ class ModelUtilsTest(TestCasePlus):
 
     @require_accelerate
     def test_model_from_pretrained_with_none_quantization_config(self):
-        model = None
         # Needs a device_map for to enter the low_cpu_mem branch. We also load AutoModelForSequenceClassification
         # deliberately to enter the missing keys branch.
         model = AutoModelForSequenceClassification.from_pretrained(
