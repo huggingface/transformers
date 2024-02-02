@@ -14,12 +14,14 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
+from dataclasses import dataclass
 from functools import cache
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_utils import get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -55,9 +57,6 @@ pil_torch_interpolation_mapping = {
 }
 
 
-from dataclasses import dataclass
-
-
 @dataclass(frozen=True)
 class SizeDict:
     height: int = None
@@ -65,25 +64,13 @@ class SizeDict:
     longest_edge: int = None
     shortest_edge: int = None
 
-    def todict(self):
-        output = {}
-        if self.height is not None:
-            output["height"] = self.height
-        if self.width is not None:
-            output["width"] = self.width
-        if self.longest_edge is not None:
-            output["longest_edge"] = self.longest_edge
-        if self.shortest_edge is not None:
-            output["shortest_edge"] = self.shortest_edge
-        return output
-
     def __getitem__(self, key):
         if hasattr(self, key):
             return getattr(self, key)
         raise KeyError(f"Key {key} not found in SizeDict.")
 
 
-class ViTImageProcessorFast(BaseImageProcessor):
+class ViTImageProcessorFast(BaseImageProcessorFast):
     r"""
     Constructs a ViT image processor.
 
@@ -161,23 +148,6 @@ class ViTImageProcessorFast(BaseImageProcessor):
             image_std=image_std,
         )
 
-    def _set_transform_settings(self, **kwargs):
-        settings = {}
-        for k, v in kwargs.items():
-            if k not in self._transform_params:
-                raise ValueError(f"Invalid transform parameter {k}={v}.")
-            settings[k] = v
-        self._transform_settings = settings
-
-    def _same_transforms_settings(self, **kwargs):
-        """
-        Check if the current settings are the same as the current transforms.
-        """
-        for key, value in kwargs.items():
-            if value not in self._transform_settings or value != self._transform_settings[key]:
-                return False
-        return True
-
     def _build_transforms(
         self,
         do_resize: bool,
@@ -200,49 +170,6 @@ class ViTImageProcessorFast(BaseImageProcessor):
         if do_normalize:
             transforms.append(Normalize(image_mean, image_std))
         return Compose(transforms)
-
-    def set_transforms(
-        self,
-        do_resize: bool,
-        do_rescale: bool,
-        do_normalize: bool,
-        size: Dict[str, int],
-        resample: PILImageResampling,
-        rescale_factor: float,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-    ):
-        if self._same_transforms_settings(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        ):
-            return self._transforms
-        transforms = self._build_transforms(
-            do_resize=do_resize,
-            size_dict=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-        self._set_transform_settings(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
-        self._transforms = transforms
 
     @cache
     def _validate_input_arguments(
@@ -269,40 +196,6 @@ class ViTImageProcessorFast(BaseImageProcessor):
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-    @cache
-    def _maybe_update_transforms(
-        self,
-        do_resize: bool,
-        size: Dict[str, int],
-        resample: PILImageResampling,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-    ):
-        if self._same_transforms_settings(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        ):
-            return
-        self.set_transforms(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-        )
 
     def preprocess(
         self,
