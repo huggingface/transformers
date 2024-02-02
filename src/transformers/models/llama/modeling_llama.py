@@ -372,17 +372,14 @@ class LlamaAttention(nn.Module):
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if attention_mask is not None and attention_mask.dim() == 2:
-            causal_mask = self.causal_mask[None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1)
-            # mask out padding and unsqueeze in head position
-            causal_mask[:, :q_len, :kv_seq_len].mul_(attention_mask[:, None, :])
-            causal_mask = causal_mask.unsqueeze(1)
+            causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]].repeat(bsz, 1, 1, 1)
+            mask = causal_mask[..., :kv_seq_len].eq(False) * (attention_mask[:, None, None, :].eq(False))
+            causal_mask[..., :kv_seq_len] = causal_mask[..., :kv_seq_len].masked_fill(mask, torch.finfo(hidden_states.dtype).min)
         elif attention_mask is not None and attention_mask.dim() == 4:  # user defined causal mask
             causal_mask = attention_mask
         else:
             causal_mask = self.causal_mask[None, None, new_cache_positions, : key_states.shape[-2]]
 
-        causal_mask = 1 - causal_mask.to(hidden_states.dtype)
-        causal_mask = causal_mask.masked_fill(causal_mask.bool(), torch.finfo(hidden_states.dtype).min)
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
