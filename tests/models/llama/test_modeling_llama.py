@@ -48,6 +48,7 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
+    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
 class LlamaModelTester:
@@ -506,10 +507,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertTrue(torch.allclose(res_eager, res_sdpa))
 
     @require_torch_gpu
-    def test_rope_casting(self):
+    def test_rope_casting_invariant(self):
         """
-        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are resilient to model casting
-        strategy (`.to()` or `torch_dtype`).
+        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are unnafected by the model
+        casting strategy (`.to()` or `torch_dtype`).
         """
         model_1 = LlamaForCausalLM.from_pretrained(
             "HuggingFaceM4/tiny-random-LlamaForCausalLM",
@@ -537,6 +538,41 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(torch.allclose(model_1_out.logits, model_2_out.logits))
         self.assertTrue(model_1.model.layers[0].self_attn.rotary_emb.sin_cached.dtype == torch.float32)
         self.assertTrue(model_2.model.layers[0].self_attn.rotary_emb.sin_cached.dtype == torch.float32)
+
+    @require_torch_gpu
+    def test_rope_device_invariant(self):
+        """
+        Test exclusive to models with RoPE embeddings: tests that the RoPE embeddings are unnafected by the device
+        placement.
+        """
+
+        def compare_rope(test_dtype, dim, max_position_embeddings, base):
+            with torch.device("cuda"):
+                rope_gpu = LlamaRotaryEmbedding(
+                    dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cuda"
+                )
+            rope_cpu = LlamaRotaryEmbedding(
+                dim=dim, max_position_embeddings=max_position_embeddings, base=base, device="cpu"
+            )
+            # Despite the `with` statement and the `device` argument (that exists for backwards compatibility), the
+            # sin/cos tensors are on CPU in both cases.
+            self.assertTrue(rope_cpu.sin_cached.device == torch.device("cpu"))
+            self.assertTrue(rope_gpu.sin_cached.device == torch.device("cpu"))
+
+            # Moving to the desired dtype and device (as in the forward pass of the embeddings) has the same results
+            # regardless of the device set at the creation of the sin/cos tensors.
+            rope_cpu = rope_cpu.to(device="cuda", dtype=test_dtype)
+            rope_gpu = rope_gpu.to(device="cuda", dtype=test_dtype)
+            max_sin_diff = (rope_gpu.sin_cached - rope_cpu.sin_cached).abs().max()
+            max_cos_diff = (rope_gpu.cos_cached - rope_cpu.cos_cached).abs().max()
+            max_diff = max(max_sin_diff, max_cos_diff)
+            self.assertEqual(max_diff, 0.0)
+
+        for test_dtype in (torch.float32, torch.float16, torch.bfloat16):
+            for dim in (64, 256, 1024):
+                for max_position_embeddings in (1024, 2048, 4096):
+                    for base in (10000, 100000, 1000000):
+                        compare_rope(test_dtype, dim, max_position_embeddings, base)
 
 
 @require_torch

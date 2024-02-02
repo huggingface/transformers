@@ -163,7 +163,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
+        super().__init__(dim, max_position_embeddings, base)
 
     def _set_cos_sin_cache(self, seq_len):
         self.max_seq_len_cached = seq_len
@@ -185,9 +185,9 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
-        super().__init__(dim, max_position_embeddings, base, device)
+        super().__init__(dim, max_position_embeddings, base)
 
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
+    def _set_cos_sin_cache(self, seq_len):
         self.max_seq_len_cached = seq_len
 
         if seq_len > self.max_position_embeddings:
@@ -856,6 +856,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
+    _keys_to_ignore_on_load_unexpected = ["inv_freq"]
 
     def _init_weights(self, module):
         std = self.config.initializer_range
