@@ -25,7 +25,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from torch import device, nn
+from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -123,46 +123,38 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
-
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        self._reset_inv_freq(device=device)
 
         # Build here to make `torch.jit.trace` work.
-        self._set_cos_sin_cache(seq_len=max_position_embeddings, device=self.inv_freq.device)
+        self._set_cos_sin_cache(seq_len=max_position_embeddings)
 
-    def _reset_inv_freq(self, device):
-        """
-        Resets `self.inv_freq` frequency. Two notes:
-        1. `self.inv_freq` should be a buffer, so (e.g.) it can be moved along the model with a `.to()` call.
-        2. Despite the above, we don't want to cast it down from `torch.float32`. This function should be called when
-            `self.inv_freq` is detected to be of the wrong dtype.
-        """
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def _set_cos_sin_cache(self, seq_len, device):
-        if self.inv_freq.dtype != torch.float32:
-            self._reset_inv_freq(device=device)
-
+    def _set_cos_sin_cache(self, seq_len):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim)
+        )
+        t = torch.arange(self.max_seq_len_cached, device="cpu", dtype=torch.int64).float()
 
-        freqs = torch.outer(t, self.inv_freq)
+        freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos(), persistent=False)
-        self.register_buffer("sin_cached", emb.sin(), persistent=False)
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device)
+            self._set_cos_sin_cache(seq_len=seq_len)
+
+        # Move to the target device if needed. This line prevents repeated device copies, if sin/cos haven't changed.
+        self.sin_cached = self.sin_cached.to(x.device)
+        self.cos_cached = self.cos_cached.to(x.device)
 
         return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+            self.cos_cached[:seq_len].to(x),
+            self.sin_cached[:seq_len].to(x),
         )
 
 
@@ -173,19 +165,19 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         self.scaling_factor = scaling_factor
         super().__init__(dim, max_position_embeddings, base, device)
 
-    def _set_cos_sin_cache(self, seq_len, device, dtype):
-        if self.inv_freq.dtype != torch.float32:
-            self._reset_inv_freq(device=device)
-
+    def _set_cos_sin_cache(self, seq_len):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim)
+        )
+        t = torch.arange(self.max_seq_len_cached, device="cpu", dtype=torch.int64).float()
         t = t / self.scaling_factor
 
-        freqs = torch.outer(t, self.inv_freq)
+        freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
@@ -202,18 +194,14 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
-            self.register_buffer("inv_freq", inv_freq, persistent=False)
-        elif self.inv_freq.dtype != torch.float32:
-            self._reset_inv_freq(device=device)
+        inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device="cpu").float() / self.dim))
+        t = torch.arange(self.max_seq_len_cached, device="cpu", dtype=torch.int64).float()
 
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
-
-        freqs = torch.outer(t, self.inv_freq)
+        freqs = torch.outer(t, inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+        self.cos_cached = emb.cos()
+        self.sin_cached = emb.sin()
 
 
 def rotate_half(x):
