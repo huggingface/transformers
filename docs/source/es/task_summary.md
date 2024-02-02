@@ -62,23 +62,23 @@ Pero uno de los desafíos clave que las arquitecturas Transformer han ayudado a 
 {'text': ' I have a dream that one day this nation will rise up and live out the true meaning of its creed.'}
 ```
 
-## Computer vision
+## Visión por computadora
 
-One of the first and earliest successful computer vision tasks was recognizing images of zip code numbers using a [convolutional neural network (CNN)](glossary#convolution). An image is composed of pixels, and each pixel has a numerical value. This makes it easy to represent an image as a matrix of pixel values. Each particular combination of pixel values describes the colors of an image. 
+Una de las primeras y exitosas tareas de visión por computadora fue reconocer imágenes de números de código postal utilizando una [red neuronal convolucional](glossary#convolution) (CNN, por sus siglas en inglés). Una imagen está compuesta por píxeles, y cada píxel tiene un valor numérico. Esto facilita representar una imagen como una matriz de valores de píxeles. Cada combinación particular de valores de píxeles describe los colores de una imagen.
 
-Two general ways computer vision tasks can be solved are:
+Dos formas generales en las que se pueden resolver las tareas de visión por computadora son:
 
-1. Use convolutions to learn the hierarchical features of an image from low-level features to high-level abstract things.
-2. Split an image into patches and use a Transformer to gradually learn how each image patch is related to each other to form an image. Unlike the bottom-up approach favored by a CNN, this is kind of like starting out with a blurry image and then gradually bringing it into focus.
+1. Utilizar convoluciones para aprender las características jerárquicas de una imagen, desde características de bajo nivel hasta cosas abstractas de alto nivel.
+2. Dividir una imagen en parches y utilizar un Transformer para aprender gradualmente cómo cada parche de imagen se relaciona entre sí para formar una imagen. A diferencia del enfoque ascendente preferido por una CNN, esto es como comenzar con una imagen borrosa y luego enfocarla gradualmente.
 
-### Image classification
+### Clasificación de imágenes
 
-Image classification labels an entire image from a predefined set of classes. Like most classification tasks, there are many practical use cases for image classification, some of which include:
+La clasificación de imágenes etiqueta una imagen completa con un conjunto predefinido de clases. Como la mayoría de las tareas de clasificación, hay muchos casos prácticos para la clasificación de imágenes, algunos de los cuales incluyen:
 
-* healthcare: label medical images to detect disease or monitor patient health
-* environment: label satellite images to monitor deforestation, inform wildland management or detect wildfires
-* agriculture: label images of crops to monitor plant health or satellite images for land use monitoring 
-* ecology: label images of animal or plant species to monitor wildlife populations or track endangered species
+* salud: etiquetar imágenes médicas para detectar enfermedades o monitorear la salud del paciente
+* medio ambiente: etiquetar imágenes de satélite para monitorear la deforestación, informar la gestión de áreas silvestres o detectar incendios forestales
+* agricultura: etiquetar imágenes de cultivos para monitorear la salud de las plantas o imágenes de satélite para el monitoreo del uso del suelo
+* ecología: etiquetar imágenes de especies animales o vegetales para monitorear poblaciones de vida silvestre o rastrear especies en peligro de extinción
 
 ```py
 >>> from transformers import pipeline
@@ -96,13 +96,13 @@ Image classification labels an entire image from a predefined set of classes. Li
 {'score': 0.0229, 'label': 'tiger cat'}
 ```
 
-### Object detection
+### Detección de objetos
 
-Unlike image classification, object detection identifies multiple objects within an image and the objects' positions in an image (defined by the bounding box). Some example applications of object detection include:
+A diferencia de la clasificación de imágenes, la detección de objetos identifica múltiples objetos dentro de una imagen y las posiciones de los objetos en la imagen (definidas por el cuadro delimitador). Algunas aplicaciones ejemplares de la detección de objetos incluyen:
 
-* self-driving vehicles: detect everyday traffic objects such as other vehicles, pedestrians, and traffic lights
-* remote sensing: disaster monitoring, urban planning, and weather forecasting
-* defect detection: detect cracks or structural damage in buildings, and manufacturing defects
+* vehículos autónomos: detectar objetos de tráfico cotidianos como otros vehículos, peatones y semáforos
+* teledetección: monitoreo de desastres, planificación urbana y pronóstico del tiempo
+* detección de defectos: detectar grietas o daños estructurales en edificios y defectos de fabricación
 
 ```py
 >>> from transformers import pipeline
@@ -118,14 +118,14 @@ Unlike image classification, object detection identifies multiple objects within
   'box': {'xmin': 178, 'ymin': 154, 'xmax': 882, 'ymax': 598}}]
 ```
 
-### Image segmentation
+### Segmentación de imágenes
 
-Image segmentation is a pixel-level task that assigns every pixel in an image to a class. It differs from object detection, which uses bounding boxes to label and predict objects in an image because segmentation is more granular. Segmentation can detect objects at a pixel-level. There are several types of image segmentation:
+La segmentación de imágenes es una tarea a nivel de píxeles que asigna cada píxel en una imagen a una clase. A diferencia de la detección de objetos, que utiliza cuadros delimitadores para etiquetar y predecir objetos en una imagen, la segmentación es más granular. La segmentación puede detectar objetos a nivel de píxeles. Hay varios tipos de segmentación de imágenes:
 
-* instance segmentation: in addition to labeling the class of an object, it also labels each distinct instance of an object ("dog-1", "dog-2")
-* panoptic segmentation: a combination of semantic and instance segmentation; it labels each pixel with a semantic class **and** each distinct instance of an object
+* segmentación de instancias: además de etiquetar la clase de un objeto, también etiqueta cada instancia distinta de un objeto ("perro-1", "perro-2")
+* segmentación panóptica: una combinación de segmentación semántica y de instancias; etiqueta cada píxel con una clase semántica **y** cada instancia distinta de un objeto
 
-Segmentation tasks are helpful in self-driving vehicles to create a pixel-level map of the world around them so they can navigate safely around pedestrians and other vehicles. It is also useful for medical imaging, where the task's finer granularity can help identify abnormal cells or organ features. Image segmentation can also be used in ecommerce to virtually try on clothes or create augmented reality experiences by overlaying objects in the real world through your camera.
+Las tareas de segmentación son útiles en vehículos autónomos para crear un mapa a nivel de píxeles del mundo que los rodea para que puedan navegar de manera segura alrededor de peatones y otros vehículos. También es útil en imágenes médicas, donde la mayor granularidad de la tarea puede ayudar a identificar células anormales o características de órganos. La segmentación de imágenes también se puede utilizar en comercio electrónico para probar virtualmente la ropa o crear experiencias de realidad aumentada superponiendo objetos en el mundo real a través de tu cámara.
 
 ```py
 >>> from transformers import pipeline
@@ -141,14 +141,14 @@ Segmentation tasks are helpful in self-driving vehicles to create a pixel-level 
 {'score': 0.9972, 'label': 'cat'}
 ```
 
-### Depth estimation
+### Estimación de profundidad
 
-Depth estimation predicts the distance of each pixel in an image from the camera. This computer vision task is especially important for scene understanding and reconstruction. For example, in self-driving cars, vehicles need to understand how far objects like pedestrians, traffic signs, and other vehicles are to avoid obstacles and collisions. Depth information is also helpful for constructing 3D representations from 2D images and can be used to create high-quality 3D representations of biological structures or buildings.
+La estimación de profundidad predice la distancia de cada píxel en una imagen desde la cámara. Esta tarea de visión por computadora es especialmente importante para la comprensión y reconstrucción de escenas. Por ejemplo, en los vehículos autónomos, es necesario entender qué tan lejos están los objetos como peatones, señales de tráfico y otros vehículos para evitar obstáculos y colisiones. La información de profundidad también es útil para construir representaciones 3D a partir de imágenes 2D y se puede utilizar para crear representaciones 3D de alta calidad de estructuras biológicas o edificios.
 
-There are two approaches to depth estimation:
+Hay dos enfoques para la estimación de profundidad:
 
-* stereo: depths are estimated by comparing two images of the same image from slightly different angles
-* monocular: depths are estimated from a single image
+* estéreo: las profundidades se estiman comparando dos imágenes de la misma escena desde ángulos ligeramente diferentes
+* monocular: las profundidades se estiman a partir de una sola imagen
 
 ```py
 >>> from transformers import pipeline
@@ -159,16 +159,16 @@ There are two approaches to depth estimation:
 ... )
 ```
 
-## Natural language processing
+## Procesamiento del lenguaje natural
 
-NLP tasks are among the most common types of tasks because text is such a natural way for us to communicate. To get text into a format recognized by a model, it needs to be tokenized. This means dividing a sequence of text into separate words or subwords (tokens) and then converting these tokens into numbers. As a result, you can represent a sequence of text as a sequence of numbers, and once you have a sequence of numbers, it can be input into a model to solve all sorts of NLP tasks!
+Las tareas de procesamiento del lenguaje natural (NLP, por sus siglas en inglés) están entre los tipos de tareas más comunes porque el texto es una forma natural de comunicación para nosotros. Para convertir el texto en un formato reconocido por un modelo, es necesario tokenizarlo. Esto significa dividir una secuencia de texto en palabras o subpalabras separadas (tokens) y luego convertir estos tokens en números. Como resultado, puedes representar una secuencia de texto como una secuencia de números, y una vez que tienes una secuencia de números, se puede ingresar a un modelo para resolver todo tipo de tareas de NLP.
 
-### Text classification
+### Clasificación de texto
 
-Like classification tasks in any modality, text classification labels a sequence of text (it can be sentence-level, a paragraph, or a document) from a predefined set of classes. There are many practical applications for text classification, some of which include:
+Al igual que las tareas de clasificación en cualquier modalidad, la clasificación de texto etiqueta una secuencia de texto (puede ser a nivel de oración, párrafo o documento) de un conjunto predefinido de clases. Hay muchas aplicaciones prácticas para la clasificación de texto, algunas de las cuales incluyen:
 
-* sentiment analysis: label text according to some polarity like `positive` or `negative` which can inform and support decision-making in fields like politics, finance, and marketing
-* content classification: label text according to some topic to help organize and filter information in news and social media feeds (`weather`, `sports`, `finance`, etc.)
+* análisis de sentimientos: etiquetar texto según alguna polaridad como `positivo` o `negativo`, lo que puede informar y respaldar la toma de decisiones en campos como política, finanzas y marketing
+* clasificación de contenido: etiquetar texto según algún tema para ayudar a organizar y filtrar información en noticias y feeds de redes sociales (`clima`, `deportes`, `finanzas`, etc.)
 
 ```py
 >>> from transformers import pipeline
