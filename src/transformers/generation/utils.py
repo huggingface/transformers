@@ -2934,7 +2934,9 @@ class GenerationMixin:
                 #
                 # minibatch_size=batch_size
                 # outputs = minibatch_forward(self, model_inputs, minibatch_size, batch_beam_size, output_attentions, output_hidden_states)
-                outputs = auto_minibatch_forward(self, model_inputs, batch_beam_size, output_attentions, output_hidden_states)
+                outputs = auto_minibatch_forward(
+                    self, model_inputs, batch_beam_size, output_attentions, output_hidden_states
+                )
 
             else:  # Unchanged original behavior
                 outputs = self(
@@ -4805,7 +4807,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput]) -> ModelOutput:
     return model_output_cls(**concatenated_data)
 
 
-def minibatch_forward(model, model_inputs, mini_batch_size:int, batch_size:int, output_attentions:bool, output_hidden_states:bool):
+def minibatch_forward(
+    model, model_inputs, mini_batch_size: int, batch_size: int, output_attentions: bool, output_hidden_states: bool
+):
     """
     Splits the model inputs into sub-batches, processes each sub-batch through the model,
     and stacks the outputs.
@@ -4821,9 +4825,7 @@ def minibatch_forward(model, model_inputs, mini_batch_size:int, batch_size:int, 
         The stacked model outputs.
     """
     # Split the model inputs into sub-batches
-    inputs_per_sub_batches = _split_model_inputs(
-        model_inputs, split_size=mini_batch_size, full_batch_size=batch_size
-    )
+    inputs_per_sub_batches = _split_model_inputs(model_inputs, split_size=mini_batch_size, full_batch_size=batch_size)
 
     # Process each sub-batch through the model
     outputs_per_sub_batch = [
@@ -4840,9 +4842,12 @@ def minibatch_forward(model, model_inputs, mini_batch_size:int, batch_size:int, 
     outputs = stack_model_outputs(outputs_per_sub_batch)
     return outputs
 
+
 # Global variable to cache the optimal batch size for low memory beam search
 optimal_low_mem_beam_search_bs = None
-def auto_minibatch_forward(model, model_inputs, batch_size:int, output_attentions:bool, output_hidden_states:bool):
+
+
+def auto_minibatch_forward(model, model_inputs, batch_size: int, output_attentions: bool, output_hidden_states: bool):
     """
     Splits the model inputs into sub-batches, processes each sub-batch through the model,
     and stacks the outputs.
@@ -4862,16 +4867,17 @@ def auto_minibatch_forward(model, model_inputs, batch_size:int, output_attention
     # try, except while loop
     while try_split_size > 0:
         try:
-            outputs = minibatch_forward(model, model_inputs, try_split_size, batch_size, output_attentions, output_hidden_states)
+            outputs = minibatch_forward(
+                model, model_inputs, try_split_size, batch_size, output_attentions, output_hidden_states
+            )
             optimal_low_mem_beam_search_bs = try_split_size
             break
         except RuntimeError as e:
             if "out of memory" in str(e) and try_split_size > 1:
-                try_split_size = try_split_size//2
+                try_split_size = try_split_size // 2
                 torch.cuda.empty_cache()
             # if try_split_size is already 1, raise the error because we can't split further
             else:
                 raise e
 
     return outputs
-
