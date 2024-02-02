@@ -309,5 +309,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
 
     @property
     def inputs_to_logits_ratio(self):
-        # Logic behind the ratio: https://github.com/huggingface/transformers/pull/28821#issuecomment-1923723958
-        return self.feature_projection_input_dim * 2
+        ratio = self.feature_projection_input_dim * 2
+        if self.add_adapter:
+            ratio = ratio * (self.adapter_stride**self.num_adapter_layers)
+        return ratio
