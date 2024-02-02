@@ -32,7 +32,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
-COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile"}
+COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "v": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
@@ -227,7 +227,7 @@ class CircleCIJob:
             # failure.
             test_command = f"({test_command}) || true"
         else:
-            test_command += " || true"
+            test_command = f"({test_command} | tee tests_output.txt) || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
         # Deal with errors
