@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Bo Peng and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2024 Tri Dao, Albert Gu and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,6 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -248,31 +248,87 @@ def mamba_linear_attention(time_decay, time_first, key, value, state=None, retur
         return MambaLinearAttention.apply(time_decay, time_first, key, value, state, return_state)
 
 
+class MambaMixer(nn.Module):
+    
+    def __init__(self, config, layer_idx):
+        super().__init__()
+        self.d_model = config.d_model
+        self.d_state = config.d_state
+        self.d_conv = config.d_conv
+        self.expand = config.expand
+        self.d_inner = int(self.expand * self.d_model)
+        self.dt_rank = math.ceil(self.d_model / 16) if config.dt_rank == "auto" else config.dt_rank
+        self.use_fast_path = config.use_fast_path
+        self.layer_idx = layer_idx
+
+        self.in_proj = nn.Linear(self.d_model, self.d_inner * 2, bias=config.bias)
+
+        self.conv1d = nn.Conv1d(
+            in_channels=self.d_inner,
+            out_channels=self.d_inner,
+            bias=config.conv_bias,
+            kernel_size=config.d_conv,
+            groups=self.d_inner,
+            padding=config.d_conv - 1,
+        )
+
+        self.activation = config.activation
+        self.act = ACT2FN[config.activation]
+        
+        
+        self.x_proj = nn.Linear(self.d_inner, self.dt_rank + self.d_state * 2, bias=False)
+        self.dt_proj = nn.Linear(self.dt_rank, self.d_inner, bias=True)
+
+        # S4D real initialization
+        what_is_this = torch.arange(1, self.d_state + 1, dtype=torch.float32)
+        A = torch.repeat(what_is_this,d=self.d_inner).contiguous()
+        A_log = torch.log(A)  # Keep A_log in fp32
+        self.A_log = nn.Parameter(A_log)
+        self.A_log._no_weight_decay = True
+
+        # D "skip" parameter
+        self.D = nn.Parameter(torch.ones(self.d_inner))  # Keep in fp32
+        self.D._no_weight_decay = True
+        self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.bias)
+
+    def forward(self, hidden_states, inference_params):
+        """
+        hidden_states: (B, L, D)
+        Returns: same shape as hidden_states
+        """
+        batch, seqlen, dim = hidden_states.shape
+        
+        conv_state, ssm_state = None, None
+        if inference_params is not None:
+            conv_state, ssm_state = self._get_states_from_cache(inference_params, batch)
+            if inference_params.seqlen_offset > 0:
+                # The states are updated inplace
+                out, _, _ = self.step(hidden_states, conv_state, ssm_state)
+                return out
+        
+        
+        
+        return hidden_states
+
+
+        
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
         self.config = config
         self.layer_id = layer_id
-
+        self.residual_in_fp32 = config.residual_in_fp32
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.mixer = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.mixer = MambaMixer(config.hidden_size, eps=config.layer_norm_epsilon)
 
-    def forward(self, hidden, state=None, use_cache=False, output_attentions=False):
-        if self.layer_id == 0:
-            hidden = self.pre_ln(hidden)
-
-        attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache)
-        hidden = hidden + attention
-
-        feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
-        hidden = hidden + feed_forward
-
-        outputs = (hidden, state)
-        if output_attentions:
-            outputs += (attention,)
-        else:
-            outputs += (None,)
-
+    def forward(self, hidden_states, residual=None, inference_params=None):
+        residual = (hidden_states + residual) if residual is not None else hidden_states
+        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+        if self.residual_in_fp32:
+            residual = residual.to(torch.float32)
+            
+        hidden_states = self.mixer(hidden_states, inference_params=inference_params)
+        outputs = (hidden_states, residual)
         return outputs
 
 
@@ -352,6 +408,8 @@ class MambaPreTrainedModel(PreTrainedModel):
                     with torch.no_grad():
                         p /= math.sqrt(self.config.n_residuals_per_layer * self.config.n_layer)
 
+        def _setup_cache(self, batch_size, max_seqlen, dtype):
+            raise NotImplementedError
 
 @dataclass
 class MambaOutput(ModelOutput):
@@ -485,10 +543,9 @@ class MambaModel(MambaPreTrainedModel):
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([MambaBlock(config, layer_id=idx) for idx in range(config.num_hidden_layers)])
-        self.norm_f = nn.LayerNorm(config.hidden_size)
+        self.norm_f = nn.LayerNorm(config.hidden_size) # ir use ALL_LAYER_NORM[config.hidden_states]
 
         self.layers_are_rescaled = False
-
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -524,8 +581,6 @@ class MambaModel(MambaPreTrainedModel):
         use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.training == self.layers_are_rescaled:
-            self._rescale_layers()
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -534,11 +589,11 @@ class MambaModel(MambaPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)
-
-        if use_cache and state is None:
+        # TODO better to call _set_cache
+        if use_cache and cache is None:
             shape = (inputs_embeds.size(0), self.config.hidden_size, self.config.num_hidden_layers)
             dtype = inputs_embeds.dtype if i <= 1 else torch.float32
-            state = [torch.zeros(*shape, dtype=dtype, device=inputs_embeds.device)for i in range(5)]
+            cache = [torch.zeros(*shape, dtype=dtype, device=inputs_embeds.device)for i in range(5)]
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -553,11 +608,11 @@ class MambaModel(MambaPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for idx, layer in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                hidden_states, state, attentions = self._gradient_checkpointing_func(
+                hidden_states, cache, partial_states = self._gradient_checkpointing_func(
                     layer.__call__, hidden_states, state, use_cache, output_attentions
                 )
             else:
-                hidden_states, state, attentions = layer(
+                hidden_states, cache, partial_states = layer(
                     hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions
                 )
 
@@ -565,7 +620,7 @@ class MambaModel(MambaPreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (attentions,)
+                all_self_attentions = all_self_attentions + (partial_states,)
 
         hidden_states = self.ln_out(hidden_states)
 
@@ -577,55 +632,10 @@ class MambaModel(MambaPreTrainedModel):
 
         return MambaOutput(
             last_hidden_state=hidden_states,
-            state=state,
+            state=cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-    def _rescale_layers(self):
-        # Layers should be rescaled for inference only.
-        if self.layers_are_rescaled == (not self.training):
-            return
-        if self.config.rescale_every > 0:
-            with torch.no_grad():
-                for block_id, block in enumerate(self.blocks):
-                    if self.training:
-                        block.attention.output.weight.mul_(2 ** int(block_id // self.config.rescale_every))
-                        block.feed_forward.value.weight.mul_(2 ** int(block_id // self.config.rescale_every))
-                    else:
-                        # Deal with quantization statistics
-                        if hasattr(block.attention.output.weight, "SCB"):
-                            block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
-                        elif hasattr(block.attention.output.weight, "quant_state"):
-                            self._bnb_4bit_dequantize_and_rescale(block.attention.output, block_id)
-                            self._bnb_4bit_dequantize_and_rescale(block.feed_forward.value, block_id)
-                        else:
-                            block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
-
-        self.layers_are_rescaled = not self.training
-
-    def _bnb_4bit_dequantize_and_rescale(self, target_layer, block_id):
-        r"""
-        Perform the dequantization and rescaling of the weights of a given layer. After that operation the layer will
-        be quantized again.
-        """
-        if not is_bitsandbytes_available():
-            raise ImportError("Please install bitsandbytes to use this method.")
-        import bitsandbytes as bnb
-
-        dequant_weights = bnb.functional.dequantize_4bit(target_layer.weight.data, target_layer.weight.quant_state)
-
-        dequant_weights.div_(2 ** int(block_id // self.config.rescale_every))
-
-        # re-quantize the model:
-        # we need to put it first on CPU then back to the device
-        # this will create an overhead :/
-        # We set requires_grad=False as we cannot compute gradients on top of 4bit parameters anyway and to avoid
-        # bugs with bnb
-        quant_weight = bnb.nn.Params4bit(dequant_weights.to("cpu"), requires_grad=False).to(dequant_weights.device)
-        setattr(target_layer, "weight", quant_weight)
 
 
 @add_start_docstrings(
@@ -641,7 +651,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.mamba = MambaModel(config)
+        self.backbone = MambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -676,11 +686,8 @@ class MambaForCausalLM(MambaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # noqa
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        state: Optional[List[torch.FloatTensor]] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -696,8 +703,6 @@ class MambaForCausalLM(MambaPreTrainedModel):
         mamba_outputs = self.mamba(
             input_ids,
             inputs_embeds=inputs_embeds,
-            state=state,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -724,7 +729,7 @@ class MambaForCausalLM(MambaPreTrainedModel):
         return MambaCausalLMOutput(
             loss=loss,
             logits=logits,
-            state=mamba_outputs.state,
+            cache=mamba_outputs.cache,
             hidden_states=mamba_outputs.hidden_states,
             attentions=mamba_outputs.attentions,
         )
