@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MAMBA configuration"""
-
+import math
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -90,32 +90,32 @@ class MambaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50277,
-        context_length=1024,
-        hidden_size=4096,
+        vocab_size=50280,
+        hidden_size=768,
+        state_size=16,
         num_hidden_layers=32,
-        attention_hidden_size=None,
-        intermediate_size=None,
         layer_norm_epsilon=1e-5,
-        bos_token_id=0,
-        eos_token_id=0,
-        rescale_every=6,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        expand=2,
+        dt_rank="auto",
         tie_word_embeddings=True,
-        use_cache=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.context_length = context_length
         self.hidden_size = hidden_size
+        self.state_size = state_size
         self.num_hidden_layers = num_hidden_layers
-        self.attention_hidden_size = attention_hidden_size if attention_hidden_size is not None else hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else 4 * hidden_size
         self.layer_norm_epsilon = layer_norm_epsilon
-        self.rescale_every = rescale_every
-        self.use_cache = use_cache
-
+        self.d_inner = hidden_size * 2
+        self.d_conv = 4
+        self.state_size = state_size
+        self.expand = expand
+        self.time_step_rank = math.ceil(self.hidden_size / 16) if dt_rank == "auto" else dt_rank
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs

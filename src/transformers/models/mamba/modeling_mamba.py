@@ -257,7 +257,7 @@ class MambaMixer(nn.Module):
         self.d_conv = config.d_conv
         self.expand = config.expand
         self.d_inner = int(self.expand * self.d_model)
-        self.dt_rank = math.ceil(self.d_model / 16) if config.dt_rank == "auto" else config.dt_rank
+        self.time_step_rank = math.ceil(self.d_model / 16) if config.time_step_rank == "auto" else config.time_step_rank
         self.use_fast_path = config.use_fast_path
         self.layer_idx = layer_idx
 
@@ -275,11 +275,12 @@ class MambaMixer(nn.Module):
         self.activation = config.activation
         self.act = ACT2FN[config.activation]
         
-        
-        self.x_proj = nn.Linear(self.d_inner, self.dt_rank + self.d_state * 2, bias=False)
-        self.dt_proj = nn.Linear(self.dt_rank, self.d_inner, bias=True)
-
-        # S4D real initialization
+        # selective projection used to make dt, B and C input dependant
+        self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
+        self.time_step_proj = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
+        # S4D real initialization. These are not discretized! 
+        # THe core is to load them, compute the discrete states, then write the updates state. 
+        # Keeps the memory bounded
         what_is_this = torch.arange(1, self.d_state + 1, dtype=torch.float32)
         A = torch.repeat(what_is_this,d=self.d_inner).contiguous()
         A_log = torch.log(A)  # Keep A_log in fp32
@@ -291,24 +292,55 @@ class MambaMixer(nn.Module):
         self.D._no_weight_decay = True
         self.out_proj = nn.Linear(self.d_inner, self.d_model, bias=config.bias)
 
-    def forward(self, hidden_states, inference_params):
+    def forward(self, hidden_states: torch.Tensor, inference_params=None):
         """
         hidden_states: (B, L, D)
         Returns: same shape as hidden_states
         """
-        batch, seqlen, dim = hidden_states.shape
+        _, seqlen, _ = hidden_states.shape
+        conv_state, ssm_state = inference_params.key_value_memory_dict[self.layer_idx]
+
+        projected_states = self.in_proj(hidden_states).transpose(1,2)
+        x, z = projected_states.chunk(2, dim=1)
         
-        conv_state, ssm_state = None, None
-        if inference_params is not None:
-            conv_state, ssm_state = self._get_states_from_cache(inference_params, batch)
-            if inference_params.seqlen_offset > 0:
-                # The states are updated inplace
-                out, _, _ = self.step(hidden_states, conv_state, ssm_state)
-                return out
-        
-        
-        
-        return hidden_states
+        if inference_params is not None and inference_params.seq_offset > 0:
+            x = causal_conv1d_update(
+                x,
+                conv_state, 
+                self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
+                self.conv1d.bias,
+                self.activation,
+            )
+        else:
+            conv_state = F.pad(x, (self.d_conv - seqlen, 0))
+            x = causal_conv1d_fn(
+                x=x,
+                weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
+                bias=self.conv1d.bias,
+                activation=self.activation,
+            )
+
+        # We're careful here about the layout, to avoid extra transposes.
+        # We want dt to have d as the slowest moving dimension
+        # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
+        x_dbl = self.x_proj(rearrange(x, "b d l -> (b l) d"))  # (bl d)
+        dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
+        dt = self.dt_proj.weight @ dt.t()
+        dt = rearrange(dt, "d (b l) -> b d l", l=seqlen)
+        B = rearrange(B, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        C = rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        if inference_params is not None and inference_params.seq_offset > 0:
+            y, _ = selective_scan_update(
+                ssm_state, x, dt, self.negA, B, C, self.D, z=z, dt_bias=self.dt_proj.bias, dt_softplus=True
+            )
+        else:
+            y, last_state = selective_scan_fn(
+                x, dt, self.negA, B, C, self.D.float(),z=z,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
+            )
+        y = rearrange(y, "b d l -> b l d")
+        attn_outputs = self.out_proj(y)
+        return attn_outputs, conv_state, last_state
+
 
 
         
