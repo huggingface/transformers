@@ -24,10 +24,8 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import (
-    _create_4d_causal_attention_mask,
-    _prepare_4d_attention_mask,
-)
+from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask,
+
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -521,6 +519,7 @@ class OwlViTMLP(nn.Module):
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
+    #Ignore Copy
     def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
