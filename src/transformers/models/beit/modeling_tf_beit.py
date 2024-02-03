@@ -1113,6 +1113,7 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         Returns:
+        
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, TFBeitForImageClassification
