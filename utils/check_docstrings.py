@@ -239,6 +239,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxMBartModel",
     "FlaxMarianMTModel",
     "FlaxMarianModel",
+    "FlaxMistralForCausalLM",
+    "FlaxMistralModel",
     "FlaxOPTForCausalLM",
     "FlaxPegasusForConditionalGeneration",
     "FlaxPegasusModel",

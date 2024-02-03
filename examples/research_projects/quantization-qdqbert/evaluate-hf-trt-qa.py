@@ -275,7 +275,7 @@ else:
 # https://huggingface.co/docs/datasets/loading_datasets.
 
 # Preprocessing the datasets.
-# Preprocessing is slighlty different for training and evaluation.
+# Preprocessing is slightly different for training and evaluation.
 
 column_names = raw_datasets["validation"].column_names
 

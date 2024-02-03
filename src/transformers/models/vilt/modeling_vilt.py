@@ -317,7 +317,8 @@ class ViltPatchEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        x = self.projection(pixel_values)
+        target_dtype = self.projection.weight.dtype
+        x = self.projection(pixel_values.to(dtype=target_dtype))
         return x
 
 
