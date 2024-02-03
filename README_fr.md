@@ -45,7 +45,7 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <b>Anglais</b> |
+        <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hans.md">简体中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
@@ -54,8 +54,8 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ru.md">Русский</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_fr.md">Français</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
+        <b>Français</b> |
     </p>
 </h4>
 
@@ -233,7 +233,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
     - Entraînez des modèles de pointe en 3 lignes de code.
     - Trasnférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
     - Choisissez facilement le bon framework pour l'entraînement, l'évaluation et la production.
-    
+
 1. Personnalisez facilement un modèle ou un exemple selon vos besoins :
     - Nous fournissons des exemples pour chaque architecture afin de reproduire les résultats publiés par ses auteurs originaux.
     - Les détails internes du modèle sont exposés de manière aussi cohérente que possible.
@@ -256,7 +256,7 @@ Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https:/
 D'abord, créez un environnement virtuel avec la version de Python que vous allez utiliser et activez-le.
 
 Ensuite, vous devrez installer au moins l'un de Flax, PyTorch ou TensorFlow.
-Veuillez vous référer à la page d'installation de [TensorFlow](https://www.tensorflow.org/install/), de [PyTorch](https://pytorch.org/get-started/locally/#start-locally) et/ou de [Flax]](https://github.com/google/flax#quick-install) et [Jax](https://github.com/google/jax#installation) pour connaître la commande d'installation spécifique à votre plateforme.
+Veuillez vous référer à la page d'installation de [TensorFlow](https://www.tensorflow.org/install/), de [PyTorch](https://pytorch.org/get-started/locally/#start-locally) et/ou de [Flax](https://github.com/google/flax#quick-install) et [Jax](https://github.com/google/jax#installation) pour connaître la commande d'installation spécifique à votre plateforme.
 
 Lorsqu'un de ces backends est installé, 🤗 Transformers peut être installé avec pip comme suit :
 

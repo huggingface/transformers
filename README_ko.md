@@ -46,9 +46,11 @@ limitations under the License.
         <b>한국어</b> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a>
-        <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_fr.md">Français</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_ru.md">Русский</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_fr.md">Français</a> |
     </p>
 </h4>
 

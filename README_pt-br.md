@@ -45,7 +45,7 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <b>English</b> |
+        <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hans.md">简体中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
@@ -53,9 +53,9 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_ja.md">日本語</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_fr.md">Français</a> |
+        <b>Рortuguês</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_fr.md">Français</a> |
     </p>
 </h4>
 
@@ -93,7 +93,7 @@ Aqui estão alguns exemplos:
 Em Processamento de Linguagem Natural:
 
 - [Completar palavra mascarada com BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
--  [Reconhecimento de Entidades Nomeadas com Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+- [Reconhecimento de Entidades Nomeadas com Electra](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
 - [Geração de texto com GPT-2](https://huggingface.co/gpt2?text=A+long+time+ago%2C)
 - [Inferência de Linguagem Natural com RoBERTa](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
 - [Sumarização com BART](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
