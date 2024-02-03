@@ -24,6 +24,7 @@ from torch import Tensor, nn
 from ... import initialization as init
 from ...activations import ACT2FN
 <<<<<<< HEAD
+<<<<<<< HEAD
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 =======
@@ -32,6 +33,13 @@ from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
 )
 >>>>>>> 251683a68d (Added sdpa attention)
+=======
+from ...modeling_attn_mask_utils import (
+    _create_4d_causal_attention_mask,
+    _prepare_4d_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
+>>>>>>> e81d53c670 (Fixed nits)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -564,7 +572,7 @@ class OwlViTMLP(nn.Module):
 
 # Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->OwlViT
 class OwlViTEncoderLayer(nn.Module):
-    #Ignore Copy
+    # Ignore Copy
     def __init__(self, config: OwlViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -620,6 +628,7 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "owlvit"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     @torch.no_grad()
@@ -785,10 +794,16 @@ class OwlViTTextTransformer(nn.Module):
         causal_attention_mask = _create_4d_causal_attention_mask(
             input_shape, hidden_states.dtype, device=hidden_states.device
         )
+
         # expand attention_mask
         if attention_mask is not None:
             # [num_samples, seq_len] -> [num_samples, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+
+        if self._use_sdpa and not output_attentions:
+            # output_attentions=True can not be supported when using SDPA, and we fall back on
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
