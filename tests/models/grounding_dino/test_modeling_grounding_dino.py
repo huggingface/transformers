@@ -166,7 +166,7 @@ class GroundingDinoModelTester:
             use_timm_backbone=False,
             backbone_config=swin_config,
             max_text_len=self.max_text_len,
-            text_backbone_config=text_backbone,
+            text_config=text_backbone,
         )
 
     def prepare_config_and_inputs_for_common(self):
