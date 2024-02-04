@@ -206,11 +206,11 @@ class GroundingDinoEncoderOutput(ModelOutput):
             Sequence of hidden-states at the output of the last layer of the vision encoder.
         last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the text encoder.
-        hidden_states_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        vision_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each
             layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the
             output of each layer plus the initial embedding outputs.
-        hidden_states_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        text_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer)
             of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of
             each layer plus the initial embedding outputs.
@@ -223,8 +223,8 @@ class GroundingDinoEncoderOutput(ModelOutput):
 
     last_hidden_state_vision: torch.FloatTensor = None
     last_hidden_state_text: torch.FloatTensor = None
-    hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
+    vision_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    text_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -1626,7 +1626,7 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*:
-            `hidden_states_vision`, *optional*: `hidden_states_text`, *optional*: `attentions`)
+            `vision_hidden_states`, *optional*: `text_hidden_states`, *optional*: `attentions`)
             `last_hidden_state_vision` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence
             of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the
             decoder.
@@ -1803,8 +1803,8 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         return GroundingDinoEncoderOutput(
             last_hidden_state_vision=vision_features,
             last_hidden_state_text=text_features,
-            hidden_states_vision=encoder_vision_states,
-            hidden_states_text=encoder_text_states,
+            vision_hidden_states=encoder_vision_states,
+            text_hidden_states=encoder_text_states,
             attentions=all_attns,
         )
 
@@ -3042,8 +3042,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             encoder_outputs = GroundingDinoEncoderOutput(
                 last_hidden_state_vision=encoder_outputs[0],
                 last_hidden_state_text=encoder_outputs[1],
-                hidden_states_vision=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-                hidden_states_text=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
+                vision_hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                text_hidden_states=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
                 attentions=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
             )
 
@@ -3118,8 +3118,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             decoder_attentions=decoder_outputs.attentions,
             encoder_last_hidden_state_vision=encoder_outputs.last_hidden_state_vision,
             encoder_last_hidden_state_text=encoder_outputs.last_hidden_state_text,
-            encoder_hidden_states_vision=encoder_outputs.hidden_states_vision,
-            encoder_hidden_states_text=encoder_outputs.hidden_states_text,
+            encoder_hidden_states_vision=encoder_outputs.vision_hidden_states,
+            encoder_hidden_states_text=encoder_outputs.text_hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
