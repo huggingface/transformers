@@ -1023,7 +1023,7 @@ class GroundingDinoDropPath(nn.Module):
 
 
 class GroundingDinoFusionLayer(nn.Module):
-    def __init__(self, config, init_values=1e-4):
+    def __init__(self, config):
         super().__init__()
         drop_path = config.fusion_droppath
 
@@ -1034,6 +1034,7 @@ class GroundingDinoFusionLayer(nn.Module):
 
         # add layer scale for training stability
         self.drop_path = GroundingDinoDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        init_values = 1e-4
         self.vision_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
         self.text_param = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
 
@@ -1164,21 +1165,25 @@ class GroundingDinoDeformableLayer(nn.Module):
         return hidden_states, attn_weights
 
 
+# Based on https://github.com/IDEA-Research/GroundingDINO/blob/2b62f419c292ca9c518daae55512fabc3fead4a4/groundingdino/models/GroundingDINO/utils.py#L24
 def get_sine_pos_embed(
-    pos_tensor: torch.Tensor,
-    num_pos_feats: int = 128,
-    temperature: int = 10000,
-    exchange_xy: bool = True,
+    pos_tensor: torch.Tensor, num_pos_feats: int = 128, temperature: int = 10000, exchange_xy: bool = True
 ) -> Tensor:
-    """generate sine position embedding from a position tensor
+    """
+    Generate sine position embeddings from a position tensor.
+
     Args:
-        pos_tensor (torch.Tensor): shape: [..., n].
-        num_pos_feats (int): projected shape for each float in the tensor.
-        temperature (int): temperature in the sine/cosine function.
-        exchange_xy (bool, optional): exchange pos x and pos y. \
-            For example, input tensor is [x,y], the results will be [pos(y), pos(x)]. Defaults to True.
+        pos_tensor (torch.Tensor):
+            Tensor containing positions. Shape: [..., n].
+        num_pos_feats (`int`, *optional*, defaults to 128):
+            Projected shape for each float in the tensor.
+        temperature (`int`, *optional*, defaults to 10000):
+            Temperature in the sine/cosine function.
+        exchange_xy (`bool`, *optional*, defaults to `True`):
+            Exchange pos x and pos y. For example, input tensor is [x,y], the results will be [pos(y), pos(x)].
+
     Returns:
-        pos_embed (torch.Tensor): shape: [..., n*num_pos_feats].
+        position_embeddings (torch.Tensor): shape: [..., n * hidden_size].
     """
     scale = 2 * math.pi
     dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
@@ -1189,11 +1194,12 @@ def get_sine_pos_embed(
         sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
         return sin_x
 
-    pos_res = [sine_func(x) for x in pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)]
+    pos_tensor = pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)
+    position_embeddings = [sine_func(x) for x in pos_tensor]
     if exchange_xy:
-        pos_res[0], pos_res[1] = pos_res[1], pos_res[0]
-    pos_res = torch.cat(pos_res, dim=-1)
-    return pos_res
+        position_embeddings[0], position_embeddings[1] = position_embeddings[1], position_embeddings[0]
+    position_embeddings = torch.cat(position_embeddings, dim=-1)
+    return position_embeddings
 
 
 class GroundingDinoEncoderLayer(nn.Module):
@@ -1549,6 +1555,89 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, GroundingDinoDecoder):
             module.gradient_checkpointing = value
+
+
+class GroundingDinoTextModel(GroundingDinoPreTrainedModel):
+    """Grounding DINO text encoder, BERT-like."""
+
+    def __init__(self, config: GroundingDinoTextConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.embeddings = GroundingDinoTextEmbeddings(config)
+        self.encoder = GroundingDinoTextEncoder(config)
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.encoder.layer[layer].attention.prune_heads(heads)
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        input_shape = input_ids.shape
+        batch_size, seq_length = input_shape
+        device = input_ids.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
+
+        if token_type_ids is None:
+            if hasattr(self.embeddings, "token_type_ids"):
+                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
+                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
+                token_type_ids = buffered_token_type_ids_expanded
+            else:
+                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+        )
+        encoder_outputs = self.encoder(
+            embedding_output,
+            attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        sequence_output = encoder_outputs[0]
+
+        if not return_dict:
+            return (sequence_output,) + encoder_outputs[1:]
+
+        return BaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 GROUNDING_DINO_START_DOCSTRING = r"""
@@ -3651,87 +3740,4 @@ class GroundingDinoTextEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
-        )
-
-
-class GroundingDinoTextModel(GroundingDinoPreTrainedModel):
-    """Grounding DINO text encoder, BERT-like."""
-
-    def __init__(self, config: GroundingDinoTextConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.embeddings = GroundingDinoTextEmbeddings(config)
-        self.encoder = GroundingDinoTextEncoder(config)
-
-    def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
-
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    def forward(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        input_shape = input_ids.shape
-        batch_size, seq_length = input_shape
-        device = input_ids.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
-
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-        )
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=extended_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
-
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
-
-        return BaseModelOutput(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
