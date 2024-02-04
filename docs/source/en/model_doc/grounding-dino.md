@@ -27,6 +27,40 @@ The abstract from the paper is the following:
 Tips:
 
 - One can use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
+- To separate classes in the text use a period e.g. "a cat. a dog."
+- When using multiple classes use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs
+
+```python
+import requests
+
+import torch
+from PIL import Image
+from transformers import AutoModelForObjectDetection, AutoProcessor
+
+model_id = "EduardoPacheco/grounding-dino-tiny"
+
+model = AutoModelForObjectDetection.from_pretrained(model_id).to(device)
+processor = AutoProcessor.from_pretrained(model_id)
+
+def load_image(url):
+    return Image.open(requests.get(url, stream=True).raw)
+
+image = load_image('http://images.cocodataset.org/val2017/000000039769.jpg')
+# Check for cats and remote controls
+text = "a cat. a remote control"
+
+inputs = processor(images=image, text=text, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs)
+
+results = processor.post_process_grounded_object_detection(
+    outputs,
+    inputs.input_ids,
+    bbox_threshold=0.4
+    text_threshold=0.3,
+    target_sizes=[image.size[::-1]]
+)
+```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
 alt="drawing" width="600"/>
@@ -46,6 +80,7 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 ## GroundingDinoProcessor
 
 [[autodoc]] GroundingDinoProcessor
+    - post_process_grounded_object_detection
 
 ## GroundingDinoTextConfig
 
