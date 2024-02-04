@@ -466,7 +466,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states_vision
+            hidden_states = outputs.encoder_vision_hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -480,7 +480,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 [seq_len, self.model_tester.hidden_size],
             )
 
-            hidden_states = outputs.encoder_hidden_states_text
+            hidden_states = outputs.encoder_text_hidden_states
 
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -535,7 +535,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         # we take the second output since last_hidden_state is the second item
         output = outputs[1]
 
-        encoder_hidden_states = outputs.encoder_hidden_states_vision[0]
+        encoder_hidden_states = outputs.encoder_vision_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0][0]
         encoder_hidden_states.retain_grad()
         encoder_attentions.retain_grad()
