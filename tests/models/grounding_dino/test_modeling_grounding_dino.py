@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -167,7 +166,7 @@ class GroundingDinoModelTester:
             use_timm_backbone=False,
             backbone_config=swin_config,
             max_text_len=self.max_text_len,
-            text_backbone_config=text_backbone,
+            text_config=text_backbone,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -202,7 +201,7 @@ class GroundingDinoModelTester:
 
 
 @require_torch
-class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GroundingDinoModel, GroundingDinoForObjectDetection) if is_torch_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
@@ -467,7 +466,7 @@ class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states_vision
+            hidden_states = outputs.encoder_vision_hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
@@ -481,7 +480,7 @@ class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 [seq_len, self.model_tester.hidden_size],
             )
 
-            hidden_states = outputs.encoder_hidden_states_text
+            hidden_states = outputs.encoder_text_hidden_states
 
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -536,7 +535,7 @@ class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         # we take the second output since last_hidden_state is the second item
         output = outputs[1]
 
-        encoder_hidden_states = outputs.encoder_hidden_states_vision[0]
+        encoder_hidden_states = outputs.encoder_vision_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0][0]
         encoder_hidden_states.retain_grad()
         encoder_attentions.retain_grad()
@@ -595,21 +594,19 @@ class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if param.requires_grad:
-                        if (
-                            "level_embed" in name
-                            or "sampling_offsets.bias" in name
-                            or "text_param" in name
-                            or "vision_param" in name
-                            or "value_proj" in name
-                            or "output_proj" in name
-                            or "reference_points" in name
-                        ):
-                            continue
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "text_param" in name
+                        or "vision_param" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                    ):
+                        continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -665,9 +662,6 @@ class GroundingDinoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 [],
                 f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
             )
-
-
-TOLERANCE = 1e-4
 
 
 # We will verify our results on an image of cute cats
