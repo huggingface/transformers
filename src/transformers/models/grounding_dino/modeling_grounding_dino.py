@@ -1295,7 +1295,10 @@ class GroundingDinoEncoderLayer(nn.Module):
         self.deformable_layer = GroundingDinoDeformableLayer(config)
 
     def get_text_position_embeddings(
-        self, text_features: Tensor, text_position_embedding: Optional[torch.Tensor], text_position_ids: Optional[torch.Tensor],
+        self,
+        text_features: Tensor,
+        text_position_embedding: Optional[torch.Tensor],
+        text_position_ids: Optional[torch.Tensor],
     ) -> Tensor:
         batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
@@ -1985,7 +1988,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         )
         self.gradient_checkpointing = False
 
-        # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
+        # hack implementation for iterative bounding box refinement as in two-stage Deformable DETR
         self.bbox_embed = None
         self.class_embed = None
         self.query_scale = None
@@ -3122,9 +3125,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         masks = []
         for level, (source, mask) in enumerate(vision_features):
             sources.append(self.input_proj_vision[level](source))
-            masks.append(mask)
             if mask is None:
                 raise ValueError("No attention mask was provided")
+            masks.append(mask)
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
@@ -3206,7 +3209,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
                 encoder_outputs[0], ~mask_flatten, spatial_shapes
             )
 
-            # hack implementation for two-stage Deformable DETR
+            # hack implementation as in two-stage Deformable DETR
             # apply a detection head to each pixel (A.4 in paper)
             # linear projection for bounding box binary classification (i.e. foreground and background)
             enc_outputs_class = self.encoder_output_class_embed(
@@ -3402,7 +3405,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         outputs_classes = []
         outputs_coords = []
 
-        for level in range(hidden_states.shape[1]):
+        num_levels = hidden_states.shape[1]
+        for level in range(num_levels):
             if level == 0:
                 reference = init_reference_points
             else:
@@ -3414,9 +3418,11 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 text_token_mask=attention_mask.bool(),
             )
             delta_bbox = self.bbox_embed[level](hidden_states[:, level])
-            if reference.shape[-1] == 4:
+
+            reference_coordinates = reference.shape[-1]
+            if reference_coordinates == 4:
                 outputs_coord_logits = delta_bbox + reference
-            elif reference.shape[-1] == 2:
+            elif reference_coordinates == 2:
                 delta_bbox[..., :2] += reference
                 outputs_coord_logits = delta_bbox
             else:
