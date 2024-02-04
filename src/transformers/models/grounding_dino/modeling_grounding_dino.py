@@ -516,26 +516,18 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
+    def __init__(self, embedding_dim=64, temperature=10000):
         super().__init__()
         self.embedding_dim = embedding_dim
         self.temperature = temperature
-        self.normalize = normalize
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
+        self.scale = 2 * math.pi
 
     def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
         y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
         x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+        eps = 1e-6
+        y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
         dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
@@ -576,9 +568,7 @@ def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
         # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDinoSinePositionEmbedding(
-            n_steps, config.positional_embedding_temperature, normalize=True
-        )
+        position_embedding = GroundingDinoSinePositionEmbedding(n_steps, config.positional_embedding_temperature)
     elif config.position_embedding_type == "learned":
         position_embedding = GroundingDinoLearnedPositionEmbedding(n_steps)
     else:
@@ -875,7 +865,7 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         self.out_vision_proj = nn.Linear(self.embed_dim, self.vision_dim)
         self.out_text_proj = nn.Linear(self.embed_dim, self.text_dim)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+    def _reshape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
@@ -915,16 +905,16 @@ class GroundingDinoBiMultiHeadAttention(nn.Module):
         batch_size, tgt_len, _ = vision_features.size()
 
         vision_query_states = self.vision_proj(vision_features) * self.scale
-        vision_query_states = self._shape(vision_query_states, tgt_len, batch_size)
+        vision_query_states = self._reshape(vision_query_states, tgt_len, batch_size)
 
         text_key_states = self.text_proj(text_features)
-        text_key_states = self._shape(text_key_states, -1, batch_size)
+        text_key_states = self._reshape(text_key_states, -1, batch_size)
 
         vision_value_states = self.values_vision_proj(vision_features)
-        vision_value_states = self._shape(vision_value_states, -1, batch_size)
+        vision_value_states = self._reshape(vision_value_states, -1, batch_size)
 
         text_value_states = self.values_text_proj(text_features)
-        text_value_states = self._shape(text_value_states, -1, batch_size)
+        text_value_states = self._reshape(text_value_states, -1, batch_size)
 
         proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
 
@@ -1094,7 +1084,6 @@ class GroundingDinoFusionLayer(nn.Module):
         return (vision_features, vision_attn), (text_features, text_attn)
 
 
-# NOTE just renamed the class
 class GroundingDinoDeformableLayer(nn.Module):
     def __init__(self, config: GroundingDinoConfig):
         super().__init__()
