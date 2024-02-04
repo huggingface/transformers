@@ -313,6 +313,33 @@ def read_in_q_k_v_encoder(state_dict, config):
     ########################################## VISION BACKBONE - END
 
 
+def read_in_q_k_v_text_enhancer(state_dict, config):
+    hidden_size = config.hidden_size
+    for idx in range(config.encoder_layers):
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.weight"] = in_proj_weight[
+            :hidden_size, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.weight"] = in_proj_weight[
+            -hidden_size:, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.bias"] = in_proj_bias[
+            -hidden_size:
+        ]
+
+
 def read_in_q_k_v_decoder(state_dict, config):
     hidden_size = config.hidden_size
     for idx in range(config.decoder_layers):
@@ -330,6 +357,24 @@ def read_in_q_k_v_decoder(state_dict, config):
 
         state_dict[f"model.decoder.layers.{idx}.self_attn.value.weight"] = in_proj_weight[-hidden_size:, :]
         state_dict[f"model.decoder.layers.{idx}.self_attn.value.bias"] = in_proj_bias[-hidden_size:]
+
+        # read in weights + bias of cross-attention
+        in_proj_weight = state_dict.pop(f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"model.decoder.layers.{idx}.encoder_attn_text.in_proj_bias")
+
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.weight"] = in_proj_weight[:hidden_size, :]
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.query.bias"] = in_proj_bias[:hidden_size]
+
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.key.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.weight"] = in_proj_weight[-hidden_size:, :]
+        state_dict[f"model.decoder.layers.{idx}.encoder_attn_text.value.bias"] = in_proj_bias[-hidden_size:]
 
 
 # We will verify our results on an image of cute cats
@@ -351,6 +396,7 @@ def convert_grounding_dino_checkpoint(args):
     model_name = args.model_name
     pytorch_dump_folder_path = args.pytorch_dump_folder_path
     push_to_hub = args.push_to_hub
+    verify_logits = args.verify_logits
 
     checkpoint_mapping = {
         "grounding-dino-tiny": "https://huggingface.co/ShilongLiu/GroundingDino/resolve/main/groundingdino_swint_ogc.pth",
@@ -374,6 +420,7 @@ def convert_grounding_dino_checkpoint(args):
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v_encoder(new_state_dict, config)
+    read_in_q_k_v_text_enhancer(new_state_dict, config)
     read_in_q_k_v_decoder(new_state_dict, config)
 
     # Load HF model
@@ -397,17 +444,19 @@ def convert_grounding_dino_checkpoint(args):
 
     assert torch.allclose(original_pixel_values, inputs.pixel_values, atol=1e-4)
 
-    # Running forward
-    with torch.no_grad():
-        outputs = model(**inputs)
+    if verify_logits:
+        # Running forward
+        with torch.no_grad():
+            outputs = model(**inputs)
 
-    print(outputs.logits[0, :3, :3])
+        print(outputs.logits[0, :3, :3])
 
-    expected_slice = torch.tensor(
-        [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
-    )
+        expected_slice = torch.tensor(
+            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
+        )
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+        assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+        print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         model.save_pretrained(pytorch_dump_folder_path)
@@ -433,6 +482,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
+    parser.add_argument(
+        "--verify_logits", action="store_false", help="Whether or not to verify logits after conversion."
     )
 
     args = parser.parse_args()
