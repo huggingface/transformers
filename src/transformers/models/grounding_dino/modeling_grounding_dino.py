@@ -2121,8 +2121,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         if config.num_feature_levels > 1:
             num_backbone_outs = len(backbone.intermediate_channel_sizes)
             input_proj_list = []
-            for _ in range(num_backbone_outs):
-                in_channels = backbone.intermediate_channel_sizes[_]
+            for i in range(num_backbone_outs):
+                in_channels = backbone.intermediate_channel_sizes[i]
                 input_proj_list.append(
                     nn.Sequential(
                         nn.Conv2d(in_channels, config.d_model, kernel_size=1),
@@ -2294,7 +2294,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, GroundingDinoModel
+        >>> from transformers import AutoProcessor, AutoModel
         >>> from PIL import Image
         >>> import requests
 
@@ -2303,7 +2303,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         >>> text = "a cat."
 
         >>> processor = AutoProcessor.from_pretrained("EduardoPacheco/grounding-dino-tiny")
-        >>> model = GroundingDinoForObjectDetection.from_pretrained("EduardoPacheco/grounding-dino-tiny")
+        >>> model = AutoModel.from_pretrained("EduardoPacheco/grounding-dino-tiny")
 
         >>> inputs = processor(images=image, text=text, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2631,8 +2631,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
         enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
-        init_reference = outputs.init_reference_points if return_dict else outputs[0]
-        inter_references = outputs.intermediate_reference_points if return_dict else outputs[3]
+        init_reference_points = outputs.init_reference_points if return_dict else outputs[0]
+        inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
 
         # class logits + predicted bounding boxes
         outputs_classes = []
@@ -2640,9 +2640,9 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         for level in range(hidden_states.shape[1]):
             if level == 0:
-                reference = init_reference
+                reference = init_reference_points
             else:
-                reference = inter_references[:, level - 1]
+                reference = inter_references_points[:, level - 1]
             reference = inverse_sigmoid(reference)
             outputs_class = self.class_embed[level](
                 vision_hidden_state=hidden_states[:, level],
