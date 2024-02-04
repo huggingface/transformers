@@ -2069,7 +2069,6 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         )
 
 
-
 # Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->GroundingDinoText
 class GroundingDinoTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -2671,6 +2670,7 @@ class GroundingDinoTextPrenet(GroundingDinoPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
 
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
