@@ -163,18 +163,6 @@ class Bnb8BitHfQuantizer(HfQuantizer):
             if fp16_statistics is not None:
                 setattr(module.weight, "SCB", fp16_statistics.to(target_device))
 
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        import bitsandbytes as bnb
-
-        for name, module in model.named_modules():
-            if isinstance(module, bnb.nn.modules.Linear8bitLt):
-                self.activate_module(module)
-
-        model._is_quantized_training_enabled = self.is_trainable
-        model.is_loaded_in_8bit = True
-        model.is_8bit_serializable = self.is_serializable
-        return model
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -229,6 +217,18 @@ class Bnb8BitHfQuantizer(HfQuantizer):
         # TODO: consider bringing replace_with_bnb_linear() code from ..integrations/bitsandbyter.py to here
 
         model.config.quantization_config = self.quantization_config
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        import bitsandbytes as bnb
+
+        for name, module in model.named_modules():
+            if isinstance(module, bnb.nn.modules.Linear8bitLt):
+                self.activate_module(module)
+
+        model._is_quantized_training_enabled = self.is_trainable
+        model.is_loaded_in_8bit = True
+        model.is_8bit_serializable = self.is_serializable
+        return model
 
     @property
     def is_serializable(self):
