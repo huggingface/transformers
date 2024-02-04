@@ -200,6 +200,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
         ("squeezebert", "SqueezeBertModel"),
+        ("superpoint", "SuperPointModel"),
         ("swiftformer", "SwiftFormerModel"),
         ("swin", "SwinModel"),
         ("swin2sr", "Swin2SRModel"),
@@ -1177,6 +1178,9 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("superpoint", "SuperPointModel"),
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         ("patchtsmixer", "PatchTSMixerForTimeSeriesClassification"),
@@ -1282,6 +1286,8 @@ MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL
 
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
 
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES
 MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING_NAMES
 )
@@ -1567,6 +1573,15 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 
 
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
+
+
+class AutoModelForInterestPointDescription(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING
+
+
+AutoModelForInterestPointDescription = auto_class_update(
+    AutoModelForInterestPointDescription, head_doc="image interest point description"
+)
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):
