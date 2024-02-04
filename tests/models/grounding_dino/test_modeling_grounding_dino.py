@@ -594,21 +594,19 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if param.requires_grad:
-                        if (
-                            "level_embed" in name
-                            or "sampling_offsets.bias" in name
-                            or "text_param" in name
-                            or "vision_param" in name
-                            or "value_proj" in name
-                            or "output_proj" in name
-                            or "reference_points" in name
-                        ):
-                            continue
+                    if (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "text_param" in name
+                        or "vision_param" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                    ):
+                        continue
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
@@ -664,9 +662,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                 [],
                 f"Missing `_tied_weights_keys` for {model_class}: add all of {tied_params} except one.",
             )
-
-
-TOLERANCE = 1e-4
 
 
 # We will verify our results on an image of cute cats
