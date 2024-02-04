@@ -40,6 +40,9 @@ def get_phrases_from_posmap(posmaps, input_ids):
     left_idx = 0
     right_idx = 255
 
+    # Avoiding altering the input tensor
+    posmaps = posmaps.clone()
+
     posmaps[:, 0 : left_idx + 1] = False
     posmaps[:, right_idx:] = False
 
