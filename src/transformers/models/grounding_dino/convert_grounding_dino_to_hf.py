@@ -313,6 +313,33 @@ def read_in_q_k_v_encoder(state_dict, config):
     ########################################## VISION BACKBONE - END
 
 
+def read_in_q_k_v_text_enhancer(state_dict, config):
+    hidden_size = config.hidden_size
+    for idx in range(config.encoder_layers):
+        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_weight")
+        in_proj_bias = state_dict.pop(f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.in_proj_bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.weight"] = in_proj_weight[
+            :hidden_size, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.query.bias"] = in_proj_bias[:hidden_size]
+
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.weight"] = in_proj_weight[
+            hidden_size : hidden_size * 2, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.key.bias"] = in_proj_bias[
+            hidden_size : hidden_size * 2
+        ]
+
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.weight"] = in_proj_weight[
+            -hidden_size:, :
+        ]
+        state_dict[f"model.encoder.layers.{idx}.text_enhancer_layer.self_attn.value.bias"] = in_proj_bias[
+            -hidden_size:
+        ]
+
+
 def read_in_q_k_v_decoder(state_dict, config):
     hidden_size = config.hidden_size
     for idx in range(config.decoder_layers):
@@ -393,6 +420,7 @@ def convert_grounding_dino_checkpoint(args):
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v_encoder(new_state_dict, config)
+    read_in_q_k_v_text_enhancer(new_state_dict, config)
     read_in_q_k_v_decoder(new_state_dict, config)
 
     # Load HF model
