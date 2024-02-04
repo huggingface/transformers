@@ -101,7 +101,7 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
 
 
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitDropPath with Beit->Data2VecVision
-class TFData2VecVisionDropPath(tf.keras.layers.Layer):
+class TFData2VecVisionDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
@@ -419,11 +419,11 @@ class TFData2VecVisionAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.beit.modeling_tf_beit.TFBeitIntermediate with Beit->Data2VecVision
-class TFData2VecVisionIntermediate(tf.keras.layers.Layer):
+class TFData2VecVisionIntermediate(keras.layers.Layer):
     def __init__(self, config: Data2VecVisionConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
