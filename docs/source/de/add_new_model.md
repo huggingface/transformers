@@ -556,7 +556,7 @@ demselben Framework wie *brand_new_bert* geschrieben wurde. Normalerweise reicht
 es für Ihren Anwendungsfall leicht anzupassen. Zögern Sie nicht, das Hugging Face Team zu bitten, Sie auf ein ähnliches, bereits vorhandenes
 Konvertierungsskript für Ihr Modell zu finden.
 
-- Wenn Sie ein Modell von TensorFlow nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BERT [hier] (https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
+- Wenn Sie ein Modell von TensorFlow nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BERT [hier](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
 - Wenn Sie ein Modell von PyTorch nach PyTorch portieren, ist ein guter Ausgangspunkt das Konvertierungsskript von BART [hier](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 Im Folgenden werden wir kurz erklären, wie PyTorch-Modelle Ebenengewichte speichern und Ebenennamen definieren. In PyTorch wird der

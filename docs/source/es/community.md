@@ -10,7 +10,7 @@ Esta página agrupa los recursos de 🤗 Transformers desarrollados por la comun
 
 | Recurso     |      Descripción     |      Autor      |
 |:----------|:-------------|------:|
-| [Hugging Face Transformers Glossary Flashcards](https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards) | Un conjunto de flashcards basadas en el [Glosario de documentos de Transformers] (glosario) que se ha puesto en un formato que se puede aprender/revisar fácilmente usando [Anki] (https://apps.ankiweb.net/) una fuente abierta, aplicación de multiplataforma diseñada específicamente para la retención de conocimientos a largo plazo. Ve este [Introductory video on how to use the flashcards](https://www.youtube.com/watch?v=Dji_h7PILrw). | [Darigov Research](https://www.darigovresearch.com/) |
+| [Hugging Face Transformers Glossary Flashcards](https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards) | Un conjunto de flashcards basadas en el [Glosario de documentos de Transformers] (glosario) que se ha puesto en un formato que se puede aprender/revisar fácilmente usando [Anki](https://apps.ankiweb.net/) una fuente abierta, aplicación de multiplataforma diseñada específicamente para la retención de conocimientos a largo plazo. Ve este [Introductory video on how to use the flashcards](https://www.youtube.com/watch?v=Dji_h7PILrw). | [Darigov Research](https://www.darigovresearch.com/) |
 
 ## Los cuadernos de la comunidad:
 
