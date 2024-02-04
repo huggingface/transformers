@@ -1213,7 +1213,7 @@ class GroundingDinoEncoderLayer(nn.Module):
         self.deformable_layer = GroundingDinoDeformableLayer(config)
 
     def get_text_position_embeddings(
-        self, text_features: Tensor, text_position_embedding: Tensor, text_position_ids: Tensor
+        self, text_features: Tensor, text_position_embedding: Optional[torch.Tensor], text_position_ids: Optional[torch.Tensor],
     ) -> Tensor:
         batch_size, seq_length, _ = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
