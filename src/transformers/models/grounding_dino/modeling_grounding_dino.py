@@ -1417,11 +1417,12 @@ class GroundingDinoDecoderLayer(nn.Module):
 
         # Cross-Attention Text
         queries = self.with_pos_embed(hidden_states, position_embeddings)
+
         hidden_states, text_cross_attn_weights = self.encoder_attn_text(
             queries=queries,
             keys=text_encoder_hidden_states,
             values=text_encoder_hidden_states,
-            attention_mask=text_encoder_attention_mask,
+            # attention_mask=text_encoder_attention_mask, # TODO fix cross-attention mask here
             output_attentions=True,
         )
 
