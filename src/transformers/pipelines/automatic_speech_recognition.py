@@ -57,7 +57,7 @@ def rescale_stride(stride, ratio):
     return new_strides
 
 
-def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, rescale=True, dtype=None):
+def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, dtype=None):
     inputs_len = inputs.shape[0]
     step = chunk_len - stride_left - stride_right
     for chunk_start_idx in range(0, inputs_len, step):
@@ -73,13 +73,6 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
 
         chunk_len = chunk.shape[0]
         stride = (chunk_len, _stride_left, _stride_right)
-        if "input_features" in processed:
-            processed_len = processed["input_features"].shape[-1]
-        elif "input_values" in processed:
-            processed_len = processed["input_values"].shape[-1]
-        if processed_len != chunk.shape[-1] and rescale:
-            ratio = processed_len / chunk_len
-            stride = rescale_stride([stride], ratio)[0]
         if chunk.shape[0] > _stride_left:
             yield {"is_last": is_last, "stride": stride, **processed}
         if is_last:
@@ -436,10 +429,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if chunk_len < stride_left + stride_right:
                 raise ValueError("Chunk length must be superior to stride length")
 
-            rescale = self.type != "seq2seq_whisper"
-            # make sure that
             for item in chunk_iter(
-                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, rescale, self.torch_dtype
+                inputs, self.feature_extractor, chunk_len, stride_left, stride_right, self.torch_dtype
             ):
                 yield item
         else:
