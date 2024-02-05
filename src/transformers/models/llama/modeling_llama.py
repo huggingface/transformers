@@ -652,12 +652,8 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if (
-            attention_mask is not None and not torch.all(attention_mask[..., 0] == 1) and q_len != 1
-        ):  # user defined causal mask
+        if attention_mask is not None:  # user defined causal mask
             causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
-            # this one liner is equivalent to the pad_unpad function
-            causal_mask.mul_(~torch.eq(causal_mask, causal_mask.min()).all(dim=-1)[..., None])
         else:
             causal_mask = None
 
@@ -1014,6 +1010,12 @@ class LlamaModel(LlamaPreTrainedModel):
             causal_mask[..., : attention_mask.shape[-1]] = causal_mask[..., : attention_mask.shape[-1]].masked_fill(
                 padding_mask, torch.finfo(inputs_embeds.dtype).min
             )
+
+        if self.config._attn_implementation=="sdpa": 
+            if seq_length > 1:
+                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None])
+            elif seq_length==1 or attention_mask is None or attention_mask.mean() == 1:
+                causal_mask=None
 
         # embed positions
         hidden_states = inputs_embeds
