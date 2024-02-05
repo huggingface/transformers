@@ -1247,7 +1247,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)
 if Pipeline.push_to_hub.__doc__ is not None:
     Pipeline.push_to_hub.__doc__ = Pipeline.push_to_hub.__doc__.format(
-        object="model", object_class="AutoModel", object_files="model file"
+        object="pipe", object_class="pipeline", object_files="model file"
     )
 
 
