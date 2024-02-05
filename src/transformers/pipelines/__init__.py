@@ -26,6 +26,7 @@ from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
+from ..models.auto import get_values
 from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
@@ -916,7 +917,10 @@ def pipeline(
         and not load_tokenizer
         and normalized_task not in NO_TOKENIZER_TASKS
         # Using class name to avoid importing the real class.
-        and model_config.__class__.__name__ in [MULTI_MODEL_AUDIO_CONFIGS, MULTI_MODEL_VISION_CONFIGS]
+        and (
+            model_config.__class__.__name__ in MULTI_MODEL_AUDIO_CONFIGS
+            or model_config.__class__.__name__ in MULTI_MODEL_VISION_CONFIGS
+        )
     ):
         # This is a special category of models, that are fusions of multiple models
         # so the model_config might not define a tokenizer, but it seems to be
