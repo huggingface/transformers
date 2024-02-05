@@ -34,6 +34,7 @@ from .generic import (
     ExplicitEnum,
     ModelOutput,
     PaddingStrategy,
+    TArrayType,
     TensorType,
     add_model_info_to_auto_map,
     cached_property,

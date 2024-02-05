@@ -23,7 +23,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import partial
-from typing import Any, ContextManager, Iterable, List, Tuple
+from typing import Any, ContextManager, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -58,6 +58,52 @@ class cached_property(property):
         return cached
 
 
+class ExplicitEnum(str, Enum):
+    """
+    Enum with more explicit error message for missing values.
+    """
+
+    @classmethod
+    def _missing_(cls, value):
+        raise ValueError(
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
+        )
+
+
+class PaddingStrategy(ExplicitEnum):
+    """
+    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
+    IDE.
+    """
+
+    LONGEST = "longest"
+    MAX_LENGTH = "max_length"
+    DO_NOT_PAD = "do_not_pad"
+
+
+class TensorType(ExplicitEnum):
+    """
+    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
+    tab-completion in an IDE.
+    """
+
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
+    NUMPY = "np"
+    JAX = "jax"
+    # Python `List`
+    LIST = "list"
+
+    @staticmethod
+    def from_type(array_type: Optional[Union[str, "TensorType"]]) -> Optional["TensorType"]:
+        if array_type is None or isinstance(array_type, TArrayType):
+            return array_type
+        return TArrayType(array_type)
+
+
+TArrayType = TensorType
+
+
 # vendored from distutils.util
 def strtobool(val):
     """Convert a string representation of truth to true (1) or false (0).
@@ -71,6 +117,25 @@ def strtobool(val):
     if val in {"n", "no", "f", "false", "off", "0"}:
         return 0
     raise ValueError(f"invalid truth value {val!r}")
+
+
+# TODO: Preventing to use magic strings
+def infer_framework(model_class):
+    """
+    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
+    classes are imported or available.
+    """
+    for base_class in inspect.getmro(model_class):
+        module = base_class.__module__
+        name = base_class.__name__
+        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
+            return "tf"
+        elif module.startswith("torch") or name == "PreTrainedModel":
+            return "pt"
+        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
+            return "flax"
+    else:
+        raise TypeError(f"Could not infer framework from class {model_class}.")
 
 
 def infer_framework_from_repr(x):
@@ -89,6 +154,20 @@ def infer_framework_from_repr(x):
         return "np"
 
 
+def infer_array_type(array) -> Optional[TArrayType]:
+    if is_numpy_array(array):
+        return TArrayType.NUMPY
+    if is_torch_tensor(array):
+        return TArrayType.PYTORCH
+    if is_tf_tensor(array):
+        return TArrayType.TENSORFLOW
+    if is_jax_tensor(array):
+        return TArrayType.JAX
+    if isinstance(array, List):
+        return TArrayType.LIST
+    return None
+
+
 def _get_frameworks_and_test_func(x):
     """
     Returns an (ordered since we are in Python 3.7+) dictionary framework to test function, which places the framework
@@ -105,7 +184,7 @@ def _get_frameworks_and_test_func(x):
     frameworks = [] if preferred_framework is None else [preferred_framework]
     if preferred_framework != "np":
         frameworks.append("np")
-    frameworks.extend([f for f in framework_to_test if f not in [preferred_framework, "np"]])
+    frameworks.extend([f for f in framework_to_test if f not in frameworks[:]])
     return {f: framework_to_test[f] for f in frameworks}
 
 
@@ -466,41 +545,6 @@ if is_torch_available():
         )
 
 
-class ExplicitEnum(str, Enum):
-    """
-    Enum with more explicit error message for missing values.
-    """
-
-    @classmethod
-    def _missing_(cls, value):
-        raise ValueError(
-            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
-        )
-
-
-class PaddingStrategy(ExplicitEnum):
-    """
-    Possible values for the `padding` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for tab-completion in an
-    IDE.
-    """
-
-    LONGEST = "longest"
-    MAX_LENGTH = "max_length"
-    DO_NOT_PAD = "do_not_pad"
-
-
-class TensorType(ExplicitEnum):
-    """
-    Possible values for the `return_tensors` argument in [`PreTrainedTokenizerBase.__call__`]. Useful for
-    tab-completion in an IDE.
-    """
-
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-    JAX = "jax"
-
-
 class ContextManagers:
     """
     Wrapper for `contextlib.ExitStack` which enters a collection of context managers. Adaptation of `ContextManagers`
@@ -593,16 +637,15 @@ def transpose(array, axes=None):
     """
     if is_numpy_array(array):
         return np.transpose(array, axes=axes)
-    elif is_torch_tensor(array):
+    if is_torch_tensor(array):
         return array.T if axes is None else array.permute(*axes)
-    elif is_tf_tensor(array):
+    if is_tf_tensor(array):
         import tensorflow as tf
 
         return tf.transpose(array, perm=axes)
-    elif is_jax_tensor(array):
+    if is_jax_tensor(array):
         return jnp.transpose(array, axes=axes)
-    else:
-        raise ValueError(f"Type not supported for transpose: {type(array)}.")
+    raise NotImplementedError(f"Type not supported for transpose: {type(array)}.")
 
 
 def reshape(array, newshape):
@@ -612,35 +655,41 @@ def reshape(array, newshape):
     """
     if is_numpy_array(array):
         return np.reshape(array, newshape)
-    elif is_torch_tensor(array):
+    if is_torch_tensor(array):
         return array.reshape(*newshape)
-    elif is_tf_tensor(array):
+    if is_tf_tensor(array):
         import tensorflow as tf
 
         return tf.reshape(array, newshape)
-    elif is_jax_tensor(array):
+    if is_jax_tensor(array):
         return jnp.reshape(array, newshape)
-    else:
-        raise ValueError(f"Type not supported for reshape: {type(array)}.")
+    raise NotImplementedError(f"Type not supported for reshape: {type(array)}.")
 
 
-def squeeze(array, axis=None):
+def _squeeze(array, axis=None, array_type: Optional[TArrayType] = None):
+    if array_type == TArrayType.NUMPY:
+        try:
+            return np.squeeze(array, axis=axis)
+        except np.exceptions.AxisError as e:
+            raise IndexError("Out of bound for array of dimension") from e
+    if array_type == TArrayType.PYTORCH:
+        return array.squeeze() if axis is None else array.squeeze(dim=axis)
+    if array_type == TArrayType.TENSORFLOW:
+        import tensorflow as tf
+
+        return tf.squeeze(array, axis=axis)
+    if array_type == TArrayType.JAX:
+        return jnp.squeeze(array, axis=axis)
+    raise NotImplementedError(f"Type not supported for squeeze: {type(array)}.")
+
+
+def squeeze(array, array_type: Optional[TArrayType] = None, axis=None):
     """
     Framework-agnostic version of `numpy.squeeze` that will work on torch/TensorFlow/Jax tensors as well as NumPy
     arrays.
     """
-    if is_numpy_array(array):
-        return np.squeeze(array, axis=axis)
-    elif is_torch_tensor(array):
-        return array.squeeze() if axis is None else array.squeeze(dim=axis)
-    elif is_tf_tensor(array):
-        import tensorflow as tf
-
-        return tf.squeeze(array, axis=axis)
-    elif is_jax_tensor(array):
-        return jnp.squeeze(array, axis=axis)
-    else:
-        raise ValueError(f"Type not supported for squeeze: {type(array)}.")
+    array_type = infer_array_type(array) if array_type is None else array_type
+    return _squeeze(array, axis=axis, array_type=array_type)
 
 
 def expand_dims(array, axis):
@@ -650,34 +699,37 @@ def expand_dims(array, axis):
     """
     if is_numpy_array(array):
         return np.expand_dims(array, axis)
-    elif is_torch_tensor(array):
+    if is_torch_tensor(array):
         return array.unsqueeze(dim=axis)
-    elif is_tf_tensor(array):
+    if is_tf_tensor(array):
         import tensorflow as tf
 
         return tf.expand_dims(array, axis=axis)
-    elif is_jax_tensor(array):
+    if is_jax_tensor(array):
         return jnp.expand_dims(array, axis=axis)
-    else:
-        raise ValueError(f"Type not supported for expand_dims: {type(array)}.")
+    raise NotImplementedError(f"Type not supported for expand_dims: {type(array)}.")
 
 
-def tensor_size(array):
-    """
-    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
-    """
-    if is_numpy_array(array):
+def _array_size(array, array_type: Optional[TArrayType] = None):
+    if array_type == TArrayType.NUMPY:
         return np.size(array)
-    elif is_torch_tensor(array):
+    if array_type == TArrayType.PYTORCH:
         return array.numel()
-    elif is_tf_tensor(array):
+    if array_type == TArrayType.TENSORFLOW:
         import tensorflow as tf
 
         return tf.size(array)
-    elif is_jax_tensor(array):
+    if array_type == TArrayType.JAX:
         return array.size
-    else:
-        raise ValueError(f"Type not supported for tensor_size: {type(array)}.")
+    raise NotImplementedError(f"Type not supported for tensor_size: {type(array)}.")
+
+
+def tensor_size(array, array_type: Optional[TArrayType] = None):
+    """
+    Framework-agnostic version of `numpy.size` that will work on torch/TensorFlow/Jax tensors as well as NumPy arrays.
+    """
+    array_type = infer_array_type(array)
+    return _array_size(array, array_type=array_type)
 
 
 def add_model_info_to_auto_map(auto_map, repo_id):
@@ -691,21 +743,3 @@ def add_model_info_to_auto_map(auto_map, repo_id):
             auto_map[key] = f"{repo_id}--{value}"
 
     return auto_map
-
-
-def infer_framework(model_class):
-    """
-    Infers the framework of a given model without using isinstance(), because we cannot guarantee that the relevant
-    classes are imported or available.
-    """
-    for base_class in inspect.getmro(model_class):
-        module = base_class.__module__
-        name = base_class.__name__
-        if module.startswith("tensorflow") or module.startswith("keras") or name == "TFPreTrainedModel":
-            return "tf"
-        elif module.startswith("torch") or name == "PreTrainedModel":
-            return "pt"
-        elif module.startswith("flax") or module.startswith("jax") or name == "FlaxPreTrainedModel":
-            return "flax"
-    else:
-        raise TypeError(f"Could not infer framework from class {model_class}.")

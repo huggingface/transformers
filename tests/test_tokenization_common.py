@@ -58,6 +58,7 @@ from transformers.testing_utils import (
     slow,
 )
 from transformers.tokenization_utils import AddedToken
+from transformers.utils.generic import TArrayType
 
 
 if is_torch_available():
@@ -982,6 +983,96 @@ class TokenizerTesterMixin:
                 self.assertIsInstance(text_2, str)
 
                 self.assertEqual(text_2, output_text)
+
+    def test_encode_decode_consistency(self):
+        # self.assertEqual(True, False)
+        def _get_excepted(item, decoded):
+            excepted_entry = item
+            if isinstance(item, list):
+                if isinstance(item, str):
+                    excepted_entry = " ".join(item)
+                else:
+                    excepted_entry = decoded
+            return excepted_entry
+
+        def _excepted_skip(item, is_fast, is_batch):
+            if not is_fast:
+                return False
+            if not isinstance(item, list):
+                return False
+            if isinstance(item[0], int):
+                # fast tokenizer does not support encoding list of integers
+                return True
+            if isinstance(item[0], str):
+                # fast tokenizer does not support encoding list with only one string.
+                # For this case, we may print a warning to tell user that
+                # they can replace PreTokenizedEntry as TextEntry, consider
+                # it only have one string item.
+                return True
+            if not is_batch:
+                return False
+            if len(item) > 1:
+                # fast tokenizer does not support encoding list with multiple items
+                return True
+            return False
+
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        return_tensorses = [None] + list(TArrayType._value2member_map_.keys())
+        for tokenizer, return_tensors in itertools.product(tokenizers, return_tensorses):
+            print(tokenizer)
+            with self.subTest(f"{tokenizer.__class__.__name__} with {return_tensors=}"):
+                # Test consistency for `encode/decode` method pair.
+                items = [
+                    "one",
+                    "one two",
+                    # TODO: test unicode characters that may map to multiple tokens
+                    # "樴"
+                    # pre tokenized
+                    ["one"],
+                    ["one", "two"],  # decode result should be "one two"
+                    [10],
+                    [10, 10],
+                ]
+                for item in items:
+                    if _excepted_skip(item, is_fast=tokenizer.is_fast, is_batch=False):
+                        continue
+                    print(f"{item=}")
+                    tokens = tokenizer.consistent_encode(item, return_tensors=return_tensors)
+                    print(f"{tokens=}")
+                    decoded = tokenizer.consistent_decode(tokens, skip_special_tokens=True)
+                    print(f"{decoded=}")
+                    excepted = _get_excepted(item, decoded)
+                    print(f"{excepted=}")
+                    self.assertEqual(excepted, decoded)
+                    print()
+                print("==============")
+
+                # Test consistency for `encode_batch/decode_batch` method pair.
+                items = [
+                    ["one"],
+                    ["one two"],
+                    ["one", "two"],
+                    ["one two", "three"],
+                    # pre tokenized
+                    [["one"]],
+                    [["one", "two"]],
+                    [["one", "two"], ["three"]],
+                    [[10]],
+                    [[10, 10]],
+                ]
+                for item in items:
+                    if _excepted_skip(item[0], is_fast=tokenizer.is_fast, is_batch=True):
+                        continue
+                    print(f"{item=}")
+                    tokens = tokenizer.consistent_encode_batch(item, return_tensors=return_tensors)
+                    print(f"{tokens=}")
+                    decoded = tokenizer.consistent_decode_batch(tokens, skip_special_tokens=True)
+                    print(f"{decoded=}")
+                    excepted = [_get_excepted(x, y) for x, y in zip(item, decoded)]
+                    print(f"{excepted=}")
+                    self.assertEqual(excepted, decoded)
+                    print()
+                print("==============")
 
     @require_tokenizers
     def test_encode_decode_with_spaces(self):
