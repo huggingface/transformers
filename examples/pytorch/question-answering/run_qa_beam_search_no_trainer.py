@@ -119,7 +119,7 @@ def parse_args():
         default=384,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_length` is passed."
         ),
     )
     parser.add_argument(
@@ -385,7 +385,7 @@ def main():
     )
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
     column_names = raw_datasets["train"].column_names
 
     question_column_name = "question" if "question" in column_names else column_names[0]
@@ -508,7 +508,7 @@ def main():
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
     if args.max_train_samples is not None:
-        # We will select sample from whole data if agument is specified
+        # We will select sample from whole data if argument is specified
         train_dataset = train_dataset.select(range(args.max_train_samples))
     # Create train feature from dataset
     with accelerator.main_process_first():
@@ -877,7 +877,7 @@ def main():
                     commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
                 )
 
-    # intialize all lists to collect the batches
+    # initialize all lists to collect the batches
     all_start_top_log_probs = []
     all_start_top_index = []
     all_end_top_log_probs = []
@@ -936,7 +936,7 @@ def main():
     logger.info(f"Evaluation metrics: {eval_metric}")
 
     if args.do_predict:
-        # intialize all lists to collect the batches
+        # initialize all lists to collect the batches
 
         all_start_top_log_probs = []
         all_start_top_index = []

@@ -295,7 +295,7 @@ repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-te
 to host these files and reference them by URL. We recommend placing documentation
 related images in the following repository:
 [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-You can open a PR on this dataset repostitory and ask a Hugging Face member to merge it.
+You can open a PR on this dataset repository and ask a Hugging Face member to merge it.
 
 For more information about the checks run on a pull request, take a look at our [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
 

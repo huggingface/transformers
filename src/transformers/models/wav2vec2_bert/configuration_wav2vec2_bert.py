@@ -66,7 +66,7 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the feature projection.
+            The dropout probability for the feature projection.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`Wav2Vec2BertForCTC`].
         layerdrop (`float`, *optional*, defaults to 0.1):

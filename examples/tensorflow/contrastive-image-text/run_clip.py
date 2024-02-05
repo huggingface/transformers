@@ -311,7 +311,7 @@ def main():
     # Log on each process the small summary:
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # 3. Detecting last checkpoint and eventualy continue from last checkpoint
+    # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
