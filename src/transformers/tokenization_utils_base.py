@@ -29,7 +29,6 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from types import GenericAlias
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -64,6 +63,13 @@ from .utils import (
     requires_backends,
     to_py_obj,
 )
+
+
+# GenericAlias requires >= Python 3.9.
+try:
+    from types import GenericAlias
+except ImportError:
+    GenericAlias = type(list[int])
 
 
 if TYPE_CHECKING:

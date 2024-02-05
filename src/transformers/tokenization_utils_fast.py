@@ -20,7 +20,6 @@ import copy
 import json
 import os
 from collections import defaultdict
-from types import GenericAlias
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
@@ -40,6 +39,7 @@ from .tokenization_utils_base import (
     EncodedEntry,
     EncodedEntryPair,
     EntryEncoding,
+    GenericAlias,
     PreTokenizedEntry,
     PreTokenizedEntryPair,
     PreTokenizedInput,

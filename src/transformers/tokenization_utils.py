@@ -21,7 +21,6 @@ import itertools
 import re
 import unicodedata
 from collections import OrderedDict
-from types import GenericAlias
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from transformers.utils.generic import TArrayType
@@ -37,6 +36,7 @@ from .tokenization_utils_base import (
     EncodedInput,
     EncodedInputPair,
     EntryEncoding,
+    GenericAlias,
     PreTokenizedEntry,
     PreTokenizedEntryPair,
     PreTokenizedInput,
