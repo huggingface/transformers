@@ -21,7 +21,7 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import AnnotationFormatTestMixin, ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -129,7 +129,7 @@ class GroundingDinoImageProcessingTester(unittest.TestCase):
 @require_torch
 @require_vision
 # Copied from tests.models.deformable_detr.test_image_processing_deformable_detr.DeformableDetrImageProcessingTest with DeformableDetr->GroundingDino
-class GroundingDinoImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = GroundingDinoImageProcessor if is_vision_available() else None
 
     def setUp(self):
