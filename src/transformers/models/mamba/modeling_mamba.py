@@ -234,7 +234,7 @@ def mamba_linear_attention_cpu(time_decay, time_first, key, value, state=None, r
     return output, state
 
 
-def mamba_linear_attention(time_decay, time_first, key, value, state=None, return_state=False):
+def mamba_mixer_forward(time_decay, time_first, key, value, state=None, return_state=False):
     no_cuda = any(t.device.type != "cuda" for t in [time_decay, time_first, key, value])
     # Launching the CUDA kernel for just one token will actually be slower (there is no for loop in the CPU version
     # in this case).
@@ -242,7 +242,7 @@ def mamba_linear_attention(time_decay, time_first, key, value, state=None, retur
     if mamba_cuda_kernel is None or no_cuda or one_token:
         return mamba_linear_attention_cpu(time_decay, time_first, key, value, state=state, return_state=return_state)
     else:
-        return MambaLinearAttention.apply(time_decay, time_first, key, value, state, return_state)
+        return MambaMixer.apply(time_decay, time_first, key, value, state, return_state)
 
 
 class MambaMixer(nn.Module):
