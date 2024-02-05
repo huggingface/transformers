@@ -31,9 +31,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_bitsandbytes_available,
-    is_ninja_available,
-    is_torch_cuda_available,
     logging,
 )
 from .configuration_mamba import MambaConfig
@@ -249,7 +246,7 @@ def mamba_linear_attention(time_decay, time_first, key, value, state=None, retur
 
 
 class MambaMixer(nn.Module):
-    
+
     def __init__(self, config, layer_idx):
         super().__init__()
         self.d_model = config.d_model
@@ -274,12 +271,12 @@ class MambaMixer(nn.Module):
 
         self.activation = config.activation
         self.act = ACT2FN[config.activation]
-        
+
         # selective projection used to make dt, B and C input dependant
         self.x_proj = nn.Linear(self.d_inner, self.time_step_rank + self.d_state * 2, bias=False)
         self.time_step_proj = nn.Linear(self.time_step_rank, self.d_inner, bias=True)
-        # S4D real initialization. These are not discretized! 
-        # THe core is to load them, compute the discrete states, then write the updates state. 
+        # S4D real initialization. These are not discretized!
+        # THe core is to load them, compute the discrete states, then write the updates state.
         # Keeps the memory bounded
         what_is_this = torch.arange(1, self.d_state + 1, dtype=torch.float32)
         A = torch.repeat(what_is_this,d=self.d_inner).contiguous()
@@ -302,11 +299,11 @@ class MambaMixer(nn.Module):
 
         projected_states = self.in_proj(hidden_states).transpose(1,2)
         hidden_states, z = projected_states.chunk(2, dim=1)
-        
+
         if inference_params is not None and inference_params.seq_offset > 0:
             hidden_states = causal_conv1d_update(
                 hidden_states,
-                conv_state, 
+                conv_state,
                 self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
                 self.conv1d.bias,
                 self.activation,
@@ -340,10 +337,10 @@ class MambaMixer(nn.Module):
         y = rearrange(y, "b d l -> b l d")
         attn_outputs = self.out_proj(y)
         return attn_outputs, conv_state, last_state
-    
+
 
 class MambaCache:
-    
+
     def __init__(self):
         self.conv_state = None
         self.ssm_state = None
@@ -357,23 +354,24 @@ class MambaCache:
         self.ssm_state.copy_(ssm_state)
 
 class MambaSlowMixer(MambaMixer):
-    
+
     def forward(self, hidden_states, infer_params=MambaCache()):
         batch_size, seq_len, _ = hidden_states.shape
-        
+
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1,2)
         hidden_states, gate = projected_states.chunk(2, dim=1)
-        
+
         # 2. Convolution sequence transformation
         if infer_params is not None:
             conv_state = infer_params.update_conv_states(hidden_states)
 
+        # TODO replace with simple conv call
         hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
         if self.conv1d.bias is not None:
             hidden_states = hidden_states + self.conv1d.bias
         hidden_states = self.act(hidden_states).to(dtype=hidden_states.dtype)
-        
+
         # 3. State Space Model sequence transformation
         # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(torch.rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
@@ -383,28 +381,28 @@ class MambaSlowMixer(MambaMixer):
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
         B = torch.rearrange(B, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
         C = torch.rearrange(C, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
-        
+
         # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         dt = nn.functional.softplus(dt + self.dt_proj.bias.to(dtype=dt.dtype))
         dA = torch.exp(torch.einsum("bd,dn->bdn", dt, A))
         dB = torch.einsum("bd,bn->bdn", dt, B)
-        
+
         # 3.c perform the recurrence y ← SSM(A, B, C)(x)
-        ys = []    
+        ys = []
         for i in range(seq_len):
             self.ssm_state.copy_(self.ssm_state * dA + torch.rearrange(hidden_states, "b d -> b d 1") * dB)
             y = torch.einsum(self.ssm_state, C[:, i, :], 'b d_in n, b n -> b d_in')
             ys.append(y)
         y = torch.stack(ys, dim=1)  # shape (b, l, d_in)
-        
+
         y = y + self.D.to(hidden_states.dtype) * hidden_states
         y = y * self.act(gate)  # (B D)
-            
+
         # 4. Final linear projection
         attn_outputs = self.out_proj(y)
         return attn_outputs, conv_state, y
 
-        
+
 class MambaBlock(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
@@ -419,7 +417,7 @@ class MambaBlock(nn.Module):
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
         if self.residual_in_fp32:
             residual = residual.to(torch.float32)
-            
+
         hidden_states = self.mixer(hidden_states, inference_params=inference_params)
         outputs = (hidden_states, residual)
         return outputs

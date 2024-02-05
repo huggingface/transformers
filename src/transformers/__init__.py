@@ -5306,6 +5306,7 @@ if TYPE_CHECKING:
         LxmertTokenizer,
     )
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
+    from .models.mamba import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, MambaConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5484,7 +5485,6 @@ if TYPE_CHECKING:
         RoFormerTokenizer,
     )
     from .models.rwkv import RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP, RwkvConfig
-    from .models.mamba import MAMBA_PRETRAINED_CONFIG_ARCHIVE_MAP, MambaConfig
     from .models.sam import (
         SAM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SamConfig,
@@ -7076,6 +7076,12 @@ if TYPE_CHECKING:
             M2M100Model,
             M2M100PreTrainedModel,
         )
+        from .models.mamba import (
+            MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MambaForCausalLM,
+            MambaModel,
+            MambaPreTrainedModel,
+        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.markuplm import (
             MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7549,12 +7555,6 @@ if TYPE_CHECKING:
             RwkvForCausalLM,
             RwkvModel,
             RwkvPreTrainedModel,
-        )
-        from .models.mamba import (
-            MAMBA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MambaForCausalLM,
-            MambaModel,
-            MambaPreTrainedModel,
         )
         from .models.sam import (
             SAM_PRETRAINED_MODEL_ARCHIVE_LIST,

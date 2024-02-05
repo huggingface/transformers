@@ -15,6 +15,7 @@
 # limitations under the License.
 """ MAMBA configuration"""
 import math
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
