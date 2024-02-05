@@ -1033,8 +1033,7 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         mask = tf.cast(cross_attention_gate == 0, dtype=hidden_states.dtype)
         # Expand dimensions of mask to match hidden_states
         mask = tf.expand_dims(mask, -1)
-        hidden_states = hidden_states * mask
-
+        hidden_states = tf.where(tf.broadcast_to(mask, tf.shape(hidden_states)) == 1, tf.zeros_like(hidden_states), hidden_states)
         # when there are no images the model is used in pure language mode
         # gate = 0 if no_images else 1
         hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
