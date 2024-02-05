@@ -54,7 +54,7 @@ There are two key differences with MusicGen:
 1. The audio prompt is used here as a conditional signal for the generated audio sample, whereas it's used for audio continuation in [MusicGen](https://huggingface.co/docs/transformers/main/en/model_doc/musicgen).
 2. Conditional text and audio signals are concatenated to the decoder's hidden states instead of being used as a cross-attention signal, as in MusicGen.
 
-## Usage tips
+## Checkpoint Conversion
 
 - After downloading the original checkpoints from [here](https://github.com/facebookresearch/audiocraft/blob/main/docs/MUSICGEN.md#importing--exporting-models) , you can convert them using the **conversion script** available at
 `src/transformers/models/musicgen_melody/convert_musicgen_melody_transformers.py` with the following command:
