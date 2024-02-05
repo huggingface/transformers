@@ -631,7 +631,7 @@ class XLMRobertaLayer(nn.Module):
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = XLM_ROBERTA_ATTENTION_CLASSES[config._attn_implementation](
-                config, position_embedding_type="absolute", is_cross_attention=True
+                config, position_embedding_type="absolute"
             )
         self.intermediate = XLMRobertaIntermediate(config)
         self.output = XLMRobertaOutput(config)
