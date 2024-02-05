@@ -234,10 +234,10 @@ class GroundingDinoModelOutput(ModelOutput):
     Base class for outputs of the Grounding DINO encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
             Stacked intermediate hidden states (output of each layer of the decoder).
         intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -2514,8 +2514,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             return tuple_outputs
 
         return GroundingDinoModelOutput(
-            init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
+            init_reference_points=init_reference_points,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -2648,7 +2648,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         hidden_states = outputs.intermediate_hidden_states if return_dict else outputs[2]
         enc_text_hidden_state = outputs.encoder_last_hidden_state_text if return_dict else outputs[idx]
-        init_reference_points = outputs.init_reference_points if return_dict else outputs[0]
+        init_reference_points = outputs.init_reference_points if return_dict else outputs[1]
         inter_references_points = outputs.intermediate_reference_points if return_dict else outputs[3]
 
         # class logits + predicted bounding boxes

@@ -532,8 +532,7 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
         outputs = model(**inputs)
 
-        # we take the second output since last_hidden_state is the second item
-        output = outputs[1]
+        output = outputs[0]
 
         encoder_hidden_states = outputs.encoder_vision_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0][0]

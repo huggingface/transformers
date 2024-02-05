@@ -240,7 +240,7 @@ class GroundingDinoConfig(PretrainedConfig):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
 
     Examples:
