@@ -1723,7 +1723,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
         """
-        Get reference points for each feature map. Used in decoder.
+        Get reference points for each feature map.
 
         Args:
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
@@ -1920,10 +1920,11 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
         pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
 
-        if proposals.size(-1) == 2:
+        num_coordinates = proposals.size(-1)
+        if num_coordinates == 2:
             # batch_size, num_queries, num_pos_feats * 2
             pos = torch.cat((pos_y, pos_x), dim=2)
-        elif proposals.size(-1) == 4:
+        elif num_coordinates == 4:
             w_embed = proposals[:, :, 2] * scale
             pos_w = w_embed[:, :, None] / dim_t
             # batch_size, num_queries, num_pos_feats
@@ -2128,6 +2129,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         )
 
 
+# these correspond to [CLS], [SEP], . and ?
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
