@@ -106,16 +106,19 @@ In Computer Vision:
 - [Universal Segmentation with OneFormer](https://huggingface.co/shi-labs/oneformer_ade20k_dinat_large)
 
 In Audio:
-- [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
+- [Automatic Speech Recognition with Whisper](https://huggingface.co/openai/whisper-large-v3) or [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
 - [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 - [Audio Classification with Audio Spectrogram Transformer](https://huggingface.co/MIT/ast-finetuned-audioset-10-10-0.4593)
 
 In Multimodal tasks:
 - [Table Question Answering with TAPAS](https://huggingface.co/google/tapas-base-finetuned-wtq)
 - [Visual Question Answering with ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
-- [Zero-shot Image Classification with CLIP](https://huggingface.co/openai/clip-vit-large-patch14)
+- [Zero-shot Image Classification with CLIP](https://huggingface.co/openai/clip-vit-large-patch14) or [SigLIP](https://huggingface.co/google/siglip-so400m-patch14-384)
 - [Document Question Answering with LayoutLM](https://huggingface.co/impira/layoutlm-document-qa)
 - [Zero-shot Video Classification with X-CLIP](https://huggingface.co/docs/transformers/model_doc/xclip)
+- [Zero-shot Object Detection with OWLv2](https://huggingface.co/docs/transformers/en/model_doc/owlv2)
+- [Zero-shot Image Segmentation with CLIPSeg](https://huggingface.co/docs/transformers/model_doc/clipseg)
+- [Automatic Mask Generation with SAM](https://huggingface.co/docs/transformers/model_doc/sam)
 
 
 ## 100 projects using Transformers
