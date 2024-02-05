@@ -45,7 +45,6 @@ from ..utils import (
     is_torch_cuda_available,
     is_torch_xpu_available,
     logging,
-
 )
 
 
@@ -781,7 +780,7 @@ if is_torch_available():
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
-class Pipeline(_ScikitCompat,PushToHubMixin):
+class Pipeline(_ScikitCompat, PushToHubMixin):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
     different pipelines.
@@ -893,11 +892,11 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
                 self.image_processor = self.feature_extractor
 
     def save_pretrained(
-            self,
-            save_directory: str,
-            safe_serialization: bool = True,
-            **kwargs,
-        ):
+        self,
+        save_directory: str,
+        safe_serialization: bool = True,
+        **kwargs,
+    ):
         """
         Save the pipeline's model and tokenizer.
 
@@ -948,6 +947,7 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
+
     @staticmethod
     def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
@@ -1242,11 +1242,14 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
         # easy solution.
         for input_ in inputs:
             yield self.run_single(input_, preprocess_params, forward_params, postprocess_params)
+
+
 Pipeline.push_to_hub = copy_func(Pipeline.push_to_hub)
 if Pipeline.push_to_hub.__doc__ is not None:
     Pipeline.push_to_hub.__doc__ = Pipeline.push_to_hub.__doc__.format(
         object="model", object_class="AutoModel", object_files="model file"
     )
+
 
 class ChunkPipeline(Pipeline):
     def run_single(self, inputs, preprocess_params, forward_params, postprocess_params):
