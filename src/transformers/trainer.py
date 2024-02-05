@@ -1697,6 +1697,8 @@ class Trainer:
         use_accelerator_prepare = True if model is self.model else False
 
         if delay_optimizer_creation:
+            if use_accelerator_prepare:
+                self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
