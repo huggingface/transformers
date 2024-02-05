@@ -375,17 +375,6 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
-def _get_clones(module, num_copies):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(num_copies)])
-
-
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
 class GroundingDinoFrozenBatchNorm2d(nn.Module):
     """
@@ -2083,7 +2072,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
                 if reference_points.shape[-1] == 4:
-                    new_reference_points = tmp + inverse_sigmoid(reference_points)
+                    new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     if reference_points.shape[-1] != 2:
@@ -2091,7 +2080,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                             f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
                         )
                     new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
+                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
@@ -2621,7 +2610,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         if config.decoder_bbox_embed_share:
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            self.bbox_embed = _get_clones(_bbox_embed, config.decoder_layers)
+            self.bbox_embed = nn.ModuleList(_bbox_embed, config.decoder_layers)
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed
@@ -2726,7 +2715,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 reference = init_reference_points
             else:
                 reference = inter_references_points[:, level - 1]
-            reference = inverse_sigmoid(reference)
+            reference = torch.special.logit(reference, eps=1e-5)
             outputs_class = self.class_embed[level](
                 vision_hidden_state=hidden_states[:, level],
                 text_hidden_state=enc_text_hidden_state,
