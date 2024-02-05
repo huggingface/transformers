@@ -375,17 +375,6 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
 
 
-def _get_clones(module, num_copies):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(num_copies)])
-
-
-def inverse_sigmoid(x, eps=1e-5):
-    x = x.clamp(min=0, max=1)
-    x1 = x.clamp(min=eps)
-    x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1 / x2)
-
-
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
 class GroundingDinoFrozenBatchNorm2d(nn.Module):
     """
@@ -516,10 +505,10 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000):
+    def __init__(self, config):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
+        self.embedding_dim = config.d_model // 2
+        self.temperature = config.positional_embedding_temperature
         self.scale = 2 * math.pi
 
     def forward(self, pixel_values, pixel_mask):
@@ -540,14 +529,15 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
 class GroundingDinoLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, embedding_dim=256):
+    def __init__(self, config):
         super().__init__()
+
+        embedding_dim = config.d_model // 2
         self.row_embeddings = nn.Embedding(50, embedding_dim)
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
@@ -565,12 +555,10 @@ class GroundingDinoLearnedPositionEmbedding(nn.Module):
 
 
 def build_position_encoding(config):
-    n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDinoSinePositionEmbedding(n_steps, config.positional_embedding_temperature)
+        position_embedding = GroundingDinoSinePositionEmbedding(config)
     elif config.position_embedding_type == "learned":
-        position_embedding = GroundingDinoLearnedPositionEmbedding(n_steps)
+        position_embedding = GroundingDinoLearnedPositionEmbedding(config)
     else:
         raise ValueError(f"Not supported {config.position_embedding_type}")
 
@@ -1735,7 +1723,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
         """
-        Get reference points for each feature map. Used in decoder.
+        Get reference points for each feature map.
 
         Args:
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
@@ -1932,10 +1920,11 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
         pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
 
-        if proposals.size(-1) == 2:
+        num_coordinates = proposals.size(-1)
+        if num_coordinates == 2:
             # batch_size, num_queries, num_pos_feats * 2
             pos = torch.cat((pos_y, pos_x), dim=2)
-        elif proposals.size(-1) == 4:
+        elif num_coordinates == 4:
             w_embed = proposals[:, :, 2] * scale
             pos_w = w_embed[:, :, None] / dim_t
             # batch_size, num_queries, num_pos_feats
@@ -2083,7 +2072,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
             if self.bbox_embed is not None:
                 tmp = self.bbox_embed[idx](hidden_states)
                 if reference_points.shape[-1] == 4:
-                    new_reference_points = tmp + inverse_sigmoid(reference_points)
+                    new_reference_points = tmp + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
                 else:
                     if reference_points.shape[-1] != 2:
@@ -2091,7 +2080,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                             f"Reference points' last dimension must be of size 2, but is {reference_points.shape[-1]}"
                         )
                     new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
+                    new_reference_points[..., :2] = tmp[..., :2] + torch.special.logit(reference_points, eps=1e-5)
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
@@ -2140,6 +2129,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         )
 
 
+# these correspond to [CLS], [SEP], . and ?
 SPECIAL_TOKENS = [101, 102, 1012, 1029]
 
 
@@ -2621,7 +2611,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         if config.decoder_bbox_embed_share:
             self.bbox_embed = nn.ModuleList([_bbox_embed for _ in range(config.decoder_layers)])
         else:
-            self.bbox_embed = _get_clones(_bbox_embed, config.decoder_layers)
+            self.bbox_embed = nn.ModuleList(_bbox_embed, config.decoder_layers)
         self.class_embed = nn.ModuleList([_class_embed for _ in range(config.decoder_layers)])
         # hack implementation for two-stage
         self.model.decoder.bbox_embed = self.bbox_embed
@@ -2726,7 +2716,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
                 reference = init_reference_points
             else:
                 reference = inter_references_points[:, level - 1]
-            reference = inverse_sigmoid(reference)
+            reference = torch.special.logit(reference, eps=1e-5)
             outputs_class = self.class_embed[level](
                 vision_hidden_state=hidden_states[:, level],
                 text_hidden_state=enc_text_hidden_state,
