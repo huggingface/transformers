@@ -18,6 +18,10 @@ import unittest
 import pytest
 
 from transformers import XLMRobertaConfig, is_torch_available
+from transformers.models.xlm_roberta.modeling_xlm_roberta import (
+    XLMRobertaEmbeddings,
+    create_position_ids_from_input_ids,
+)
 from transformers.testing_utils import (
     require_flash_attn,
     require_sentencepiece,
@@ -27,11 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-
-from transformers.models.xlm_roberta.modeling_xlm_roberta import (
-        XLMRobertaEmbeddings,
-        create_position_ids_from_input_ids,
-    )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -43,7 +42,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         XLMRobertaForCausalLM,
         XLMRobertaForMaskedLM,
         XLMRobertaForMultipleChoice,
