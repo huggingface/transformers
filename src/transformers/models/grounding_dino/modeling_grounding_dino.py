@@ -505,10 +505,10 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000):
+    def __init__(self, config):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
+        self.embedding_dim = config.d_model // 2
+        self.temperature = config.positional_embedding_temperature
         self.scale = 2 * math.pi
 
     def forward(self, pixel_values, pixel_mask):
@@ -529,14 +529,15 @@ class GroundingDinoSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding
 class GroundingDinoLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, embedding_dim=256):
+    def __init__(self, config):
         super().__init__()
+
+        embedding_dim = config.d_model // 2
         self.row_embeddings = nn.Embedding(50, embedding_dim)
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
@@ -554,12 +555,10 @@ class GroundingDinoLearnedPositionEmbedding(nn.Module):
 
 
 def build_position_encoding(config):
-    n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = GroundingDinoSinePositionEmbedding(n_steps, config.positional_embedding_temperature)
+        position_embedding = GroundingDinoSinePositionEmbedding(config)
     elif config.position_embedding_type == "learned":
-        position_embedding = GroundingDinoLearnedPositionEmbedding(n_steps)
+        position_embedding = GroundingDinoLearnedPositionEmbedding(config)
     else:
         raise ValueError(f"Not supported {config.position_embedding_type}")
 
