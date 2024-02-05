@@ -345,13 +345,21 @@ class MambaMixer(nn.Module):
 class MambaCache:
     
     def __init__(self):
-        pass
+        self.conv_state = None
+        self.ssm_state = None
 
+    def update_conv_state(self, hidden_states):
+        self.conv_state.copy_(torch.roll(self.conv_state, shifts=-1, dims=-1))  # Update state (B D W)
+        self.conv_state[:, :, -1] = hidden_states
+        return self.conv_state
+
+    def update_ssm_state(self, ssm_state):
+        self.ssm_state.copy_(ssm_state)
 
 class MambaSlowMixer(MambaMixer):
     
     def forward(self, hidden_states, infer_params=MambaCache()):
-        batch_size, seqlen, _ = hidden_states.shape
+        batch_size, seq_len, _ = hidden_states.shape
         
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1,2)
@@ -359,39 +367,40 @@ class MambaSlowMixer(MambaMixer):
         
         # 2. Convolution sequence transformation
         if infer_params is not None:
-            conv_state = infer_params.update_conv_states(hidden_states, ssm_state)
+            conv_state = infer_params.update_conv_states(hidden_states)
 
         hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
         if self.conv1d.bias is not None:
             hidden_states = hidden_states + self.conv1d.bias
         hidden_states = self.act(hidden_states).to(dtype=hidden_states.dtype)
         
-
         # 3. State Space Model sequence transformation
-        
+        # 3.a. input varying initialization of time_step, B and C
         x_dbl = self.x_proj(torch.rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
         dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
         dt = self.dt_proj.weight @ dt.t()
-        dt = torch.rearrange(dt, "d (b l) -> b d l", l=seqlen)
+        dt = torch.rearrange(dt, "d (b l) -> b d l", l=seq_len)
         A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
-        B = torch.rearrange(B, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
-        C = torch.rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        B = torch.rearrange(B, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
+        C = torch.rearrange(C, "(b l) dstate -> b dstate l", l=seq_len).contiguous()
         
-            
+        # 3.b. discretize time_step, B and C: zero-order hold from (B,L,D) to  (B,L,D,N)
         dt = nn.functional.softplus(dt + self.dt_proj.bias.to(dtype=dt.dtype))
         dA = torch.exp(torch.einsum("bd,dn->bdn", dt, A))
         dB = torch.einsum("bd,bn->bdn", dt, B)
         
-        if infer_params is not None:
-            ssm_state = infer_params.update_state_space(hidden_states, dA, dB)
-
-        ssm_state.copy_(ssm_state * dA + torch.rearrange(hidden_states, "b d -> b d 1") * dB)
-        y = torch.einsum("bdn,bn->bd", ssm_state.to(hidden_states.dtype), C)
+        # 3.c perform the recurrence y ← SSM(A, B, C)(x)
+        ys = []    
+        for i in range(seq_len):
+            self.ssm_state.copy_(self.ssm_state * dA + torch.rearrange(hidden_states, "b d -> b d 1") * dB)
+            y = torch.einsum(self.ssm_state, C[:, i, :], 'b d_in n, b n -> b d_in')
+            ys.append(y)
+        y = torch.stack(ys, dim=1)  # shape (b, l, d_in)
+        
         y = y + self.D.to(hidden_states.dtype) * hidden_states
         y = y * self.act(gate)  # (B D)
             
         # 4. Final linear projection
-        
         attn_outputs = self.out_proj(y)
         return attn_outputs, conv_state, y
 
