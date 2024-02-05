@@ -532,11 +532,6 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (tf.range(0, self.dim, 2, dtype=tf.float32) / self.dim))
-        self.inv_freq = tf.constant(inv_freq, dtype=tf.float32)
-
-        # Build here to make `tf.function` work.
-        self._set_cos_sin_cache(seq_len=max_position_embeddings, dtype=tf.float32)
 
     def _set_cos_sin_cache(self, seq_len, dtype):
         self.max_seq_len_cached = seq_len
@@ -547,6 +542,18 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
         emb = tf.concat([freqs, freqs], axis=-1)
         self.cos_cached = tf.math.cos(emb)
         self.sin_cached = tf.math.sin(emb)
+
+    def build(self, input_shape):
+        self.inv_freq = self.add_weight(
+            name="inv_freq", shape=(self.dim // 2,), dtype=tf.float32
+        )
+        self.inv_freq.assign(
+            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2,
+                                          dtype=tf.float32) / self.dim))
+        )
+        self._set_cos_sin_cache(seq_len=self.max_position_embeddings, dtype=tf.float32)
+
+        super().build(input_shape)
 
     def call(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
