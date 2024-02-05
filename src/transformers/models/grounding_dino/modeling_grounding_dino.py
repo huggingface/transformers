@@ -1655,14 +1655,6 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             Pixel values can be obtained using [`AutoImageProcessor`]. See [`GroundingDinoImageProcessor.__call__`] for
             details.
 
-        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
-
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-
-            [What are attention masks?](../glossary#attention-mask)
-
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -1682,6 +1674,14 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
             1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
 
             [What are token type IDs?](../glossary#token-type-ids)
+
+        pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
+
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
+
+            [What are attention masks?](../glossary#attention-mask)
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state_vision`, *optional*: `last_hidden_state_text`, *optional*:
@@ -2296,8 +2296,8 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         self,
         pixel_values: Tensor,
         input_ids: Tensor,
-        token_type_ids: Tensor = None,
-        attention_mask: Tensor = None,
+        token_type_ids: Optional[Tensor] = None,
+        attention_mask: Optional[Tensor] = None,
         pixel_mask: Optional[Tensor] = None,
         encoder_outputs=None,
         output_attentions=None,

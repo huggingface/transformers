@@ -187,8 +187,8 @@ class GroundingDinoProcessor(ProcessorMixin):
         self,
         outputs,
         input_ids,
-        box_threshold: float,
-        text_threshold: float,
+        box_threshold: float = 0.25,
+        text_threshold: float = 0.25,
         target_sizes: Union[TensorType, List[Tuple]] = None,
     ):
         """
