@@ -820,9 +820,9 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pos_enc_positive = torch.zeros(x.size(1), self.embed_dim)
         pos_enc_negative = torch.zeros(x.size(1), self.embed_dim)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.embed_dim, 2, dtype=torch.float32) * -(math.log(10000.0) / self.embed_dim)
+            torch.arange(0, self.embed_dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.embed_dim)
         )
         pos_enc_positive[:, 0::2] = torch.sin(position * div_term)
         pos_enc_positive[:, 1::2] = torch.cos(position * div_term)
