@@ -104,7 +104,6 @@ class TFIdeficsPerceiverResampler(tf.keras.layers.Layer):
         for attn, ff in self.blocks:
             latents = attn(context, latents) + latents
             latents = ff(latents) + latents
-
         return self.layer_norm(latents)
 
 
@@ -115,11 +114,11 @@ class TFIdeficsPerceiverAttention(tf.keras.layers.Layer):
         self.embed_dim, self.n_heads, self.head_dim = embed_dim, n_heads, head_dim
         self.qk_layer_norms = qk_layer_norms
         # Normalization & Scaling
-        self.context_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="context_layer_norm")
-        self.latents_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="latents_layer_norm")
+        self.context_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="context_layer_norm")
+        self.latents_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="latents_layer_norm")
         if self.qk_layer_norms:
-            self.q_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="q_layer_norm")
-            self.k_layer_norm = tf.keras.layers.LayerNormalization(axis=-1, name="k_layer_norm")
+            self.q_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="q_layer_norm")
+            self.k_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="k_layer_norm")
 
         self.qk_scale = self.head_dim**-0.5
 
@@ -181,7 +180,7 @@ class TFIdeficsMLP(tf.keras.layers.Layer):
         """Simple MLP block with intermediate_size and embedding size"""
         super().__init__(**kwargs)
         self.embed_dim = config.vision_config.embed_dim
-        self.ln = tf.keras.layers.LayerNormalization(axis=-1, name="ln")
+        self.ln = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="ln")
         self.fc = tf.keras.layers.Dense(intermediate_size, use_bias=False, name="fc")
         self.act = tf.keras.layers.ReLU(name="act")
         self.c_proj = tf.keras.layers.Dense(self.embed_dim, use_bias=False, name="c_proj")
