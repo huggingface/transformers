@@ -755,7 +755,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         # We shall remove the leading batch axis due to the convenience call on above.
-        # TODO: return_overflowing_tokens still works? 
+        # TODO: return_overflowing_tokens still works?
         # Overflowing tokens are returned as a batch of output so we keep them in this case
         # if not return_overflowing_tokens:
         batched_output = BatchEncoding(
