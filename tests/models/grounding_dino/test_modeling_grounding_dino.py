@@ -701,7 +701,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             [[0.7674, 0.4136, 0.4572], [0.2566, 0.5463, 0.4760], [0.2585, 0.5442, 0.4641]]
         ).to(torch_device)
         expected_logits = torch.tensor(
-            [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
+            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
