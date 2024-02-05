@@ -300,17 +300,12 @@ def get_contrastive_denoising_training_group(
     attn_mask[num_denoising_queries:, :num_denoising_queries] = True
 
     # reconstructions cannot see each other
-    for i in range(num_groups_denoising_queries):
+    for i in range(num_group):
         idx_block_start = max_gt_num * 2 * i
         idx_block_end = max_gt_num * 2 * (i + 1)
-        if i == 0:
-            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
-        if i == num_groups_denoising_queries - 1:
-            attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-        else:
-            attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising_queries] = True
-            attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
-
+        attn_mask[idx_block_start:idx_block_end, :idx_block_start] = True
+        attn_mask[idx_block_start:idx_block_end, idx_block_end:num_denoising] = True
+        
     dn_meta = {
         "dn_positive_idx": denoise_positive_idx,
         "dn_num_group": num_groups_denoising_queries,
