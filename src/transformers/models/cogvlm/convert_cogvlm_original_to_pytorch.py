@@ -49,7 +49,6 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         torch_dtype=torch.bfloat16,
         low_cpu_mem_usage=True,
         trust_remote_code=True,
-        # load_in_4bit=True,
         revision=revision,
     )
     original_model.to(original_device)
