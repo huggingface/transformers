@@ -34,6 +34,7 @@ from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
     AutoModel,
+    AutoModelForSequenceClassification,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -201,6 +202,7 @@ if is_tf_available():
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
 TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-classification"
+TINY_MISTRAL = "hf-internal-testing/tiny-random-MistralForCausalLM"
 
 
 def check_models_equal(model1, model2):
@@ -255,6 +257,26 @@ class ModelUtilsTest(TestCasePlus):
 
         self.assertTrue(check_models_equal(model, model_loaded))
 
+    def test_model_manually_shared_disjointed_tensors_optimum(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        # Let's fuse qkv
+        attn = model.encoder.layer[0].attention.self
+        q = attn.query.weight
+        k = attn.key.weight
+        v = attn.value.weight
+        # Force some shared storage
+        qkv = torch.stack([q, k, v], dim=0)
+        attn.query.weight = torch.nn.Parameter(qkv[0])
+        attn.key.weight = torch.nn.Parameter(qkv[1])
+        attn.value.weight = torch.nn.Parameter(qkv[2])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            model_loaded = BertModel.from_pretrained(tmp_dir)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
     def test_model_from_pretrained_subfolder_sharded(self):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
         model = BertModel(config)
@@ -299,6 +321,15 @@ class ModelUtilsTest(TestCasePlus):
             with CaptureLogger(logger) as cl:
                 BertModel.from_pretrained(TINY_T5)
         self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
+
+    @require_accelerate
+    def test_model_from_pretrained_with_none_quantization_config(self):
+        # Needs a device_map for to enter the low_cpu_mem branch. We also load AutoModelForSequenceClassification
+        # deliberately to enter the missing keys branch.
+        model = AutoModelForSequenceClassification.from_pretrained(
+            TINY_MISTRAL, device_map="auto", quantization_config=None
+        )
+        self.assertIsNotNone(model)
 
     def test_model_from_config_torch_dtype(self):
         # test that the model can be instantiated with dtype of user's choice - as long as it's a

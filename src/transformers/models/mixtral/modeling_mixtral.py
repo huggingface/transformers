@@ -189,7 +189,7 @@ class MixtralRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -199,7 +199,7 @@ class MixtralRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -787,7 +787,7 @@ MIXTRAL_ATTENTION_CLASSES = {
 }
 
 
-class MixtralBLockSparseTop2MLP(nn.Module):
+class MixtralBlockSparseTop2MLP(nn.Module):
     def __init__(self, config: MixtralConfig):
         super().__init__()
         self.ffn_dim = config.intermediate_size
@@ -803,6 +803,14 @@ class MixtralBLockSparseTop2MLP(nn.Module):
         current_hidden_states = self.act_fn(self.w1(hidden_states)) * self.w3(hidden_states)
         current_hidden_states = self.w2(current_hidden_states)
         return current_hidden_states
+
+
+class MixtralBLockSparseTop2MLP(MixtralBlockSparseTop2MLP):
+    def __init__(self, *args, **kwargs):
+        logger.warning_once(
+            "MixtralBLockSparseTop2MLP is deprecated by MixtralBlockSparseTop2MLP and will be removed in v4.40."
+        )
+        super().__init__(*args, **kwargs)
 
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -827,7 +835,7 @@ class MixtralSparseMoeBlock(nn.Module):
         # gating
         self.gate = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
 
-        self.experts = nn.ModuleList([MixtralBLockSparseTop2MLP(config) for _ in range(self.num_experts)])
+        self.experts = nn.ModuleList([MixtralBlockSparseTop2MLP(config) for _ in range(self.num_experts)])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """ """

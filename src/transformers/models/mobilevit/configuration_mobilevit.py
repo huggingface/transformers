@@ -77,7 +77,7 @@ class MobileViTConfig(PretrainedConfig):
         output_stride (`int`, *optional*, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the Transformer encoder.
+            The dropout probability for all fully connected layers in the Transformer encoder.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):

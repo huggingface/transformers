@@ -53,6 +53,9 @@ class Mask2FormerConfig(PretrainedConfig):
             is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
         use_pretrained_backbone (`bool`, *optional*, `False`):
             Whether to use pretrained weights for the backbone.
+        use_timm_backbone (`bool`, *optional*, `False`):
+            Whether to load `backbone` from the timm library. If `False`, the backbone is loaded from the transformers
+            library.
         feature_size (`int`, *optional*, defaults to 256):
             The features (channels) of the resulting feature maps.
         mask_feature_size (`int`, *optional*, defaults to 256):
@@ -162,6 +165,7 @@ class Mask2FormerConfig(PretrainedConfig):
         output_auxiliary_logits: bool = None,
         backbone=None,
         use_pretrained_backbone=False,
+        use_timm_backbone=False,
         **kwargs,
     ):
         if use_pretrained_backbone:
@@ -228,6 +232,7 @@ class Mask2FormerConfig(PretrainedConfig):
         self.num_hidden_layers = decoder_layers
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.use_timm_backbone = use_timm_backbone
 
         super().__init__(**kwargs)
 
