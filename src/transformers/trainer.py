@@ -4052,6 +4052,16 @@ class Trainer:
         if self.is_deepspeed_enabled and getattr(self.args, "hf_deepspeed_config", None) is None:
             self.propagate_args_to_deepspeed()
 
+        # `save_only_model` can't be used with DeepSpeed/FSDP along with `load_best_model_at_end`
+        if (
+            self.args.save_only_model
+            and (self.is_deepspeed_enabled or self.is_fsdp_enabled)
+            and self.args.load_best_model_at_end
+        ):
+            raise ValueError(
+                "DeepSpeed/FSDP can't be used with `save_only_model` along with `load_best_model_at_end`."
+            )
+
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
         Sets values in the deepspeed plugin based on the Trainer args
