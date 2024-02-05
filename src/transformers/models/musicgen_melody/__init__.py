@@ -16,9 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_librosa_available,
     is_torch_available,
-    is_torchaudio_available,
 )
 
 
@@ -44,13 +42,6 @@ else:
         "MusicgenMelodyModel",
         "MusicgenMelodyPreTrainedModel",
     ]
-
-try:
-    if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
     _import_structure["feature_extraction_musicgen_melody"] = ["MusicgenMelodyFeatureExtractor"]
 
 
@@ -68,6 +59,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
         from .modeling_musicgen_melody import (
             MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
             MusicgenMelodyForCausalLM,
@@ -75,14 +67,6 @@ if TYPE_CHECKING:
             MusicgenMelodyModel,
             MusicgenMelodyPreTrainedModel,
         )
-
-    try:
-        if not (is_torch_available() and is_torchaudio_available() and is_librosa_available()):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_musicgen_melody import MusicgenMelodyFeatureExtractor
 
 
 else:

@@ -20,16 +20,16 @@ from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 
+from ...audio_utils import chroma_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_librosa_available, is_torchaudio_available, logging
+from ...utils import TensorType, is_torch_available, is_torchaudio_available, logging
 
 
-if is_librosa_available():
-    from librosa.filters import chroma
+if is_torch_available():
+    import torch
 
 if is_torchaudio_available():
-    import torch
     import torchaudio
 
 logger = logging.get_logger(__name__)
@@ -100,7 +100,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         self.chunk_length = chunk_length
         self.n_samples = chunk_length * sampling_rate
         self.sampling_rate = sampling_rate
-        self.chroma_filters = torch.from_numpy(chroma(sr=sampling_rate, n_fft=n_fft, tuning=0, n_chroma=num_chroma))
+        self.chroma_filters = torch.from_numpy(
+            chroma_filter_bank(sampling_rate=sampling_rate, num_frequency_bins=n_fft, tuning=0, num_chroma=num_chroma)
+        )
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft, win_length=n_fft, hop_length=hop_length, power=2, center=True, pad=0, normalized=True
         )
@@ -149,6 +151,8 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             input_sampling_rate (`int`, *optional*, defaults to `44000`):
                 Demucs sampling rate.
         """
+        if input_sampling_rate != self.sampling_rate and not is_torchaudio_available():
+            raise ValueError("")
         # extract "vocals" and "others" sources from audio encoder (demucs) output
         # [batch_size, num_stems, channel_size, audio_length]
         wav = audio[:, stem_indices]
@@ -161,9 +165,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         # resample to model sampling rate
         # not equivalent to julius.resample
-        wav = torchaudio.functional.resample(
-            wav, input_sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
-        )
+        if is_torchaudio_available():
+            wav = torchaudio.functional.resample(
+                wav, input_sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
+            )
 
         # [batch_size, 1, audio_length] -> [batch_size, audio_length]
         wav = wav.squeeze(1)

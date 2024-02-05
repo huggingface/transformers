@@ -25,11 +25,10 @@ import numpy as np
 
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
-    require_librosa,
     require_torch,
     require_torchaudio,
 )
-from transformers.utils.import_utils import is_librosa_available, is_torch_available, is_torchaudio_available
+from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -37,7 +36,6 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 if is_torch_available():
     import torch
 
-if is_torchaudio_available() and is_librosa_available():
     from transformers import MusicgenMelodyFeatureExtractor
 
 
@@ -70,8 +68,6 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 
 @require_torch
-@require_librosa
-@require_torchaudio
 class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -122,12 +118,8 @@ class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torch
-@require_librosa
-@require_torchaudio
 class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = (
-        MusicgenMelodyFeatureExtractor if is_torchaudio_available() and is_librosa_available() else None
-    )
+    feature_extraction_class = MusicgenMelodyFeatureExtractor if is_torch_available() else None
 
     def setUp(self):
         self.feat_extract_tester = MusicgenMelodyFeatureExtractionTester(self)
@@ -191,6 +183,7 @@ class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, un
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    @require_torchaudio
     def test_call_from_demucs(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
