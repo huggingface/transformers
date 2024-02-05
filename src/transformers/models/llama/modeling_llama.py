@@ -367,7 +367,7 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        causal_mask = attention_mask[...,past_seen_tokens:past_seen_tokens + q_len,  : key_states.shape[-2]]
+        causal_mask = attention_mask[..., past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
@@ -652,8 +652,10 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:  # user defined causal mask
-            causal_mask = attention_mask[:,:, past_seen_tokens:past_seen_tokens+q_len, : key_states.shape[-2]]
+        if attention_mask is not None and not torch.all(attention_mask[0,:,:,:] == 1) and q_len!=1:  # user defined causal mask
+            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
+            # this one liner is equivalent to the pad_unpad function
+            causal_mask.mul_(~torch.eq(causal_mask, causal_mask.min()).all(dim=-1)[...,None])
         else:
             causal_mask = None
 
@@ -804,12 +806,15 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        
-        if max_cache_len>self.model.causal_mask.shape[-1]:
-            causal_mask = torch.full((max_cache_len, max_cache_len),fill_value=torch.finfo(self.config.torch_dtype).min,dtype=self.config.torch_dtype)
-            causal_mask = torch.triu(causal_mask,diagonal=1)
+        if max_cache_len > self.model.causal_mask.shape[-1]:
+            causal_mask = torch.full(
+                (max_cache_len, max_cache_len),
+                fill_value=torch.finfo(self.config.torch_dtype).min,
+                dtype=self.config.torch_dtype,
+            )
+            causal_mask = torch.triu(causal_mask, diagonal=1)
             self.model.register_buffer("causal_mask", causal_mask, persistent=False)
-                
+
         for layer in self.model.layers:
             layer.self_attn.past_key_value = cache_cls(
                 self.config, max_batch_size, max_cache_len, device=layer.self_attn.o_proj.weight.device
@@ -921,8 +926,10 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
         dtype = config.torch_dtype if isinstance(config.torch_dtype, torch.dtype) else torch.float32
-        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings),fill_value=torch.finfo(dtype).min)
-        self.register_buffer("causal_mask", torch.triu(causal_mask,diagonal=1), persistent=False)
+        causal_mask = torch.full(
+            (config.max_position_embeddings, config.max_position_embeddings), fill_value=torch.finfo(dtype).min
+        )
+        self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -985,19 +992,23 @@ class LlamaModel(LlamaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-
         # support going beyond `max_position_embedding`
-        if past_key_values_length+seq_length>self.causal_mask.shape[-1]:
-            causal_mask = torch.full((2*self.causal_mask.shape[-1],2*self.causal_mask.shape[-1]),fill_value=torch.finfo(inputs_embeds.dtype).min)
-            self.register_buffer("causal_mask", torch.triu(causal_mask,diagonal=1), persistent=False)
+        if past_key_values_length + seq_length > self.causal_mask.shape[-1]:
+            causal_mask = torch.full(
+                (2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]),
+                fill_value=torch.finfo(inputs_embeds.dtype).min,
+            )
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
             logger.warning(
                 "You are going above the `max_position_embedding` you should set `max_position_embedding` accordingly. This will no longer be supported"
                 " in transformers v4.40"
             )
-                
+
         causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1)
         if attention_mask is not None and attention_mask.dim() == 2:
-            padding_mask = causal_mask[..., : attention_mask.shape[-1]].eq(0.) * attention_mask[:, None, None, :].eq(0.)
+            padding_mask = causal_mask[..., : attention_mask.shape[-1]].eq(0.0) * attention_mask[:, None, None, :].eq(
+                0.0
+            )
             causal_mask[..., : attention_mask.shape[-1]] = causal_mask[..., : attention_mask.shape[-1]].masked_fill(
                 padding_mask, torch.finfo(inputs_embeds.dtype).min
             )
