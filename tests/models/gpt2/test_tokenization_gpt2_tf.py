@@ -10,6 +10,7 @@ from transformers.testing_utils import require_keras_nlp, require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
+
 if is_keras_nlp_available():
     from transformers.models.gpt2 import TFGPT2Tokenizer
 

@@ -531,7 +531,7 @@ aber alle anderen sollten eine Initialisierung wie oben verwenden. Dies ist wie 
 ```py
 def _init_weights(self, module):
     """Initialize the weights"""
-    if isinstnace(module, Wav2Vec2ForPreTraining):
+    if isinstance(module, Wav2Vec2ForPreTraining):
         module.project_hid.reset_parameters()
         module.project_q.reset_parameters()
         module.project_hid._is_hf_initialized = True

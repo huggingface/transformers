@@ -127,7 +127,7 @@ class LlamaRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -137,7 +137,7 @@ class LlamaRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -165,7 +165,7 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
         t = t / self.scaling_factor
 
         freqs = torch.outer(t, self.inv_freq)
@@ -189,10 +189,10 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -291,8 +291,8 @@ class LlamaAttention(nn.Module):
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
 
@@ -506,7 +506,6 @@ class LlamaFlashAttention2(LlamaAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -529,8 +528,10 @@ class LlamaFlashAttention2(LlamaAttention):
 
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -701,6 +702,7 @@ class LlamaSdpaAttention(LlamaAttention):
         if past_key_value is not None:
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         if past_key_value is not None:
@@ -715,6 +717,13 @@ class LlamaSdpaAttention(LlamaAttention):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -993,6 +1002,13 @@ class LlamaModel(LlamaPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         past_key_values_length = 0
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
@@ -1030,13 +1046,6 @@ class LlamaModel(LlamaPreTrainedModel):
 
         # embed positions
         hidden_states = inputs_embeds
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1153,8 +1162,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, LlamaForCausalLM
 
-        >>> model = LlamaForCausalLM.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1231,7 +1240,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
 
             # Keep only the unprocessed tokens:
             # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusivelly passed as part of the cache (e.g. when passing input_embeds as
+            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
             # input)
             if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
                 input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
@@ -1361,9 +1370,10 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
 

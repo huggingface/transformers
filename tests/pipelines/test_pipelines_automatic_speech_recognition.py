@@ -298,6 +298,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @require_torch
+    @slow
+    def test_torch_large_with_input_features(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-audio/wav2vec2-bert-CV16-en",
+            framework="pt",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": ""})
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
+
     @slow
     @require_torch
     @slow
@@ -673,6 +690,50 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ),
             },
         )
+
+    @slow
+    @require_torch
+    def test_whisper_word_timestamps_batched(self):
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model="openai/whisper-tiny",
+            chunk_length_s=3,
+            return_timestamps="word",
+        )
+        data = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        sample = data[0]["audio"]
+
+        # not the same output as test_simple_whisper_asr because of chunking
+        EXPECTED_OUTPUT = {
+            "text": " Mr. Quilder is the apostle of the middle classes and we are glad to welcome his gospel.",
+            "chunks": [
+                {"text": " Mr.", "timestamp": (0.48, 0.96)},
+                {"text": " Quilder", "timestamp": (0.96, 1.24)},
+                {"text": " is", "timestamp": (1.24, 1.5)},
+                {"text": " the", "timestamp": (1.5, 1.72)},
+                {"text": " apostle", "timestamp": (1.72, 1.98)},
+                {"text": " of", "timestamp": (1.98, 2.32)},
+                {"text": " the", "timestamp": (2.32, 2.5)},
+                {"text": " middle", "timestamp": (2.5, 2.68)},
+                {"text": " classes", "timestamp": (2.68, 3.2)},
+                {"text": " and", "timestamp": (3.2, 3.56)},
+                {"text": " we", "timestamp": (3.56, 3.68)},
+                {"text": " are", "timestamp": (3.68, 3.8)},
+                {"text": " glad", "timestamp": (3.8, 4.1)},
+                {"text": " to", "timestamp": (4.1, 4.34)},
+                {"text": " welcome", "timestamp": (4.3, 4.6)},
+                {"text": " his", "timestamp": (4.6, 4.94)},
+                {"text": " gospel.", "timestamp": (4.94, 5.82)},
+            ],
+        }
+
+        # batch size 1: copy the audio sample since pipeline consumes it
+        output = pipe(sample.copy(), batch_size=1)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
+
+        # batch size 2: input audio is chunked into smaller pieces so it's testing batching
+        output = pipe(sample, batch_size=2)
+        self.assertDictEqual(output, EXPECTED_OUTPUT)
 
     @require_torch
     @slow
@@ -1091,7 +1152,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_whisper_longform(self):
         # fmt: off
-        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out of fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!"""
+        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."""
         # fmt: on
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -1390,6 +1451,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
+        # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
         out = pipe(
@@ -1399,11 +1461,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             out,
             {
-                "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.02)},
-                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
-                ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+                "chunks": [{"timestamp": (0.58, None), "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं"}],
             },
         )
 

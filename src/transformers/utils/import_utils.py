@@ -24,7 +24,7 @@ import subprocess
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
 from typing import Any, Tuple, Union
@@ -64,8 +64,12 @@ USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
+# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
 # This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
+
+ACCELERATE_MIN_VERSION = "0.21.0"
+FSDP_MIN_VERSION = "1.12.0"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
@@ -91,6 +95,7 @@ except importlib.metadata.PackageNotFoundError:
     except importlib.metadata.PackageNotFoundError:
         _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
+_g2p_en_available = _is_package_available("g2p_en")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -354,6 +359,14 @@ def is_torch_fp16_available_on_device(device):
     try:
         x = torch.zeros(2, 2, dtype=torch.float16).to(device)
         _ = x @ x
+
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
+
     except:  # noqa: E722
         # TODO: more precise exception matching, if possible.
         # most backends should return `RuntimeError` however this is not guaranteed.
@@ -439,6 +452,10 @@ def is_flax_available():
 
 def is_ftfy_available():
     return _ftfy_available
+
+
+def is_g2p_en_available():
+    return _g2p_en_available
 
 
 @lru_cache()
@@ -681,13 +698,13 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available(min_version: str = "0.21.0"):
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
     if min_version is not None:
         return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
     return _accelerate_available
 
 
-def is_fsdp_available(min_version: str = "1.12.0"):
+def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
     return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
 
 
@@ -1057,6 +1074,12 @@ install python-Levenshtein`. Please note that you may need to restart your runti
 """
 
 # docstyle-ignore
+G2P_EN_IMPORT_ERROR = """
+{0} requires the g2p-en library but it was not found in your environment. You can install it with pip:
+`pip install g2p-en`. Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
@@ -1097,7 +1120,6 @@ SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
 `pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
-
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
@@ -1154,8 +1176,9 @@ PYCTCDECODE_IMPORT_ERROR = """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
-{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`. Please note that you may need to restart your runtime after installation.
+{0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
+You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
+runtime after installation.
 """
 
 # docstyle-ignore
@@ -1221,6 +1244,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
+        ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
@@ -1286,40 +1310,6 @@ class DummyObject(type):
         if key.startswith("_") and key != "_from_config":
             return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    warnings.warn(
-        "The method `torch_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    warnings.warn(
-        "The method `tf_required` is deprecated and will be removed in v4.36. Use `requires_backends` instead.",
-        FutureWarning,
-    )
-
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):

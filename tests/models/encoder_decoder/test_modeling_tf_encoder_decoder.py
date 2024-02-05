@@ -509,7 +509,7 @@ class TFEncoderDecoderMixin:
         tf_outputs = tf_model(tf_inputs_dict)
 
         # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `tf.keras.losses.Reduction.NONE`)
+        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
         # Change it here to a scalar to match PyTorch models' loss
         tf_loss = getattr(tf_outputs, "loss", None)
         if tf_loss is not None:
@@ -1071,9 +1071,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
         encoder = TFBertModel(config.encoder)
-        encoder.build()
+        encoder.build_in_name_scope()
         decoder = TFBertLMHeadModel(config.decoder)
-        decoder.build()
+        decoder.build_in_name_scope()
 
         encoder_decoder_orig = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 

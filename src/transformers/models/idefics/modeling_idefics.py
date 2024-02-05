@@ -477,7 +477,7 @@ class IdeficsEmbedding(torch.nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -487,7 +487,7 @@ class IdeficsEmbedding(torch.nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -687,6 +687,13 @@ class IdeficsAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
 
         attn_output = nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1485,8 +1492,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         ```python
         >>> from transformers import AutoTokenizer, IdeficsForVisionText2Text
 
-        >>> model = IdeficsForVisionText2Text.from_pretrained(PATH_TO_CONVERTED_WEIGHTS)
-        >>> tokenizer = AutoTokenizer.from_pretrained(PATH_TO_CONVERTED_TOKENIZER)
+        >>> model = IdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b")
+        >>> tokenizer = AutoTokenizer.from_pretrained("HuggingFaceM4/idefics-9b")
 
         >>> prompt = "Hey, are you consciours? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

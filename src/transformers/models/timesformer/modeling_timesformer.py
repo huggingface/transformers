@@ -305,7 +305,7 @@ class TimesformerLayer(nn.Module):
         ]  # stochastic depth decay rule
         drop_path_rate = drop_path_rates[layer_index]
 
-        self.drop_path = TimeSformerDropPath(config.drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = TimeSformerDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimesformerIntermediate(config)
         self.output = TimesformerOutput(config)

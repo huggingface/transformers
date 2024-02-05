@@ -292,6 +292,16 @@
         title: ConvBERT
       - local: model_doc/cpm
         title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
+      - local: model_doc/dialogpt
+        title: DialoGPT
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -305,6 +315,18 @@
         title: ConvNeXT
       - local: model_doc/convnextv2
         title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -337,7 +359,16 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/data2vec
+        title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       title: マルチモーダルモデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
+      title: 強化学習モデル
     - isExpanded: false
       sections:
       - local: model_doc/autoformer

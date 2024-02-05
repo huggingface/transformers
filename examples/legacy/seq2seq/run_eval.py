@@ -107,7 +107,7 @@ def run_generate(verbose=True):
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
