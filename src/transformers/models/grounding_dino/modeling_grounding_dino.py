@@ -1902,44 +1902,6 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_proposal_pos_embed(self, proposals: torch.FloatTensor) -> torch.FloatTensor:
-        """Get the position embedding of the proposals."""
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-        # batch_size, num_queries
-        pos_x = proposals[:, :, 0] * scale
-        pos_y = proposals[:, :, 1] * scale
-        # batch_size, num_queries, num_pos_feats
-        pos_x = pos_x[:, :, None] / dim_t
-        pos_y = pos_y[:, :, None] / dim_t
-        # batch_size, num_queries, num_pos_feats
-        pos_x = torch.stack((pos_x[:, :, 0::2].sin(), pos_x[:, :, 1::2].cos()), dim=3).flatten(2)
-        pos_y = torch.stack((pos_y[:, :, 0::2].sin(), pos_y[:, :, 1::2].cos()), dim=3).flatten(2)
-
-        num_coordinates = proposals.size(-1)
-        if num_coordinates == 2:
-            # batch_size, num_queries, num_pos_feats * 2
-            pos = torch.cat((pos_y, pos_x), dim=2)
-        elif num_coordinates == 4:
-            w_embed = proposals[:, :, 2] * scale
-            pos_w = w_embed[:, :, None] / dim_t
-            # batch_size, num_queries, num_pos_feats
-            pos_w = torch.stack((pos_w[:, :, 0::2].sin(), pos_w[:, :, 1::2].cos()), dim=3).flatten(2)
-
-            h_embed = proposals[:, :, 3] * scale
-            pos_h = h_embed[:, :, None] / dim_t
-            # batch_size, num_queries, num_pos_feats
-            pos_h = torch.stack((pos_h[:, :, 0::2].sin(), pos_h[:, :, 1::2].cos()), dim=3).flatten(2)
-            # batch_size, num_queries, num_pos_feats * 4
-            pos = torch.cat((pos_y, pos_x, pos_w, pos_h), dim=2)
-        else:
-            raise ValueError("Unknown proposals shape(-1):{}".format(proposals.size(-1)))
-        return pos
-
     def forward(
         self,
         inputs_embeds,
@@ -2016,11 +1978,11 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
                 reference_points_input = (
                     reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
+            elif reference_points.shape[-1] != 2:
+                raise ValueError("Reference points' last dimension must be of size 2")
             else:
-                if reference_points.shape[-1] != 2:
-                    raise ValueError("Reference points' last dimension must be of size 2")
                 reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
-            query_pos = self.get_proposal_pos_embed(reference_points_input[:, :, 0, :])
+            query_pos = get_sine_pos_embed(reference_points_input[:, :, 0, :], num_pos_feats=self.config.d_model // 2)
             query_pos = self.reference_points_head(query_pos)
 
             # In original implementation they apply layer norm before outputting intermediate hidden states
@@ -2275,23 +2237,6 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         valid_ratio_width = valid_width.float() / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
-
-    def get_proposal_pos_embed(self, proposals):
-        """Get the position embedding of the proposals."""
-
-        num_pos_feats = self.config.d_model // 2
-        temperature = 10000
-        scale = 2 * math.pi
-
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
-        # batch_size, num_queries, 4
-        proposals = proposals.sigmoid() * scale
-        # batch_size, num_queries, 4, 128
-        pos = proposals[:, :, :, None] / dim_t
-        # batch_size, num_queries, 4, 64, 2 -> batch_size, num_queries, 512
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
-        return pos
 
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.

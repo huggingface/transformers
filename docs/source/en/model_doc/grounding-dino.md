@@ -24,23 +24,33 @@ The abstract from the paper is the following:
 
 *In this paper, we present an open-set object detector, called Grounding DINO, by marrying Transformer-based detector DINO with grounded pre-training, which can detect arbitrary objects with human inputs such as category names or referring expressions. The key solution of open-set object detection is introducing language to a closed-set detector for open-set concept generalization. To effectively fuse language and vision modalities, we conceptually divide a closed-set detector into three phases and propose a tight fusion solution, which includes a feature enhancer, a language-guided query selection, and a cross-modality decoder for cross-modality fusion. While previous works mainly evaluate open-set object detection on novel categories, we propose to also perform evaluations on referring expression comprehension for objects specified with attributes. Grounding DINO performs remarkably well on all three settings, including benchmarks on COCO, LVIS, ODinW, and RefCOCO/+/g. Grounding DINO achieves a 52.5 AP on the COCO detection zero-shot transfer benchmark, i.e., without any training data from COCO. It sets a new record on the ODinW zero-shot benchmark with a mean 26.1 AP.*
 
-Tips:
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
+alt="drawing" width="600"/>
+
+<small> Grounding DINO overview. Taken from the <a href="https://arxiv.org/abs/2303.05499">original paper</a>. </small>
+
+This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [nielsr](https://huggingface.co/nielsr).
+The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
+
+## Usage tips
 
 - One can use [`GroundingDinoProcessor`] to prepare image-text pairs for the model.
 - To separate classes in the text use a period e.g. "a cat. a dog."
-- When using multiple classes use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs
+- When using multiple classes, use `post_process_grounded_object_detection` from [`GroundingDinoProcessor`] to post process outputs.
+
+Here's how to use the model for zero-shot object detection:
 
 ```python
 import requests
 
 import torch
 from PIL import Image
-from transformers import AutoModelForObjectDetection, AutoProcessor
+from transformers import AutoProcessor, AutoModelForObjectDetection, 
 
 model_id = "EduardoPacheco/grounding-dino-tiny"
 
-model = AutoModelForObjectDetection.from_pretrained(model_id).to(device)
 processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForObjectDetection.from_pretrained(model_id).to(device)
 
 def load_image(url):
     return Image.open(requests.get(url, stream=True).raw)
@@ -61,14 +71,6 @@ results = processor.post_process_grounded_object_detection(
     target_sizes=[image.size[::-1]]
 )
 ```
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/grouding_dino_architecture.png"
-alt="drawing" width="600"/>
-
-<small> Grounding DINO overview. Taken from the <a href="https://arxiv.org/abs/2303.05499">original paper</a>. </small>
-
-This model was contributed by [EduardoPacheco](https://huggingface.co/EduardoPacheco) and [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/IDEA-Research/GroundingDINO).
 
 
 ## GroundingDinoImageProcessor
