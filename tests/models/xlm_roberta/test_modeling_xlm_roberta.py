@@ -18,10 +18,6 @@ import unittest
 import pytest
 
 from transformers import XLMRobertaConfig, is_torch_available
-from transformers.models.xlm_roberta.modeling_xlm_roberta import (
-    XLMRobertaEmbeddings,
-    create_position_ids_from_input_ids,
-)
 from transformers.testing_utils import (
     require_flash_attn,
     require_sentencepiece,
@@ -49,6 +45,10 @@ if is_torch_available():
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
         XLMRobertaModel,
+    )
+    from transformers.models.xlm_roberta.modeling_xlm_roberta import (
+        XLMRobertaEmbeddings,
+        create_position_ids_from_input_ids,
     )
 
 
