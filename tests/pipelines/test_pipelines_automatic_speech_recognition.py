@@ -1334,15 +1334,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_chunk_iterator(self):
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         inputs = torch.arange(100).long()
-        outs = list(
-            chunk_iter(
-                inputs,
-                feature_extractor,
-                100,
-                0,
-                0,
-            )
-        )
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0))
+
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
