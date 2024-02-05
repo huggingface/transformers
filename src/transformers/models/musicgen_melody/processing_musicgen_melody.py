@@ -148,7 +148,7 @@ class MusicgenMelodyProcessor(ProcessorMixin):
         return audio_values
 
     def get_unconditional_inputs(self, num_samples=1, return_tensors="pt"):
-        """# TODO: update,
+        """
         Helper function to get null inputs for unconditional generation, enabling the model to be used without the
         feature extractor or tokenizer.
 
@@ -156,15 +156,14 @@ class MusicgenMelodyProcessor(ProcessorMixin):
             num_samples (int, *optional*):
                 Number of audio samples to unconditionally generate.
 
-
         Example:
         ```python
-        >>> from transformers import MusicgenMelodyForConditionalGeneration
+        >>> from transformers import MusicgenMelodyForConditionalGeneration, MusicgenMelodyProcessor
 
         >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("facebook/musicgen-melody")
 
         >>> # get the unconditional (or 'null') inputs for the model
-        >>> unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
+        >>> unconditional_inputs = MusicgenMelodyProcessor.from_pretrained("facebook/musicgen-melody").get_unconditional_inputs(num_samples=1)
         >>> audio_samples = model.generate(**unconditional_inputs, max_new_tokens=256)
         ```"""
         inputs = self.tokenizer([""] * num_samples, return_tensors=return_tensors, return_attention_mask=True)
