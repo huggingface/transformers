@@ -16,6 +16,8 @@
 
 import unittest
 
+from datasets import load_dataset
+
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -78,6 +80,11 @@ class SegGptImageProcessingTester(unittest.TestCase):
         )
 
 
+def prepare_mask():
+    ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
+    return ds[0]["mask"].convert("L")
+
+
 @require_torch
 @require_vision
 class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
@@ -111,3 +118,14 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(image_processing.num_labels, num_labels)
         self.assertEqual(len(image_processing.palette), num_labels + 1)
         self.assertEqual(image_processing.palette[0], (0, 0, 0))
+
+    def test_mask_equivalence(self):
+        image_processor = SegGptImageProcessor()
+
+        mask_binary = prepare_mask()
+        mask_rgb = mask_binary.convert("RGB")
+
+        inputs_binary = image_processor(images=None, prompt_masks=mask_binary, return_tensors="pt")
+        inputs_rgb = image_processor(images=None, prompt_masks=mask_rgb, return_tensors="pt")
+
+        self.assertTrue((inputs_binary["prompt_masks"] == inputs_rgb["prompt_masks"]).all().item())

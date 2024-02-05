@@ -285,7 +285,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_mask:
+        if is_mask and images[0].ndim == 2:
             if self.num_labels is not None:
                 images = [mask_to_rgb(image, self.palette) for image in images]
             else:

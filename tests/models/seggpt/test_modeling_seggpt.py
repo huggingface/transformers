@@ -252,7 +252,6 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
 def prepare_img():
     ds = load_dataset("EduardoPacheco/seggpt-example-data")["train"]
     images = [image.convert("RGB") for image in ds["image"]]
@@ -278,7 +277,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         images, masks = prepare_img()
         input_image = images[1]
         prompt_image = images[0]
-        prompt_mask = masks[0].convert("L")
+        prompt_mask = masks[0]
 
         inputs = image_processor(
             images=input_image, prompt_images=prompt_image, prompt_masks=prompt_mask, return_tensors="pt"
@@ -350,7 +349,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
         images, masks = prepare_img()
         input_images = [images[1]] * 2
         prompt_images = [images[0], images[2]]
-        prompt_masks = [masks[0].convert("L"), masks[2].convert("L")]
+        prompt_masks = [masks[0], masks[2]]
 
         inputs = image_processor(
             images=input_images, prompt_images=prompt_images, prompt_masks=prompt_masks, return_tensors="pt"
