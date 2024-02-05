@@ -129,7 +129,7 @@ python run_classification.py \
     --num_train_epochs 15 \
     --output_dir /tmp/${dataset}_${subset}/ 
 ```
- It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explictly remove the "unused" split from the dataset, since it is not used for classification.
+ It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explicitly remove the "unused" split from the dataset, since it is not used for classification.
 
 ### Mixed precision training
 

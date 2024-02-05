@@ -51,7 +51,8 @@ The methods and tools covered in this guide can be classified based on the effec
 | [Data preloading](#data-preloading)                        | Yes                     | No                           |
 | [DeepSpeed Zero](#deepspeed-zero)                          | No                      | Yes                          |
 | [torch.compile](#using-torchcompile)                       | Yes                     | No                           |
-
+| [Parameter-Efficient Fine Tuning (PEFT)](#peft)            | No                      | Yes                          |
+ 
 <Tip>
 
 Note: when using mixed precision with a small model and a large batch size, there will be some memory savings but with a 
@@ -237,7 +238,7 @@ You can speedup the training throughput by using Flash Attention 2 integration i
 The most common optimizer used to train transformer models is Adam or AdamW (Adam with weight decay). Adam achieves 
 good convergence by storing the rolling average of the previous gradients; however, it adds an additional memory 
 footprint of the order of the number of model parameters. To remedy this, you can use an alternative optimizer. 
-For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed, `adamw_apex_fused` will give you the 
+For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed for NVIDIA GPUs, or [ROCmSoftwarePlatform/apex](https://github.com/ROCmSoftwarePlatform/apex) for AMD GPUs, `adamw_apex_fused` will give you the
 fastest training experience among all supported AdamW optimizers.
 
 [`Trainer`] integrates a variety of optimizers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
@@ -399,6 +400,25 @@ Choose which backend to use by specifying it via `torch_compile_backend` in the 
 * `dynamo.optimize("ipex")` -  Uses IPEX for inference on CPU.  [Read more](https://github.com/intel/intel-extension-for-pytorch)
 
 For an example of using `torch.compile` with 🤗 Transformers, check out this [blog post on fine-tuning a BERT model for Text Classification using the newest PyTorch 2.0 features](https://www.philschmid.de/getting-started-pytorch-2-0-transformers)
+
+## Using 🤗 PEFT
+
+[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) methods freeze the pretrained model parameters during fine-tuning and add a small number of trainable parameters (the adapters) on top of it.
+
+As a result the [memory associated to the optimizer states and gradients](https://huggingface.co/docs/transformers/model_memory_anatomy#anatomy-of-models-memory) are greatly reduced.
+
+For example with a vanilla AdamW, the memory requirement for the optimizer state would be:
+* fp32 copy of parameters: 4 bytes/param
+* Momentum: 4 bytes/param
+* Variance: 4 bytes/param
+
+Suppose a model with 7B parameters and 200 millions parameters injected with [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora).
+
+The memory requirement for the optimizer state of the plain model would be 12 * 7 = 84 GB (assuming 7B trainable parameters).
+
+Adding Lora increases slightly the memory associated to the model weights and substantially decreases memory requirement for the optimizer state to 12 * 0.2 = 2.4GB.
+
+Read more about PEFT and its detailed usage in [the PEFT documentation](https://huggingface.co/docs/peft/) or [PEFT repository](https://github.com/huggingface/peft).
 
 ## Using 🤗 Accelerate
 

@@ -840,10 +840,12 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         num_queries = int((model.config.vision_config.image_size / model.config.vision_config.patch_size) ** 2)
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
-        expected_slice_logits = torch.tensor([[-21.4139, -21.6130], [-19.0084, -19.5491], [-20.9592, -21.3830]])
+        expected_slice_logits = torch.tensor(
+            [[-21.413497, -21.612638], [-19.008193, -19.548841], [-20.958896, -21.382694]]
+        ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
         expected_slice_boxes = torch.tensor(
-            [[0.2413, 0.0519, 0.4533], [0.1395, 0.0457, 0.2507], [0.2330, 0.0505, 0.4277]],
+            [[0.241309, 0.051896, 0.453267], [0.139474, 0.045701, 0.250660], [0.233022, 0.050479, 0.427671]],
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 

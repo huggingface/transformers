@@ -23,9 +23,9 @@ The abstract from the paper is the following:
 This research addresses temporal video grounding (TVG), which is the process of pinpointing the start and end times of specific events in a long video, as described by a text sentence. Text-visual prompting (TVP), is proposed to enhance TVG. TVP involves integrating specially designed patterns, known as 'prompts', into both the visual (image-based) and textual (word-based) input components of a TVG model. These prompts provide additional spatial-temporal context, improving the model's ability to accurately determine event timings in the video. The approach employs 2D visual inputs in place of 3D ones. Although 3D inputs offer more spatial-temporal detail, they are also more time-consuming to process. The use of 2D inputs with the prompting method aims to provide similar levels of context and accuracy more efficiently.
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/tvp_architecture.png"
-alt="drawing" width="600"/> 
+alt="drawing" width="600"/>
 
-<small> TVP architecture. Taken from the <a href="https://arxiv.org/abs/2209.14156">original paper.</a> </small>
+<small> TVP architecture. Taken from the <a href="https://arxiv.org/abs/2303.04995">original paper.</a> </small>
 
 This model was contributed by [Jiqing Feng](https://huggingface.co/Jiqing). The original code can be found [here](https://github.com/intel/TVP).
 

@@ -16,7 +16,6 @@
 
 
 import copy
-import inspect
 import tempfile
 import unittest
 
@@ -34,6 +33,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -478,10 +478,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     def test_save_load_fast_init_to_base(self):
         pass
 
-    @unittest.skip(reason="The speech encoder doesn't support head masking")
-    def test_generate_with_head_masking(self):
-        pass
-
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
@@ -614,9 +610,17 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    @unittest.skip(
+        reason="In training model, the first speech encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 @require_torch
-class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4TModelWithTextInputTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -636,6 +640,19 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         else ()
     )
     all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "automatic-speech-recognition": SeamlessM4TForSpeechToText,
+            "conversational": SeamlessM4TForTextToText,
+            "feature-extraction": SeamlessM4TModel,
+            "summarization": SeamlessM4TForTextToText,
+            "text-to-audio": SeamlessM4TForTextToSpeech,
+            "text2text-generation": SeamlessM4TForTextToText,
+            "translation": SeamlessM4TForTextToText,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
@@ -698,43 +715,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
-    def test_generate_with_head_masking(self):
-        """Test designed for encoder-decoder models to ensure the attention head masking is used."""
-        attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
-        for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-
-            model = model_class(config).to(torch_device).eval()
-
-            head_masking = {
-                "head_mask": torch.zeros(config.encoder_layers, config.encoder_attention_heads, device=torch_device),
-                "decoder_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-                "cross_attn_head_mask": torch.zeros(
-                    config.decoder_layers, config.decoder_attention_heads, device=torch_device
-                ),
-            }
-
-            signature = inspect.signature(model.forward)
-            # We want to test only models where encoder/decoder head masking is implemented
-            if not set(head_masking.keys()) < {*signature.parameters.keys()}:
-                continue
-
-            for attn_name, (name, mask) in zip(attention_names, head_masking.items()):
-                out = model.generate(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    num_beams=1,
-                    output_attentions=True,
-                    return_dict_in_generate=True,
-                    remove_invalid_values=True,
-                    **{name: mask},
-                )
-                # We check the state of decoder_attentions and cross_attentions just from the last step
-                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-                self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-
     @unittest.skip(reason="SeamlessM4TModel can take input_ids or input_features")
     def test_forward_signature(self):
         pass
@@ -769,6 +749,12 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        reason="In training model, the first encoder layer is sometimes skipped. Training is not supported yet, so the test is ignored."
+    )
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
 

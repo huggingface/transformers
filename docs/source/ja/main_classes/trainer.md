@@ -196,7 +196,7 @@ _python_、_numpy_、および _pytorch_ の RNG 状態は、そのチェック�
 [`DistributedDataParallel`](https://pytorch.org/docs/stable/generated/torch.nn.Parallel.DistributedDataParallel.html) を使用して GPU のサブセットのみを使用する場合、使用する GPU の数を指定するだけです。 。たとえば、GPU が 4 つあるが、最初の 2 つを使用したい場合は、次のようにします。
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2  trainer-program.py ...
+torchrun --nproc_per_node=2  trainer-program.py ...
 ```
 
 [`accelerate`](https://github.com/huggingface/accelerate) または [`deepspeed`](https://github.com/microsoft/DeepSpeed) がインストールされている場合は、次を使用して同じことを達成することもできます。の一つ：
@@ -223,7 +223,7 @@ deepspeed --num_gpus 2 trainer-program.py ...
 たとえば、4 つの GPU (0、1、2、3) があるとします。物理 GPU 0 と 2 のみで実行するには、次のようにします。
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=0,2 torchrun trainer-program.py ...
 ```
 
 したがって、pytorch は 2 つの GPU のみを認識し、物理 GPU 0 と 2 はそれぞれ `cuda:0` と `cuda:1` にマッピングされます。
@@ -231,7 +231,7 @@ CUDA_VISIBLE_DEVICES=0,2 python -m torch.distributed.launch trainer-program.py .
 順序を変更することもできます。
 
 ```bash
-CUDA_VISIBLE_DEVICES=2,0 python -m torch.distributed.launch trainer-program.py ...
+CUDA_VISIBLE_DEVICES=2,0 torchrun trainer-program.py ...
 ```
 
 ここでは、物理 GPU 0 と 2 がそれぞれ`cuda:1`と`cuda:0`にマッピングされています。
@@ -253,7 +253,7 @@ CUDA_VISIBLE_DEVICES= python trainer-program.py ...
 
 ```bash
 export CUDA_VISIBLE_DEVICES=0,2
-python -m torch.distributed.launch trainer-program.py ...
+torchrun trainer-program.py ...
 ```
 
 ただし、この方法では、以前に環境変数を設定したことを忘れて、なぜ間違った GPU が使用されているのか理解できない可能性があるため、混乱を招く可能性があります。したがって、このセクションのほとんどの例で示されているように、同じコマンド ラインで特定の実行に対してのみ環境変数を設定するのが一般的です。

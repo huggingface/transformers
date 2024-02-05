@@ -15,7 +15,6 @@
 """ PyTorch SpeechT5 model."""
 
 import math
-import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -314,8 +313,8 @@ class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.int64).float() * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.int64).float().unsqueeze(1) * emb.unsqueeze(0)
         emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
         if embedding_dim % 2 == 1:
             # zero pad
@@ -404,7 +403,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
     def __init__(self, dropout, dim, max_len=5000):
         pe = torch.zeros(max_len, dim)
         position = torch.arange(0, max_len).unsqueeze(1)
-        div_term = torch.exp((torch.arange(0, dim, 2, dtype=torch.float) * -(math.log(10000.0) / dim)))
+        div_term = torch.exp((torch.arange(0, dim, 2, dtype=torch.int64).float() * -(math.log(10000.0) / dim)))
         pe[:, 0::2] = torch.sin(position.float() * div_term)
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
@@ -665,13 +664,11 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
         )
 
         self.final_layer = nn.Linear(config.speech_decoder_prenet_units, config.hidden_size)
-
         self.encode_positions = SpeechT5ScaledPositionalEncoding(
             config.positional_dropout,
             config.hidden_size,
             config.max_speech_positions,
         )
-
         self.speaker_embeds_layer = nn.Linear(config.speaker_embedding_dim + config.hidden_size, config.hidden_size)
 
     def _consistent_dropout(self, inputs_embeds, p):
@@ -696,9 +693,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
 
         if speaker_embeddings is not None:
             speaker_embeddings = nn.functional.normalize(speaker_embeddings)
-            speaker_embeddings = speaker_embeddings.unsqueeze(1)
-            speaker_embeddings = speaker_embeddings.expand(-1, inputs_embeds.size(1), -1)
-            speaker_embeddings = speaker_embeddings.repeat(inputs_embeds.size(0), 1, 1)
+            speaker_embeddings = speaker_embeddings.unsqueeze(1).expand(-1, inputs_embeds.size(1), -1)
             inputs_embeds = torch.cat([inputs_embeds, speaker_embeddings], dim=-1)
             inputs_embeds = nn.functional.relu(self.speaker_embeds_layer(inputs_embeds))
 
@@ -1570,11 +1565,11 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -2704,12 +2699,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if stop_labels is not None:
-            warnings.warn(
-                "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
-
         if labels is not None:
             if decoder_input_values is None:
                 decoder_input_values = shift_spectrograms_right(labels, self.config.reduction_factor)
@@ -2832,6 +2821,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch_size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
@@ -2918,6 +2917,16 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 `torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.decoder_attention_heads,
                 output_sequence_length, input_sequence_length)` -- The outputs of the decoder's cross-attention layers.
         """
+        if speaker_embeddings is not None:
+            batch_size = input_ids.size(0)
+            if speaker_embeddings.size(0) != batch_size:
+                if speaker_embeddings.size(0) == 1:
+                    speaker_embeddings = speaker_embeddings.repeat(batch_size, 1)
+                else:
+                    raise ValueError(
+                        "The first dimension of speaker_embeddings must be either 1 or the same as batch size."
+                    )
+
         return _generate_speech(
             self,
             input_ids,
@@ -3034,12 +3043,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if stop_labels is not None:
-            warnings.warn(
-                "The argument `stop_labels` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
 
         if labels is not None:
             if decoder_input_values is None:

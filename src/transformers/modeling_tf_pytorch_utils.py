@@ -57,7 +57,7 @@ def convert_tf_weight_name_to_pt_weight_name(
           transposed with regards to each other
     """
     if name_scope is not None:
-        if not tf_name.startswith(name_scope):
+        if not tf_name.startswith(name_scope) and "final_logits_bias" not in tf_name:
             raise ValueError(
                 f"Weight name {tf_name} does not start with name_scope {name_scope}. This is an internal error "
                 "in Transformers, so (unless you were doing something really evil) please open an issue to report it!"
@@ -167,6 +167,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         import tensorflow as tf  # noqa: F401
         import torch  # noqa: F401
         from safetensors.torch import load_file as safe_load_file  # noqa: F401
+
+        from .pytorch_utils import is_torch_greater_or_equal_than_1_13  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in TensorFlow, requires both PyTorch and TensorFlow to be installed. Please see "
@@ -186,7 +188,8 @@ def load_pytorch_checkpoint_in_tf2_model(
         if pt_path.endswith(".safetensors"):
             state_dict = safe_load_file(pt_path)
         else:
-            state_dict = torch.load(pt_path, map_location="cpu")
+            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            state_dict = torch.load(pt_path, map_location="cpu", **weights_only_kwarg)
 
         pt_state_dict.update(state_dict)
 
@@ -257,7 +260,6 @@ def load_pytorch_state_dict_in_tf2_model(
     """Load a pytorch state_dict in a TF 2.0 model. pt_state_dict can be either an actual dict or a lazy-loading
     safetensors archive created with the safe_open() function."""
     import tensorflow as tf
-    from keras import backend as K
 
     if tf_inputs is None:
         tf_inputs = tf_model.dummy_inputs
@@ -318,7 +320,14 @@ def load_pytorch_state_dict_in_tf2_model(
             name_scope=_prefix,
         )
         if tf_to_pt_weight_rename is not None:
-            name = tf_to_pt_weight_rename(name)
+            aliases = tf_to_pt_weight_rename(name)  # Is a tuple to account for possible name aliasing
+            for alias in aliases:  # The aliases are in priority order, take the first one that matches
+                if alias in tf_keys_to_pt_keys:
+                    name = alias
+                    break
+            else:
+                # If none of the aliases match, just use the first one (it'll be reported as missing)
+                name = aliases[0]
 
         # Find associated numpy array in pytorch model state dict
         if name not in tf_keys_to_pt_keys:
@@ -350,7 +359,7 @@ def load_pytorch_state_dict_in_tf2_model(
 
         tf_loaded_numel += tensor_size(array)
 
-        K.set_value(symbolic_weight, array)
+        symbolic_weight.assign(tf.cast(array, symbolic_weight.dtype))
         del array  # Immediately free memory to keep peak usage as low as possible
         all_pytorch_weights.discard(name)
 

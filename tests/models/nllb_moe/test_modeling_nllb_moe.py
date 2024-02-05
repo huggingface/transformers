@@ -348,10 +348,6 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(model(**input_dict)["encoder_router_logits"][1])
         self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
 
-    @unittest.skip("Test does not fail individually but fails on the CI @ArthurZucker looking into it")
-    def test_assisted_decoding_sample(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece

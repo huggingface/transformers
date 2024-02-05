@@ -211,7 +211,7 @@ class TFAutoModelTest(unittest.TestCase):
         config = copy.deepcopy(model.config)
         config.architectures = ["FunnelBaseModel"]
         model = TFAutoModel.from_config(config)
-        model.build()
+        model.build_in_name_scope()
 
         self.assertIsInstance(model, TFFunnelBaseModel)
 
@@ -249,7 +249,7 @@ class TFAutoModelTest(unittest.TestCase):
                     config = NewModelConfig(**tiny_config.to_dict())
 
                     model = auto_class.from_config(config)
-                    model.build()
+                    model.build_in_name_scope()
 
                     self.assertIsInstance(model, TFNewModel)
 

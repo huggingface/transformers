@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Mod
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import prune_linear_layer
 from ...utils import logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_tvp import TvpConfig
 
 
@@ -61,8 +61,8 @@ class TvpVideoGroundingOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 class TvpLoss(nn.Module):
@@ -148,7 +148,7 @@ class TvpLoss(nn.Module):
 class TvpVisionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.backbone = load_backbone(config)
         self.grid_encoder_conv = nn.Conv2d(
             config.backbone_config.hidden_sizes[-1],
             config.hidden_size,
@@ -606,12 +606,15 @@ class TvpFrameDownPadPrompter(nn.Module):
 
     def forward(self, pixel_values):
         if self.visual_prompter_apply != "add":
-            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            visual_prompt_mask = torch.ones(
+                [self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device
+            )
             visual_prompt_mask[self.max_img_size - self.visual_prompt_size : self.max_img_size, :] = 0.0
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply != "remove":
             prompt = torch.zeros(
-                [pixel_values.shape[0], pixel_values.shape[1], 3, self.max_img_size, self.max_img_size]
+                [pixel_values.shape[0], pixel_values.shape[1], 3, self.max_img_size, self.max_img_size],
+                device=pixel_values.device,
             )
             start_point = self.max_img_size - self.visual_prompt_size
             prompt[:, :, :, start_point : self.max_img_size, :] = self.pad_down
@@ -667,10 +670,12 @@ class TvpFramePadPrompter(nn.Module):
         if self.visual_prompter_apply not in ("add", "remove", "replace"):
             raise ValueError(f"Invalid visual_prompter_apply value {self.visual_prompter_apply}")
         if self.visual_prompter_apply in ("replace", "remove"):
-            visual_prompt_mask = torch.ones([self.max_img_size, self.max_img_size], dtype=pixel_values.dtype)
+            visual_prompt_mask = torch.ones(
+                [self.max_img_size, self.max_img_size], dtype=pixel_values.dtype, device=pixel_values.device
+            )
             pixel_values *= visual_prompt_mask
         if self.visual_prompter_apply in ("replace", "add"):
-            base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size)
+            base = torch.zeros(1, self.num_frames, 3, self.base_size, self.base_size, device=pixel_values.device)
             prompt = torch.cat([self.pad_left, base, self.pad_right], dim=4)
             prompt = torch.cat([self.pad_up, prompt, self.pad_down], dim=3)
             prompt = torch.cat(pixel_values.size(0) * [prompt])

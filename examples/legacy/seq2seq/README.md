@@ -140,7 +140,7 @@ python finetune_trainer.py --help
 
 For multi-gpu training use `torch.distributed.launch`, e.g. with 2 gpus:
 ```bash
-python -m torch.distributed.launch --nproc_per_node=2  finetune_trainer.py ...
+torchrun --nproc_per_node=2  finetune_trainer.py ...
 ```
 
 **At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
@@ -214,7 +214,7 @@ because it uses SortishSampler to minimize padding. You can also use it on 1 GPU
 `{type_path}.source` and `{type_path}.target`. Run `./run_distributed_eval.py --help` for all clargs.
 
 ```bash
-python -m torch.distributed.launch --nproc_per_node=8  run_distributed_eval.py \
+torchrun --nproc_per_node=8  run_distributed_eval.py \
     --model_name sshleifer/distilbart-large-xsum-12-3  \
     --save_dir xsum_generations \
     --data_dir xsum \
@@ -321,7 +321,7 @@ For example,
 ./save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
 ./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
 ```
-splits `wmt_en_ro/train` into 11,197 uneven lengthed batches and can finish 1 epoch in 8 minutes on a v100.
+splits `wmt_en_ro/train` into 11,197 uneven length batches and can finish 1 epoch in 8 minutes on a v100.
 
 For comparison,
 ```bash

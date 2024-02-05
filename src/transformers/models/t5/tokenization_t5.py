@@ -183,7 +183,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self._added_tokens_decoder = {}
         for i in range(len(extra_tokens)):
             self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
-                f"<extra_id_{i}>", single_word=True, lstrip=True, rstrip=True, special=True
+                f"<extra_id_{i}>", single_word=False, lstrip=True, rstrip=True, special=True, normalized=False
             )
 
         if legacy is None:
@@ -191,7 +191,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
+                " means, and thoroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True

@@ -73,7 +73,7 @@ pip install datasets
 `tokenizer`返回一个包含三个重要对象的字典：
 
 * [input_ids](glossary#input-ids) 是与句子中每个`token`对应的索引。
-* [attention_mask](glossary#attention-mask) 指示是否应该关注一个`toekn`。
+* [attention_mask](glossary#attention-mask) 指示是否应该关注一个`token`。
 * [token_type_ids](glossary#token-type-ids) 在存在多个序列时标识一个`token`属于哪个序列。
 
 通过解码 `input_ids` 来返回您的输入：

@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 def make_list_of_list_of_images(
-    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput]
+    images: Union[List[List[ImageInput]], List[ImageInput], ImageInput],
 ) -> List[List[ImageInput]]:
     if is_valid_image(images):
         return [[images]]
@@ -684,8 +684,8 @@ class FuyuImageProcessor(BaseImageProcessor):
                 # Indices of image patches.
                 patches_mask = subseq_image_input_ids == image_placeholder_id
                 num_patches = torch.count_nonzero(patches_mask)
-                indices = torch.arange(
-                    num_patches, dtype=subseq_image_input_ids.dtype, device=subseq_image_input_ids.device
+                indices = torch.arange(num_patches, dtype=torch.int64, device=subseq_image_input_ids.device).type_as(
+                    subseq_image_input_ids
                 )
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.

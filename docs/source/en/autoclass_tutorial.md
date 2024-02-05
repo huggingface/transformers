@@ -31,6 +31,7 @@ In this tutorial, learn to:
 * Load a pretrained feature extractor.
 * Load a pretrained processor.
 * Load a pretrained model.
+* Load a model as a backbone.
 
 ## AutoTokenizer
 
@@ -64,6 +65,48 @@ For vision tasks, an image processor processes the image into the correct input 
 >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
 ```
 
+## AutoBackbone
+
+<div style="text-align: center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stages.png">
+    <figcaption class="mt-2 text-center text-sm text-gray-500">A Swin backbone with multiple stages for outputting a feature map.</figcaption>
+</div>
+
+The [`AutoBackbone`] lets you use pretrained models as backbones to get feature maps from different stages of the backbone. You should specify one of the following parameters in [`~PretrainedConfig.from_pretrained`]:
+
+* `out_indices` is the index of the layer you'd like to get the feature map from
+* `out_features` is the name of the layer you'd like to get the feature map from
+
+These parameters can be used interchangeably, but if you use both, make sure they're aligned with each other! If you don't pass any of these parameters, the backbone returns the feature map from the last layer.
+
+<div style="text-align: center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Swin%20Stage%201.png">
+    <figcaption class="mt-2 text-center text-sm text-gray-500">A feature map from the first stage of the backbone. The patch partition refers to the model stem.</figcaption>
+</div>
+
+For example, in the above diagram, to return the feature map from the first stage of the Swin backbone, you can set `out_indices=(1,)`:
+
+```py
+>>> from transformers import AutoImageProcessor, AutoBackbone
+>>> import torch
+>>> from PIL import Image
+>>> import requests
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+>>> processor = AutoImageProcessor.from_pretrained("microsoft/swin-tiny-patch4-window7-224")
+>>> model = AutoBackbone.from_pretrained("microsoft/swin-tiny-patch4-window7-224", out_indices=(1,))
+
+>>> inputs = processor(image, return_tensors="pt")
+>>> outputs = model(**inputs)
+>>> feature_maps = outputs.feature_maps
+```
+
+Now you can access the `feature_maps` object from the first stage of the backbone:
+
+```py
+>>> list(feature_maps[0].shape)
+[1, 96, 56, 56]
+```
 
 ## AutoFeatureExtractor
 
@@ -95,7 +138,7 @@ Load a processor with [`AutoProcessor.from_pretrained`]:
 
 <frameworkcontent>
 <pt>
-Finally, the `AutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`AutoModelForSequenceClassification.from_pretrained`]:
+The `AutoModelFor` classes let you load a pretrained model for a given task (see [here](model_doc/auto) for a complete list of available tasks). For example, load a model for sequence classification with [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification

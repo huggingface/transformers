@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch VitMatte model. """
 
 
-import inspect
 import unittest
 
 from huggingface_hub import hf_hub_download
@@ -112,6 +111,7 @@ class VitMatteModelTester:
     def get_config(self):
         return VitMatteConfig(
             backbone_config=self.get_backbone_config(),
+            backbone=None,
             hidden_size=self.hidden_size,
             fusion_hidden_sizes=self.fusion_hidden_sizes,
         )
@@ -188,18 +188,6 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="ViTMatte does not support input and output embeddings")
     def test_model_common_attributes(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -70,7 +70,7 @@ pip install 'transformers[tf-cpu]'
 <Tip warning={true}>
 
 M1 / ARM用户
-    
+
 在安装 TensorFlow 2.0 前，你需要安装以下库：
 ```
 brew install cmake
@@ -147,10 +147,10 @@ git pull
 
 ## 使用 conda 安装
 
-从 conda 的 `huggingface` 频道安装：
+从 conda 的 `conda-forge` 频道安装：
 
 ```bash
-conda install -c huggingface transformers
+conda install conda-forge::transformers
 ```
 
 ## 缓存设置

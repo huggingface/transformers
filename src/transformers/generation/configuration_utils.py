@@ -63,6 +63,14 @@ class GenerationConfig(PushToHubMixin):
     You do not need to call any of the above methods directly. Pass custom parameter values to '.generate()'. To learn
     more about decoding strategies refer to the [text generation strategies guide](../generation_strategies).
 
+    <Tip>
+
+    A large number of these flags control the logits or the stopping criteria of the generation. Make sure you check
+    the [generate-related classes](https://huggingface.co/docs/transformers/internal/generation_utils) for a full
+    description of the possible manipulations, as well as examples of their usage.
+
+    </Tip>
+
     Arg:
         > Parameters that control the length of the output
 
@@ -192,7 +200,8 @@ class GenerationConfig(PushToHubMixin):
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
         low_memory (`bool`, *optional*):
-            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
+            Switch to sequential beam search and sequential topk for contrastive search to reduce peak memory.
+            Used with beam search and contrastive search.
 
 
         > Parameters that define the output variables of `generate`
@@ -312,6 +321,9 @@ class GenerationConfig(PushToHubMixin):
         self.num_assistant_tokens = kwargs.pop("num_assistant_tokens", 5)
         self.num_assistant_tokens_schedule = kwargs.pop("num_assistant_tokens_schedule", "heuristic")
 
+        # Prompt lookup decoding
+        self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
+
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
@@ -410,7 +422,7 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. detect beam-only parameterization when not in beam mode
         if self.num_beams is None:
-            logging.warning("`num_beams` is set to None - defaulting to 1.", UserWarning)
+            warnings.warn("`num_beams` is set to None - defaulting to 1.", UserWarning)
             self.num_beams = 1
 
         if self.num_beams == 1:
@@ -497,6 +509,24 @@ class GenerationConfig(PushToHubMixin):
                     f"({self.num_beams})."
                 )
 
+        # 5. check common issue: passing `generate` arguments inside the generation config
+        generate_arguments = (
+            "logits_processor",
+            "stopping_criteria",
+            "prefix_allowed_tokens_fn",
+            "synced_gpus",
+            "assistant_model",
+            "streamer",
+            "negative_prompt_ids",
+            "negative_prompt_attention_mask",
+        )
+        for arg in generate_arguments:
+            if hasattr(self, arg):
+                raise ValueError(
+                    f"Argument `{arg}` is not a valid argument of `GenerationConfig`. It should be passed to "
+                    "`generate()` (or a pipeline) directly."
+                )
+
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
@@ -525,16 +555,13 @@ class GenerationConfig(PushToHubMixin):
         try:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 self.validate()
-            for w in caught_warnings:
-                raise ValueError(w.message)
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
         except ValueError as exc:
-            warnings.warn(
+            raise ValueError(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
-                "\n\nThrown during validation:\n" + str(exc),
-                UserWarning,
+                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc)
             )
-            return
 
         use_auth_token = kwargs.pop("use_auth_token", None)
 
@@ -881,6 +908,16 @@ class GenerationConfig(PushToHubMixin):
         if ignore_metadata:
             for metadata_field in METADATA_FIELDS:
                 config_dict.pop(metadata_field, None)
+
+        def convert_keys_to_string(obj):
+            if isinstance(obj, dict):
+                return {str(key): convert_keys_to_string(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_keys_to_string(item) for item in obj]
+            else:
+                return obj
+
+        config_dict = convert_keys_to_string(config_dict)
 
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 

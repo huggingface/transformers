@@ -610,6 +610,13 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
         )
 
+        def empty_prefix_allowed_tokens_fn(batch_id, inputs_ids):
+            return []
+
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(empty_prefix_allowed_tokens_fn, 1)
+
+        self.assertRaises(ValueError, prefix_constrained_logits_proc, input_ids, scores.clone())
+
     def test_hamming_diversity(self):
         vocab_size = 4
         num_beams = 2
@@ -815,5 +822,21 @@ class LogitsProcessorTest(unittest.TestCase):
         expected_scores_list = [
             scores[0].tolist(),
             [float("-inf"), float("-inf"), scores[0][0], float("-inf")],
+        ]
+        self.assertListEqual(actual_scores.tolist(), expected_scores_list)
+
+    def test_early_stop_processor_multi_eos(self):
+        input_ids = None
+        eos_token_id = [2, 3]
+        min_eos_p = 0.1  ## some small float
+
+        scores = self._get_uniform_logits(2, 4)
+        scores[0][eos_token_id] = -6  ## less than log(min_eos_p)
+
+        esp = BarkEosPrioritizerLogitsProcessor(eos_token_id=eos_token_id, min_eos_p=min_eos_p)
+        actual_scores = esp(input_ids, scores)
+        expected_scores_list = [
+            scores[0].tolist(),
+            [float("-inf"), float("-inf"), scores[0][0], scores[0][0]],
         ]
         self.assertListEqual(actual_scores.tolist(), expected_scores_list)

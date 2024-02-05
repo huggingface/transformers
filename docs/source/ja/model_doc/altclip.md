@@ -52,8 +52,8 @@ Transformerエンコーダーに画像を与えるには、各画像を固定サ
 >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
 
 >>> outputs = model(**inputs)
->>> logits_per_image = outputs.logits_per_image  # これは画像-テキスト類似度スコア
->>> probs = logits_per_image.softmax(dim=1)  # Softmaxを取ることで各ラベルの確率を得られる
+>>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+>>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
 ```
 
 <Tip>
