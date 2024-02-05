@@ -890,7 +890,12 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory: str, safe_serialization: bool = True):
+    def save_pretrained(
+            self,
+            save_directory: str, 
+            safe_serialization: bool = True,
+            **kwargs,
+        ):
         """
         Save the pipeline's model and tokenizer.
 
@@ -900,6 +905,8 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
             safe_serialization (`str`):
                 Whether to save the model using `safetensors` or the traditional way for PyTorch or Tensorflow.
         """
+        self._set_token_in_kwargs(kwargs)
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -939,6 +946,32 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
+    @staticmethod
+    def _set_token_in_kwargs(kwargs, token=None):
+        """Temporary method to deal with `token` and `use_auth_token`.
+
+        This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
+
+        Need to clean up `use_auth_token` in a follow PR.
+        """
+        # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
+        if token is None:
+            token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
 
     def transform(self, X):
         """
