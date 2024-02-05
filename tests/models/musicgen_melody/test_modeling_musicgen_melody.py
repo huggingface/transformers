@@ -492,7 +492,7 @@ class MusicgenMelodyTester:
             num_layers=self.num_hidden_layers,
             num_heads=self.num_attention_heads,
         )
-        audio_decoder_config = EncodecConfig(
+        audio_encoder_config = EncodecConfig(
             hidden_size=self.vocab_size,
             compress=1,
             num_filters=self.num_filters,
@@ -512,7 +512,7 @@ class MusicgenMelodyTester:
             tie_word_embeddings=False,
         )
         config = MusicgenMelodyConfig.from_sub_models_config(
-            text_encoder_config, audio_decoder_config, decoder_config, chroma_length=self.chroma_length
+            text_encoder_config, audio_encoder_config, decoder_config, chroma_length=self.chroma_length
         )
         return config
 
@@ -522,7 +522,7 @@ class MusicgenMelodyTester:
 
 
 @require_torch
-# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody, musicgen->musicgen_melody, audio_encoder->audio_decoder, EncoderDecoder->DecoderOnly
+# Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody, musicgen->musicgen_melody, EncoderDecoder->DecoderOnly
 class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
     greedy_sample_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
@@ -606,7 +606,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             )
         self.assertTrue(all(key not in outputs for key in ["encoder_attentions", "decoder_attentions"]))
         config.text_encoder.output_attentions = True  # inner model config -> will work
-        config.audio_decoder.output_attentions = True
+        config.audio_encoder.output_attentions = True
         config.decoder.output_attentions = True
 
         model = model_class(config)
@@ -663,7 +663,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 continue
 
             config.text_encoder.gradient_checkpointing = True
-            config.audio_decoder.gradient_checkpointing = True
+            config.audio_encoder.gradient_checkpointing = True
             config.decoder.gradient_checkpointing = True
             model = model_class(config)
             self.assertTrue(model.is_gradient_checkpointing)
@@ -685,7 +685,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.text_encoder.output_hidden_states = True
-        config.audio_decoder.output_hidden_states = True
+        config.audio_encoder.output_hidden_states = True
         config.decoder.output_hidden_states = True
 
         config.text_encoder.output_attentions = True
@@ -766,7 +766,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # check that output_hidden_states also work using config
             del inputs_dict["output_hidden_states"]
             config.text_encoder.output_hidden_states = True
-            config.audio_decoder.output_hidden_states = True
+            config.audio_encoder.output_hidden_states = True
             config.decoder.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)

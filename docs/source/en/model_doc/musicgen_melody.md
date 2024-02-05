@@ -257,7 +257,7 @@ The MusicGen model can be de-composed into three distinct stages:
 3. Audio decoder: used to recover the audio waveform from the audio tokens predicted by the decoder
 
 Thus, the MusicGen model can either be used as a standalone decoder model, corresponding to the class [`MusicgenMelodyForCausalLM`],
-or as a composite model that includes the text encoder and audio decoder, corresponding to the class
+or as a composite model that includes the text encoder and audio encoder, corresponding to the class
 [`MusicgenMelodyForConditionalGeneration`]. If only the decoder needs to be loaded from the pre-trained checkpoint, it can be loaded by first 
 specifying the correct config, or be accessed through the `.decoder` attribute of the composite model:
 
@@ -272,9 +272,9 @@ specifying the correct config, or be accessed through the `.decoder` attribute o
 >>> decoder = MusicgenMelodyForConditionalGeneration.from_pretrained("ylacombe/musicgen-melody").decoder
 ```
 
-Since the text encoder and audio decoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`]
+Since the text encoder and audio encoder models are frozen during training, the MusicGen decoder [`MusicgenMelodyForCausalLM`]
 can be trained standalone on a dataset of encoder hidden-states and audio codes. For inference, the trained decoder can
-be combined with the frozen text encoder and audio decoder to recover the composite [`MusicgenMelodyForConditionalGeneration`]
+be combined with the frozen text encoder and audio encoder to recover the composite [`MusicgenMelodyForConditionalGeneration`]
 model.
 
 ## Checkpoint Conversion

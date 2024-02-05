@@ -1362,12 +1362,12 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The composite Musicgen Melody model with a text and audio conditional models, a MusicgenMelody decoder and an audio decoder, "
+    "The composite Musicgen Melody model with a text and audio conditional models, a MusicgenMelody decoder and an audio encoder, "
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_MELODY_START_DOCSTRING,
     """
         text_encoder (`Optional[PreTrainedModel]`, *optional*): Text encoder.
-        audio_decoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
+        audio_encoder (`Optional[PreTrainedModel]`, *optional*): Audio code decoder.
         decoder (`Optional[MusicgenMelodyForCausalLM]`, *optional*): MusicGen Melody decoder used to generate audio codes.
     """,
 )
@@ -1380,16 +1380,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         self,
         config: MusicgenMelodyConfig = None,
         text_encoder: Optional[PreTrainedModel] = None,
-        audio_decoder: Optional[PreTrainedModel] = None,
+        audio_encoder: Optional[PreTrainedModel] = None,
         decoder: Optional[MusicgenMelodyForCausalLM] = None,
     ):
-        if config is None and (text_encoder is None or audio_decoder is None or decoder is None):
+        if config is None and (text_encoder is None or audio_encoder is None or decoder is None):
             raise ValueError(
-                "Either a configuration has to be provided, or all four of text encoder, audio decoder and Musicgen Melody decoder."
+                "Either a configuration has to be provided, or all three of text encoder, audio encoder and Musicgen Melody decoder."
             )
         if config is None:
             config = MusicgenMelodyConfig.from_sub_models_config(
-                text_encoder.config, audio_decoder.config, decoder.config
+                text_encoder.config, audio_encoder.config, decoder.config
             )
         else:
             if not isinstance(config, self.config_class):
@@ -1403,16 +1403,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
             text_encoder = AutoModelForTextEncoding.from_config(config.text_encoder)
 
-        if audio_decoder is None:
+        if audio_encoder is None:
             from ..auto.modeling_auto import AutoModel
 
-            audio_decoder = AutoModel.from_config(config.audio_decoder)
+            audio_encoder = AutoModel.from_config(config.audio_encoder)
 
         if decoder is None:
             decoder = MusicgenMelodyForCausalLM(config.decoder)
 
         self.text_encoder = text_encoder
-        self.audio_decoder = audio_decoder
+        self.audio_encoder = audio_encoder
         self.decoder = decoder
 
         if self.text_encoder.config.to_dict() != self.config.text_encoder.to_dict():
@@ -1420,10 +1420,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 f"Config of the text_encoder: {self.text_encoder.__class__} is overwritten by shared text_encoder config:"
                 f" {self.config.text_encoder}"
             )
-        if self.audio_decoder.config.to_dict() != self.config.audio_decoder.to_dict():
+        if self.audio_encoder.config.to_dict() != self.config.audio_encoder.to_dict():
             logger.warning(
-                f"Config of the audio_decoder: {self.audio_decoder.__class__} is overwritten by shared audio_decoder config:"
-                f" {self.config.audio_decoder}"
+                f"Config of the audio_encoder: {self.audio_encoder.__class__} is overwritten by shared audio_encoder config:"
+                f" {self.config.audio_encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
@@ -1434,7 +1434,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
         self.text_encoder.config = self.config.text_encoder
-        self.audio_decoder.config = self.config.audio_decoder
+        self.audio_encoder.config = self.config.audio_encoder
         self.decoder.config = self.config.decoder
 
         # text encoder outputs might need to be projected to different dimension for decoder
@@ -1506,13 +1506,13 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
     def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: str = None,
-        audio_decoder_pretrained_model_name_or_path: str = None,
+        audio_encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
         r"""
-        Instantiate a text encoder, an audio decoder, and a Musicgen Melody decoder from one to four base classes of the
+        Instantiate a text encoder, an audio encoder, and a Musicgen Melody decoder from one to three base classes of the
         library from pretrained model checkpoints.
 
 
@@ -1529,8 +1529,8 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
 
-            audio_decoder_pretrained_model_name_or_path (`str`, *optional*):
-                Information necessary to initiate the audio decoder. Can be either:
+            audio_encoder_pretrained_model_name_or_path (`str`, *optional*):
+                Information necessary to initiate the audio encoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                       Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
@@ -1556,7 +1556,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
                 - To update the text encoder configuration, use the prefix *text_encoder_* for each configuration
                   parameter.
-                - To update the audio decoder configuration, use the prefix *audio_decoder_* for each configuration
+                - To update the audio encoder configuration, use the prefix *audio_encoder_* for each configuration
                   parameter.
                 - To update the decoder configuration, use the prefix *decoder_* for each configuration parameter.
                 - To update the parent model configuration, do not use a prefix for each configuration parameter.
@@ -1568,10 +1568,10 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         ```python
         >>> from transformers import MusicgenMelodyForConditionalGeneration
 
-        >>> # initialize a musicgen_melody model from a t5 text encoder, encodec audio decoder, and musicgen_melody decoder
+        >>> # initialize a musicgen_melody model from a t5 text encoder, encodec audio encoder, and musicgen_melody decoder
         >>> model = MusicgenMelodyForConditionalGeneration.from_sub_models_pretrained(
         ...     text_encoder_pretrained_model_name_or_path="t5-base",
-        ...     audio_decoder_pretrained_model_name_or_path="facebook/encodec_24khz",
+        ...     audio_encoder_pretrained_model_name_or_path="facebook/encodec_24khz",
         ...     decoder_pretrained_model_name_or_path="facebook/musicgen-melody",
         ... )
         >>> # saving model after fine-tuning
@@ -1586,21 +1586,21 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             if argument.startswith("text_encoder_")
         }
 
-        kwargs_audio_decoder = {
-            argument[len("audio_decoder_") :]: value
+        kwargs_audio_encoder = {
+            argument[len("audio_encoder_") :]: value
             for argument, value in kwargs.items()
-            if argument.startswith("audio_decoder_")
+            if argument.startswith("audio_encoder_")
         }
 
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        # remove text encoder, audio_decoder and decoder kwargs from kwargs
+        # remove text encoder, audio_encoder and decoder kwargs from kwargs
         for key in kwargs_text_encoder.keys():
             del kwargs["text_encoder_" + key]
-        for key in kwargs_audio_decoder.keys():
-            del kwargs["audio_decoder_" + key]
+        for key in kwargs_audio_encoder.keys():
+            del kwargs["audio_encoder_" + key]
         for key in kwargs_decoder.keys():
             del kwargs["decoder_" + key]
 
@@ -1634,31 +1634,31 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 text_encoder_pretrained_model_name_or_path, *model_args, **kwargs_text_encoder
             )
 
-        audio_decoder = kwargs_audio_decoder.pop("model", None)
-        if audio_decoder is None:
-            if audio_decoder_pretrained_model_name_or_path is None:
+        audio_encoder = kwargs_audio_encoder.pop("model", None)
+        if audio_encoder is None:
+            if audio_encoder_pretrained_model_name_or_path is None:
                 raise ValueError(
-                    "If `audio_decoder_model` is not defined as an argument, an `audio_decoder_pretrained_model_name_or_path` has "
+                    "If `audio_encoder_model` is not defined as an argument, an `audio_encoder_pretrained_model_name_or_path` has "
                     "to be defined."
                 )
 
-            if "config" not in kwargs_audio_decoder:
-                encoder_config, kwargs_audio_decoder = AutoConfig.from_pretrained(
-                    audio_decoder_pretrained_model_name_or_path, **kwargs_audio_decoder, return_unused_kwargs=True
+            if "config" not in kwargs_audio_encoder:
+                encoder_config, kwargs_audio_encoder = AutoConfig.from_pretrained(
+                    audio_encoder_pretrained_model_name_or_path, **kwargs_audio_encoder, return_unused_kwargs=True
                 )
 
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
-                        f"Initializing {audio_decoder_pretrained_model_name_or_path} as an audio_decoder model "
+                        f"Initializing {audio_encoder_pretrained_model_name_or_path} as an audio_encoder model "
                         "from a decoder model. Cross-attention and casual mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
 
-                kwargs_audio_decoder["config"] = encoder_config
+                kwargs_audio_encoder["config"] = encoder_config
 
-            audio_decoder = AutoModel.from_pretrained(
-                audio_decoder_pretrained_model_name_or_path, *model_args, **kwargs_audio_decoder
+            audio_encoder = AutoModel.from_pretrained(
+                audio_encoder_pretrained_model_name_or_path, *model_args, **kwargs_audio_encoder
             )
 
         decoder = kwargs_decoder.pop("model", None)
@@ -1703,9 +1703,9 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         # instantiate config with corresponding kwargs
         config = MusicgenMelodyConfig.from_sub_models_config(
-            text_encoder.config, audio_decoder.config, decoder.config, **kwargs
+            text_encoder.config, audio_encoder.config, decoder.config, **kwargs
         )
-        return cls(text_encoder=text_encoder, audio_decoder=audio_decoder, decoder=decoder, config=config)
+        return cls(text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder, config=config)
 
     @add_start_docstrings_to_model_forward(MUSICGEN_MELODY_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MusicgenMelodyOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -2386,15 +2386,15 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             audio_scales = [None] * batch_size
 
         if self.decoder.config.audio_channels == 1:
-            output_values = self.audio_decoder.decode(
+            output_values = self.audio_encoder.decode(
                 output_ids,
                 audio_scales=audio_scales,
             ).audio_values
         else:
-            codec_outputs_left = self.audio_decoder.decode(output_ids[:, :, ::2, :], audio_scales=audio_scales)
+            codec_outputs_left = self.audio_encoder.decode(output_ids[:, :, ::2, :], audio_scales=audio_scales)
             output_values_left = codec_outputs_left.audio_values
 
-            codec_outputs_right = self.audio_decoder.decode(output_ids[:, :, 1::2, :], audio_scales=audio_scales)
+            codec_outputs_right = self.audio_encoder.decode(output_ids[:, :, 1::2, :], audio_scales=audio_scales)
             output_values_right = codec_outputs_right.audio_values
 
             output_values = torch.cat([output_values_left, output_values_right], dim=1)

@@ -141,7 +141,7 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
 class MusicgenMelodyConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
-    Musicgen Melody model according to the specified arguments, defining the text encoder, audio decoder and Musicgen Melody decoder
+    Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [ylacombe/musicgen-melody](https://huggingface.co/ylacombe/musicgen-melody) architecture.
 
@@ -157,8 +157,8 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
                 - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
                   defines the text encoder config.
-                - **audio_decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio decoder config.
+                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
+                  defines the audio encoder config.
                 - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
                   the decoder config.
 
@@ -173,13 +173,13 @@ class MusicgenMelodyConfig(PretrainedConfig):
     ...     MusicgenMelodyForConditionalGeneration,
     ... )
 
-    >>> # Initializing text encoder, audio decoder, and decoder model configurations
+    >>> # Initializing text encoder, audio encoder, and decoder model configurations
     >>> text_encoder_config = T5Config()
-    >>> audio_decoder_config = EncodecConfig()
+    >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenMelodyDecoderConfig()
 
     >>> configuration = MusicgenMelodyConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_decoder_config, decoder_config
+    ...     text_encoder_config, audio_encoder_config, decoder_config
     ... )
 
     >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the ylacombe/musicgen-melody style configuration
@@ -188,7 +188,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     >>> config_text_encoder = model.config.text_encoder
-    >>> config_audio_decoder = model.config.audio_decoder
+    >>> config_audio_encoder = model.config.audio_encoder
     >>> config_decoder = model.config.decoder
 
     >>> # Saving the model, including its configuration
@@ -209,19 +209,19 @@ class MusicgenMelodyConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_decoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_decoder and decoder config")
+        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
 
         text_encoder_config = kwargs.pop("text_encoder")
         text_encoder_model_type = text_encoder_config.pop("model_type")
 
-        audio_decoder_config = kwargs.pop("audio_decoder")
-        audio_decoder_model_type = audio_decoder_config.pop("model_type")
+        audio_encoder_config = kwargs.pop("audio_encoder")
+        audio_encoder_model_type = audio_encoder_config.pop("model_type")
 
         decoder_config = kwargs.pop("decoder")
 
         self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_decoder = AutoConfig.for_model(audio_decoder_model_type, **audio_decoder_config)
+        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
         self.decoder = MusicgenMelodyDecoderConfig(**decoder_config)
         self.is_encoder_decoder = False
 
@@ -232,12 +232,12 @@ class MusicgenMelodyConfig(PretrainedConfig):
     def from_sub_models_config(
         cls,
         text_encoder_config: PretrainedConfig,
-        audio_decoder_config: PretrainedConfig,
+        audio_encoder_config: PretrainedConfig,
         decoder_config: MusicgenMelodyDecoderConfig,
         **kwargs,
     ):
         r"""
-        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio decoder and decoder
+        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio encoder and decoder
         configurations.
 
         Returns:
@@ -246,7 +246,7 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
         return cls(
             text_encoder=text_encoder_config.to_dict(),
-            audio_decoder=audio_decoder_config.to_dict(),
+            audio_encoder=audio_encoder_config.to_dict(),
             decoder=decoder_config.to_dict(),
             **kwargs,
         )
@@ -254,4 +254,4 @@ class MusicgenMelodyConfig(PretrainedConfig):
     @property
     # This is a property because you might want to change the codec model on the fly
     def sampling_rate(self):
-        return self.audio_decoder.sampling_rate
+        return self.audio_encoder.sampling_rate

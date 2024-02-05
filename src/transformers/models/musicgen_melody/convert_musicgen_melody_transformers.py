@@ -140,14 +140,14 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     )
 
     text_encoder = T5EncoderModel.from_pretrained("t5-base")
-    audio_decoder = EncodecModel.from_pretrained("facebook/encodec_32khz")
+    audio_encoder = EncodecModel.from_pretrained("facebook/encodec_32khz")
     decoder = MusicgenMelodyForCausalLM(decoder_config).eval()
 
     # load all decoder weights - expect that we'll be missing embeddings and enc-dec projection
     missing_keys, unexpected_keys = decoder.load_state_dict(decoder_state_dict, strict=False)
 
     for key in missing_keys.copy():
-        if key.startswith(("text_encoder", "audio_decoder")) or key in EXPECTED_MISSING_KEYS:
+        if key.startswith(("text_encoder", "audio_encoder")) or key in EXPECTED_MISSING_KEYS:
             missing_keys.remove(key)
 
     for key in unexpected_keys.copy():
@@ -162,7 +162,7 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
 
     # init the composite model
     model = MusicgenMelodyForConditionalGeneration(
-        text_encoder=text_encoder, audio_decoder=audio_decoder, decoder=decoder
+        text_encoder=text_encoder, audio_encoder=audio_encoder, decoder=decoder
     )
 
     # load the pre-trained enc-dec projection (from the decoder state dict)
@@ -192,7 +192,7 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     model.generation_config.pad_token_id = 2048
 
     # set other default generation config params
-    model.generation_config.max_length = int(30 * audio_decoder.config.frame_rate)
+    model.generation_config.max_length = int(30 * audio_encoder.config.frame_rate)
     model.generation_config.do_sample = True
     model.generation_config.guidance_scale = 3.0
 
