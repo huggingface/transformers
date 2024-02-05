@@ -69,7 +69,7 @@ from .utils import (
 try:
     from types import GenericAlias
 except ImportError:
-    GenericAlias = type(list[int])
+    GenericAlias = Any
 
 
 if TYPE_CHECKING:
