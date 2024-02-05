@@ -360,8 +360,8 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
+    init_reference_points: Optional[torch.FloatTensor] = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -2509,7 +2509,9 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
         if not return_dict:
             enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
-            tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
+            tuple_outputs = (
+                (decoder_outputs[0], init_reference_points) + decoder_outputs[1:] + encoder_outputs + enc_outputs
+            )
 
             return tuple_outputs
 
@@ -2737,8 +2739,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             loss_dict=loss_dict,
             logits=logits,
             pred_boxes=pred_boxes,
-            auxiliary_outputs=auxiliary_outputs,
             last_hidden_state=outputs.last_hidden_state,
+            auxiliary_outputs=auxiliary_outputs,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
             encoder_last_hidden_state_vision=outputs.encoder_last_hidden_state_vision,
