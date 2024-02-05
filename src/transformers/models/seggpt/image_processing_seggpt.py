@@ -354,8 +354,9 @@ class SegGptImageProcessor(BaseImageProcessor):
                 Prompt image to _preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             prompt_masks (`ImageInput`):
-                Prompt mask from prompt image to _preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+                Prompt mask from prompt image to _preprocess. Expects a single or batch of masks. If the mask masks are
+                a single channel then it will be converted to RGB using the palette if `self.num_labels` is specified
+                or by just repeating the channel if not. If the mask is already in RGB format, it will be passed through.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
