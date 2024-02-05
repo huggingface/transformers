@@ -117,7 +117,6 @@ class FimPipeline(Pipeline):
         return_type=None,
         clean_up_tokenization_spaces=None,
         prefix=None,
-        handle_long_generation=None,
         stop_sequence=None,
         add_special_tokens=False,
         **generate_kwargs,
@@ -140,14 +139,6 @@ class FimPipeline(Pipeline):
                 return_tensors=self.framework,
             )
             generate_kwargs["prefix_length"] = prefix_inputs["input_ids"].shape[-1]
-
-        if handle_long_generation is not None:
-            if handle_long_generation not in {"hole"}:
-                raise ValueError(
-                    f"{handle_long_generation} is not a valid value for `handle_long_generation` parameter expected"
-                    " [None, 'hole']"
-                )
-            preprocess_params["handle_long_generation"] = handle_long_generation
 
         preprocess_params.update(generate_kwargs)
         forward_params = generate_kwargs
@@ -186,7 +177,6 @@ class FimPipeline(Pipeline):
         infill_token,
         mode,
         prefix="",
-        handle_long_generation=None,
         add_special_tokens=False,
         **generate_kwargs,
     ):
@@ -194,27 +184,27 @@ class FimPipeline(Pipeline):
         self.ensure_infill_token(prompt_text, infill_token)
 
         # Assemble the inputs in the PSM (Prefix-Suffix-Middle) format based on the model architecture
-        # Currently, codellama model variants support using only the "<FILL_ME>" token, so we won't overcomplicate things
-        if "codellama" not in self.model.name_or_path.lower():
-            # Extract prefix and suffix
-            input_prefix, input_suffix = self.extract_prefix_suffix(prompt_text, infill_token)
+        # Extract prefix and suffix
+        input_prefix, input_suffix = self.extract_prefix_suffix(prompt_text, infill_token)
 
-            if mode == "psm":
-                prompt_text = (
-                    self.DEFAULT_PREFIX_TOKEN
-                    + input_prefix
-                    + self.DEFAULT_SUFFIX_TOKEN
-                    + input_suffix
-                    + self.DEFAULT_MIDDLE_TOKEN
-                )
-            else:
-                prompt_text = (
-                    self.DEFAULT_SUFFIX_TOKEN
-                    + input_suffix
-                    + self.DEFAULT_PREFIX_TOKEN
-                    + input_prefix
-                    + self.DEFAULT_MIDDLE_TOKEN
-                )
+        # If the mode is Prefix-Suffix-Middle, arrange the components accordingly
+        if mode == "psm":
+            prompt_text = (
+                self.DEFAULT_PREFIX_TOKEN
+                + input_prefix
+                + self.DEFAULT_SUFFIX_TOKEN
+                + input_suffix
+                + self.DEFAULT_MIDDLE_TOKEN
+            )
+        # Change if the mode is Suffix-Prefix-Middle
+        else:
+            prompt_text = (
+                self.DEFAULT_SUFFIX_TOKEN
+                + input_suffix
+                + self.DEFAULT_PREFIX_TOKEN
+                + input_prefix
+                + self.DEFAULT_MIDDLE_TOKEN
+            )
 
         inputs = self.tokenizer(
             prefix + prompt_text,
@@ -224,26 +214,6 @@ class FimPipeline(Pipeline):
         )
         inputs["prompt_text"] = prompt_text
         inputs["infill_token"] = infill_token
-
-        if handle_long_generation == "hole":
-            cur_len = inputs["input_ids"].shape[-1]
-            if "max_new_tokens" in generate_kwargs:
-                new_tokens = generate_kwargs["max_new_tokens"]
-            else:
-                new_tokens = generate_kwargs.get("max_length", self.model.config.max_length) - cur_len
-                if new_tokens < 0:
-                    raise ValueError("We cannot infer how many new tokens are expected")
-            if cur_len + new_tokens > self.tokenizer.model_max_length:
-                keep_length = self.tokenizer.model_max_length - new_tokens
-                if keep_length <= 0:
-                    raise ValueError(
-                        "We cannot use `hole` to handle this generation the number of desired tokens exceeds the"
-                        " models max length"
-                    )
-
-                inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
-                if "attention_mask" in inputs:
-                    inputs["attention_mask"] = inputs["attention_mask"][:, -keep_length:]
 
         return inputs
 
@@ -309,15 +279,6 @@ class FimPipeline(Pipeline):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (`str`, *optional*):
                 Prefix added to prompt.
-            handle_long_generation (`str`, *optional*):
-                By default, this pipelines does not handle long generation (ones that exceed in one form or the other
-                the model maximum length). There is no perfect way to adress this (more info
-                :https://github.com/huggingface/transformers/issues/14033#issuecomment-948385227). This provides common
-                strategies to work around that problem depending on your use case.
-
-                - `None` : default strategy where nothing in particular happens
-                - `"hole"`: Truncates left of input, and leaves a gap wide enough to let generation happen (might
-                  truncate a lot of the prompt and not suitable when generation exceed the model capacity)
 
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
