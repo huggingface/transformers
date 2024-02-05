@@ -257,8 +257,12 @@ class CogVLMVisionModel(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->CogVLM
 class CogVLMRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
+        """
+        CogVLMRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
@@ -268,9 +272,10 @@ class CogVLMRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)
+        return self.weight * hidden_states.to(input_dtype)
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->CogVLM
 class CogVLMMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -282,8 +287,7 @@ class CogVLMMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_state):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-        return down_proj
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
 def get_expert_mask(token_type_ids: torch.LongTensor) -> (torch.BoolTensor, torch.BoolTensor):

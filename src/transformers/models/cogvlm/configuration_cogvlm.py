@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -143,8 +143,8 @@ class CogVLMConfig(PretrainedConfig):
         vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`CogVLMVisionConfig`].
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the LLaMA model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LlamaModel`]
+            Vocabulary size of the CogVLM model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`CogVLMModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 11008):
@@ -156,8 +156,7 @@ class CogVLMConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Llama 1 supports up to 2048 tokens,
-            Llama 2 up to 4096, CodeLlama up to 16384.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):

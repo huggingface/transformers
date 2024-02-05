@@ -34,7 +34,7 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
 original_device = "cuda:0"
-hf_device = "cuda:2"
+hf_device = "cuda:4"
 
 
 @torch.no_grad()
@@ -138,7 +138,7 @@ def convert_cogvlm_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         # base history template
         prompt = f"{query}"
     else:
-        raise ValueError("Teplate version not supported")
+        raise ValueError("Template version not supported")
 
     inputs = processor(images=image, text=prompt, return_tensors="pt").to(hf_device, torch.bfloat16)
 
