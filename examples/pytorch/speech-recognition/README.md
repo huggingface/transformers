@@ -446,7 +446,7 @@ A very common use case is to leverage a pretrained speech encoder model,
 
 By pairing a pretrained speech model with a pretrained text model, the warm-started model has prior knowledge of both the source audio and target text domains. However, the cross-attention weights between the encoder and decoder are randomly initialised. Thus, the model requires fine-tuning to learn the cross-attention weights and align the encoder mapping with that of the decoder. We can perform this very fine-tuning procedure using the example script.
 
-As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEnocderDecoderModel` framework. First create an empty repo on `hf.co`:
+As an example, let's instantiate a *Wav2Vec2-2-Bart* model with the `SpeechEncoderDecoderModel` framework. First create an empty repo on `hf.co`:
 
 ```bash
 huggingface-cli repo create wav2vec2-2-bart-base
@@ -506,7 +506,7 @@ Having warm-started the speech-encoder-decoder model under `<your-user-name>/wav
 In the script [`run_speech_recognition_seq2seq`], we load the warm-started model, 
 feature extractor, and tokenizer, process a speech recognition dataset, 
 and subsequently make use of the [`Seq2SeqTrainer`](https://huggingface.co/docs/transformers/main/en/main_classes/trainer#transformers.Seq2SeqTrainer) to train our system.
-Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains captilized letters in the transcriptions,
+Note that it is important to align the target transcriptions with the decoder's vocabulary. For example, the [`Librispeech`](https://huggingface.co/datasets/librispeech_asr) dataset only contains capitalized letters in the transcriptions,
 whereas BART was pretrained mostly on normalized text. Thus, it is recommended to add the argument 
 `--do_lower_case` to the fine-tuning script when using a warm-started `SpeechEncoderDecoderModel`. 
 The model is fine-tuned on the standard cross-entropy language modeling
