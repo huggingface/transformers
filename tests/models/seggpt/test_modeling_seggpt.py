@@ -334,7 +334,7 @@ class SegGptModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.pred_masks[0, :, :3, :3], expected_slice, atol=1e-4))
 
-        result = image_processor.post_process_semantic_segmentation(outputs, [input_image.size[::-1]])[0]["mask"]
+        result = image_processor.post_process_semantic_segmentation(outputs, [input_image.size[::-1]])[0]
 
         result_expected_shape = torch.Size((170, 297))
         expected_area = 1082

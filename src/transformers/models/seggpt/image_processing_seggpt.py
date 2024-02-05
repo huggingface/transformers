@@ -469,8 +469,9 @@ class SegGptImageProcessor(BaseImageProcessor):
                 List of length (batch_size), where each list item (`Tuple[int, int]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `List[Dict[str, TensorType]]`: A list of dictionaries, each dictionary containing the mask for an image
-            in the batch as predicted by the model.
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         requires_backends(self, ["torch"])
         # batch_size x num_channels x 2*height x width
@@ -493,7 +494,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         # Clip to match with palette if specified
         masks = torch.clip(masks * 255, 0, 255)
 
-        results = []
+        semantic_segmentation = []
         palette_tensor = torch.tensor(self.palette).float().to(masks.device) if self.palette is not None else None
 
         for idx, mask in enumerate(masks):
@@ -517,6 +518,6 @@ class SegGptImageProcessor(BaseImageProcessor):
                 # If no palette is specified SegGpt will try to paint using the mask class idx as RGB
                 pred = mask.mean(dim=0).int()
 
-            results.append({"mask": pred})
+            semantic_segmentation.append(pred)
 
-        return results
+        return semantic_segmentation
