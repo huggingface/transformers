@@ -301,20 +301,20 @@ class MambaMixer(nn.Module):
         conv_state, ssm_state = inference_params.key_value_memory_dict[self.layer_idx]
 
         projected_states = self.in_proj(hidden_states).transpose(1,2)
-        x, z = projected_states.chunk(2, dim=1)
+        hidden_states, z = projected_states.chunk(2, dim=1)
         
         if inference_params is not None and inference_params.seq_offset > 0:
-            x = causal_conv1d_update(
-                x,
+            hidden_states = causal_conv1d_update(
+                hidden_states,
                 conv_state, 
                 self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
                 self.conv1d.bias,
                 self.activation,
             )
         else:
-            conv_state = F.pad(x, (self.d_conv - seqlen, 0))
-            x = causal_conv1d_fn(
-                x=x,
+            conv_state = F.pad(hidden_states, (self.d_conv - seqlen, 0))
+            hidden_states = causal_conv1d_fn(
+                hidden_states=hidden_states,
                 weight=self.conv1d.weight.view(self.conv1d.weight.size(0), self.conv1d.weight.size(2)),
                 bias=self.conv1d.bias,
                 activation=self.activation,
@@ -323,7 +323,7 @@ class MambaMixer(nn.Module):
         # We're careful here about the layout, to avoid extra transposes.
         # We want dt to have d as the slowest moving dimension
         # and L as the fastest moving dimension, since those are what the ssm_scan kernel expects.
-        x_dbl = self.x_proj(rearrange(x, "b d l -> (b l) d"))  # (bl d)
+        x_dbl = self.x_proj(rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
         dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
         dt = self.dt_proj.weight @ dt.t()
         dt = rearrange(dt, "d (b l) -> b d l", l=seqlen)
@@ -331,17 +331,69 @@ class MambaMixer(nn.Module):
         C = rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
         if inference_params is not None and inference_params.seq_offset > 0:
             y, _ = selective_scan_update(
-                ssm_state, x, dt, self.negA, B, C, self.D, z=z, dt_bias=self.dt_proj.bias, dt_softplus=True
+                ssm_state, hidden_states, dt, self.negA, B, C, self.D, z=z, dt_bias=self.dt_proj.bias, dt_softplus=True
             )
         else:
             y, last_state = selective_scan_fn(
-                x, dt, self.negA, B, C, self.D.float(),z=z,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
+                hidden_states, dt, self.negA, B, C, self.D.float(),z=z,delta_bias=self.dt_proj.bias.float(),delta_softplus=True,return_last_state=True,
             )
         y = rearrange(y, "b d l -> b l d")
         attn_outputs = self.out_proj(y)
         return attn_outputs, conv_state, last_state
+    
+
+class MambaCache:
+    
+    def __init__(self):
+        pass
 
 
+class MambaSlowMixer(MambaMixer):
+    
+    def forward(self, hidden_states, infer_params=MambaCache()):
+        batch_size, seqlen, _ = hidden_states.shape
+        
+        # 1. Gated MLP's linear projection
+        projected_states = self.in_proj(hidden_states).transpose(1,2)
+        hidden_states, gate = projected_states.chunk(2, dim=1)
+        
+        # 2. Convolution sequence transformation
+        if infer_params is not None:
+            conv_state = infer_params.update_conv_states(hidden_states, ssm_state)
+
+        hidden_states = torch.sum(conv_state * torch.rearrange(self.conv1d.weight, "d 1 w -> d w"), dim=-1)  # (B D)
+        if self.conv1d.bias is not None:
+            hidden_states = hidden_states + self.conv1d.bias
+        hidden_states = self.act(hidden_states).to(dtype=hidden_states.dtype)
+        
+
+        # 3. State Space Model sequence transformation
+        
+        x_dbl = self.x_proj(torch.rearrange(hidden_states, "b d l -> (b l) d"))  # (bl d)
+        dt, B, C = torch.split(x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=-1)
+        dt = self.dt_proj.weight @ dt.t()
+        dt = torch.rearrange(dt, "d (b l) -> b d l", l=seqlen)
+        A = -torch.exp(self.A_log.float())  # (d_inner, d_state)
+        B = torch.rearrange(B, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        C = torch.rearrange(C, "(b l) dstate -> b dstate l", l=seqlen).contiguous()
+        
+            
+        dt = nn.functional.softplus(dt + self.dt_proj.bias.to(dtype=dt.dtype))
+        dA = torch.exp(torch.einsum("bd,dn->bdn", dt, A))
+        dB = torch.einsum("bd,bn->bdn", dt, B)
+        
+        if infer_params is not None:
+            ssm_state = infer_params.update_state_space(hidden_states, dA, dB)
+
+        ssm_state.copy_(ssm_state * dA + torch.rearrange(hidden_states, "b d -> b d 1") * dB)
+        y = torch.einsum("bdn,bn->bd", ssm_state.to(hidden_states.dtype), C)
+        y = y + self.D.to(hidden_states.dtype) * hidden_states
+        y = y * self.act(gate)  # (B D)
+            
+        # 4. Final linear projection
+        
+        attn_outputs = self.out_proj(y)
+        return attn_outputs, conv_state, y
 
         
 class MambaBlock(nn.Module):
@@ -660,7 +712,7 @@ class MambaModel(MambaPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(x for x in [hidden_states, state, all_hidden_states, all_self_attentions] if x is not None)
+            return tuple(hidden_states for hidden_states in [hidden_states, state, all_hidden_states, all_self_attentions] if hidden_states is not None)
 
         return MambaOutput(
             last_hidden_state=hidden_states,
