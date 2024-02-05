@@ -43,6 +43,7 @@ from ..utils import (
     is_torch_cuda_available,
     is_torch_xpu_available,
     logging,
+    PushToHubMixin,
 )
 
 
@@ -778,7 +779,7 @@ if is_torch_available():
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_feature_extractor=True, has_image_processor=True))
-class Pipeline(_ScikitCompat):
+class Pipeline(_ScikitCompat,PushToHubMixin):
     """
     The Pipeline class is the class from which all pipelines inherit. Refer to this class for methods shared across
     different pipelines.
