@@ -36,15 +36,16 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
+    PushToHubMixin,
     add_end_docstrings,
+    copy_func,
     infer_framework,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_xpu_available,
     logging,
-    PushToHubMixin,
-    copy_func,
+
 )
 
 
