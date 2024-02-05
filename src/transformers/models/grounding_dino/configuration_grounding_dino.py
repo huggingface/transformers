@@ -240,6 +240,8 @@ class GroundingDinoConfig(PretrainedConfig):
             The temperature for Sine Positional Embedding that is used together with vision backbone.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
 
     Examples:
 
@@ -303,6 +305,7 @@ class GroundingDinoConfig(PretrainedConfig):
         two_stage_bbox_embed_share=False,
         positional_embedding_temperature=20,
         init_std=0.02,
+        layer_norm_eps=1e-5,
         **kwargs,
     ):
         if backbone_config is None:
@@ -367,6 +370,7 @@ class GroundingDinoConfig(PretrainedConfig):
             raise ValueError("If two_stage_bbox_embed_share is True, decoder_bbox_embed_share must be True.")
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
+        self.layer_norm_eps = layer_norm_eps
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

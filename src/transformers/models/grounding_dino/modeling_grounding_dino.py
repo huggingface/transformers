@@ -276,8 +276,8 @@ class GroundingDinoModelOutput(ModelOutput):
             Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    init_reference_points: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
+    init_reference_points: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -752,8 +752,8 @@ class GroundingDinoTextEnhancerLayer(nn.Module):
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
         self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
 
-        self.layer_norm_before = nn.LayerNorm(config.d_model)
-        self.layer_norm_after = nn.LayerNorm(config.d_model)
+        self.layer_norm_before = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.layer_norm_after = nn.LayerNorm(config.d_model, config.layer_norm_eps)
 
         self.activation = ACT2FN[config.activation_function]
         self.num_heads = config.encoder_attention_heads // 2
@@ -1016,8 +1016,8 @@ class GroundingDinoFusionLayer(nn.Module):
         drop_path = config.fusion_droppath
 
         # pre layer norm
-        self.layer_norm_vision = nn.LayerNorm(config.d_model)
-        self.layer_norm_text = nn.LayerNorm(config.d_model)
+        self.layer_norm_vision = nn.LayerNorm(config.d_model, config.layer_norm_eps)
+        self.layer_norm_text = nn.LayerNorm(config.d_model, config.layer_norm_eps)
         self.attn = GroundingDinoBiMultiHeadAttention(config)
 
         # add layer scale for training stability
@@ -1080,13 +1080,13 @@ class GroundingDinoDeformableLayer(nn.Module):
         self.self_attn = GroundingDinoMultiscaleDeformableAttention(
             config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
 
     def forward(
         self,
@@ -1350,21 +1350,21 @@ class GroundingDinoDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention text
         self.encoder_attn_text = GroundingDinoMultiheadAttention(mha_config)
-        self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = GroundingDinoMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, config.layer_norm_eps)
 
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
@@ -1887,7 +1887,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.layer_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
         self.layers = nn.ModuleList([GroundingDinoDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.reference_points_head = GroundingDinoMLPPredictionHead(
             config.query_dim // 2 * config.d_model, config.d_model, config.d_model, 2
@@ -2233,7 +2233,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
 
         if config.two_stage:
             self.enc_output = nn.Linear(config.d_model, config.d_model)
-            self.enc_output_norm = nn.LayerNorm(config.d_model)
+            self.enc_output_norm = nn.LayerNorm(config.d_model, config.layer_norm_eps)
             if (
                 config.two_stage_bbox_embed_share
                 and config.decoder_bbox_embed_share
