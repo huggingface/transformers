@@ -892,7 +892,7 @@ class Pipeline(_ScikitCompat,PushToHubMixin):
 
     def save_pretrained(
             self,
-            save_directory: str, 
+            save_directory: str,
             safe_serialization: bool = True,
             **kwargs,
         ):
