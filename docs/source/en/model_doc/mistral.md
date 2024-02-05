@@ -149,3 +149,13 @@ Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Sin
 
 [[autodoc]] MistralForSequenceClassification
     - forward
+
+## FlaxMistralModel
+
+[[autodoc]] FlaxMistralModel
+    - __call__
+
+## FlaxMistralForCausalLM
+
+[[autodoc]] FlaxMistralForCausalLM
+    - __call__

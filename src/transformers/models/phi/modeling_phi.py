@@ -86,7 +86,7 @@ class PhiRotaryEmbedding(nn.Module):
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
@@ -96,7 +96,7 @@ class PhiRotaryEmbedding(nn.Module):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -125,7 +125,7 @@ class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
         t = t / self.scaling_factor
 
         freqs = torch.outer(t, self.inv_freq)
@@ -150,10 +150,10 @@ class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
             base = self.base * (
                 (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
             ) ** (self.dim / (self.dim - 2))
-            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
             self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
@@ -237,8 +237,8 @@ class PhiAttention(nn.Module):
         self.layer_idx = layer_idx
         if layer_idx is None:
             logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
 
@@ -506,7 +506,7 @@ class PhiFlashAttention2(PhiAttention):
             value_states = value_states.to(target_dtype)
 
         attn_output = self._flash_attention_forward(
-            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=1.0
+            query_states, key_states, value_states, attention_mask, q_len, dropout=attn_dropout, softmax_scale=None
         )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()

@@ -298,6 +298,23 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         output = speech_recognizer(filename)
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
+    @require_torch
+    @slow
+    def test_torch_large_with_input_features(self):
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-audio/wav2vec2-bert-CV16-en",
+            framework="pt",
+        )
+        waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
+        output = speech_recognizer(waveform)
+        self.assertEqual(output, {"text": ""})
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        filename = ds[40]["file"]
+        output = speech_recognizer(filename)
+        self.assertEqual(output, {"text": "a man said to the universe sir i exist"})
+
     @slow
     @require_torch
     @slow
@@ -1135,7 +1152,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     @slow
     def test_whisper_longform(self):
         # fmt: off
-        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out of fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct denny's, set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile!"""
+        EXPECTED_RESULT = """ Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."""
         # fmt: on
 
         processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
@@ -1317,22 +1334,22 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
     def test_chunk_iterator(self):
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         inputs = torch.arange(100).long()
-        ratio = 1
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 0, 0))
+
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
         self.assertEqual([o["is_last"] for o in outs], [True])
 
         # two chunks no stride
-        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 50, 0, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(50, 0, 0), (50, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 50), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
         # two chunks incomplete last
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 0, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 0), (20, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 20)])
@@ -1343,7 +1360,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # This test is specifically crafted to trigger a bug if next chunk
         # would be ignored by the fact that all the data would be
         # contained in the strided left data.
-        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 105, 5, 5))
         self.assertEqual(len(outs), 1)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100)])
@@ -1356,25 +1373,24 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-        ratio = 1
-        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 100, 20, 10))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(100, 0, 10), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 100), (1, 30)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 80, 20, 10))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(80, 0, 10), (50, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 80), (1, 50)])
         self.assertEqual([o["is_last"] for o in outs], [False, True])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 90, 20, 0))
         self.assertEqual(len(outs), 2)
         self.assertEqual([o["stride"] for o in outs], [(90, 0, 0), (30, 20, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 90), (1, 30)])
 
-        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 36, 6, 6))
         self.assertEqual(len(outs), 4)
         self.assertEqual([o["stride"] for o in outs], [(36, 0, 6), (36, 6, 6), (36, 6, 6), (28, 6, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 36), (1, 36), (1, 36), (1, 28)])
@@ -1383,7 +1399,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         input_values = feature_extractor(inputs, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")[
             "input_values"
         ]
-        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5, ratio))
+        outs = list(chunk_iter(inputs, feature_extractor, 30, 5, 5))
         self.assertEqual(len(outs), 5)
         self.assertEqual([o["stride"] for o in outs], [(30, 0, 5), (30, 5, 5), (30, 5, 5), (30, 5, 5), (20, 5, 0)])
         self.assertEqual([o["input_values"].shape for o in outs], [(1, 30), (1, 30), (1, 30), (1, 30), (1, 20)])
@@ -1434,6 +1450,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # Original model wasn't trained with timestamps and has incorrect generation config
         pipe.model.generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
 
+        # the audio is 4 seconds long
         audio = hf_hub_download("Narsil/asr_dummy", filename="hindi.ogg", repo_type="dataset")
 
         out = pipe(
@@ -1443,11 +1460,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             out,
             {
-                "chunks": [
-                    {"text": "", "timestamp": (18.94, 0.02)},
-                    {"text": "मिर्ची में कितने विभिन्न प्रजातियां हैं", "timestamp": (None, None)},
-                ],
                 "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं",
+                "chunks": [{"timestamp": (0.58, None), "text": "मिर्ची में कितने विभिन्न प्रजातियां हैं"}],
             },
         )
 

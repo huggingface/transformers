@@ -23,6 +23,20 @@ from unittest import skip
 from unittest.mock import patch
 
 import tensorflow as tf
+from packaging.version import parse
+
+
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
 
 from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
@@ -115,7 +129,7 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_text_classification.main()
             # Reset the mixed precision policy so we don't break other tests
-            tf.keras.mixed_precision.set_global_policy("float32")
+            keras.mixed_precision.set_global_policy("float32")
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
