@@ -481,7 +481,7 @@ class OwlViTSdpaAttention(OwlViTAttention):
             value_states,
             attn_mask=attention_mask,
             dropout_p=self.dropout if self.training else 0.0,
-            is_causal=self.is_causal and causal_attention_mask,
+            is_causal=self.is_causal and causal_attention_mask is None,
         )
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
@@ -877,7 +877,7 @@ class OwlViTTextTransformer(nn.Module):
         if self._use_sdpa and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on
             # the manual implementation that requires a 4D causal mask in all cases.
-            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, hidden_states)
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(attention_mask, input_shape, hidden_states ,0 )
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
