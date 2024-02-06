@@ -103,27 +103,27 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
-            {
-                "restore_cache": {
-                    "keys": [
-                        # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                        # try the partially-matched cache from `main`
-                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
-                        # try the general partially-matched cache
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
-                    ]
-                }
-            },
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
-                    ]
-                }
-            },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             # check the fully-matched cache first
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+            #             # try the partially-matched cache from `main`
+            #             f"v{self.cache_version}-{self.cache_name}-main-pip-",
+            #             # try the general partially-matched cache
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
+            #         ]
+            #     }
+            # },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+            #             f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
+            #         ]
+            #     }
+            # },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
