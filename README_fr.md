@@ -45,7 +45,7 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <b>Anglais</b> |
+        <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hans.md">简体中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hant.md">繁體中文</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
@@ -54,8 +54,8 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/README_hd.md">हिन्दी</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_ru.md">Русский</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers//blob/main/README_fr.md">Français</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_te.md">తెలుగు</a> |
+        <b>Français</b> |
     </p>
 </h4>
 
@@ -233,7 +233,7 @@ Le modèle lui-même est un module [`nn.Module` PyTorch](https://pytorch.org/doc
     - Entraînez des modèles de pointe en 3 lignes de code.
     - Trasnférer un seul modèle entre les frameworks TF2.0/PyTorch/JAX à volonté.
     - Choisissez facilement le bon framework pour l'entraînement, l'évaluation et la production.
-    
+
 1. Personnalisez facilement un modèle ou un exemple selon vos besoins :
     - Nous fournissons des exemples pour chaque architecture afin de reproduire les résultats publiés par ses auteurs originaux.
     - Les détails internes du modèle sont exposés de manière aussi cohérente que possible.
@@ -256,7 +256,7 @@ Vous devriez installer 🤗 Transformers dans un [environnement virtuel](https:/
 D'abord, créez un environnement virtuel avec la version de Python que vous allez utiliser et activez-le.
 
 Ensuite, vous devrez installer au moins l'un de Flax, PyTorch ou TensorFlow.
-Veuillez vous référer à la page d'installation de [TensorFlow](https://www.tensorflow.org/install/), de [PyTorch](https://pytorch.org/get-started/locally/#start-locally) et/ou de [Flax]](https://github.com/google/flax#quick-install) et [Jax](https://github.com/google/jax#installation) pour connaître la commande d'installation spécifique à votre plateforme.
+Veuillez vous référer à la page d'installation de [TensorFlow](https://www.tensorflow.org/install/), de [PyTorch](https://pytorch.org/get-started/locally/#start-locally) et/ou de [Flax](https://github.com/google/flax#quick-install) et [Jax](https://github.com/google/jax#installation) pour connaître la commande d'installation spécifique à votre plateforme.
 
 Lorsqu'un de ces backends est installé, 🤗 Transformers peut être installé avec pip comme suit :
 
@@ -373,7 +373,7 @@ Nombre actuel de points de contrôle : ![](https://img.shields.io/endpoint?url=h
 1. **[GPT Neo](https://huggingface.co/docs/transformers/model_doc/gpt_neo)** (d'EleutherAI) publié dans le référentiel [EleutherAI/gpt-neo](https://github.com/EleutherAI/gpt-neo) par Sid Black, Stella Biderman, Leo Gao, Phil Wang et Connor Leahy.
 1. **[GPT NeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox)** (d'EleutherAI) publié dans l'article [GPT-NeoX-20B: Un modèle de langue autonome open source](https://arxiv.org/abs/2204.06745) par Sid Black, Stella Biderman, Eric Hallahan, Quentin Anthony, Leo Gao, Laurence Golding, Horace He, Connor Leahy, Kyle McDonell, Jason Phang, Michael Pieler, USVSN Sai Prashanth, Shivanshu Purohit, Laria Reynolds, Jonathan Tow, Ben Wang, Samuel Weinbach
 1. **[GPT NeoX Japanese](https://huggingface.co/docs/transformers/model_doc/gpt_neox_japanese)** (de ABEJA) publié par Shinya Otani, Takayoshi Makabe, Anuj Arora et Kyo Hattori.
-1. **[GPT-2](https://huggingface.co/docs/transformers/model_doc/gpt2)** (d'OpenAI) a été publié dans l'article [Les modèles de langage sont des apprenants multitâches non supervisés](https://openai.com/research/better-language-models/) par Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** et Ilya Sutskever**.
+1. **[GPT-2](https://huggingface.co/docs/transformers/model_doc/gpt2)** (d'OpenAI) a été publié dans l'article [Les modèles de langage sont des apprenants multitâches non supervisés](https://openai.com/research/better-language-models/) par Alec Radford, Jeffrey Wu, Rewon Child, David Luan, Dario Amodei et Ilya Sutskever.
 1. **[GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj)** (d'EleutherAI) a été publié dans le dépôt [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax/) par Ben Wang et Aran Komatsuzaki.
 1. **[GPT-Sw3](https://huggingface.co/docs/transformers/model_doc/gpt-sw3)** (d'AI-Sweden) a été publié dans l'article [Leçons apprises de GPT-SW3 : Construction du premier modèle de langage génératif à grande échelle pour le suédois](http://www.lrec-conf.org/proceedings/lrec2022/pdf/2022.lrec-1.376.pdf) par Ariel Ekgren, Amaru Cuba Gyllensten, Evangelia Gogoulou, Alice Heiman, Severine Verlinden, Joey Öhman, Fredrik Carlsson, Magnus Sahlgren.
 1. **[GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode)** (de BigCode) a été publié dans l'article [SantaCoder: ne visez pas les étoiles !](https://arxiv.org/abs/2301.03988) par Loubna Ben Allal, Raymond Li, Denis Kocetkov, Chenghao Mou, Christopher Akiki, Carlos Munoz Ferrandis, Niklas Muennighoff, Mayank Mishra, Alex Gu, Manan Dey, Logesh Kumar Umapathi, Carolyn Jane Anderson, Yangtian Zi, Joel Lamy Poirier, Hailey Schoelkopf, Sergey Troshin, Dmitry Abulkhanov, Manuel Romero, Michael Lappert, Francesco De Toni, Bernardo García del Río, Qian Liu, Shamik Bose, Urvashi Bhattacharyya, Terry Yue Zhuo, Ian Yu, Paulo Villegas, Marco Zocca, Sourab Mangrulkar, David Lansky, Huu Nguyen, Danish Contractor, Luis Villa, Jia Li, Dzmitry Bahdanau, Yacine Jernite, Sean Hughes, Daniel Fried, Arjun Guha, Harm de Vries, Leandro von Werra.

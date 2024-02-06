@@ -379,7 +379,7 @@ pytest --random-order-bucket=none
 
 Standardmäßig ist `--random-order-bucket=module` impliziert, wodurch die Dateien auf den Modulebenen gemischt werden. Es kann auch
 auf den Ebenen `class`, `package`, `global` und `none` mischen. Die vollständigen Details entnehmen Sie bitte der
-[Dokumentation] (https://github.com/jbasko/pytest-random-order).
+[Dokumentation](https://github.com/jbasko/pytest-random-order).
 
 Eine weitere Alternative zur Randomisierung ist: [`pytest-random`](https://github.com/pytest-dev/pytest-randomly). Dieses
 Modul hat eine sehr ähnliche Funktionalität/Schnittstelle, aber es hat nicht die Eimermodi, die in
