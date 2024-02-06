@@ -1093,14 +1093,18 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         super().__init__(config)
 
         if config.scaling == "mean" or config.scaling is True:
-            self.scaler = LagLlamaMeanScaler(dim=1, keepdim=True)
+            self.scaler = LagLlamaMeanScaler(config)
         elif config.scaling == "std":
-            self.scaler = LagLlamaStdScaler(dim=1, keepdim=True)
+            self.scaler = LagLlamaStdScaler(config)
         else:
-            self.scaler = LagLlamaNOPScaler(dim=1, keepdim=True)
+            self.scaler = LagLlamaNOPScaler(config)
 
         self.embed_inputs = nn.Linear(config.feature_size, config.hidden_size, bias=True)
-        self.layers = nn.ModuleList([LagLlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [LagLlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self._use_sdpa = config._attn_implementation == "sdpa"
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = LagLlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
