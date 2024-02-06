@@ -39,7 +39,7 @@ embeddings and generates valid masks.
 SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on 
 SA-1B, a dataset with 1 million images and 1.1 billion masks. 
 
-In this guide, we will learn how to:
+In this guide, you will learn how to:
 - Infer in segment everything mode,
 - Infer in point prompting mode,
 - Infer in box prompting mode,
