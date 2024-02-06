@@ -131,7 +131,8 @@ class LlamaRotaryEmbedding(nn.Module):
         self._set_cos_sin_cache(seq_len=max_position_embeddings, device=device, dtype=torch.get_default_dtype())
 
     def _set_cos_sin_cache(self, seq_len, device, dtype):
-        # Note: on the original Llama codebase, these tensors are created on the target device (and not on CPU)
+        # Note: on the original Llama codebase, these tensors are created on the target device (and not on CPU) and
+        # in FP32. They are applied (multiplied) in FP32 as well.
         self.max_seq_len_cached = seq_len
         inv_freq = 1.0 / (
             self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=device).float() / self.dim)
@@ -150,8 +151,8 @@ class LlamaRotaryEmbedding(nn.Module):
             self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
-            self.cos_cached[:seq_len].to(x.device).to(x.dtype),
-            self.sin_cached[:seq_len].to(x.device).to(x.dtype),
+            self.cos_cached[:seq_len].to(x.device),
+            self.sin_cached[:seq_len].to(x.device),
         )
 
 
@@ -232,9 +233,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """
     cos = cos[position_ids].unsqueeze(unsqueeze_dim)
     sin = sin[position_ids].unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    # q_embed = (q * cos) + (rotate_half(q) * sin)
+    # k_embed = (k * cos) + (rotate_half(k) * sin)
+    # return q_embed, k_embed
+    q_fp32 = q.float()
+    k_fp32 = q.float()
+    q_embed = (q_fp32 * cos) + (rotate_half(q_fp32) * sin)
+    k_embed = (k_fp32 * cos) + (rotate_half(k_fp32) * sin)
+    return q_embed.type_as(q), k_embed.type_as(k)
 
 
 class LlamaMLP(nn.Module):
@@ -281,6 +287,27 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
+    ndim = x.ndim
+    assert 0 <= 1 < ndim
+    assert freqs_cis.shape == (x.shape[1], x.shape[-1])
+    shape = [d if i == 1 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
+    return freqs_cis.view(*shape)
+
+
+def apply_rotary_emb(
+    xq: torch.Tensor,
+    xk: torch.Tensor,
+    freqs_cis: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
+    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
+    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
+    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
 class LlamaAttention(nn.Module):
@@ -402,7 +429,19 @@ class LlamaAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        query_states = torch.stack((query_states[..., :64], query_states[..., 64:]), dim=-1).flatten(3)
+        key_states = torch.stack((key_states[..., :64], key_states[..., 64:]), dim=-1).flatten(3)
+        freqs_cis = torch.complex(cos[:, :64], sin[:, :64])
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        query_states, key_states = apply_rotary_emb(query_states, key_states, freqs_cis)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        query_states = torch.cat((query_states[..., torch.arange(0, 128, 2)], query_states[..., torch.arange(1, 128, 2)]), dim=3)
+        key_states = torch.cat((key_states[..., torch.arange(0, 128, 2)], key_states[..., torch.arange(1, 128, 2)]), dim=3)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
