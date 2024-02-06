@@ -986,8 +986,9 @@ class TokenizerTesterMixin:
 
     def test_encode_decode_consistency(self):
         INCONSISTENCY_TOKENIZERS = [
-            "MgpstrTokenizer"
+            "MgpstrTokenizer",
         ]
+
         # self.assertEqual(True, False)
         def _get_excepted(item, decoded):
             excepted_entry = item
@@ -1000,8 +1001,6 @@ class TokenizerTesterMixin:
             return excepted_entry
 
         def _excepted_skip(item, tokenizer, is_batch):
-            if tokenizer.__class__.__name__ in INCONSISTENCY_TOKENIZERS:
-                return True
             if not tokenizer.is_fast:
                 return False
             if not isinstance(item, list):
@@ -1026,6 +1025,8 @@ class TokenizerTesterMixin:
         return_tensorses = [None] + list(TArrayType._value2member_map_.keys())
         for tokenizer, return_tensors in itertools.product(tokenizers, return_tensorses):
             with self.subTest(f"{tokenizer.__class__.__name__} with {return_tensors=}"):
+                if tokenizer.__class__.__name__ in INCONSISTENCY_TOKENIZERS:
+                    continue
                 tokenizer.add_tokens(["one", "two", "three"])
                 # Test consistency for `encode/decode` method pair.
                 items = [

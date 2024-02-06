@@ -91,8 +91,6 @@ class TensorType(ExplicitEnum):
     TENSORFLOW = "tf"
     NUMPY = "np"
     JAX = "jax"
-    # Python `List`
-    LIST = "list"
 
     @staticmethod
     def from_type(array_type: Optional[Union[str, "TensorType"]]) -> Optional["TensorType"]:
@@ -163,8 +161,6 @@ def infer_array_type(array) -> Optional[TArrayType]:
         return TArrayType.TENSORFLOW
     if is_jax_tensor(array):
         return TArrayType.JAX
-    if isinstance(array, List):
-        return TArrayType.LIST
     return None
 
 
