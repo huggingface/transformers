@@ -4863,6 +4863,22 @@ def auto_sequential_bs_forward(
     Returns:
         The stacked model outputs.
     """
+
+    def largest_factor(n, m=None):
+        """Returns the largest factor of n that is smaller than m.
+        This helps us find the biggest divisible split size for the input batch size.
+        """
+        if m<=1:
+            raise ValueError("m should be greater than 1, because no factor can be found strictly less than 1")
+        if m is None:
+            m = n
+        if n <= 1 or m <= 1:
+            return None  # No meaningful factors in this context
+        for i in range(min(n // 2, m - 1), 0, -1):
+            if n % i == 0:
+                return i
+        return None  # If no factor is found that is smaller than m
+
     global optimal_low_mem_beam_search_bs
     try_split_size = batch_size if optimal_low_mem_beam_search_bs is None else optimal_low_mem_beam_search_bs
 
@@ -4876,7 +4892,8 @@ def auto_sequential_bs_forward(
             break
         except RuntimeError as e:
             if "out of memory" in str(e) and try_split_size > 1:
-                try_split_size = try_split_size // 2
+                # Find the largest factor of batch_size that is smaller than try_split_size
+                try_split_size = largest_factor(batch_size, try_split_size)
                 torch.cuda.empty_cache()
             # if try_split_size is already 1, raise the error because we can't split further
             else:
