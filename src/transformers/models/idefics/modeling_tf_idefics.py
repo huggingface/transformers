@@ -530,43 +530,32 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
 
 class TFIdeficsEmbedding(tf.keras.layers.Layer):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
+        # Matt: The PyTorch version of this layer does a lot of work to cache values, but we just rely on TF compilation
+        # and/or XLA to sort out constants like that. It actually may not seem like this layer needs to be stateful at
+        # all when we benefit from TF compilation, but it does. The reason is that self.inv_freq is a buffer in the
+        # original implementation, and fp16 conversion may cast the buffer to a different dtype, and we need to
+        # replicate those lower-precision values or our models give different outputs from the original.
         super().__init__(**kwargs)
 
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-
-    def _set_cos_sin_cache(self, seq_len, dtype):
-        self.max_seq_len_cached = seq_len
-        t = tf.range(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
-
-        freqs = tf.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-        emb = tf.concat([freqs, freqs], axis=-1)
-        self.cos_cached = tf.math.cos(emb)
-        self.sin_cached = tf.math.sin(emb)
-
-    def build(self, input_shape):
-        if self.built:
-            return
-        self.built = True
-        self.inv_freq = self.add_weight(name="inv_freq", shape=(self.dim // 2,), dtype=tf.float32)
-        self.inv_freq.assign(
+        self.inv_freq = tf.constant(
             1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
         )
-        self._set_cos_sin_cache(seq_len=self.max_position_embeddings, dtype=tf.float32)
 
-        super().build(input_shape)
+    def _compute_cos_sin(self, seq_len):
+        t = tf.range(seq_len, dtype=self.inv_freq.dtype)
+        freqs = tf.einsum("i, j -> ij", t, self.inv_freq)  # Outer multiplication
+        emb = tf.concat((freqs, freqs), axis=-1)
+
+        return tf.cos(emb), tf.sin(emb)
 
     def call(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len],
-            self.sin_cached[:seq_len],
-        )
+        if seq_len is None:
+            seq_len = shape_list(x)[2]
+        return self._compute_cos_sin(seq_len=seq_len)
 
 
 def rotate_half(x):
@@ -779,6 +768,9 @@ class TFIdeficsAttention(tf.keras.layers.Layer):
         if getattr(self, "v_proj", None) is not None:
             with tf.name_scope(self.v_proj.name):
                 self.v_proj.build(kv_input_dim)
+        if getattr(self, "rotary_emb", None) is not None:
+            with tf.name_scope(self.rotary_emb.name):
+                self.rotary_emb.build(None)
 
 
 class TFIdeficsDecoderLayer(tf.keras.layers.Layer):
