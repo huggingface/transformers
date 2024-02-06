@@ -24,7 +24,7 @@ given an image.
 Mask generation models are trained on large amounts of data, and they operate in two modes. The first one is prompting 
 mode. In this mode, the model takes in an image and a prompt, where a prompt can be a point location in the image within 
 an object or a bounding box surrounding an object. In prompting mode, the model only returns the mask over the object 
-that the prompt is pointing out to. The second one is the  segment everything mode. In segment everything, given an 
+that the prompt is pointing out to. The second one is the segment everything mode. In segment everything, given an 
 image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image
 for inference. 
 
