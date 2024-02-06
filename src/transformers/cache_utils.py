@@ -381,8 +381,7 @@ class StaticCache(Cache):
         Return:
             A tuple containing the updated key and value states.
         """
-        q_len = cache_kwargs.get("q_len", key_states.shape[1])
-        position_ids = torch.arange(self.seen_tokens, self.seen_tokens + q_len, device=key_states.device)
+        position_ids = cache_kwargs.get("position_ids")
 
         k_out = self.key_cache
         v_out = self.value_cache
