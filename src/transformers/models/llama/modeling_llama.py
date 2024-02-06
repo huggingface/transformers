@@ -273,6 +273,8 @@ class LlamaMLP(nn.Module):
             down_proj = sum(down_proj)
         else:
             down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+            if down_proj.isinf().any():
+                breakpoint()
 
         return down_proj
 
@@ -392,6 +394,8 @@ class LlamaAttention(nn.Module):
             )
 
         bsz, q_len, _ = hidden_states.size()
+        if hidden_states.isnan().any() or hidden_states.isinf().any():
+            breakpoint()
 
         if self.config.pretraining_tp > 1:
             key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.config.pretraining_tp
@@ -431,17 +435,16 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
-
         query_states = torch.stack((query_states[..., :64], query_states[..., 64:]), dim=-1).flatten(3)
         key_states = torch.stack((key_states[..., :64], key_states[..., 64:]), dim=-1).flatten(3)
         freqs_cis = torch.complex(cos[:, :64], sin[:, :64])
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         query_states, key_states = apply_rotary_emb(query_states, key_states, freqs_cis)
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        query_states = torch.cat((query_states[..., torch.arange(0, 128, 2)], query_states[..., torch.arange(1, 128, 2)]), dim=3)
-        key_states = torch.cat((key_states[..., torch.arange(0, 128, 2)], key_states[..., torch.arange(1, 128, 2)]), dim=3)
+        # query_states = query_states.transpose(1, 2)
+        # key_states = key_states.transpose(1, 2)
+        # query_states = torch.cat((query_states[..., torch.arange(0, 128, 2)], query_states[..., torch.arange(1, 128, 2)]), dim=3)
+        # key_states = torch.cat((key_states[..., torch.arange(0, 128, 2)], key_states[..., torch.arange(1, 128, 2)]), dim=3)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -449,6 +452,10 @@ class LlamaAttention(nn.Module):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
+
+        # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        query_states = query_states.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        key_states = key_states.transpose(1, 2) # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
@@ -489,6 +496,9 @@ class LlamaAttention(nn.Module):
 
         if not output_attentions:
             attn_weights = None
+
+        if attn_output.isnan().any() or attn_output.isinf().any():
+            breakpoint()
 
         return attn_output, attn_weights, past_key_value
 
@@ -743,7 +753,18 @@ class LlamaSdpaAttention(LlamaAttention):
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+        # query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        query_states = torch.stack((query_states[..., :64], query_states[..., 64:]), dim=-1).flatten(3)
+        key_states = torch.stack((key_states[..., :64], key_states[..., 64:]), dim=-1).flatten(3)
+        freqs_cis = torch.complex(cos[-key_states.shape[2]:, :64], sin[-key_states.shape[2]:, :64])
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        query_states, key_states = apply_rotary_emb(query_states, key_states, freqs_cis)
+        # query_states = query_states.transpose(1, 2)
+        # key_states = key_states.transpose(1, 2)
+        # query_states = torch.cat((query_states[..., torch.arange(0, 128, 2)], query_states[..., torch.arange(1, 128, 2)]), dim=3)
+        # key_states = torch.cat((key_states[..., torch.arange(0, 128, 2)], key_states[..., torch.arange(1, 128, 2)]), dim=3)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos}  # Specific to RoPE models
@@ -751,6 +772,8 @@ class LlamaSdpaAttention(LlamaAttention):
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
+        query_states = query_states.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        key_states = key_states.transpose(1, 2) # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
@@ -831,6 +854,8 @@ class LlamaDecoderLayer(nn.Module):
             )
 
         residual = hidden_states
+        if residual.isnan().any() or residual.isinf().any():
+            breakpoint()
 
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -853,6 +878,9 @@ class LlamaDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
+
+        if hidden_states.isnan().any() or hidden_states.isinf().any():
+            breakpoint()
 
         if output_attentions:
             outputs += (self_attn_weights,)
