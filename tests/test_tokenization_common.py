@@ -985,10 +985,6 @@ class TokenizerTesterMixin:
                 self.assertEqual(text_2, output_text)
 
     def test_encode_decode_consistency(self):
-        INCONSISTENCY_TOKENIZERS = [
-            "MgpstrTokenizer",
-        ]
-
         # self.assertEqual(True, False)
         def _get_excepted(item, decoded):
             excepted_entry = item
@@ -1025,8 +1021,6 @@ class TokenizerTesterMixin:
         return_tensorses = [None] + list(TArrayType._value2member_map_.keys())
         for tokenizer, return_tensors in itertools.product(tokenizers, return_tensorses):
             with self.subTest(f"{tokenizer.__class__.__name__} with {return_tensors=}"):
-                if tokenizer.__class__.__name__ in INCONSISTENCY_TOKENIZERS:
-                    continue
                 tokenizer.add_tokens(["one", "two", "three"])
                 # Test consistency for `encode/decode` method pair.
                 items = [
