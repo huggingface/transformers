@@ -33,7 +33,7 @@ base image encoder, a prompt encoder, and a mask decoder. Images and prompts are
 embeddings and generates valid masks. 
 
 <div class="flex justify-center">
-     <img src="https://huggingface.co/datasets/huggingface/documentation-images/blob/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
 SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on 
