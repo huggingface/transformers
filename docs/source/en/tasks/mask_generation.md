@@ -129,7 +129,7 @@ Below is the original image in grayscale with colorful maps overlaid. Very impre
 
 ### Point Prompting
 
-You can also use the model without the pipeline. To do so, simply initialize the model and
+You can also use the model without the pipeline. To do so, initialize the model and
 the processor.
 
 ```python
