@@ -43,7 +43,7 @@ In this guide, you will learn how to:
 - Infer in segment everything mode,
 - Infer in point prompting mode,
 - Infer in box prompting mode,
-- Prompt batching.
+- Batch prompts.
 
 First, let's install `transformers`:
 
