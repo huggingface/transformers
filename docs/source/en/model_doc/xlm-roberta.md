@@ -55,6 +55,14 @@ This model was contributed by [stefan-it](https://huggingface.co/stefan-it). The
   language from the input ids.
 - Uses RoBERTa tricks on the XLM approach, but does not use the translation language modeling objective. It only uses masked language modeling on sentences coming from one language.
 
+### Expected speedups
+
+Below is an expected speedup diagram that compares pure inference time between the native implementation in transformers using `FacebookAI/xlm-roberta-base` checkpoint and the Flash Attention 2 version of the model.
+
+<div style="text-align: center">
+<img src="https://private-user-images.githubusercontent.com/74915610/302696384-d93c45c1-3518-4e18-a316-5efb7b70ebb7.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3MDcyMzU4NzYsIm5iZiI6MTcwNzIzNTU3NiwicGF0aCI6Ii83NDkxNTYxMC8zMDI2OTYzODQtZDkzYzQ1YzEtMzUxOC00ZTE4LWEzMTYtNWVmYjdiNzBlYmI3LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNDAyMDYlMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjQwMjA2VDE2MDYxNlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTI4YTI4NDA4ZDYwZjI4ODQ4Mjc2MjY5MjM4M2FmYjhmZmZmODFkODkyMmQ5ZGY1NDBjMjZjZDgxYTY2NTU3NzAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JmFjdG9yX2lkPTAma2V5X2lkPTAmcmVwb19pZD0wIn0.a59nTa9CDX5NK9oQ9uLHNNuWZkRePPtQFIo_NemOnZs">
+</div>
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with XLM-RoBERTa. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
