@@ -275,6 +275,10 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(decoder_attentions.grad)
 
     def test_attention_outputs(self):
+        for i in range(100):
+            self._test_attention_outputs()
+
+    def _test_attention_outputs(self):
         """
         Custom `test_attention_outputs` since FastSpeech2Conformer does not output cross attentions, has variable
         decoder attention shape, and uniquely outputs energy, pitch, and durations.
