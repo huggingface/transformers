@@ -1229,7 +1229,9 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, lags.shape[-2], -1)
 
         if past_time_features is not None:
-            inputs = torch.cat((lags, expanded_static_feat, past_time_features[..., -lags.shape[-2] :, :]), dim=-1)
+            inputs = torch.cat(
+                (lags, expanded_static_feat, past_time_features[..., max(self.config.lags_sequence) :, :]), dim=-1
+            )
         else:
             inputs = torch.cat((lags, expanded_static_feat), dim=-1)
         return inputs, loc, scale
