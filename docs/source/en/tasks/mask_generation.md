@@ -53,7 +53,7 @@ pip install -q transformers
 
 ## Mask Generation Pipeline
 
-The easiest way to infer mask generation models is to use `mask-generation` pipeline.
+The easiest way to infer mask generation models is to use the `mask-generation` pipeline.
 
 ```python
 >>> from transformers import pipeline
