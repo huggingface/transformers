@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Mask generation is the task of generating semantically meaningful masks for an image. 
 This task is very similar to image segmentation, but many differences exist. Image segmentation models are trained
-on labeled datasets and are limited to the classes they have seen during training; they return a mask and its class, 
+on labeled datasets and are limited to the classes they have seen during training; they return a set of masks and corresponding classes, 
 given an image. 
 
 Mask generation models are trained on large amounts of data, and they operate in two modes. The first one is prompting 
