@@ -4058,9 +4058,8 @@ class Trainer:
             and (self.is_deepspeed_enabled or self.is_fsdp_enabled)
             and self.args.load_best_model_at_end
         ):
-            raise ValueError(
-                "DeepSpeed/FSDP can't be used with `save_only_model` along with `load_best_model_at_end`."
-            )
+            wrapper = "DeepSpeed" if self.is_deepspeed_enabled else "FSDP"
+            raise ValueError(f"{wrapper} can't be used with `save_only_model` along with `load_best_model_at_end`.")
 
     def propagate_args_to_deepspeed(self, auto_find_batch_size=False):
         """
