@@ -106,7 +106,7 @@ def decoder_config_from_checkpoint(checkpoint: str) -> MusicgenMelodyDecoderConf
         num_attention_heads = 32
     else:
         raise ValueError(
-            "Checkpoint should be one of `['facebook/musicgen-stereo', 'facebook/musicgen-stereo-large']` for the mono checkpoints, "
+            "Checkpoint should be one of `['facebook/musicgen-melody', 'facebook/musicgen-melody-large']` for the mono checkpoints, "
             "or `['facebook/musicgen-stereo-melody', 'facebook/musicgen-stereo-melody-large']` "
             f"for the stereo checkpoints, got {checkpoint}."
         )
