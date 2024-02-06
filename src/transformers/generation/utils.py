@@ -4868,7 +4868,7 @@ def auto_sequential_bs_forward(
         """Returns the largest factor of n that is smaller than m.
         This helps us find the biggest divisible split size for the input batch size.
         """
-        if m<=1:
+        if m <= 1:
             raise ValueError("m should be greater than 1, because no factor can be found strictly less than 1")
         if m is None:
             m = n
