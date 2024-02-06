@@ -1800,7 +1800,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                 # optionally project audio_hidden_states ->
                 # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
                 if self.config.num_chroma != self.decoder.config.hidden_size:
-                    audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states.to(self.dtype))
+                    audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
 
                 # pad or truncate to config.chroma_length
                 if audio_hidden_states.shape[1] < self.config.chroma_length:
@@ -2046,7 +2046,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             # optionally project audio_hidden_states ->
             # (batch_size, seq_len, num_chroma) -> (batch_size, seq_len, hidden_size)
             if self.config.num_chroma != self.decoder.config.hidden_size:
-                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states.to(self.dtype))
+                audio_hidden_states = self.audio_enc_to_dec_proj(audio_hidden_states)
 
             # pad or truncate to config.chroma_length
             if audio_hidden_states.shape[1] < self.config.chroma_length:

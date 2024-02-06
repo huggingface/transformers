@@ -140,7 +140,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         norm_chroma[:] = 0
         norm_chroma.scatter_(dim=-1, index=idx, value=1)
 
-        return norm_chroma.int()
+        return norm_chroma
 
     def _extract_stem_indices(self, audio, sampling_rate=None):
         """
