@@ -212,7 +212,7 @@ mask = processor.image_processor.post_process_masks(
 )[0][0][0].numpy()
 ```
 
-You can see the bounding box around the bee like below.
+You can visualize the bounding box around the bee as shown below.
 
 ```python
 import matplotlib.patches as patches
