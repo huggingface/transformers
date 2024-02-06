@@ -350,16 +350,17 @@ class LlamaAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
             kv_seq_len += past_seen_tokens
-        else:
-            past_seen_tokens = 0
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
         new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
@@ -370,8 +371,9 @@ class LlamaAttention(nn.Module):
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-        causal_mask = attention_mask[..., past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        if attention_mask is not None: # no matter the length, we just slice it
+            causal_mask = attention_mask[..., past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
@@ -427,7 +429,6 @@ class LlamaFlashAttention2(LlamaAttention):
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
-        attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
 
         bsz, q_len, _ = hidden_states.size()
 
@@ -639,17 +640,17 @@ class LlamaSdpaAttention(LlamaAttention):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
+        past_seen_tokens = 0
         past_key_value = getattr(self, "past_key_value", past_key_value)
         if past_key_value is not None:
             past_seen_tokens = past_key_value.get_usable_length(kv_seq_len, self.layer_idx)  # add what was seen
             kv_seq_len += past_seen_tokens
-        else:
-            past_seen_tokens = 0
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
+        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
+        position_ids = new_cache_positions.unsqueeze(0) if position_ids is None else position_ids
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        new_cache_positions = torch.arange(past_seen_tokens, past_seen_tokens + q_len, device=key_states.device)
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "position_ids": new_cache_positions}
@@ -658,10 +659,9 @@ class LlamaSdpaAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if attention_mask is not None:  # user defined causal mask
-            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]]
-        else:
-            causal_mask = None
+        causal_mask = None
+        if attention_mask is not None:
+            causal_mask = attention_mask[:, :, past_seen_tokens : past_seen_tokens + q_len, : key_states.shape[-2]].contiguous()
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
@@ -676,7 +676,7 @@ class LlamaSdpaAttention(LlamaAttention):
             value_states,
             attn_mask=causal_mask,
             dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=causal_mask is None and q_len > 1,
+            is_causal=causal_mask is None,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -793,7 +793,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values","causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
@@ -810,14 +810,9 @@ class LlamaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _setup_cache(self, cache_cls, max_batch_size, max_cache_len: Optional[int] = None):
-        if max_cache_len > self.model.causal_mask.shape[-1] or self.dtype != self.model.causal_mask.dtype:
-            causal_mask = torch.full(
-                (max_cache_len, max_cache_len),
-                fill_value=torch.finfo(self.dtype).min,
-                dtype=self.dtype,
-            )
-            causal_mask = torch.triu(causal_mask, diagonal=1)
-            self.model.register_buffer("causal_mask", causal_mask, persistent=False)
+        if max_cache_len > self.model.causal_mask.shape[-1] or self.device != self.model.causal_mask.device:
+            causal_mask = torch.full((max_cache_len, max_cache_len),fill_value=1, device=self.device)
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         for layer in self.model.layers:
             layer.self_attn.past_key_value = cache_cls(
@@ -920,20 +915,14 @@ class LlamaModel(LlamaPreTrainedModel):
         self.layers = nn.ModuleList(
             [LlamaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self._use_sdpa = config._attn_implementation == "sdpa"
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
         self.gradient_checkpointing = False
-        # Initialize weights and apply final processing
-        self.post_init()
 
         # register a causal mask to separate causal and padding mask creation. Merging happends in the attention class
-        dtype = config.torch_dtype if isinstance(config.torch_dtype, torch.dtype) else torch.float32
-        causal_mask = torch.full(
-            (config.max_position_embeddings, config.max_position_embeddings), fill_value=torch.finfo(dtype).min
-        )
+        causal_mask = torch.full((config.max_position_embeddings, config.max_position_embeddings), fill_value=1)
         self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -959,69 +948,22 @@ class LlamaModel(LlamaPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            batch_size, seq_length = input_ids.shape[:2]
-        elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.shape[:2]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one")
 
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
+        if self.gradient_checkpointing and self.training and use_cache:
+            logger.warning_once("`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`.")
+            use_cache = False
 
-        past_key_values_length = 0
-        if use_cache:
-            use_legacy_cache = not isinstance(past_key_values, Cache)
-            if use_legacy_cache:
-                past_key_values = DynamicCache.from_legacy_cache(past_key_values)
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
-
-        if position_ids is None:
-            device = input_ids.device if input_ids is not None else inputs_embeds.device
-            position_ids = torch.arange(
-                past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
-            )
-            position_ids = position_ids.unsqueeze(0)
+        if use_cache and not isinstance(past_key_values, Cache):
+            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # support going beyond `max_position_embedding`
-        if past_key_values_length + seq_length > self.causal_mask.shape[-1]:
-            causal_mask = torch.full(
-                (2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]),
-                fill_value=torch.finfo(inputs_embeds.dtype).min,
-            )
-            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
-            logger.warning(
-                "You are going above the `max_position_embedding` you should set `max_position_embedding` accordingly. This will no longer be supported"
-                " in transformers v4.40"
-            )
-
-        causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1)
-        if attention_mask is not None and attention_mask.dim() == 2:
-            padding_mask = causal_mask[..., : attention_mask.shape[-1]].eq(0.0) * attention_mask[:, None, None, :].eq(
-                0.0
-            )
-            causal_mask[..., : attention_mask.shape[-1]] = causal_mask[..., : attention_mask.shape[-1]].masked_fill(
-                padding_mask, torch.finfo(inputs_embeds.dtype).min
-            )
-
-        if self.config._attn_implementation=="sdpa": 
-            if seq_length > 1:
-                causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None])
-            elif seq_length==1 or attention_mask is None or attention_mask.mean() == 1:
-                causal_mask=None
+        causal_mask = self._update_causal_mask(attention_mask, inputs_embeds)
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1071,7 +1013,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+            next_cache = next_decoder_cache.to_legacy_cache() if not isinstance(past_key_values, Cache) else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -1080,6 +1022,34 @@ class LlamaModel(LlamaPreTrainedModel):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+        
+    def _update_causal_mask(self, attention_mask, input_tensor):
+        batch_size, seq_length = input_tensor.shape[:2]
+        dtype = input_tensor.dtype
+        
+        if hasattr(self, "causal_mask"):
+            causal_mask = self.causal_mask[None, None, :, :].repeat(batch_size, 1, 1, 1).to(dtype) * torch.finfo(dtype).min
+        else:
+            causal_mask = torch.triu(torch.full((self.config.max_position_embeddings, self.config.max_position_embeddings), fill_value=torch.finfo(dtype).min))
+
+        if self.config._attn_implementation == "flash_attention":
+            causal_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+
+        if attention_mask is not None and attention_mask.dim() == 2:
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[...,:mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
+            causal_mask[...,:mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, torch.finfo(dtype).min)
+
+        if self.config._attn_implementation == "sdpa":
+            if attention_mask is None:
+                return None
+            is_tracing = torch.jit.is_tracing() or isinstance(input_tensor, torch.fx.Proxy)
+            if not is_tracing and (torch.all(attention_mask == 1)):
+                return None
+            if is_tracing and seq_length==1:
+                return None
+            causal_mask = causal_mask.mul(~torch.all(causal_mask == causal_mask.min(), dim=-1)[..., None]).to(dtype)
+        return causal_mask
 
 
 class LlamaForCausalLM(LlamaPreTrainedModel):
@@ -1244,6 +1214,20 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+
+        if past_key_value := getattr(self.model.layers[0].self_attn, "past_key_value",None):
+            # generation with static cache
+            seen_tokens = past_key_value.get_seq_length()
+            input_ids = input_ids[:,seen_tokens:]
+            position_ids = position_ids[:, seen_tokens:]
+
+        # support going beyond `max_position_embedding`
+        if past_key_value is not None and past_key_value.get_seq_length() > self.causal_mask.shape[-1]:
+            causal_mask = torch.full(
+                (2 * self.causal_mask.shape[-1], 2 * self.causal_mask.shape[-1]),
+                fill_value=torch.finfo(inputs_embeds.dtype).min,
+            )
+            self.register_buffer("causal_mask", torch.triu(causal_mask, diagonal=1), persistent=False)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
