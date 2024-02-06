@@ -210,9 +210,11 @@ class BatchEncoding(UserDict):
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above).
-        n_sequences (`Optional[int]`, *optional*):
+        n_sequences (`Optional[int]`, *optional*, defaults to `None`):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
+        data_is_tensor_list (`bool`, defaults to `False`):
+            Whether the data is already a list of tensors or not, tensors in list can have different length.
     """
 
     def __init__(
@@ -2576,6 +2578,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         pair_entry: Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]] = None,
     ) -> Union[TextEntry, TextEntryPair, PreTokenizedEntry, PreTokenizedEntryPair, EncodedEntry, EncodedEntryPair]:
         """
+        Args:
+            entry (TextEntry, PreTokenizedEntry or EncodedEntry):
+                The first sequence to be encoded.
+            entry_type:
+                The type of `entry` (and pair_entry).
+            pair_entry (Optional[Union[TextEntry, PreTokenizedEntry, EncodedEntry]], *optional*):
+                Optional second sequence to be encoded.
         Returns:
             bool: If the result will be a entry_pair, return `True`, otherwise, return `False`.
             entry_or_entry_pair: tuple the entry and pair_entry if pair_entry is not `None`.
@@ -2682,16 +2691,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
 
         return encoded_inputs["input_ids"]
 
-    @add_end_docstrings(
-        ENCODE_KWARGS_DOCSTRING,
-        """
-            **kwargs: Passed along to the `.tokenize()` method.
-        """,
-        """
-        Returns:
-            `List[int]`, `torch.Tensor`, `tf.Tensor` or `np.ndarray`: The tokenized ids of the text.
-        """,
-    )
+    # TODO: add docstrings for consistent_XXX methods
     def consistent_encode(
         self,
         text: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
@@ -2704,21 +2704,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         return_tensors: Optional[Union[str, TArrayType]] = None,
         **kwargs,
     ) -> List[int]:
-        """
-        Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
-
-        Same as doing `self.convert_tokens_to_ids(self.tokenize(text))`.
-
-        Args:
-            text (`str`, `List[str]` or `List[int]`):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
-                `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-            text_pair (`str`, `List[str]` or `List[int]`, *optional*):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-        """
         encoded_inputs = self.consistent_encode_plus(
             text,
             pair_entry=text_pair,
@@ -2733,16 +2718,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
 
         return encoded_inputs["input_ids"]
 
-    @add_end_docstrings(
-        ENCODE_KWARGS_DOCSTRING,
-        """
-            **kwargs: Passed along to the `.tokenize()` method.
-        """,
-        """
-        Returns:
-            `List[int]`, `torch.Tensor`, `tf.Tensor` or `np.ndarray`: The tokenized ids of the text.
-        """,
-    )
     def consistent_encode_batch(
         self,
         entries_or_entry_pairs: Union[
@@ -2761,21 +2736,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         return_tensors: Optional[Union[str, TArrayType]] = None,
         **kwargs,
     ) -> List[Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"]]:
-        """
-        Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
-
-        Same as doing `self.convert_tokens_to_ids(self.tokenize(text))`.
-
-        Args:
-            text (`str`, `List[str]` or `List[int]`):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
-                `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-            text_pair (`str`, `List[str]` or `List[int]`, *optional*):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-        """
         encoded_inputs = self.consistent_encode_batch_plus(
             entries_or_entry_pairs,
             add_special_tokens=add_special_tokens,
@@ -3211,7 +3171,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
             **kwargs,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def consistent_encode_plus(
         self,
         entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
@@ -3233,26 +3192,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         verbose: bool = True,
         **kwargs,
     ) -> EntryEncoding:
-        """
-        Tokenize and prepare for the model a sequence or a pair of sequences.
-
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
-
-        Args:
-            text (`str`, `List[str]` or `List[int]` (the latter only for not-fast tokenizers)):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
-                `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-            text_pair (`str`, `List[str]` or `List[int]`, *optional*):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
-                method).
-        """
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -3408,7 +3347,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
             **kwargs,
         )
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def consistent_encode_batch_plus(
         self,
         entries_or_entry_pairs: Union[
@@ -3436,22 +3374,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         verbose: bool = True,
         **kwargs,
     ) -> EntryEncoding:
-        """
-        Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
-
-        <Tip warning={true}>
-
-        This method is deprecated, `__call__` should be used instead.
-
-        </Tip>
-
-        Args:
-            batch_text_or_text_pairs (`List[str]`, `List[Tuple[str, str]]`, `List[List[str]]`, `List[Tuple[List[str], List[str]]]`, and for not-fast tokenizers, also `List[List[int]]`, `List[Tuple[List[int], List[int]]]`):
-                Batch of sequences or pair of sequences to be encoded. This can be a list of
-                string/string-sequences/int-sequences or a list of pair of string/string-sequences/int-sequence (see
-                details in `encode_plus`).
-        """
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -3522,7 +3444,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
     ) -> BatchEncoding:
         raise NotImplementedError
 
-    # TODO: add @abc.abstractmethod?
+    # TODO: add @abc.abstractmethod? add necessary docstrings for subclasses
     def _consistent_encode_batch_plus(
         self,
         entries_or_entry_pairs: Union[
@@ -3551,9 +3473,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         verbose: bool = True,
         **kwargs,
     ) -> EntryEncoding:
-        """
-        TODO: add necessary docstring for subclasses
-        """
         raise NotImplementedError
 
     def pad(
@@ -4214,26 +4133,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
     ) -> str:
-        """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
-        tokens and clean up tokenization spaces.
-
-        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
-
-        Args:
-            token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
-
-        Returns:
-            `str`: The decoded sentence.
-        """
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
 
@@ -4251,23 +4150,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
     ) -> List[str]:
-        """
-        Convert a list of lists of token ids into a list of strings by calling decode.
-
-        Args:
-            sequences (`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
-            skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
-            kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
-
-        Returns:
-            `List[str]`: The list of decoded sentences.
-        """
         return [
             self.consistent_decode(
                 seq,

@@ -691,7 +691,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             return entry
         raise TypeError(f"Entry type is not valid: {type(entry)}.")
 
-    # TODO: add @abc.abstractmethod?
     def _consistent_encode_plus(
         self,
         entry: Union[TextEntry, PreTokenizedEntry, EncodedEntry],
@@ -980,7 +979,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         return BatchEncoding(batch_outputs)
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def _consistent_batch_prepare_for_model(
         self,
         batch_ids_pairs: List[Union[Tuple[List[int], List[int]], Tuple[List[int], None]]],
@@ -998,15 +996,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> EntryEncoding:
-        """
-        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
-        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
-        manages a moving window (with user defined stride) for overflowing tokens
-
-        Args:
-            batch_ids_pairs: list of tokenized input ids or input ids pairs
-        """
-
         batch_outputs = {}
         for first_ids, second_ids in batch_ids_pairs:
             outputs = self.prepare_for_model(
@@ -1029,9 +1018,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
             for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
+                batch_outputs.setdefault(key, []).append(value)
 
         batch_outputs = self.pad(
             batch_outputs,
@@ -1093,9 +1080,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             )
 
             for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
+                batch_outputs.setdefault(key, []).append(value)
 
         batch_outputs = self.pad(
             batch_outputs,
