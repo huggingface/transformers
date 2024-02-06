@@ -68,8 +68,6 @@ class SwiftFormerConfig(PretrainedConfig):
             Dropout rate for the MLP component of SwiftFormer.
         drop_conv_encoder_rate (`float`, *optional*, defaults to 0.0):
             Dropout rate for the ConvEncoder component of SwiftFormer.
-        drop_mlp_rate (`float`, *optional*, defaults to 0.0):
-            Dropout rate for the MLP component of SwiftFormer.
         use_layer_scale (`bool`, *optional*, defaults to `True`):
             Whether to scale outputs from token mixers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-05):
