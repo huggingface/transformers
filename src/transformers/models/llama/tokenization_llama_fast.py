@@ -99,7 +99,29 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token (`bool`, *optional*, defaults to `False`):
             Whether or not to add an `eos_token` at the end of sequences.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Llama should be used.
+            Whether or not the default system prompt for Llama should be used
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
+            example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
+            [8774, 32099, 5, 1]
+            ```
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -119,8 +141,20 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         add_bos_token=True,
         add_eos_token=False,
         use_default_system_prompt=False,
+        legacy=None,
         **kwargs,
     ):
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
+                " means, and thoroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
+            )
+            legacy = True
+        self.legacy = legacy
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,

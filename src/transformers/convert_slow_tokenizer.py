@@ -1247,14 +1247,6 @@ class LlamaConverter(SpmConverter):
         return tokenizer
 
     def normalizer(self, proto):
-        return normalizers.Sequence(
-            [
-                normalizers.Prepend(prepend="▁"),
-                normalizers.Replace(pattern=" ", content="▁"),
-            ]
-        )
-
-    def pre_tokenizer(self, replacement, add_prefix_space):
         return None
 
     def post_processor(self):
