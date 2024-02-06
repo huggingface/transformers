@@ -47,7 +47,7 @@ class LagLlamaConfig(PretrainedConfig):
         lags_sequence (`List`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`): <fill_docstring>
         num_time_features (`int`, *optional*, defaults to 0):
             The number of date-time features for the time series.
-        scaling (`str`, *optional*, defaults to `"mean"`): <fill_docstring>
+        scaling (`str`, *optional*, defaults to `"robust"`): <fill_docstring>
         num_parallel_samples (`int`, *optional*, defaults to 100): <fill_docstring>
         hidden_size (`int`, *optional*, defaults to 256):
             Dimension of the hidden representations.
@@ -120,7 +120,7 @@ class LagLlamaConfig(PretrainedConfig):
         input_size: int = 1,
         lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
         num_time_features: int = 0,
-        scaling: str = "mean",
+        scaling: str = "robust",
         num_parallel_samples: int = 100,
         hidden_size=256,
         intermediate_size=128,

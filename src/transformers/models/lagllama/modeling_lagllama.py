@@ -65,6 +65,54 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "LagLlamaConfig"
 
 
+class LagLlamaRobustScaler(nn.Module):
+    """
+    Robust Standard Scaler that computes the scaling factor by removing the median and scaling by the
+    interquartile range (IQR).
+    """
+
+    def __init__(self, config: LagLlamaConfig):
+        super().__init__()
+        self.dim = config.scaling_dim if hasattr(config, "scaling_dim") else 1
+        self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
+        self.minimum_scale = config.minimum_scale if hasattr(config, "minimum_scale") else 1e-5
+
+    @torch.no_grad()
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Parameters:
+            data (`torch.Tensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                input for Batch norm calculation
+            observed_indicator (`torch.BoolTensor` of shape `(batch_size, sequence_length, num_input_channels)`):
+                Calculating the scale on the observed indicator.
+        Returns:
+            tuple of `torch.Tensor` of shapes
+                (`(batch_size, sequence_length, num_input_channels)`,`(batch_size, 1, num_input_channels)`,
+                `(batch_size, 1, num_input_channels)`)
+        """
+        observed_data = torch.where(observed_indicator == 1, data, torch.nan)
+
+        med = torch.nanmedian(observed_data, dim=self.dim, keepdim=True).values
+        q1 = torch.nanquantile(observed_data, 0.25, dim=self.dim, keepdim=True)
+        q3 = torch.nanquantile(observed_data, 0.75, dim=self.dim, keepdim=True)
+        iqr = q3 - q1
+
+        # if observed data is all zeros, nanmedian returns nan
+        loc = torch.where(torch.isnan(med), torch.zeros_like(med), med)
+        scale = torch.where(torch.isnan(iqr), torch.ones_like(iqr), iqr)
+        scale = torch.maximum(scale, torch.full_like(iqr, self.minimum_scale))
+
+        scaled_data = (data - loc) / scale
+
+        if not self.keepdim:
+            loc = torch.squeeze(loc, dim=self.dim)
+            scale = torch.squeeze(scale, dim=self.dim)
+
+        return scaled_data, loc, scale
+
+
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesStdScaler with TimeSeriesTransformer->LagLlama,TimeSeries->LagLlama
 class LagLlamaStdScaler(nn.Module):
     """
@@ -1096,6 +1144,8 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
             self.scaler = LagLlamaMeanScaler(config)
         elif config.scaling == "std":
             self.scaler = LagLlamaStdScaler(config)
+        elif config.scaling == "robust":
+            self.scaler = LagLlamaRobustScaler(config)
         else:
             self.scaler = LagLlamaNOPScaler(config)
 
