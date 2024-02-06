@@ -1915,6 +1915,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             "use_cache": use_cache,
         }
 
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration._prepare_decoder_input_ids_for_generation
     def _prepare_decoder_input_ids_for_generation(
         self,
         batch_size: int,
