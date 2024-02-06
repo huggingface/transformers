@@ -77,7 +77,7 @@ image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
 </div>
 
 Let's segment everything. `points-per-batch` enables parallel inference of points in
-segment everything mode. This will enable faster inference, but will consume high memory.
+segment everything mode. This enables faster inference, but consumes more memory.
 Moreover, SAM only enables batching over points and not the images. `pred_iou_thresh` is
 the IoU confidence threshold where only the masks above that certain threshold are returned.
 
