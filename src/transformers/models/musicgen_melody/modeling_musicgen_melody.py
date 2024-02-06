@@ -1088,7 +1088,6 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         return input_ids
 
     @torch.no_grad()
-    # Ignore copy
     def generate(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1152,18 +1151,14 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
                 If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchDecoderOnlyOutput`],
-                    - [`~generation.SampleDecoderOnlyOutput`],
-                    - [`~generation.BeamSearchDecoderOnlyOutput`],
-                    - [`~generation.BeamSampleDecoderOnlyOutput`]
+                    - [`~generation.GenerateDecoderOnlyOutput`],
+                    - [`~generation.GenerateBeamDecoderOnlyOutput`]
 
                 If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
                 [`~utils.ModelOutput`] types are:
 
-                    - [`~generation.GreedySearchEncoderDecoderOutput`],
-                    - [`~generation.SampleEncoderDecoderOutput`],
-                    - [`~generation.BeamSearchEncoderDecoderOutput`],
-                    - [`~generation.BeamSampleEncoderDecoderOutput`]
+                    - [`~generation.GenerateEncoderDecoderOutput`],
+                    - [`~generation.GenerateBeamEncoderDecoderOutput`]
         """
         # 1. Handle `generation_config` and kwargs that might update it, and validate the resulting objects
         if generation_config is None:
@@ -1206,6 +1201,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
+        # Ignore copy
         if model_kwargs.get("attention_mask", None) is None:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 input_ids, generation_config.pad_token_id, generation_config.eos_token_id
@@ -1242,7 +1238,7 @@ class MusicgenMelodyForCausalLM(MusicgenMelodyPreTrainedModel):
             )
 
         # 6. Prepare `input_ids` which will be used for auto-regressive generation
-        # Build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to Musicgen)
+        # Build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
         input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
             input_ids,
             pad_token_id=generation_config.decoder_start_token_id,
