@@ -711,7 +711,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
+        all_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
         # check if head_mask has a correct number of layers specified if desired
@@ -757,7 +757,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
                 next_decoder_cache += (layer_outputs[2 if output_attentions else 1],)
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                all_attentions += (layer_outputs[1],)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -767,12 +767,12 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            attentions=all_attentions,
         )
 
 
