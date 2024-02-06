@@ -943,6 +943,13 @@ src/transformers/pipelines/zero_shot_image_classification.py
 src/transformers/pipelines/zero_shot_object_detection.py
 src/transformers/processing_utils.py
 src/transformers/pytorch_utils.py
+src/transformers/quantizers/auto.py
+src/transformers/quantizers/base.py
+src/transformers/quantizers/quantizer_awq.py
+src/transformers/quantizers/quantizer_bnb_4bit.py
+src/transformers/quantizers/quantizer_bnb_8bit.py
+src/transformers/quantizers/quantizer_gptq.py
+src/transformers/quantizers/quantizers_utils.py
 src/transformers/sagemaker/trainer_sm.py
 src/transformers/sagemaker/training_args_sm.py
 src/transformers/testing_utils.py

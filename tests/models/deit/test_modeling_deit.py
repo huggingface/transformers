@@ -206,7 +206,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": DeiTModel,
+            "image-feature-extraction": DeiTModel,
             "image-classification": (DeiTForImageClassification, DeiTForImageClassificationWithTeacher),
         }
         if is_torch_available()

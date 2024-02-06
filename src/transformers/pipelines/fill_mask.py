@@ -3,7 +3,7 @@ from typing import Dict
 import numpy as np
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
-from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline, PipelineException
+from .base import GenericTensor, Pipeline, PipelineException, build_pipeline_init_args
 
 
 if is_tf_available():
@@ -20,7 +20,7 @@ logger = logging.get_logger(__name__)
 
 
 @add_end_docstrings(
-    PIPELINE_INIT_ARGS,
+    build_pipeline_init_args(has_tokenizer=True),
     r"""
         top_k (`int`, defaults to 5):
             The number of predictions to return.
@@ -28,8 +28,8 @@ logger = logging.get_logger(__name__)
             When passed, the model will limit the scores to the passed targets instead of looking up in the whole
             vocab. If the provided targets are not in the model vocab, they will be tokenized and the first resulting
             token will be used (with a warning, and that might be slower).
-
-    """,
+        tokenizer_kwargs (`dict`, *optional*):
+            Additional dictionary of keyword arguments passed along to the tokenizer.""",
 )
 class FillMaskPipeline(Pipeline):
     """

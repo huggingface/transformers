@@ -773,7 +773,6 @@ _import_structure = {
         "SiglipConfig",
         "SiglipProcessor",
         "SiglipTextConfig",
-        "SiglipTokenizer",
         "SiglipVisionConfig",
     ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
@@ -974,6 +973,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -1002,6 +1002,7 @@ _import_structure = {
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
+    "quantizers": [],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -1125,6 +1126,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizer")
+    _import_structure["models.siglip"].append("SiglipTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.speecht5"].append("SpeechT5Tokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
@@ -2481,6 +2483,7 @@ else:
     _import_structure["models.llama"].extend(
         [
             "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
@@ -2730,6 +2733,7 @@ else:
             "MT5ForConditionalGeneration",
             "MT5ForQuestionAnswering",
             "MT5ForSequenceClassification",
+            "MT5ForTokenClassification",
             "MT5Model",
             "MT5PreTrainedModel",
         ]
@@ -3298,6 +3302,7 @@ else:
             "T5ForConditionalGeneration",
             "T5ForQuestionAnswering",
             "T5ForSequenceClassification",
+            "T5ForTokenClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
@@ -3369,6 +3374,7 @@ else:
             "UMT5ForConditionalGeneration",
             "UMT5ForQuestionAnswering",
             "UMT5ForSequenceClassification",
+            "UMT5ForTokenClassification",
             "UMT5Model",
             "UMT5PreTrainedModel",
         ]
@@ -4677,6 +4683,13 @@ else:
             "FlaxMBartPreTrainedModel",
         ]
     )
+    _import_structure["models.mistral"].extend(
+        [
+            "FlaxMistralForCausalLM",
+            "FlaxMistralModel",
+            "FlaxMistralPreTrainedModel",
+        ]
+    )
     _import_structure["models.mt5"].extend(["FlaxMT5EncoderModel", "FlaxMT5ForConditionalGeneration", "FlaxMT5Model"])
     _import_structure["models.opt"].extend(
         [
@@ -5503,7 +5516,6 @@ if TYPE_CHECKING:
         SiglipConfig,
         SiglipProcessor,
         SiglipTextConfig,
-        SiglipTokenizer,
         SiglipVisionConfig,
     )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
@@ -5699,6 +5711,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
@@ -5852,6 +5865,7 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizer
         from .models.rembert import RemBertTokenizer
         from .models.seamless_m4t import SeamlessM4TTokenizer
+        from .models.siglip import SiglipTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.speecht5 import SpeechT5Tokenizer
         from .models.t5 import T5Tokenizer
@@ -7012,7 +7026,13 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
@@ -7215,6 +7235,7 @@ if TYPE_CHECKING:
             MT5ForConditionalGeneration,
             MT5ForQuestionAnswering,
             MT5ForSequenceClassification,
+            MT5ForTokenClassification,
             MT5Model,
             MT5PreTrainedModel,
         )
@@ -7680,6 +7701,7 @@ if TYPE_CHECKING:
             T5ForConditionalGeneration,
             T5ForQuestionAnswering,
             T5ForSequenceClassification,
+            T5ForTokenClassification,
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
@@ -7735,6 +7757,7 @@ if TYPE_CHECKING:
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,
             UMT5ForSequenceClassification,
+            UMT5ForTokenClassification,
             UMT5Model,
             UMT5PreTrainedModel,
         )
@@ -8828,6 +8851,11 @@ if TYPE_CHECKING:
             FlaxMBartForSequenceClassification,
             FlaxMBartModel,
             FlaxMBartPreTrainedModel,
+        )
+        from .models.mistral import (
+            FlaxMistralForCausalLM,
+            FlaxMistralModel,
+            FlaxMistralPreTrainedModel,
         )
         from .models.mt5 import (
             FlaxMT5EncoderModel,

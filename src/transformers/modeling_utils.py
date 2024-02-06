@@ -53,6 +53,7 @@ from .pytorch_utils import (  # noqa: F401
     prune_layer,
     prune_linear_layer,
 )
+from .quantizers import AutoHfQuantizer, HfQuantizer
 from .safetensors_conversion import auto_conversion
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
@@ -75,8 +76,6 @@ from .utils import (
     extract_commit_hash,
     has_file,
     is_accelerate_available,
-    is_auto_awq_available,
-    is_auto_gptq_available,
     is_bitsandbytes_available,
     is_flash_attn_2_available,
     is_offline_mode,
@@ -97,7 +96,7 @@ from .utils.import_utils import (
     is_torch_fx_proxy,
     is_torchdynamo_compiling,
 )
-from .utils.quantization_config import AwqConfig, BitsAndBytesConfig, GPTQConfig, QuantizationMethod
+from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
 
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
@@ -693,7 +692,7 @@ def _load_state_dict_into_meta_model(
     state_dict_folder=None,
     state_dict_index=None,
     dtype=None,
-    is_quantized=False,
+    hf_quantizer=None,
     is_safetensors=False,
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
@@ -714,9 +713,6 @@ def _load_state_dict_into_meta_model(
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
-
-    if is_quantized:
-        from .integrations import set_module_quantized_tensor_to_device
 
     error_msgs = []
 
@@ -799,44 +795,17 @@ def _load_state_dict_into_meta_model(
             if not is_safetensors:
                 offload_index = offload_weight(param, param_name, offload_folder, offload_index)
         elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif not is_quantized:
-            # For backward compatibility with older versions of `accelerate`
+            state_dict_index = offload_weight(param, param_name, model, state_dict_folder, state_dict_index)
+        elif (
+            hf_quantizer is None
+            or (not hf_quantizer.requires_parameters_quantization)
+            or (not hf_quantizer.check_quantized_param(model, param, param_name, state_dict))
+        ):
+            # For backward compatibility with older versions of `accelerate` and for non-quantized params
             set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-        elif param.dtype in (torch.int8, torch.uint8) and is_quantized:
-            # handling newly quantized weights and loaded quantized weights
-            # edit the param.dtype restrictions and is_quantized condition when adding new quant methods
-            quantized_stats = {}
-
-            if (param_name + ".quant_state.bitsandbytes__fp4" in state_dict) or (
-                param_name + ".quant_state.bitsandbytes__nf4" in state_dict
-            ):
-                # 4bit loading. Collecting components for restoring quantized weight
-                # This can be expanded to make a universal call for any quantized weight loading
-                for k, v in state_dict.items():
-                    if param_name + "." in k:
-                        quantized_stats[k] = v
-                        unexpected_keys.remove(k)
-
-                set_module_quantized_tensor_to_device(
-                    model, param_name, param_device, value=param, quantized_stats=quantized_stats
-                )
-
-            elif param.dtype == torch.int8 and param_name.replace("weight", "SCB") in state_dict.keys():
-                # 8bit loading. Could be combined with the above 4bit call.
-                # condition looks unreliable
-                fp16_statistics_key = param_name.replace("weight", "SCB")
-                unexpected_keys.remove(fp16_statistics_key)
-                set_module_quantized_tensor_to_device(
-                    model,
-                    param_name,
-                    param_device,
-                    value=param,
-                    quantized_stats={"SCB": state_dict[fp16_statistics_key]},
-                )
         else:
-            # loading not quantized params in quantized model
-            set_module_quantized_tensor_to_device(model, param_name, param_device, value=param)
+            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+            # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
 
@@ -1086,6 +1055,7 @@ class ModuleUtilsMixin:
 
         total_numel = []
         is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
+
         if is_loaded_in_4bit:
             if is_bitsandbytes_available():
                 import bitsandbytes as bnb
@@ -2283,29 +2253,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         _hf_peft_config_loaded = getattr(self, "_hf_peft_config_loaded", False)
 
-        # Checks if the model has been loaded in 8-bit
-        if (
-            getattr(self, "is_loaded_in_8bit", False)
-            and not getattr(self, "is_8bit_serializable", False)
-            and not _hf_peft_config_loaded
-        ):
-            raise NotImplementedError(
-                "You are calling `save_pretrained` to a 8-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 8-bit models, make sure to have `bitsandbytes>0.37.2` installed."
-            )
+        hf_quantizer = getattr(self, "hf_quantizer", None)
+        quantization_serializable = (
+            hf_quantizer is not None and isinstance(hf_quantizer, HfQuantizer) and hf_quantizer.is_serializable
+        )
 
-        if (
-            getattr(self, "is_loaded_in_4bit", False)
-            and not getattr(self, "is_4bit_serializable", False)
-            and not _hf_peft_config_loaded
-        ):
-            raise NotImplementedError(
-                "You are calling `save_pretrained` to a 4-bit converted model, but your `bitsandbytes` version doesn't support it. "
-                "If you want to save 4-bit models, make sure to have `bitsandbytes>=0.41.3` installed."
+        if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+            raise ValueError(
+                f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
-
-        if getattr(self, "_awq_is_fused", False):
-            raise ValueError("You cannot save an AWQ model that uses fused modules!")
 
         if "save_config" in kwargs:
             warnings.warn(
@@ -2788,15 +2745,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 If `True`, will temporarily offload the CPU state dict to the hard drive to avoid getting out of CPU
                 RAM if the weight of the CPU state dict + the biggest shard of the checkpoint does not fit. Defaults to
                 `True` when there is some disk offload.
-            load_in_8bit (`bool`, *optional*, defaults to `False`):
-                If `True`, will convert the loaded model into mixed-8bit quantized model. To use this feature please
-                install `bitsandbytes` (`pip install -U bitsandbytes`).
-            load_in_4bit (`bool`, *optional*, defaults to `False`):
-                If `True`, will convert the loaded model into 4bit precision quantized model. To use this feature
-                install the latest version of `bitsandbytes` (`pip install -U bitsandbytes`).
             quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
                 A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
-                bitsandbytes, gptq)
+                bitsandbytes, gptq). There may be other quantization-related kwargs, including `load_in_4bit` and
+                `load_in_8bit`, which are parsed by QuantizationConfigParser. Supported only for bitsandbytes
+                quantizations and not preferred. consider inserting all such arguments into quantization_config
+                instead.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -2910,14 +2864,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if use_safetensors is None and not is_safetensors_available():
             use_safetensors = False
-
-        if is_bitsandbytes_available():
-            is_4bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.41.3")
-            is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse("0.37.2")
-        else:
-            is_4bit_serializable = False
-            is_8bit_serializable = False
-
         if trust_remote_code is True:
             logger.warning(
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
@@ -3002,69 +2948,26 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        quantization_method_from_args = None
-
-        if quantization_config is not None:
-            quantization_method_from_args = getattr(
-                quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
-            )
-
-        if quantization_config is None and (load_in_8bit or load_in_4bit):
-            quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
-            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
-                config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
-                return_unused_kwargs=True,
-                **kwargs,
-            )
-        elif quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES:
-            load_in_8bit = quantization_config.load_in_8bit
-            load_in_4bit = quantization_config.load_in_4bit
-
-            quantization_config_kwargs = {
-                k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters
-            }
-
-            if len(quantization_config_kwargs) > 0:
+        # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
+        if load_in_4bit or load_in_8bit:
+            if quantization_config is not None:
                 raise ValueError(
-                    "You can't pass `load_in_8bit` or any other `BitsAndBytesConfig` argument as a kwarg when passing "
+                    "You can't pass `load_in_4bit`or `load_in_8bit` as a kwarg when passing "
                     "`quantization_config` argument at the same time."
                 )
 
-        if load_in_8bit or load_in_4bit:
-            if not torch.cuda.is_available():
-                raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-            if not (is_accelerate_available() and is_bitsandbytes_available()):
-                raise ImportError(
-                    "Using `load_in_8bit=True` requires Accelerate: `pip install accelerate` and the latest version of"
-                    " bitsandbytes `pip install -i https://test.pypi.org/simple/ bitsandbytes` or"
-                    " `pip install bitsandbytes`."
-                )
+            # preparing BitsAndBytesConfig from kwargs
+            config_dict = {k: v for k, v in kwargs.items() if k in inspect.signature(BitsAndBytesConfig).parameters}
+            config_dict = {**config_dict, "load_in_4bit": load_in_4bit, "load_in_8bit": load_in_8bit}
+            quantization_config, kwargs = BitsAndBytesConfig.from_dict(
+                config_dict=config_dict, return_unused_kwargs=True, **kwargs
+            )
+            logger.warning(
+                "The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. "
+                "Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead."
+            )
 
-            if torch_dtype is None:
-                # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
-                logger.info(
-                    f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                    "requirements of `bitsandbytes` to enable model loading in 8-bit or 4-bit. "
-                    "Pass your own torch_dtype to specify the dtype of the remaining non-linear layers or pass"
-                    " torch_dtype=torch.float16 to remove this warning."
-                )
-                torch_dtype = torch.float16
-
-            if device_map is None:
-                device_map = {"": torch.cuda.current_device()}
-                logger.info(
-                    "The device_map was not initialized. "
-                    "Setting device_map to {'':torch.cuda.current_device()}. "
-                    "If you want to use the model for inference, please set device_map ='auto' "
-                )
-                if low_cpu_mem_usage is None:
-                    low_cpu_mem_usage = True
-
-            if from_tf or from_flax:
-                raise ValueError(
-                    "Converting into 4-bit or 8-bit weights from tf/flax weights is currently not supported, please make"
-                    " sure the weights are in PyTorch format."
-                )
+        from_pt = not (from_tf | from_flax)
 
         user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -3107,155 +3010,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config._attn_implementation = kwarg_attn_imp
             model_kwargs = kwargs
 
-        quantizer = None
-        quantization_method_from_config = None
-        if hasattr(config, "quantization_config"):
-            quantization_method_from_config = config.quantization_config.get(
-                "quant_method", QuantizationMethod.BITS_AND_BYTES
-            )
-
-        if (
-            quantization_method_from_args is not None
-            and quantization_method_from_args == QuantizationMethod.AWQ
-            and quantization_method_from_config is None
-        ):
-            raise ValueError(
-                "You cannot quantize with AWQ a non-quantized model using transformers, please refer to the quantization documentation"
-                " to read more about how to quantize models with AWQ algorithm https://huggingface.co/docs/transformers/main_classes/quantization"
-            )
-
-        if quantization_method_from_config is not None and quantization_method_from_args is not None:
-            if quantization_method_from_config != quantization_method_from_args:
-                raise ValueError(
-                    f"The model is already quantized with {quantization_method_from_config}. "
-                    f"You can't quantize it again with {quantization_method_from_args}"
-                )
-
-        if (
-            quantization_method_from_config in (QuantizationMethod.GPTQ, QuantizationMethod.AWQ)
-            and quantization_method_from_args is not None
-        ):
-            loading_attr_dict = quantization_config.get_loading_attributes()
-            for attr, val in loading_attr_dict.items():
-                config.quantization_config[attr] = val
-            quantization_method_from_args = None
-            logger.warning(
-                f"You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
-                f"`quantization_config` attribute and has already quantized weights. However, loading attributes"
-                f" (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
-            )
-        if (
-            quantization_method_from_args == QuantizationMethod.GPTQ
-            or quantization_method_from_config == QuantizationMethod.GPTQ
-        ):
-            gptq_supports_cpu = version.parse(importlib.metadata.version("auto-gptq")) > version.parse("0.4.2")
-            if not gptq_supports_cpu and not torch.cuda.is_available():
-                raise RuntimeError("GPU is required to quantize or run quantize model.")
-            elif not (is_optimum_available() and is_auto_gptq_available()):
-                raise ImportError(
-                    "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq library (`pip install auto-gptq`)"
-                )
-            elif version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
-                raise ImportError(
-                    "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq`"
+        pre_quantized = getattr(config, "quantization_config", None) is not None
+        if pre_quantized or quantization_config is not None:
+            if pre_quantized:
+                config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
+                    config.quantization_config, quantization_config
                 )
             else:
-                # Need to protect the import
-                from optimum.gptq import GPTQQuantizer
-            if quantization_method_from_config == QuantizationMethod.GPTQ:
-                quantization_config = GPTQConfig.from_dict(config.quantization_config)
                 config.quantization_config = quantization_config
-            if torch_dtype is None:
-                torch_dtype = torch.float16
-            else:
-                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
-            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict_optimum())
-        elif quantization_method_from_config == QuantizationMethod.AWQ:
-            if not torch.cuda.is_available():
-                raise RuntimeError("GPU is required to run AWQ quantized model.")
+            hf_quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+        else:
+            hf_quantizer = None
 
-            if not is_auto_awq_available():
-                raise ImportError("Loading an AWQ quantized model requires auto-awq library (`pip install autoawq`)")
-
-            if not is_accelerate_available():
-                raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
-
-            if device_map is None:
-                logger.warning(
-                    "You have loaded an AWQ model on CPU and have a CUDA device available, make sure to set "
-                    "your model on a GPU device in order to run your model."
-                )
-            elif device_map is not None:
-                if isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
-                    raise ValueError(
-                        "You are attempting to load an AWQ model with a device_map that contains a CPU or disk device."
-                        " This is not supported. Please remove the CPU or disk device from the device_map."
-                    )
-
-            if torch_dtype is None:
-                torch_dtype = torch.float16
-            else:
-                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
+        if hf_quantizer is not None:
+            hf_quantizer.validate_environment(
+                torch_dtype=torch_dtype, from_tf=from_tf, from_flax=from_flax, device_map=device_map
+            )
+            torch_dtype = hf_quantizer.update_torch_dtype(torch_dtype)
+            device_map = hf_quantizer.update_device_map(device_map)
 
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
-
-        if quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES and (
-            (is_8bit_serializable and load_in_8bit) or (is_4bit_serializable and load_in_4bit)
-        ):
-            if quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES:
-                logger.warning(
-                    "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
-                    " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
-                    " one you passed to `from_pretrained`."
-                )
-            config.quantization_config = quantization_config
-        elif (
-            (is_8bit_serializable or is_4bit_serializable)
-            and not (load_in_8bit or load_in_4bit)
-            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
-        ):
-            quantization_config = config.quantization_config
-            if isinstance(quantization_config, dict):
-                quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
-            elif isinstance(quantization_config, BitsAndBytesConfig):
-                pass
-            else:
-                raise ValueError(
-                    f"Invalid type for `quantization_config`: {type(quantization_config)}. Should be a `dict` or a"
-                    " `BitsAndBytesConfig` instance."
-                )
-
-            load_in_8bit = quantization_config.load_in_8bit
-            load_in_4bit = quantization_config.load_in_4bit
-
-            if load_in_8bit or load_in_4bit:
-                if torch_dtype is None:
-                    torch_dtype = torch.float16
-                if device_map is None:
-                    if torch.cuda.is_available():
-                        device_map = {"": torch.cuda.current_device()}
-                    else:
-                        raise RuntimeError("No GPU found. A GPU is needed for quantization.")
-                    logger.info(
-                        "The device_map was not initialized. "
-                        "Setting device_map to {'':torch.cuda.current_device()}. "
-                        "If you want to use the model for inference, please set device_map ='auto' "
-                    )
-                    if low_cpu_mem_usage is None:
-                        low_cpu_mem_usage = True
-
-        elif (
-            not is_8bit_serializable
-            and not (load_in_8bit or load_in_4bit)
-            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
-        ):
-            logger.warning(
-                "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
-                " `bitsandbytes` version to support 4 and 8 bit serialization. Please install the latest version of `bitsandbytes` with "
-                " `pip install --upgrade bitsandbytes`."
-            )
+                logger.warning("`low_cpu_mem_usage` was None, now set to True since model is quantized.")
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -3564,7 +3341,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
-                torch_dtype == torch.float16 or load_in_4bit or load_in_8bit
+                (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
             if is_sharded:
@@ -3587,7 +3364,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
-        elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
+        elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -3610,106 +3387,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             keep_in_fp32_modules = []
 
-        if load_in_8bit or load_in_4bit:
-            from .integrations import get_keys_to_not_convert, replace_with_bnb_linear
-
-            llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
-            load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
-            if load_in_8bit:
-                logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
-            else:
-                logger.info("Detected 4-bit loading: activating 4-bit loading for this model")
-
-            # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
-            if llm_int8_skip_modules is None:
-                modules_to_not_convert = get_keys_to_not_convert(model)
-            else:
-                modules_to_not_convert = llm_int8_skip_modules
-
-            if not isinstance(modules_to_not_convert, list):
-                modules_to_not_convert = [modules_to_not_convert]
-
-            modules_to_not_convert.extend(keep_in_fp32_modules)
-
-            # Extend the modules to not convert to keys that are supposed to be offloaded to `cpu` or `disk`
-            if isinstance(device_map, dict) and len(device_map.keys()) > 1:
-                keys_on_cpu = [key for key, value in device_map.items() if value in ["disk", "cpu"]]
-
-                if len(keys_on_cpu) > 0 and not load_in_8bit_fp32_cpu_offload:
-                    raise ValueError(
-                        "If you want to offload some keys to `cpu` or `disk`, you need to set "
-                        "`llm_int8_enable_fp32_cpu_offload=True`. Note that these modules will not be "
-                        " converted to 8-bit but kept in 32-bit."
-                    )
-
-                modules_to_not_convert.extend(keys_on_cpu)
-
-            supports_4bit = version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.39.0")
-
-            if load_in_4bit and not supports_4bit:
-                raise ValueError(
-                    "You have a version of `bitsandbytes` that is not compatible with 4bit inference and training"
-                    " make sure you have the latest version of `bitsandbytes` installed"
-                )
-
-            model = replace_with_bnb_linear(
-                model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
+        if hf_quantizer is not None:
+            hf_quantizer.preprocess_model(
+                model=model, device_map=device_map, keep_in_fp32_modules=keep_in_fp32_modules
             )
-            # training in 8-bit is only available in 0.37.0+
-            model._is_quantized_training_enabled = version.parse(
-                importlib.metadata.version("bitsandbytes")
-            ) >= version.parse("0.37.0")
-
-            config.quantization_config = quantization_config
-            model.is_8bit_serializable = is_8bit_serializable
-            model.is_4bit_serializable = is_4bit_serializable
-
-        if load_in_8bit and torch_dtype is None:
-            logger.warning(
-                "You are loading your model in 8bit but you did not specify a `torch_dtype` attribute. "
-                "All non-linear modules will be loaded in full precision."
-                " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
-            )
-        if quantization_method_from_config == QuantizationMethod.GPTQ:
-            model = quantizer.convert_model(model)
-            model._is_quantized_training_enabled = True
-        elif quantization_method_from_config == QuantizationMethod.AWQ:
-            from .integrations import fuse_awq_modules, get_keys_to_not_convert, replace_with_awq_linear
-
-            modules_to_not_convert = get_keys_to_not_convert(model)
-
-            if quantization_config is None:
-                quantization_config = AwqConfig.from_dict(config.quantization_config)
-            # In case a user passes a `AwqConfig` with `do_fuse=True` for models that have
-            # a `modules_to_not_convert` attribute we need to manually set that attribute into the
-            # passed `quantization_config`
-            elif (
-                getattr(quantization_config, "modules_to_not_convert", None) is None
-                and "modules_to_not_convert" in config.quantization_config
-            ):
-                quantization_config.modules_to_not_convert = config.quantization_config["modules_to_not_convert"]
-
-            if quantization_config.modules_to_not_convert is not None:
-                modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
-
-            model, has_been_replaced = replace_with_awq_linear(
-                model, quantization_config=quantization_config, modules_to_not_convert=modules_to_not_convert
-            )
-            model._is_quantized_training_enabled = False
-
-            if not has_been_replaced:
-                logger.warning(
-                    "You are loading an AWQ model but no linear modules were found in your model."
-                    " Please double check your model architecture, or submit an issue on github if you think this is"
-                    " a bug."
-                )
-
-        if quantization_method_from_config is not None:
-            model.quantization_method = quantization_method_from_config
-        elif quantization_method_from_args is not None:
-            model.quantization_method = quantization_method_from_args
-        if hasattr(model, "quantization_method"):
-            model.is_quantized = True
 
             # We store the original dtype for quantized models as we cannot easily retrieve it
             # once the weights have been quantized
@@ -3719,14 +3400,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if isinstance(device_map, str):
             special_dtypes = {}
-            if load_in_8bit or load_in_4bit:
-                special_dtypes.update(
-                    {
-                        name: torch_dtype
-                        for name, _ in model.named_parameters()
-                        if any(m in name for m in modules_to_not_convert)
-                    }
-                )
+
+            if hf_quantizer is not None:
+                special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
 
             special_dtypes.update(
                 {
@@ -3738,20 +3414,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             target_dtype = torch_dtype
 
-            if load_in_4bit:
-                if version.parse(importlib.metadata.version("accelerate")) > version.parse("0.19.0"):
-                    from accelerate.utils import CustomDtype
-
-                    target_dtype = CustomDtype.INT4
-                else:
-                    raise ValueError(
-                        "You are using `device_map='auto'` on a 4bit loaded version of the model. To automatically compute"
-                        " the appropriate device map, you should upgrade your `accelerate` library, "
-                        "`pip install --upgrade accelerate` or install it from source to support fp4 auto device map "
-                        "calculation. You may encounter unexpected behavior, or pass your own device map"
-                    )
-            elif load_in_8bit:
-                target_dtype = torch.int8
+            if hf_quantizer is not None:
+                target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
 
             no_split_modules = model._get_no_split_modules(device_map)
             if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
@@ -3778,32 +3442,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 max_memory = get_max_memory(max_memory)
-            if getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
-                # need more space for buffers that are created during quantization
-                max_memory = {key: val * 0.90 for key, val in max_memory.items()}
+            if hf_quantizer is not None:
+                max_memory = hf_quantizer.adjust_max_memory(max_memory)
             device_map_kwargs["max_memory"] = max_memory
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
-            if load_in_8bit or load_in_4bit:
-                # The LM head / tied weights or any last module can stay on disk / CPU
-                device_map_without_lm_head = {
-                    key: device_map[key] for key in device_map.keys() if key not in modules_to_not_convert
-                }
-                if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
-                    raise ValueError(
-                        """
-                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit
-                        the quantized model. If you want to dispatch the model on the CPU or the disk while keeping
-                        these modules in 32-bit, you need to set `load_in_8bit_fp32_cpu_offload=True` and pass a custom
-                        `device_map` to `from_pretrained`. Check
-                        https://huggingface.co/docs/transformers/main/en/main_classes/quantization#offload-between-cpu-and-gpu
-                        for more details.
-                        """
-                    )
-                del device_map_without_lm_head
+            if hf_quantizer is not None:
+                hf_quantizer.validate_environment(device_map=device_map)
 
         elif device_map is not None:
             model.tie_weights()
@@ -3867,12 +3515,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                is_quantized=(getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES),
+                hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
-
-        model.is_loaded_in_4bit = load_in_4bit
-        model.is_loaded_in_8bit = load_in_8bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -3903,14 +3548,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if (
-            quantization_config is not None
-            and quantization_config.quant_method == QuantizationMethod.AWQ
-            and quantization_config.do_fuse
-        ):
-            model = fuse_awq_modules(model, config.quantization_config)
-            model._awq_is_fused = True
-
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
             device_map_kwargs = {
@@ -3922,16 +3559,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **device_map_kwargs)
 
-        if quantization_method_from_args == QuantizationMethod.GPTQ:
-            if quantization_config.tokenizer is None:
-                quantization_config.tokenizer = pretrained_model_name_or_path
-            if cls.main_input_name != "input_ids":
-                raise RuntimeError("We can only quantize pure text model.")
-            quantizer.quantize_model(model, quantization_config.tokenizer)
-            config.quantization_config = GPTQConfig.from_dict_optimum(quantizer.to_dict())
-            model._is_quantized_training_enabled = True
-        if quantization_method_from_config == QuantizationMethod.GPTQ:
-            model = quantizer.post_init_model(model)
+        if hf_quantizer is not None:
+            hf_quantizer.postprocess_model(model)
+            model.hf_quantizer = hf_quantizer
 
         if _adapter_model_path is not None:
             model.load_adapter(
@@ -3969,12 +3599,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder=None,
         offload_state_dict=None,
         dtype=None,
-        is_quantized=False,
+        hf_quantizer=None,
         keep_in_fp32_modules=None,
     ):
         is_safetensors = False
-        if is_quantized:
-            from .integrations import set_module_quantized_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -4098,14 +3726,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     target_dtype = torch.float32
 
                 if param.device == torch.device("meta"):
-                    if not (is_quantized):
-                        set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype))
-                    else:
-                        set_module_quantized_tensor_to_device(
-                            model, key, "cpu", torch.empty(*param.size(), dtype=target_dtype)
+                    value = torch.empty(*param.size(), dtype=target_dtype)
+                    if (
+                        hf_quantizer is None
+                        or getattr(hf_quantizer, "requires_parameters_quantization", False)
+                        or not hf_quantizer.check_quantized_param(
+                            model, param_value=value, param_name=key, state_dict={}
                         )
+                    ):
+                        set_module_tensor_to_device(model, key, "cpu", value)
+                    else:
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict)
 
-        # retrieve unintialized modules and initialize before maybe overriding that with the pretrained weights.
+        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
             if not ignore_mismatched_sizes:
                 if remove_prefix_from_model:
@@ -4115,6 +3748,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     _loaded_keys = loaded_keys
                 not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
+                # if we're about to tie the output embeds to the input embeds we don't need to init them
+                if hasattr(model.config, "tie_word_embeddings") and model.config.tie_word_embeddings:
+                    output_embeddings = model.get_output_embeddings()
+                    if output_embeddings is not None:
+                        output_embeddings._is_hf_initialized = True
             else:
                 not_initialized_submodules = dict(model.named_modules())
             # This will only initialize submodules that are not marked as initialized by the line above.
@@ -4278,14 +3916,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if is_fsdp_enabled() and not is_local_dist_rank_0():
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
-                                if not (is_quantized):
+                                if hf_quantizer is None:
                                     set_module_tensor_to_device(
                                         model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
-                                    set_module_quantized_tensor_to_device(
-                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
-                                    )
+                                    hf_quantizer.create_quantized_param(model, param, key, "cpu", state_dict)
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
@@ -4299,7 +3935,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             state_dict_folder=state_dict_folder,
                             state_dict_index=state_dict_index,
                             dtype=dtype,
-                            is_quantized=is_quantized,
+                            hf_quantizer=hf_quantizer,
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
@@ -4407,7 +4043,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return retrieved_modules
 
     @staticmethod
-    def _load_pretrained_model_low_mem(model, loaded_state_dict_keys, resolved_archive_file, start_prefix=""):
+    def _load_pretrained_model_low_mem(
+        model, loaded_state_dict_keys, resolved_archive_file, start_prefix="", hf_quantizer=None
+    ):
         """
         This is an experimental function that loads the model using ~1.x model size CPU memory
 
@@ -4422,12 +4060,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         4. load state_dict 2nd time
         5. replace the params/buffers from the state_dict
 
-        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed.
+        Currently, it doesn't handle missing_keys, unexpected_keys, mismatched_keys. It can't handle deepspeed. To
+        handle bitsandbytes, needs non-empty hf_quantizer argument.
         """
 
         _move_model_to_meta(model, loaded_state_dict_keys, start_prefix)
         state_dict = load_state_dict(resolved_archive_file)
-        error_msgs = _load_state_dict_into_meta_model(model, state_dict, loaded_state_dict_keys, start_prefix)
+        expected_keys = loaded_state_dict_keys  # plug for missing expected_keys. TODO: replace with proper keys
+        error_msgs = _load_state_dict_into_meta_model(
+            model,
+            state_dict,
+            loaded_state_dict_keys,
+            start_prefix,
+            expected_keys=expected_keys,
+            hf_quantizer=hf_quantizer,
+        )
         return error_msgs
 
     @classmethod
