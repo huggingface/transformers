@@ -241,6 +241,12 @@ class CacheIntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
     def test_static_cache_greedy_sampling(self, attn_implementation):
+        
+        EXPECTED_GENERATION = [
+            "The best color is the one that makes you feel good.\nThe",
+            "We should not undermind the issues at hand.\nI think the issue is that the people",
+        ]
+                
         tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>")
         model = AutoModelForCausalLM.from_pretrained(
             "NousResearch/Llama-2-7b-chat-hf",
@@ -252,36 +258,21 @@ class CacheIntegrationTest(unittest.TestCase):
             ["The best color is", "We should not undermind the issues at hand"], padding=True, return_tensors="pt"
         ).to(model.device)
 
-        # Set the generation config to use static cache
-        model.generation_config.cache_implementation = None
-        gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
+
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = [
-            "The best color is the one that makes you feel good.\nThe",
-            "We should not undermind the issues at hand.\nI think the issue is that the people",
-        ]
-        self.assertListEqual(decoded, expected_text)
-        
-        # Set the generation config to use static cache
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
+
         model.generation_config.cache_implementation = "static"
-        gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        expected_text = [
-            "The best color is the one that makes you feel good.\nThe",
-            "We should not undermind the issues at hand.\nI think the issue is that the people",
-        ]
-        self.assertListEqual(decoded, expected_text)
-
-        compiled_model = torch.compile(model)
-        model.forward = compiled_model
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        self.assertListEqual(decoded, expected_text)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
 
-        model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
+        
+        model.forward = torch.compile(model.forward)
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        self.assertListEqual(decoded, expected_text)
+        self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @unittest.skip("TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
