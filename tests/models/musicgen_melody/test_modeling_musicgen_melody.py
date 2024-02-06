@@ -75,21 +75,21 @@ def prepare_musicgen_melody_decoder_inputs_dict(
     input_ids,
     attention_mask=None,
     head_mask=None,
-    conditional_hidden_states=None,
-    conditional_attention_mask=None,
+    encoder_hidden_states=None,
+    encoder_attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.reshape(-1, config.num_codebooks, input_ids.shape[-1])[:, 0, :]
         attention_mask = attention_mask.ne(config.pad_token_id)
     if head_mask is None:
         head_mask = torch.ones(config.num_hidden_layers, config.num_attention_heads, device=torch_device)
-    if conditional_attention_mask is None and conditional_hidden_states is not None:
-        conditional_attention_mask = torch.ones(conditional_hidden_states.shape[:2], device=torch_device)
+    if encoder_attention_mask is None and encoder_hidden_states is not None:
+        encoder_attention_mask = torch.ones(encoder_hidden_states.shape[:2], device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
-        "conditional_hidden_states": conditional_hidden_states,
-        "conditional_attention_mask": conditional_attention_mask,
+        "encoder_hidden_states": encoder_hidden_states,
+        "encoder_attention_mask": encoder_attention_mask,
         "head_mask": head_mask,
     }
 
@@ -138,11 +138,11 @@ class MusicgenMelodyDecoderTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
-        conditional_hidden_states = floats_tensor([self.batch_size, self.conditional_seq_length, self.hidden_size])
+        encoder_hidden_states = floats_tensor([self.batch_size, self.conditional_seq_length, self.hidden_size])
 
         config = self.get_config()
         inputs_dict = prepare_musicgen_melody_decoder_inputs_dict(
-            config, input_ids, conditional_hidden_states=conditional_hidden_states
+            config, input_ids, encoder_hidden_states=encoder_hidden_states
         )
         return config, inputs_dict
 
@@ -702,8 +702,8 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         output = outputs[0]
 
-        conditional_hidden_states = outputs.conditional_hidden_states
-        conditional_hidden_states.retain_grad()
+        encoder_hidden_states = outputs.encoder_hidden_states
+        encoder_hidden_states.retain_grad()
 
         decoder_hidden_states = outputs.hidden_states[0]
         decoder_hidden_states.retain_grad()
@@ -714,7 +714,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         output.flatten()[0].backward(retain_graph=True)
 
-        self.assertIsNotNone(conditional_hidden_states.grad)
+        self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(decoder_hidden_states.grad)
 
         if self.has_attentions:
@@ -730,7 +730,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.conditional_hidden_states
+            hidden_states = outputs.encoder_hidden_states
 
             # Ignore copy
             expected_num_layers = self.model_tester.num_hidden_layers
