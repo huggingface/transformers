@@ -955,7 +955,7 @@ Einige Dekoratoren wie `@parameterized` schreiben Testnamen um, daher müssen `@
 `@require_*` müssen als letztes aufgeführt werden, damit sie korrekt funktionieren. Hier ist ein Beispiel für die korrekte Verwendung:
 
 ```python no-style
-@parameteriz ed.expand(...)
+@parameterized.expand(...)
 @slow
 def test_integration_foo():
 ```

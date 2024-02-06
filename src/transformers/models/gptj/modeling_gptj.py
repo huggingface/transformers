@@ -56,8 +56,8 @@ GPTJ_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.float), inv_freq).float()
+    inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
+    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -1001,9 +1001,10 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

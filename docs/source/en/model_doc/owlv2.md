@@ -56,7 +56,7 @@ OWLv2 is, just like its predecessor [OWL-ViT](owlvit), a zero-shot text-conditio
 
 >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
 >>> target_sizes = torch.Tensor([image.size[::-1]])
->>> # Convert outputs (bounding boxes and class logits) to COCO API
+>>> # Convert outputs (bounding boxes and class logits) to Pascal VOC Format (xmin, ymin, xmax, ymax)
 >>> results = processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=0.1)
 >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
 >>> text = texts[i]

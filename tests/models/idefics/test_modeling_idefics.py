@@ -16,11 +16,14 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
     require_bitsandbytes,
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -309,6 +312,12 @@ class IdeficsModelTester:
     def prepare_pixel_values(self):
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
+
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
@@ -556,6 +565,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         for model_name in IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = IdeficsModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest("Idefics has a hard requirement on SDPA, skipping this test")
 
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")

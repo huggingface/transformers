@@ -389,7 +389,7 @@ class BarkSelfFlashAttention2(BarkSelfAttention):
 
 
 BARK_ATTENTION_CLASSES = {
-    "default": BarkSelfAttention,
+    "eager": BarkSelfAttention,
     "flash_attention_2": BarkSelfFlashAttention2,
 }
 
@@ -436,8 +436,7 @@ class BarkBlock(nn.Module):
             self.layernorm_1 = nn.LayerNorm(config.hidden_size)
             self.layernorm_2 = nn.LayerNorm(config.hidden_size)
 
-        attn_type = "flash_attention_2" if getattr(config, "_flash_attn_2_enabled", False) else "default"
-        self.attn = BARK_ATTENTION_CLASSES[attn_type](config, is_causal=is_causal)
+        self.attn = BARK_ATTENTION_CLASSES[config._attn_implementation](config, is_causal=is_causal)
 
         self.mlp = BarkMLP(config)
 
@@ -670,6 +669,7 @@ class BarkCausalModel(BarkPreTrainedModel):
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
@@ -805,7 +805,7 @@ class BarkCausalModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 attention_mask = attention_mask.view(batch_size, -1)
@@ -1265,6 +1265,7 @@ class BarkFineModel(BarkPreTrainedModel):
         self.drop = nn.Dropout(config.dropout)
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
@@ -1434,7 +1435,7 @@ class BarkFineModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if getattr(self.config, "_flash_attn_2_enabled", False):
+            if self._use_flash_attention_2:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
@@ -1875,7 +1876,11 @@ class BarkModel(BarkPreTrainedModel):
 
     @classmethod
     def _check_and_enable_flash_attn_2(
-        cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        hard_check_only: bool = False,
     ):
         """
         `_check_and_enable_flash_attn_2` originally don't expand flash attention enabling to the model
@@ -1892,12 +1897,14 @@ class BarkModel(BarkPreTrainedModel):
         The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
         half precision and not ran on CPU.
 
-        If all checks pass, the method will create an attribute in the config `_flash_attn_2_enabled` so that the model
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_2" so that the model
         can initialize the correct attention module
         """
-        config = super()._check_and_enable_flash_attn_2(config, torch_dtype, device_map)
+        config = super()._check_and_enable_flash_attn_2(
+            config, torch_dtype, device_map, hard_check_only=hard_check_only
+        )
 
-        config.semantic_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
-        config.coarse_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
-        config.fine_acoustics_config._flash_attn_2_enabled = getattr(config, "_flash_attn_2_enabled", False)
+        config.semantic_config._attn_implementation = config._attn_implementation
+        config.coarse_acoustics_config._attn_implementation = config._attn_implementation
+        config.fine_acoustics_config._attn_implementation = config._attn_implementation
         return config

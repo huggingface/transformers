@@ -400,12 +400,6 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### NerPipeline
-
-[[autodoc]] NerPipeline
-
-See [`TokenClassificationPipeline`] for all details.
-
 ### QuestionAnsweringPipeline
 
 [[autodoc]] QuestionAnsweringPipeline
@@ -472,6 +466,12 @@ Pipelines available for multimodal tasks include the following.
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
+    - __call__
+    - all
+
+### ImageFeatureExtractionPipeline
+
+[[autodoc]] ImageFeatureExtractionPipeline
     - __call__
     - all
 

@@ -449,7 +449,7 @@ are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chi
 
 For comparison one can run the same pre-training with PyTorch/XLA on TPU. To set up PyTorch/XLA on Cloud TPU VMs, please 
 refer to [this](https://cloud.google.com/tpu/docs/pytorch-xla-ug-tpu-vm) guide.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenizer and configuration in `norwegian-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
@@ -499,7 +499,7 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
 
 For comparison you can run the same pre-training with PyTorch on GPU. Note that we have to make use of `gradient_accumulation` 
 because the maximum batch size that fits on a single V100 GPU is 32 instead of 128.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenizer and configuration in `norwegian-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./

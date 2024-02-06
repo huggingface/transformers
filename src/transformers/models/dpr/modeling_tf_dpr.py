@@ -23,7 +23,7 @@ from typing import Tuple, Union
 import tensorflow as tf
 
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, keras, shape_list, unpack_inputs
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -82,8 +82,8 @@ class TFDPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -110,8 +110,8 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -143,11 +143,11 @@ class TFDPRReaderOutput(ModelOutput):
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
-class TFDPREncoderLayer(tf.keras.layers.Layer):
+class TFDPREncoderLayer(keras.layers.Layer):
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -161,7 +161,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = tf.keras.layers.Dense(
+            self.encode_proj = keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
@@ -209,8 +209,19 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             return self.projection_dim
         return self.bert_model.config.hidden_size
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "bert_model", None) is not None:
+            with tf.name_scope(self.bert_model.name):
+                self.bert_model.build(None)
+        if getattr(self, "encode_proj", None) is not None:
+            with tf.name_scope(self.encode_proj.name):
+                self.encode_proj.build(None)
 
-class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
+
+class TFDPRSpanPredictorLayer(keras.layers.Layer):
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -218,10 +229,10 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self.config = config
         self.encoder = TFDPREncoderLayer(config, name="encoder")
 
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        self.qa_classifier = tf.keras.layers.Dense(
+        self.qa_classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
 
@@ -272,6 +283,20 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.encoder.embeddings_size])
+        if getattr(self, "qa_classifier", None) is not None:
+            with tf.name_scope(self.qa_classifier.name):
+                self.qa_classifier.build([None, None, self.encoder.embeddings_size])
 
 
 class TFDPRSpanPredictor(TFPreTrainedModel):
@@ -384,7 +409,7 @@ TF_DPR_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a Tensorflow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
 
@@ -599,6 +624,14 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "ctx_encoder", None) is not None:
+            with tf.name_scope(self.ctx_encoder.name):
+                self.ctx_encoder.build(None)
+
 
 @add_start_docstrings(
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
@@ -679,6 +712,14 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "question_encoder", None) is not None:
+            with tf.name_scope(self.question_encoder.name):
+                self.question_encoder.build(None)
+
 
 @add_start_docstrings(
     "The bare DPRReader transformer outputting span predictions.",
@@ -752,3 +793,11 @@ class TFDPRReader(TFDPRPretrainedReader):
             return_dict=return_dict,
             training=training,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "span_predictor", None) is not None:
+            with tf.name_scope(self.span_predictor.name):
+                self.span_predictor.build(None)

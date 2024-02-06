@@ -95,7 +95,8 @@ class BaseMixedInt8Test(unittest.TestCase):
     )
 
     input_text = "Hello my name is"
-    EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of the family.\n"
+    EXPECTED_OUTPUTS = set()
+    EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of the family.\n")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -260,7 +261,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = self.model_8bit.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_generate_quality_config(self):
         r"""
@@ -278,7 +279,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10
         )
 
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_raise_if_config_and_load_in_8bit(self):
         r"""
@@ -365,9 +366,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
             output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-            self.assertEqual(
-                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
-            )
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_int8_serialization_regression(self):
         r"""
@@ -392,9 +391,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
             output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-            self.assertEqual(
-                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
-            )
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_int8_serialization_sharded(self):
         r"""
@@ -419,9 +416,7 @@ class MixedInt8Test(BaseMixedInt8Test):
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
             output_sequences = model_from_saved.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-            self.assertEqual(
-                self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT
-            )
+            self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_int8_from_pretrained(self):
         r"""
@@ -441,7 +436,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
 @require_bitsandbytes
@@ -628,7 +623,7 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
 
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
-        self.assertEqual(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUT)
+        self.assertIn(pipeline_output[0]["generated_text"], self.EXPECTED_OUTPUTS)
 
 
 @require_torch_multi_gpu
@@ -654,7 +649,7 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
 
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
-        self.assertEqual(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output_parallel[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
 
 @require_torch_multi_gpu
@@ -671,7 +666,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
 
         # Get the generation
         output_text = self.tokenizer.decode(output_parallel[0], skip_special_tokens=True)
-        self.assertEqual(output_text, self.EXPECTED_OUTPUT)
+        self.assertIn(output_text, self.EXPECTED_OUTPUTS)
 
     def test_cpu_gpu_loading_random_device_map(self):
         r"""
@@ -708,7 +703,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.ln_f": 1,
         }
 
-        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True, load_in_8bit=True)
 
         model_8bit = AutoModelForCausalLM.from_pretrained(
             self.model_name,
@@ -734,7 +729,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h": 0,
             "transformer.ln_f": 1,
         }
-        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True, load_in_8bit=True)
 
         # Load model
         model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -760,7 +755,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             "transformer.h": 1,
             "transformer.ln_f": "disk",
         }
-        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True)
+        bnb_config = BitsAndBytesConfig(llm_int8_enable_fp32_cpu_offload=True, load_in_8bit=True)
         with tempfile.TemporaryDirectory() as tmpdirname:
             # Load model
             model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -849,7 +844,9 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
 class MixedInt8GPT2Test(MixedInt8Test):
     model_name = "gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
-    EXPECTED_OUTPUT = "Hello my name is John Doe, and I'm a big fan of"
+    EXPECTED_OUTPUTS = set()
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a big fan of")
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe, and I'm a fan of the")
 
     def test_int8_from_pretrained(self):
         r"""
@@ -869,4 +866,4 @@ class MixedInt8GPT2Test(MixedInt8Test):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
-        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
+        self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)

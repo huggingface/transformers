@@ -284,6 +284,24 @@
         title: CamemBERT
       - local: model_doc/canine
         title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
+      - local: model_doc/dialogpt
+        title: DialoGPT
       title: 文章モデル
     - isExpanded: false
       sections:
@@ -291,6 +309,24 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
       title: ビジョンモデル
     - isExpanded: false
       sections:
@@ -317,7 +353,22 @@
         title: BROS
       - local: model_doc/chinese_clip
         title: Chinese-CLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/data2vec
+        title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       title: マルチモーダルモデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
+      title: 強化学習モデル
     - isExpanded: false
       sections:
       - local: model_doc/autoformer

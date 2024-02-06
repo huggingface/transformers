@@ -67,7 +67,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-2.7B", torch_dtype=torch.float16, use_flash_attention_2=True)
+>>> model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-neo-2.7B", torch_dtype=torch.float16, attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neo-2.7B")
 
 >>> prompt = "def hello_world():"

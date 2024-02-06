@@ -29,7 +29,7 @@ import tensorflow as tf
 
 from ...activations_tf import ACT2FN
 from ...modeling_tf_outputs import TFBaseModelOutput
-from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, keras, shape_list, unpack_inputs
 from ...tf_utils import flatten, functional_layernorm
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
@@ -74,8 +74,8 @@ class TFSamVisionEncoderOutput(ModelOutput):
 
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
-    hidden_states: Tuple[tf.Tensor] | None = None
-    attentions: Tuple[tf.Tensor] | None = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -109,12 +109,12 @@ class TFSamImageSegmentationOutput(ModelOutput):
 
     iou_scores: tf.Tensor = None
     pred_masks: tf.Tensor = None
-    vision_hidden_states: Tuple[tf.Tensor] | None = None
-    vision_attentions: Tuple[tf.Tensor] | None = None
-    mask_decoder_attentions: Tuple[tf.Tensor] | None = None
+    vision_hidden_states: Tuple[tf.Tensor, ...] | None = None
+    vision_attentions: Tuple[tf.Tensor, ...] | None = None
+    mask_decoder_attentions: Tuple[tf.Tensor, ...] | None = None
 
 
-class TFSamPatchEmbeddings(tf.keras.layers.Layer):
+class TFSamPatchEmbeddings(keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -133,7 +133,7 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
         )
 
@@ -150,13 +150,22 @@ class TFSamPatchEmbeddings(tf.keras.layers.Layer):
         embeddings = self.projection(tf.transpose(pixel_values, perm=[0, 2, 3, 1]))
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, None, self.num_channels])
 
-class TFSamMLPBlock(tf.keras.layers.Layer):
+
+class TFSamMLPBlock(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.lin1 = tf.keras.layers.Dense(config.mlp_dim, name="lin1")
-        self.lin2 = tf.keras.layers.Dense(config.hidden_size, name="lin2")
+        self.lin1 = keras.layers.Dense(config.mlp_dim, name="lin1")
+        self.lin2 = keras.layers.Dense(config.hidden_size, name="lin2")
         self.act = ACT2FN[config.hidden_act]
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.lin1(hidden_states)
@@ -164,8 +173,19 @@ class TFSamMLPBlock(tf.keras.layers.Layer):
         hidden_states = self.lin2(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lin1", None) is not None:
+            with tf.name_scope(self.lin1.name):
+                self.lin1.build([None, None, self.config.hidden_size])
+        if getattr(self, "lin2", None) is not None:
+            with tf.name_scope(self.lin2.name):
+                self.lin2.build([None, None, self.config.mlp_dim])
 
-class TFSamLayerNorm(tf.keras.layers.Layer):
+
+class TFSamLayerNorm(keras.layers.Layer):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
     width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
@@ -192,7 +212,7 @@ class TFSamLayerNorm(tf.keras.layers.Layer):
         return x
 
 
-class TFSamAttention(tf.keras.layers.Layer):
+class TFSamAttention(keras.layers.Layer):
     """
     SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
     values.
@@ -209,10 +229,10 @@ class TFSamAttention(tf.keras.layers.Layer):
         if self.internal_dim % config.num_attention_heads != 0:
             raise ValueError("num_attention_heads must divide hidden_size.")
 
-        self.q_proj = tf.keras.layers.Dense(self.internal_dim, name="q_proj")
-        self.k_proj = tf.keras.layers.Dense(self.internal_dim, name="k_proj")
-        self.v_proj = tf.keras.layers.Dense(self.internal_dim, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(self.hidden_size, name="out_proj")
+        self.q_proj = keras.layers.Dense(self.internal_dim, name="q_proj")
+        self.k_proj = keras.layers.Dense(self.internal_dim, name="k_proj")
+        self.v_proj = keras.layers.Dense(self.internal_dim, name="v_proj")
+        self.out_proj = keras.layers.Dense(self.hidden_size, name="out_proj")
 
     def _separate_heads(self, hidden_states: tf.Tensor, num_attention_heads: int) -> tf.Tensor:
         batch, point_batch_size, n_tokens, channel = shape_list(hidden_states)
@@ -257,8 +277,25 @@ class TFSamAttention(tf.keras.layers.Layer):
 
         return out
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.hidden_size])
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.hidden_size])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.internal_dim])
 
-class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
+
+class TFSamTwoWayAttentionBlock(keras.layers.Layer):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False, **kwargs):
         """
         A transformer block with four layers:
@@ -279,17 +316,17 @@ class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
         self.layer_norm_eps = config.layer_norm_eps
 
         self.self_attn = TFSamAttention(config, downsample_rate=1, name="self_attn")
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm1")
 
         self.cross_attn_token_to_image = TFSamAttention(
             config, downsample_rate=attention_downsample_rate, name="cross_attn_token_to_image"
         )
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm2")
 
         self.mlp = TFSamMLPBlock(config, name="mlp")
-        self.layer_norm3 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm3")
+        self.layer_norm3 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm3")
 
-        self.layer_norm4 = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm4")
+        self.layer_norm4 = keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="layer_norm4")
         self.cross_attn_image_to_token = TFSamAttention(
             config, downsample_rate=attention_downsample_rate, name="cross_attn_image_to_token"
         )
@@ -345,8 +382,37 @@ class TFSamTwoWayAttentionBlock(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build([None, None, None, self.hidden_size])
+        if getattr(self, "cross_attn_token_to_image", None) is not None:
+            with tf.name_scope(self.cross_attn_token_to_image.name):
+                self.cross_attn_token_to_image.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build([None, None, None, self.hidden_size])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
+        if getattr(self, "layer_norm3", None) is not None:
+            with tf.name_scope(self.layer_norm3.name):
+                self.layer_norm3.build([None, None, None, self.hidden_size])
+        if getattr(self, "layer_norm4", None) is not None:
+            with tf.name_scope(self.layer_norm4.name):
+                self.layer_norm4.build([None, None, None, self.hidden_size])
+        if getattr(self, "cross_attn_image_to_token", None) is not None:
+            with tf.name_scope(self.cross_attn_image_to_token.name):
+                self.cross_attn_image_to_token.build(None)
 
-class TFSamTwoWayTransformer(tf.keras.layers.Layer):
+
+class TFSamTwoWayTransformer(keras.layers.Layer):
     def __init__(self, config: SamMaskDecoderConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -358,7 +424,7 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
             self.layers.append(TFSamTwoWayAttentionBlock(config, skip_first_layer_pe=(i == 0), name=f"layers_._{i}"))
 
         self.final_attn_token_to_image = TFSamAttention(config, name="final_attn_token_to_image")
-        self.layer_norm_final_attn = tf.keras.layers.LayerNormalization(
+        self.layer_norm_final_attn = keras.layers.LayerNormalization(
             epsilon=config.layer_norm_eps, name="layer_norm_final_attn"
         )
 
@@ -412,21 +478,37 @@ class TFSamTwoWayTransformer(tf.keras.layers.Layer):
         queries = self.layer_norm_final_attn(queries)
         return queries, keys, all_attentions
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "final_attn_token_to_image", None) is not None:
+            with tf.name_scope(self.final_attn_token_to_image.name):
+                self.final_attn_token_to_image.build(None)
+        if getattr(self, "layer_norm_final_attn", None) is not None:
+            with tf.name_scope(self.layer_norm_final_attn.name):
+                self.layer_norm_final_attn.build([None, None, None, self.config.hidden_size])
+        for layer in self.layers:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
-class TFSamFeedForward(tf.keras.layers.Layer):
+
+class TFSamFeedForward(keras.layers.Layer):
     def __init__(
         self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, sigmoid_output: bool = False, **kwargs
     ):
         super().__init__(**kwargs)
         self.num_layers = num_layers
-        self.activation = tf.keras.layers.ReLU()
-        self.proj_in = tf.keras.layers.Dense(hidden_dim, input_shape=(input_dim,), name="proj_in")
-        self.proj_out = tf.keras.layers.Dense(output_dim, input_shape=(hidden_dim,), name="proj_out")
+        self.activation = keras.layers.ReLU()
+        self.proj_in = keras.layers.Dense(hidden_dim, input_shape=(input_dim,), name="proj_in")
+        self.proj_out = keras.layers.Dense(output_dim, input_shape=(hidden_dim,), name="proj_out")
         self.layers = [
-            tf.keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layers_._{i}")
+            keras.layers.Dense(hidden_dim, input_shape=(hidden_dim,), name=f"layers_._{i}")
             for i in range(num_layers - 2)
         ]
         self.sigmoid_output = sigmoid_output
+        self.hidden_dim = hidden_dim
+        self.input_dim = input_dim
 
     def call(self, hidden_states):
         hidden_states = self.proj_in(hidden_states)
@@ -439,8 +521,23 @@ class TFSamFeedForward(tf.keras.layers.Layer):
             hidden_states = tf.sigmoid(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "proj_in", None) is not None:
+            with tf.name_scope(self.proj_in.name):
+                self.proj_in.build([None, None, self.input_dim])
+        if getattr(self, "proj_out", None) is not None:
+            with tf.name_scope(self.proj_out.name):
+                self.proj_out.build([None, None, self.hidden_dim])
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build([None, None, self.hidden_dim])
 
-class TFSamMaskDecoder(tf.keras.layers.Layer):
+
+class TFSamMaskDecoder(keras.layers.Layer):
     def __init__(self, config: SamMaskDecoderConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -451,10 +548,10 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
 
         self.transformer = TFSamTwoWayTransformer(config, name="transformer")
 
-        self.upscale_conv1 = tf.keras.layers.Conv2DTranspose(
+        self.upscale_conv1 = keras.layers.Conv2DTranspose(
             self.hidden_size // 4, kernel_size=2, strides=2, name="upscale_conv1", data_format="channels_first"
         )
-        self.upscale_conv2 = tf.keras.layers.Conv2DTranspose(
+        self.upscale_conv2 = keras.layers.Conv2DTranspose(
             self.hidden_size // 8, kernel_size=2, strides=2, name="upscale_conv2", data_format="channels_first"
         )
         self.upscale_layer_norm = TFSamLayerNorm(
@@ -483,12 +580,33 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
             name="iou_prediction_head",
         )
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         self.iou_token = self.add_weight(shape=(1, self.hidden_size), name="iou_token.weight", trainable=True)
         self.mask_tokens = self.add_weight(
             shape=(self.num_mask_tokens, self.hidden_size), name="mask_tokens.weight", trainable=True
         )
-        super().build(input_shape)
+
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "upscale_conv1", None) is not None:
+            with tf.name_scope(self.upscale_conv1.name):
+                self.upscale_conv1.build([None, self.hidden_size, None, None])
+        if getattr(self, "upscale_conv2", None) is not None:
+            with tf.name_scope(self.upscale_conv2.name):
+                self.upscale_conv2.build([None, self.hidden_size // 4, None, None])
+        if getattr(self, "upscale_layer_norm", None) is not None:
+            with tf.name_scope(self.upscale_layer_norm.name):
+                self.upscale_layer_norm.build(None)
+        if getattr(self, "iou_prediction_head", None) is not None:
+            with tf.name_scope(self.iou_prediction_head.name):
+                self.iou_prediction_head.build(None)
+        for mlp in self.output_hypernetworks_mlps:
+            with tf.name_scope(mlp.name):
+                mlp.build(None)
 
     def call(
         self,
@@ -567,7 +685,7 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         return outputs
 
 
-class TFSamPositionalEmbedding(tf.keras.layers.Layer):
+class TFSamPositionalEmbedding(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.scale = config.hidden_size // 2
@@ -578,7 +696,7 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         self.positional_embedding = self.add_weight(
             name="positional_embedding",
             shape=(2, self.config.num_pos_feats),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=self.scale),
             trainable=False,
         )
         super().build(input_shape)
@@ -605,16 +723,17 @@ class TFSamPositionalEmbedding(tf.keras.layers.Layer):
         return tf.concat([tf.sin(coordinates), tf.cos(coordinates)], axis=-1)
 
 
-class TFSamMaskEmbedding(tf.keras.layers.Layer):
+class TFSamMaskEmbedding(keras.layers.Layer):
     def __init__(self, config: SamPromptEncoderConfig, **kwargs):
         super().__init__(**kwargs)
         self.mask_input_channels = config.mask_input_channels // 4
         self.activation = ACT2FN[config.hidden_act]
-        self.conv1 = tf.keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
-        self.conv2 = tf.keras.layers.Conv2D(config.mask_input_channels, kernel_size=2, strides=2, name="conv2")
-        self.conv3 = tf.keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
+        self.conv1 = keras.layers.Conv2D(self.mask_input_channels, kernel_size=2, strides=2, name="conv1")
+        self.conv2 = keras.layers.Conv2D(config.mask_input_channels, kernel_size=2, strides=2, name="conv2")
+        self.conv3 = keras.layers.Conv2D(config.hidden_size, kernel_size=1, name="conv3")
         self.layer_norm1 = TFSamLayerNorm(self.mask_input_channels, config.layer_norm_eps, name="layer_norm1")
         self.layer_norm2 = TFSamLayerNorm(self.mask_input_channels * 4, config.layer_norm_eps, name="layer_norm2")
+        self.config = config
 
     def call(self, masks):
         masks = tf.transpose(masks, perm=(0, 2, 3, 1))  # Convert to channels-last
@@ -629,27 +748,24 @@ class TFSamMaskEmbedding(tf.keras.layers.Layer):
         dense_embeddings = tf.transpose(dense_embeddings, perm=(0, 3, 1, 2))  # Convert back to channels-first
         return dense_embeddings
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         # This class needs an explicit build method because it isn't called with the standard dummy inputs
-        conv1_shape = [None, None, None, 1]
-        conv2_shape = [None, None, None, self.mask_input_channels]
-        conv3_shape = [None, None, None, self.mask_input_channels * 4]
-        layer_norm1_shape = [None, None, None, self.mask_input_channels]
-        layer_norm2_shape = [None, None, None, self.mask_input_channels * 4]
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("conv1"):
-            self.conv1.build(conv1_shape)
+            self.conv1.build([None, None, None, 1])
         with tf.name_scope("conv2"):
-            self.conv2.build(conv2_shape)
+            self.conv2.build([None, None, None, self.mask_input_channels])
         with tf.name_scope("conv3"):
-            self.conv3.build(conv3_shape)
+            self.conv3.build([None, None, None, self.mask_input_channels * 4])
         with tf.name_scope("layer_norm1"):
-            self.layer_norm1.build(layer_norm1_shape)
+            self.layer_norm1.build([None, None, None, self.mask_input_channels])
         with tf.name_scope("layer_norm2"):
-            self.layer_norm2.build(layer_norm2_shape)
-        super().build(input_shape)
+            self.layer_norm2.build([None, None, None, self.mask_input_channels * 4])
 
 
-class TFSamPromptEncoder(tf.keras.layers.Layer):
+class TFSamPromptEncoder(keras.layers.Layer):
     def __init__(self, config: SamPromptEncoderConfig, shared_patch_embedding, **kwargs):
         super().__init__(**kwargs)
         self.shared_embedding = shared_patch_embedding
@@ -664,18 +780,18 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         self.not_a_point_embed = None
         self.config = config
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.no_mask_embed = self.add_weight(
             name="no_mask_embed.weight",
             shape=(1, self.hidden_size),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
             trainable=True,
         )
         self.point_embed = [
             self.add_weight(
                 name=f"point_embed_._{i}.weight",
                 shape=(1, self.hidden_size),
-                initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+                initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
                 trainable=True,
             )
             for i in range(self.config.num_point_embeddings)
@@ -683,7 +799,7 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         self.not_a_point_embed = self.add_weight(
             name="not_a_point_embed.weight",
             shape=(1, self.hidden_size),
-            initializer=tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
+            initializer=keras.initializers.RandomNormal(mean=0.0, stddev=0.02),
             trainable=True,
         )
         with tf.name_scope("mask_embed"):
@@ -691,7 +807,13 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
             self.mask_embed.build(
                 (None, self.config.mask_input_channels, self.config.image_size, self.config.image_size)
             )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "mask_embed", None) is not None:
+            with tf.name_scope(self.mask_embed.name):
+                self.mask_embed.build(None)
 
     def _embed_points(self, points: tf.Tensor, labels: tf.Tensor, pad: bool) -> tf.Tensor:
         """Embeds point prompts."""
@@ -785,7 +907,7 @@ class TFSamPromptEncoder(tf.keras.layers.Layer):
         return sparse_embeddings, dense_embeddings
 
 
-class TFSamVisionAttention(tf.keras.layers.Layer):
+class TFSamVisionAttention(keras.layers.Layer):
     """Multi-head Attention block with relative position embeddings."""
 
     def __init__(self, config, window_size, **kwargs):
@@ -803,8 +925,8 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         self.scale = head_dim**-0.5
         self.dropout = config.attention_dropout
 
-        self.qkv = tf.keras.layers.Dense(config.hidden_size * 3, use_bias=config.qkv_bias, name="qkv")
-        self.proj = tf.keras.layers.Dense(config.hidden_size, name="proj")
+        self.qkv = keras.layers.Dense(config.hidden_size * 3, use_bias=config.qkv_bias, name="qkv")
+        self.proj = keras.layers.Dense(config.hidden_size, name="proj")
 
         self.use_rel_pos = config.use_rel_pos
         if self.use_rel_pos:
@@ -812,7 +934,7 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
                 raise ValueError("Input size must be provided if using relative positional encoding.")
         self.config = config
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         if self.input_size is not None:
             # initialize relative positional embeddings
             self.rel_pos_h = self.add_weight(
@@ -821,7 +943,16 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
             self.rel_pos_w = self.add_weight(
                 shape=(2 * self.input_size[1] - 1, self.head_dim), initializer="zeros", name="rel_pos_w"
             )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "qkv", None) is not None:
+            with tf.name_scope(self.qkv.name):
+                self.qkv.build([None, None, self.config.hidden_size])
+        if getattr(self, "proj", None) is not None:
+            with tf.name_scope(self.proj.name):
+                self.proj.build([None, None, self.config.hidden_size])
 
     def get_rel_pos(self, q_size: int, k_size: int, rel_pos: tf.Tensor) -> tf.Tensor:
         """
@@ -941,14 +1072,15 @@ class TFSamVisionAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFSamVisionLayer(tf.keras.layers.Layer):
+class TFSamVisionLayer(keras.layers.Layer):
     def __init__(self, config, window_size, **kwargs):
         super().__init__(**kwargs)
-        self.layer_norm1 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
+        self.layer_norm1 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1")
         self.attn = TFSamVisionAttention(config, window_size, name="attn")
-        self.layer_norm2 = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
+        self.layer_norm2 = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2")
         self.mlp = TFSamMLPBlock(config, name="mlp")
         self.window_size = window_size
+        self.config = config
 
     def window_partition(self, hidden_states: tf.Tensor, window_size: int) -> Tuple[tf.Tensor, Tuple[int, int]]:
         batch_size, height, width, channel = shape_list(hidden_states)
@@ -1016,20 +1148,37 @@ class TFSamVisionLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build([None, None, None, self.config.hidden_size])
+        if getattr(self, "attn", None) is not None:
+            with tf.name_scope(self.attn.name):
+                self.attn.build(None)
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build([None, None, None, self.config.hidden_size])
+        if getattr(self, "mlp", None) is not None:
+            with tf.name_scope(self.mlp.name):
+                self.mlp.build(None)
 
-class TFSamVisionNeck(tf.keras.layers.Layer):
+
+class TFSamVisionNeck(keras.layers.Layer):
     def __init__(self, config: SamVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
 
-        self.conv1 = tf.keras.layers.Conv2D(
+        self.conv1 = keras.layers.Conv2D(
             config.output_channels,
             kernel_size=1,
             use_bias=False,
             name="conv1",
         )
         self.layer_norm1 = TFSamLayerNorm(config.output_channels, name="layer_norm1")
-        self.conv2 = tf.keras.layers.Conv2D(
+        self.conv2 = keras.layers.Conv2D(
             config.output_channels,
             kernel_size=3,
             padding="same",
@@ -1047,8 +1196,25 @@ class TFSamVisionNeck(tf.keras.layers.Layer):
         hidden_states = tf.transpose(hidden_states, perm=[0, 3, 1, 2])
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv1", None) is not None:
+            with tf.name_scope(self.conv1.name):
+                self.conv1.build([None, None, None, self.config.hidden_size])
+        if getattr(self, "layer_norm1", None) is not None:
+            with tf.name_scope(self.layer_norm1.name):
+                self.layer_norm1.build(None)
+        if getattr(self, "conv2", None) is not None:
+            with tf.name_scope(self.conv2.name):
+                self.conv2.build([None, None, None, self.config.output_channels])
+        if getattr(self, "layer_norm2", None) is not None:
+            with tf.name_scope(self.layer_norm2.name):
+                self.layer_norm2.build(None)
 
-class TFSamVisionEncoder(tf.keras.layers.Layer):
+
+class TFSamVisionEncoder(keras.layers.Layer):
     def __init__(self, config: SamVisionConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -1069,7 +1235,10 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
 
         self.neck = TFSamVisionNeck(config, name="neck")
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         if self.config.use_abs_pos:
             # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = self.add_weight(
@@ -1083,7 +1252,16 @@ class TFSamVisionEncoder(tf.keras.layers.Layer):
                 trainable=True,
                 name="pos_embed",
             )
-        super().build(input_shape)
+
+        if getattr(self, "patch_embed", None) is not None:
+            with tf.name_scope(self.patch_embed.name):
+                self.patch_embed.build(None)
+        if getattr(self, "neck", None) is not None:
+            with tf.name_scope(self.neck.name):
+                self.neck.build(None)
+        for layer in self.layers:
+            with tf.name_scope(layer.name):
+                layer.build(None)
 
     def get_input_embeddings(self):
         return self.patch_embed
@@ -1154,7 +1332,7 @@ SAM_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a TensorFlow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a TensorFlow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TensorFlow Model and refer to the TensorFlow documentation for all matter related to
     general usage and behavior.
 
@@ -1463,3 +1641,20 @@ class TFSamModel(TFSamPreTrainedModel):
             vision_attentions=attns if self.config.output_attentions else None,
             mask_decoder_attentions=output.mask_decoder_attentions if self.config.output_attentions else None,
         )
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "shared_image_embedding", None) is not None:
+            with tf.name_scope(self.shared_image_embedding.name):
+                self.shared_image_embedding.build(None)
+        if getattr(self, "vision_encoder", None) is not None:
+            with tf.name_scope(self.vision_encoder.name):
+                self.vision_encoder.build(None)
+        if getattr(self, "prompt_encoder", None) is not None:
+            with tf.name_scope(self.prompt_encoder.name):
+                self.prompt_encoder.build(None)
+        if getattr(self, "mask_decoder", None) is not None:
+            with tf.name_scope(self.mask_decoder.name):
+                self.mask_decoder.build(None)

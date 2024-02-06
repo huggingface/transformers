@@ -66,12 +66,12 @@ model = AutoModelForCausalLM.from_pretrained(model_id).to("cuda:0")
 
 ### 结合 AWQ 和 Flash Attention
 
-您可以将AWQ量化与Flash Attention结合起来，得到一个既被量化又更快速的模型。只需使用`from_pretrained`加载模型，并传递`use_flash_attention_2=True`参数。
+您可以将AWQ量化与Flash Attention结合起来，得到一个既被量化又更快速的模型。只需使用`from_pretrained`加载模型，并传递`attn_implementation="flash_attention_2"`参数。
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", use_flash_attention_2=True, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained("TheBloke/zephyr-7B-alpha-AWQ", attn_implementation="flash_attention_2", device_map="cuda:0")
 ```
 
 ### 基准测试

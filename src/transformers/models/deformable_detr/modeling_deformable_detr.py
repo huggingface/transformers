@@ -44,7 +44,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
 from ...utils import is_ninja_available, logging
-from ..auto import AutoBackbone
+from ...utils.backbone_utils import load_backbone
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -409,7 +409,7 @@ class DeformableDetrConvEncoder(nn.Module):
                 **kwargs,
             )
         else:
-            backbone = AutoBackbone.from_config(config.backbone_config)
+            backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
@@ -491,7 +491,7 @@ class DeformableDetrSinePositionEmbedding(nn.Module):
             y_embed = (y_embed - 0.5) / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = (x_embed - 0.5) / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.float32, device=pixel_values.device)
+        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -617,7 +617,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
 
     def _reset_parameters(self):
         nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
+        thetas = torch.arange(self.n_heads, dtype=torch.int64).float() * (2.0 * math.pi / self.n_heads)
         grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
         grid_init = (
             (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
@@ -1048,7 +1048,9 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
     config_class = DeformableDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
     _no_split_modules = [r"DeformableDetrConvEncoder", r"DeformableDetrEncoderLayer", r"DeformableDetrDecoderLayer"]
+    supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1143,6 +1145,7 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
 
     def __init__(self, config: DeformableDetrConfig):
         super().__init__(config)
+        self.gradient_checkpointing = False
 
         self.dropout = config.dropout
         self.layers = nn.ModuleList([DeformableDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
@@ -1235,15 +1238,27 @@ class DeformableDetrEncoder(DeformableDetrPreTrainedModel):
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
-                hidden_states,
-                attention_mask,
-                position_embeddings=position_embeddings,
-                reference_points=reference_points,
-                spatial_shapes=spatial_shapes,
-                level_start_index=level_start_index,
-                output_attentions=output_attentions,
-            )
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    position_embeddings,
+                    reference_points,
+                    spatial_shapes,
+                    level_start_index,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    position_embeddings=position_embeddings,
+                    reference_points=reference_points,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
+                    output_attentions=output_attentions,
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -1368,9 +1383,13 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    position_embeddings,
+                    reference_points_input,
+                    spatial_shapes,
+                    level_start_index,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    None,
+                    output_attentions,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1539,7 +1558,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         temperature = 10000
         scale = 2 * math.pi
 
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = torch.arange(num_pos_feats, dtype=torch.int64, device=proposals.device).float()
         dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
         # batch_size, num_queries, 4
         proposals = proposals.sigmoid() * scale
@@ -1900,7 +1919,7 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
         ...     0

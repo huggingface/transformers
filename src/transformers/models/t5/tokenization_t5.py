@@ -191,7 +191,7 @@ class T5Tokenizer(PreTrainedTokenizer):
                 f"You are using the default legacy behaviour of the {self.__class__}. This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
                 " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
+                " means, and thoroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True

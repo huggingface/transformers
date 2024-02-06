@@ -363,8 +363,10 @@ class OptFlashAttention2(OPTAttention):
         # cast them back in float16 just to be sure everything works as expected.
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
             # Handle the case where the model is quantized
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            elif hasattr(self.config, "_pre_quantization_dtype"):
                 target_dtype = self.config._pre_quantization_dtype
             else:
                 target_dtype = self.q_proj.weight.dtype
@@ -491,15 +493,18 @@ class OptFlashAttention2(OPTAttention):
         )
 
 
+OPT_ATTENTION_CLASSES = {
+    "eager": OPTAttention,
+    "flash_attention_2": OptFlashAttention2,
+}
+
+
 class OPTDecoderLayer(nn.Module):
     def __init__(self, config: OPTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        if not getattr(config, "_flash_attn_2_enabled", False):
-            self.self_attn = OPTAttention(config=config, is_decoder=True)
-        else:
-            self.self_attn = OptFlashAttention2(config=config, is_decoder=True)
+        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, is_decoder=True)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
@@ -732,6 +737,7 @@ class OPTDecoder(OPTPreTrainedModel):
             self.final_layer_norm = None
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -830,7 +836,7 @@ class OPTDecoder(OPTPreTrainedModel):
         mask_seq_length = past_key_values_length + seq_length
 
         # embed positions
-        if getattr(self.config, "_flash_attn_2_enabled", False):
+        if self._use_flash_attention_2:
             # 2d mask is passed through the layers
             causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             attention_mask = (
@@ -1290,9 +1296,10 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1).to(
-                    logits.device
-                )
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
+                sequence_lengths = sequence_lengths % input_ids.shape[-1]
+                sequence_lengths = sequence_lengths.to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(
