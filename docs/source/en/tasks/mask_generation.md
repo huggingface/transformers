@@ -142,7 +142,7 @@ processor = SamProcessor.from_pretrained("facebook/sam-vit-base")
 ```
 
 You can do point prompting like below. Simply pass the input point to the processor. Take the processor output
-and pass it to the model for inference. To postprocess the model output, we pass the outputs and
+and pass it to the model for inference. To post-process the model output, pass the outputs and
 `original_sizes` and `reshaped_input_sizes` we take from the processor's initial output. We need to pass these 
 since processor resizes the image, and the output needs to be extrapolated.
 
