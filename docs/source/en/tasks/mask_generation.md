@@ -104,7 +104,7 @@ The `masks` looks like following:
 }
 ```
 
-We can visualize them like following:
+We can visualize them like this:
 
 ```python
 import matplotlib.pyplot as plt
