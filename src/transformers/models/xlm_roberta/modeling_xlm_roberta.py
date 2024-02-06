@@ -434,6 +434,8 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
 
         query_layer = self.self.transpose_for_scores(mixed_query_layer)
 
+        attn_dropout = self.self.dropout.p if self.training else 0.0
+
         if self.self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
