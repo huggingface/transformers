@@ -101,7 +101,7 @@ wav = torch.tensor(sample["array"]).to(torch.float32)
 
 demucs = pretrained.get_model('htdemucs')
 
-wav = convert_audio(wav, sample["sampling_rate"], demucs.samplerate, demucs.audio_channels)
+wav = convert_audio(wav[None], sample["sampling_rate"], demucs.samplerate, demucs.audio_channels)
 wav = apply_model(demucs, wav[None])
 ```
 
@@ -115,7 +115,7 @@ You can then use the following snippet to generate music:
 
 >>> inputs = processor(
 ...     audio=wav,
-...     sampling_rate=demucs.sample_rate,
+...     sampling_rate=demucs.samplerate,
 ...     text=["80s blues track with groovy saxophone"],
 ...     padding=True,
 ...     return_tensors="pt",
@@ -157,7 +157,7 @@ Or save them as a `.wav` file using a third-party library, e.g. `soundfile`:
 >>> import soundfile as sf
 
 >>> sampling_rate = model.config.audio_encoder.sampling_rate
->>> sf.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0].T.numpy())
+>>> sf.write("musicgen_out.wav", audio_values[0].T.numpy(), sampling_rate)
 ```
 
 
