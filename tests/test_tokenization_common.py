@@ -989,9 +989,10 @@ class TokenizerTesterMixin:
         def _get_excepted(item, decoded):
             excepted_entry = item
             if isinstance(item, list):
-                if isinstance(item, str):
+                if isinstance(item[0], str):
                     excepted_entry = " ".join(item)
-                else:
+                elif isinstance(item[0], int):
+                    # since we won't know the result for sure
                     excepted_entry = decoded
             return excepted_entry
 
@@ -1052,6 +1053,7 @@ class TokenizerTesterMixin:
                     [["one", "two"], ["three"]],
                     [[10]],
                     [[10, 10]],
+                    [[10, 10], [10]],
                 ]
                 for item in items:
                     if _excepted_skip(item[0], is_fast=tokenizer.is_fast, is_batch=True):
