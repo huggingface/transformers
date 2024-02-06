@@ -1807,7 +1807,11 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
                     n_repeat = int(math.ceil(self.config.chroma_length / audio_hidden_states.shape[1]))
                     audio_hidden_states = audio_hidden_states.repeat(1, n_repeat, 1)
                 else:
-                    logger.warning("The conditional audio signal is too long and will be truncated.")
+                    logger.warning(
+                        f"The conditional audio signal is of length {audio_hidden_states.shape[1]}, which exceeds"
+                        f"the maximum chroma duration of {self.config.chroma_length}."
+                        f"The audio will be truncated to {self.config.chroma_length} frames."
+                    )
                 audio_hidden_states = audio_hidden_states[:, : self.config.chroma_length]
 
                 if encoder_hidden_states is not None:
