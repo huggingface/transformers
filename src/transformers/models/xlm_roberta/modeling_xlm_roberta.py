@@ -472,7 +472,7 @@ class XLMRobertaFlashAttention2(XLMRobertaAttention):
             value_layer = value_layer.to(target_dtype)
 
         attn_weights = self._flash_attention_forward(
-            query_layer, key_layer, value_layer, attention_mask, q_len, dropout=self.self.dropout.p
+            query_layer, key_layer, value_layer, attention_mask, q_len, dropout=attn_dropout
         )
 
         attn_weights_reshaped = attn_weights.reshape(bsz, q_len, self.self.all_head_size)

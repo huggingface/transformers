@@ -562,6 +562,7 @@ class XLMRobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
+    @slow
     def test_flash_attn_2_inference(self):
         import torch
 
@@ -613,6 +614,7 @@ class XLMRobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @require_flash_attn
     @require_torch_accelerator
     @pytest.mark.flash_attn_test
+    @slow
     def test_flash_attn_2_inference_padding_right(self):
         import torch
 
