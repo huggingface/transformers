@@ -44,7 +44,7 @@ class LagLlamaConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The number of input variates. For univariate time series, this should be 1. For multivariate time series,
             this should be the number of variates.
-        lags_sequence (`List`, *optional*, defaults to `[1, 2, 3, 4, 5, 6, 7]`): <fill_docstring>
+        lags_sequence (`List`, *optional*, defaults to `[0, 1, 2, 3, 4, 5, 6]`): <fill_docstring>
         num_time_features (`int`, *optional*, defaults to 0):
             The number of date-time features for the time series.
         scaling (`str`, *optional*, defaults to `"robust"`): <fill_docstring>
@@ -118,7 +118,7 @@ class LagLlamaConfig(PretrainedConfig):
         distribution_output: str = "student_t",
         loss: str = "nll",
         input_size: int = 1,
-        lags_sequence: List[int] = [1, 2, 3, 4, 5, 6, 7],
+        lags_sequence: List[int] = [0, 1, 2, 3, 4, 5, 6],
         num_time_features: int = 0,
         scaling: str = "robust",
         num_parallel_samples: int = 100,
