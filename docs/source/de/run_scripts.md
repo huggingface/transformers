@@ -226,7 +226,7 @@ accelerate launch run_summarization_no_trainer.py \
 Das Verdichtungsskript unterstützt benutzerdefinierte Datensätze, solange es sich um eine CSV- oder JSON-Line-Datei handelt. Wenn Sie Ihren eigenen Datensatz verwenden, müssen Sie mehrere zusätzliche Argumente angeben:
 
 - `train_file` und `validation_file` geben den Pfad zu Ihren Trainings- und Validierungsdateien an.
-- text_column` ist der Eingabetext, der zusammengefasst werden soll.
+- `text_column` ist der Eingabetext, der zusammengefasst werden soll.
 - Summary_column" ist der auszugebende Zieltext.
 
 Ein Zusammenfassungsskript, das einen benutzerdefinierten Datensatz verwendet, würde wie folgt aussehen:

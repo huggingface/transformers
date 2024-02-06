@@ -720,8 +720,8 @@ Zugriffsmöglichkeiten auf sie bietet:
   - `test_file_dir` - das Verzeichnis, das die aktuelle Testdatei enthält
   - `tests_dir` - das Verzeichnis der `tests` Testreihe
   - `examples_dir` - das Verzeichnis der `examples` Test-Suite
-  - repo_root_dir` - das Verzeichnis des Repositorys
-  - src_dir` - das Verzeichnis von `src` (d.h. wo sich das Unterverzeichnis `transformers` befindet)
+  - `repo_root_dir` - das Verzeichnis des Repositorys
+  - `src_dir` - das Verzeichnis von `src` (d.h. wo sich das Unterverzeichnis `transformers` befindet)
 
 - stringifizierte Pfade - wie oben, aber diese geben Pfade als Strings zurück, anstatt als `pathlib`-Objekte:
 
@@ -978,7 +978,7 @@ Ansatz zu verfeinern, sollten wir Ausnahmen einführen:
   wird in den folgenden Abschnitten erläutert.
 - Alle Tests, die ein Training durchführen müssen, das nicht speziell auf Schnelligkeit optimiert ist, sollten auf langsam gesetzt werden.
 - Wir können Ausnahmen einführen, wenn einige dieser Tests, die nicht langsam sein sollten, unerträglich langsam sind, und sie auf
-  @langsam`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
+  `@langsam`. Auto-Modellierungstests, die große Dateien auf der Festplatte speichern und laden, sind ein gutes Beispiel für Tests, die als
   als `@langsam` markiert sind.
 - Wenn ein Test in weniger als 1 Sekunde auf CI abgeschlossen wird (einschließlich eventueller Downloads), sollte es sich trotzdem um einen normalen Test handeln.
 
@@ -1172,7 +1172,7 @@ class EnvExampleTest(TestCasePlus):
 ```
 
 Je nachdem, ob die Testdatei in der Testsuite `tests` oder in `examples` war, wird sie korrekt eingerichtet
-env[PYTHONPATH]` eines dieser beiden Verzeichnisse und auch das `src` Verzeichnis, um sicherzustellen, dass der Test gegen das aktuelle
+`env[PYTHONPATH]` eines dieser beiden Verzeichnisse und auch das `src` Verzeichnis, um sicherzustellen, dass der Test gegen das aktuelle
 um sicherzustellen, dass der Test mit dem aktuellen Projektarchiv durchgeführt wird, und schließlich mit dem, was in `env[PYTHONPATH]` bereits eingestellt war, bevor der Test aufgerufen wurde.
 wenn überhaupt.
 

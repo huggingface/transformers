@@ -248,7 +248,7 @@ Der Datensatz [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) hat zum
  'sampling_rate': 8000}
 ```
 
-1. Verwenden Sie die Methode [~datasets.Dataset.cast_column] von 🤗 Datasets, um die Abtastrate auf 16kHz zu erhöhen:
+1. Verwenden Sie die Methode [`~datasets.Dataset.cast_column`] von 🤗 Datasets, um die Abtastrate auf 16kHz zu erhöhen:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
@@ -476,7 +476,7 @@ Erinnern Sie sich an den früheren Abschnitt über die Verarbeitung von Audiodat
 
 ### Prozessor
 
-Ein Processor kombiniert einen Feature-Extraktor und einen Tokenizer. Laden Sie einen Processor mit [`AutoProcessor.from_pretrained]:
+Ein Processor kombiniert einen Feature-Extraktor und einen Tokenizer. Laden Sie einen Processor mit [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor
