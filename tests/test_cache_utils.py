@@ -252,6 +252,16 @@ class CacheIntegrationTest(unittest.TestCase):
         ).to(model.device)
 
         # Set the generation config to use static cache
+        model.generation_config.cache_implementation = None
+        gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
+        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        expected_text = [
+            "The best color is the one that makes you feel good.\nThe",
+            "We should not undermind the issues at hand.\nI think the issue is that the people",
+        ]
+        self.assertListEqual(decoded, expected_text)
+        
+        # Set the generation config to use static cache
         model.generation_config.cache_implementation = "static"
         gen_out = model(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
@@ -272,5 +282,6 @@ class CacheIntegrationTest(unittest.TestCase):
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_text)
 
+    @unittest.skip("TODO @gante static cache's does not support beam search yet")
     def test_static_cache_beam_search(self):
-        raise NotImplementedError("TODO @gante static cache's does not support beam search yet")
+        pass
