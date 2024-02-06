@@ -973,6 +973,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -2482,6 +2483,7 @@ else:
     _import_structure["models.llama"].extend(
         [
             "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
@@ -2731,6 +2733,7 @@ else:
             "MT5ForConditionalGeneration",
             "MT5ForQuestionAnswering",
             "MT5ForSequenceClassification",
+            "MT5ForTokenClassification",
             "MT5Model",
             "MT5PreTrainedModel",
         ]
@@ -3299,6 +3302,7 @@ else:
             "T5ForConditionalGeneration",
             "T5ForQuestionAnswering",
             "T5ForSequenceClassification",
+            "T5ForTokenClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
@@ -3370,6 +3374,7 @@ else:
             "UMT5ForConditionalGeneration",
             "UMT5ForQuestionAnswering",
             "UMT5ForSequenceClassification",
+            "UMT5ForTokenClassification",
             "UMT5Model",
             "UMT5PreTrainedModel",
         ]
@@ -5706,6 +5711,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
@@ -7020,7 +7026,13 @@ if TYPE_CHECKING:
             LiltModel,
             LiltPreTrainedModel,
         )
-        from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llama import (
+            LlamaForCausalLM,
+            LlamaForQuestionAnswering,
+            LlamaForSequenceClassification,
+            LlamaModel,
+            LlamaPreTrainedModel,
+        )
         from .models.llava import (
             LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
             LlavaForConditionalGeneration,
@@ -7223,6 +7235,7 @@ if TYPE_CHECKING:
             MT5ForConditionalGeneration,
             MT5ForQuestionAnswering,
             MT5ForSequenceClassification,
+            MT5ForTokenClassification,
             MT5Model,
             MT5PreTrainedModel,
         )
@@ -7688,6 +7701,7 @@ if TYPE_CHECKING:
             T5ForConditionalGeneration,
             T5ForQuestionAnswering,
             T5ForSequenceClassification,
+            T5ForTokenClassification,
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
@@ -7743,6 +7757,7 @@ if TYPE_CHECKING:
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,
             UMT5ForSequenceClassification,
+            UMT5ForTokenClassification,
             UMT5Model,
             UMT5PreTrainedModel,
         )
