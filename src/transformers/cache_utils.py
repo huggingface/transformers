@@ -392,3 +392,6 @@ class StaticCache(Cache):
         device = self.value_cache.device
         self.value_cache = self.value_cache.index_select(0, beam_idx.to(device))
 
+    def to_legacy_cache(self):
+        """Dummy function for BC. We have to keep it because otherwise the call in the forward of models will break it"""
+        return None
