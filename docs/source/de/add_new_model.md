@@ -89,8 +89,8 @@ model.config  # model has access to its config
 Ähnlich wie das Modell erbt die Konfiguration grundlegende Serialisierungs- und Deserialisierungsfunktionalitäten von
 [`PretrainedConfig`]. Beachten Sie, dass die Konfiguration und das Modell immer in zwei verschiedene Formate serialisiert werden
 unterschiedliche Formate serialisiert werden - das Modell in eine *pytorch_model.bin* Datei und die Konfiguration in eine *config.json* Datei. Aufruf von
-[~PreTrainedModel.save_pretrained`] wird automatisch
-[~PretrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
+[`~PreTrainedModel.save_pretrained`] wird automatisch
+[`~PretrainedConfig.save_pretrained`] auf, so dass sowohl das Modell als auch die Konfiguration gespeichert werden.
 
 
 ### Code-Stil
@@ -543,7 +543,7 @@ def _init_weights(self, module):
 ```
 
 Das Flag `_is_hf_initialized` wird intern verwendet, um sicherzustellen, dass wir ein Submodul nur einmal initialisieren. Wenn Sie es auf
-True` für `module.project_q` und `module.project_hid` setzen, stellen wir sicher, dass die benutzerdefinierte Initialisierung, die wir vorgenommen haben, später nicht überschrieben wird,
+`True` für `module.project_q` und `module.project_hid` setzen, stellen wir sicher, dass die benutzerdefinierte Initialisierung, die wir vorgenommen haben, später nicht überschrieben wird,
 die Funktion `_init_weights` nicht auf sie angewendet wird.
 
 **6. Schreiben Sie ein Konvertierungsskript**
@@ -759,7 +759,7 @@ Falls Sie Windows verwenden, sollten Sie `RUN_SLOW=1` durch `SET RUN_SLOW=1` ers
 </Tip>
 
 Zweitens sollten alle Funktionen, die speziell für *brand_new_bert* sind, zusätzlich in einem separaten Test getestet werden unter
-`BrandNewBertModelTester`/``BrandNewBertModelTest`. Dieser Teil wird oft vergessen, ist aber in zweierlei Hinsicht äußerst nützlich
+`BrandNewBertModelTester`/`BrandNewBertModelTest`. Dieser Teil wird oft vergessen, ist aber in zweierlei Hinsicht äußerst nützlich
 Weise:
 
 - Er hilft dabei, das Wissen, das Sie während der Modellerweiterung erworben haben, an die Community weiterzugeben, indem er zeigt, wie die
