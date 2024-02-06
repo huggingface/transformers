@@ -2,7 +2,9 @@ import time
 import warnings
 from abc import ABC
 from copy import deepcopy
-from typing import Optional
+from typing import Optional, List, Union
+
+from ..tokenization_utils_base import PreTrainedTokenizerBase
 
 import torch
 
@@ -120,6 +122,56 @@ class MaxTimeCriteria(StoppingCriteria):
     def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
         self.max_time = max_time
         self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
+
+    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
+        return time.time() - self.initial_timestamp > self.max_time
+
+
+class TerminationSequenceCriteria(StoppingCriteria):
+    """
+    This class can be used to stop generation whenever specific string sequences are encountered. Because the same
+    substring can be tokenized in different ways depending on context, this class expands strings up into every possible
+    token sequence that could contain them in a preprocessing step, then does a vectorized comparison against
+    `input_ids` during generation. This is much faster than doing detokenization inside the generation loop.
+
+    Args:
+        tokenizer (`PreTrainedTokenizer`):
+            The model's associated tokenizer (necessary to extract vocab and tokenize the termination sequences)
+        termination_sequences (`Union[str, List[str]]`):
+            The sequences that should end generation. If a string is passed, it will be treated like a
+            list with a single element.
+    """
+
+    def __init__(self, tokenizer: PreTrainedTokenizerBase, termination_sequences: Union[str, List[str]]):
+        vocab = tokenizer.get_vocab()
+        tok_list = list(vocab.keys())
+        if isinstance(termination_sequences, str):
+            termination_sequences = [termination_sequences]
+        termination_tokens = []
+        for seq in termination_sequences:
+            if seq in tokenizer.special_tokens_map.values():
+                # If it's a special token it won't be split, so we can just use it directly
+                termination_tokens.append(vocab[seq])
+                continue
+            # If it isn't a special token, we need to figure out all sequences of tokens which contain this string.
+            # This is horribly inefficient, but it'll do to start.
+            bridging_seqs = []
+            for prefix_len in range(1, len(seq) + 1):
+                for suffix_len in range(len(seq), len(seq) - prefix_len, -1):
+                    prefix = seq[:prefix_len]
+                    suffix = seq[-suffix_len:]
+                    middle = seq[prefix_len:-suffix_len]
+                    possible_starts = [token for token in tok_list if token.endswith(prefix)]
+                    possible_ends = [token for token in tok_list if token.startswith(suffix)]
+                    if not possible_starts or not possible_ends:
+                        continue
+                    bridging_seqs.extend([start + middle + end for start in possible_starts for end in possible_ends])
+            if not bridging_seqs:
+                raise ValueError("Couldn't find any set of tokens spanning the termination sequence " + seq)
+            bridging_seqs = list(set(bridging_seqs))  # Uniquify just in case
+            termination_tokens.extend(tokenizer(bridging_seqs, add_special_tokens=False)['input_ids'])
+
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
