@@ -310,4 +310,4 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
         text = "This is my example sentence with a special <unk> token"
         tokens = tokenizer(text)["input_ids"]
         decode = tokenizer.decode(tokens)
-        assert decode == "en_XX This is my example sentence with a special<unk> token</s>"
+        assert decode == "en_XX This is my example sentence with a special <unk> token</s>"
