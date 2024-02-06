@@ -1497,7 +1497,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
-    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration.from_sub_models_pretrained with Musicgen->MusicgenMelody, musicgen->musicgen-melody
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration.from_sub_models_pretrained with Musicgen->MusicgenMelody, musicgen-small->musicgen-melody
     def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: str = None,
@@ -1507,7 +1507,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         **kwargs,
     ) -> PreTrainedModel:
         r"""
-        Instantiate a text encoder, an audio encoder, and a Musicgen Melody decoder from one to three base classes of the
+        Instantiate a text encoder, an audio encoder, and a MusicGen decoder from one, two or three base classes of the
         library from pretrained model checkpoints.
 
 
@@ -1563,16 +1563,16 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         ```python
         >>> from transformers import MusicgenMelodyForConditionalGeneration
 
-        >>> # initialize a musicgen_melody model from a t5 text encoder, encodec audio encoder, and musicgen_melody decoder
+        >>> # initialize a musicgen model from a t5 text encoder, encodec audio encoder, and musicgen decoder
         >>> model = MusicgenMelodyForConditionalGeneration.from_sub_models_pretrained(
         ...     text_encoder_pretrained_model_name_or_path="t5-base",
         ...     audio_encoder_pretrained_model_name_or_path="facebook/encodec_24khz",
         ...     decoder_pretrained_model_name_or_path="facebook/musicgen-melody",
         ... )
         >>> # saving model after fine-tuning
-        >>> model.save_pretrained("./musicgen_melody-ft")
+        >>> model.save_pretrained("./musicgen-ft")
         >>> # load fine-tuned model
-        >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("./musicgen_melody-ft")
+        >>> model = MusicgenMelodyForConditionalGeneration.from_pretrained("./musicgen-ft")
         ```"""
 
         kwargs_text_encoder = {
@@ -1591,7 +1591,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
 
-        # remove text encoder, audio_encoder and decoder kwargs from kwargs
+        # remove text encoder, audio encoder and decoder kwargs from kwargs
         for key in kwargs_text_encoder.keys():
             del kwargs["text_encoder_" + key]
         for key in kwargs_audio_encoder.keys():
