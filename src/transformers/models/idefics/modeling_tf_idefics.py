@@ -507,6 +507,9 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
         self.variance_epsilon = eps
 
     def build(self, input_shape):
+        if self.built:
+            return
+        self.built = True
         self.weight = self.add_weight(name="weight", shape=[self.hidden_size], initializer="ones")
 
         super().build(input_shape)
@@ -544,12 +547,12 @@ class TFIdeficsEmbedding(tf.keras.layers.Layer):
         self.sin_cached = tf.math.sin(emb)
 
     def build(self, input_shape):
-        self.inv_freq = self.add_weight(
-            name="inv_freq", shape=(self.dim // 2,), dtype=tf.float32
-        )
+        if self.built:
+            return
+        self.built = True
+        self.inv_freq = self.add_weight(name="inv_freq", shape=(self.dim // 2,), dtype=tf.float32)
         self.inv_freq.assign(
-            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2,
-                                          dtype=tf.float32) / self.dim))
+            1.0 / (self.base ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim))
         )
         self._set_cos_sin_cache(seq_len=self.max_position_embeddings, dtype=tf.float32)
 
@@ -909,6 +912,9 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         self.alphas_initializer_range = config.alphas_initializer_range
 
     def build(self, input_shape):
+        if self.built:
+            return
+        self.built = True
         if self.alpha_initializer == "zeros":
             if self.alpha_type == "vector":
                 self.alpha_cross_attn = self.add_weight(
@@ -976,7 +982,14 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
 
         if not (hasattr(self, "alpha_cross_attn") and hasattr(self, "alpha_dense")):
             raise ValueError("Alpha parameters not initialized correctly!")
-
+        with tf.name_scope(self.cross_attn.name):
+            self.cross_attn.build(None)
+        with tf.name_scope(self.mlp.name):
+            self.mlp.build(None)
+        with tf.name_scope(self.input_layernorm.name):
+            self.input_layernorm.build(None)
+        with tf.name_scope(self.post_attention_layernorm.name):
+            self.post_attention_layernorm.build(None)
         super().build(input_shape)
 
     def call(
@@ -1033,7 +1046,9 @@ class TFIdeficsGatedCrossAttentionLayer(tf.keras.layers.Layer):
         mask = tf.cast(cross_attention_gate == 0, dtype=hidden_states.dtype)
         # Expand dimensions of mask to match hidden_states
         mask = tf.expand_dims(mask, -1)
-        hidden_states = tf.where(tf.broadcast_to(mask, tf.shape(hidden_states)) == 1, tf.zeros_like(hidden_states), hidden_states)
+        hidden_states = tf.where(
+            tf.broadcast_to(mask, tf.shape(hidden_states)) == 1, tf.zeros_like(hidden_states), hidden_states
+        )
         # when there are no images the model is used in pure language mode
         # gate = 0 if no_images else 1
         hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
