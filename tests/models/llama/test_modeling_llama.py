@@ -501,9 +501,10 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
             res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
             res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            self.assertTrue(torch.allclose(res_eager, res_sdpa))
+
+            with self.subTest(f"{padding_side}"):
+                torch.testing.assert_close(res_eager, res_sdpa, msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}")
 
 
 @require_torch
