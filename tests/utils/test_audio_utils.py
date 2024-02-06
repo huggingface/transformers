@@ -810,7 +810,7 @@ class AudioUtilsFunctionTester(unittest.TestCase):
             num_chroma=num_chroma,
             sampling_rate=sampling_rate,
             power=None,
-            start_at_C_chroma=False,
+            start_at_c_chroma=False,
             weighting_parameters=(4.0, 1.0),
         )
 

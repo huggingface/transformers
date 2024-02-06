@@ -105,15 +105,15 @@ def hertz_to_octave(
         freq (`float` or `np.ndarray`):
             The frequency, or multiple frequencies, in hertz (Hz).
         tuning (`float`, defaults to `0.`):
-            Tuning deviation from A440 in (fractional) bins per octave.
+            Tuning deviation from the Stuttgart pitch (A440) in (fractional) bins per octave.
         bins_per_octave (`int`, defaults to `12`):
             Number of bins per octave.
 
     Returns:
         `float` or `np.ndarray`: The frequencies on the octave scale.
     """
-    A440 = 440.0 * 2.0 ** (tuning / bins_per_octave)
-    octave = np.log2(freq / (float(A440) / 16))
+    stuttgart_pitch = 440.0 * 2.0 ** (tuning / bins_per_octave)
+    octave = np.log2(freq / (float(stuttgart_pitch) / 16))
     return octave
 
 
@@ -146,7 +146,7 @@ def chroma_filter_bank(
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
     weighting_parameters: Optional[Tuple[float]] = (5.0, 2),
-    start_at_C_chroma: Optional[bool] = True,
+    start_at_c_chroma: Optional[bool] = True,
 ):
     """
     Creates a chroma filter bank, i.e a linear transformation to project spectrogram bins onto chroma bins.
@@ -167,13 +167,11 @@ def chroma_filter_bank(
         weighting_parameters (`Tuple[float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
-        start_at_C_chroma (`float`, *optional*, defaults to `True`):
+        start_at_c_chroma (`float`, *optional*, defaults to `True`):
             If True, the filter bank will start at the 'C' pitch class. Otherwise, it will start at 'A'.
     Returns:
         `np.ndarray` of shape `(num_frequency_bins, num_chroma)`
     """
-    chroma_filters = np.zeros((num_chroma, num_frequency_bins))
-
     # Get the FFT bins, not counting the DC component
     frequencies = np.linspace(0, sampling_rate, num_frequency_bins, endpoint=False)[1:]
 
@@ -185,17 +183,17 @@ def chroma_filter_bank(
 
     bins_width = np.concatenate((np.maximum(freq_bins[1:] - freq_bins[:-1], 1.0), [1]))
 
-    D = np.subtract.outer(freq_bins, np.arange(0, num_chroma, dtype="d")).T
+    chroma_filters = np.subtract.outer(freq_bins, np.arange(0, num_chroma, dtype="d")).T
 
     num_chroma2 = np.round(float(num_chroma) / 2)
 
     # Project into range -num_chroma/2 .. num_chroma/2
     # add on fixed offset of 10*num_chroma to ensure all values passed to
     # rem are positive
-    D = np.remainder(D + num_chroma2 + 10 * num_chroma, num_chroma) - num_chroma2
+    chroma_filters = np.remainder(chroma_filters + num_chroma2 + 10 * num_chroma, num_chroma) - num_chroma2
 
     # Gaussian bumps - 2*D to make them narrower
-    chroma_filters = np.exp(-0.5 * (2 * D / np.tile(bins_width, (num_chroma, 1))) ** 2)
+    chroma_filters = np.exp(-0.5 * (2 * chroma_filters / np.tile(bins_width, (num_chroma, 1))) ** 2)
 
     # normalize each column
     if power is not None:
@@ -209,7 +207,7 @@ def chroma_filter_bank(
             (num_chroma, 1),
         )
 
-    if start_at_C_chroma:
+    if start_at_c_chroma:
         chroma_filters = np.roll(chroma_filters, -3 * (num_chroma // 12), axis=0)
 
     # remove aliasing columns, copy to ensure row-contiguity
