@@ -28,7 +28,7 @@ that the prompt is pointing out to. The second one is the segment everything mod
 image, the model generates every mask in the image. To do so, a grid of points is generated and overlaid on the image
 for inference. 
 
-Mask generation task is supported by Segment Anything Model (SAM). It's a powerful model that consists of a Vision Transformer
+Mask generation task is supported by [Segment Anything Model (SAM)](model_doc/sam). It's a powerful model that consists of a Vision Transformer
 base image encoder, a prompt encoder, and a mask decoder. Images and prompts are encoded, and the decoder takes these 
 embeddings and generates valid masks. 
 
