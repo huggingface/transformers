@@ -1013,7 +1013,7 @@ class LlamaModel(LlamaPreTrainedModel):
 
         next_cache = None
         if use_cache:
-            next_cache = next_decoder_cache.to_legacy_cache() if not isinstance(past_key_values, Cache) else next_decoder_cache
+            next_cache = next_decoder_cache.to_legacy_cache() if isinstance(past_key_values, Cache) else next_decoder_cache
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
