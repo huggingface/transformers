@@ -344,7 +344,7 @@ Laden wir den [food101](https://huggingface.co/datasets/food101) Datensatz für 
 >>> dataset = load_dataset("food101", split="train[:100]")
 ```
 
-Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild] (https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) an:
+Als Nächstes sehen Sie sich das Bild mit dem Merkmal 🤗 Datensätze [Bild](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=image#datasets.Image) an:
 
 ```py
 >>> dataset[0]["image"]

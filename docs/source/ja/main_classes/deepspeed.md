@@ -481,7 +481,7 @@ deepspeed examples/pytorch/translation/run_translation.py ...
 設定ファイルで使用できる DeepSpeed 設定オプションの完全なガイドについては、次を参照してください。
 [次のドキュメント](https://www.deepspeed.ai/docs/config-json/) にアクセスしてください。
 
-さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples] (https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
+さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
 リポジトリ:
 
 ```bash
