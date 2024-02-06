@@ -1044,11 +1044,8 @@ class TokenizerTesterMixin:
                     if _excepted_skip(item, tokenizer=tokenizer, is_batch=False):
                         continue
                     tokens = tokenizer.consistent_encode(item, return_tensors=return_tensors)
-                    print(tokens)
                     decoded = tokenizer.consistent_decode(tokens, skip_special_tokens=True)
-                    print(decoded)
                     excepted = _get_excepted(item, decoded)
-                    print(excepted)
                     self.assertEqual(excepted, decoded)
 
                 # Test consistency for `encode_batch/decode_batch` method pair.

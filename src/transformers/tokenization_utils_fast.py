@@ -771,7 +771,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _consistent_decode(
         self,
-        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],  # noqa
+        token_ids: Union[int, List[int]],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: Optional[bool] = None,
         **kwargs,
