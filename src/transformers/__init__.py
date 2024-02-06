@@ -549,6 +549,7 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "models.lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
     "models.llava": [
         "LLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "LlavaConfig",
@@ -2487,6 +2488,14 @@ else:
             "LlamaForSequenceClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.lagllama"].extend(
+        [
+            "LagLlamaForPrediction",
+            "LagLlamaForSequenceClassification",
+            "LagLlamaModel",
+            "LagLlamaPreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -5262,6 +5271,7 @@ if TYPE_CHECKING:
         Kosmos2Config,
         Kosmos2Processor,
     )
+    from .models.lagllama import LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LagLlamaConfig
     from .models.layoutlm import (
         LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LayoutLMConfig,
@@ -6977,6 +6987,12 @@ if TYPE_CHECKING:
             Kosmos2ForConditionalGeneration,
             Kosmos2Model,
             Kosmos2PreTrainedModel,
+        )
+        from .models.lagllama import (
+            LagLlamaForPrediction,
+            LagLlamaForSequenceClassification,
+            LagLlamaModel,
+            LagLlamaPreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
