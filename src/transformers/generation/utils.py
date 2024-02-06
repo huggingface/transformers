@@ -1405,7 +1405,7 @@ class GenerationMixin:
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
 
         # if we don't pass `past_key_values` and a cache_implementation is specified
-        if generation_config.cache_implementation in ALL_COMPILE_CACHE_CLASSES_MAPPING and not model_kwargs.get(
+        if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
             "past_key_values", False
         ):
             cache_cls = ALL_COMPILE_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
