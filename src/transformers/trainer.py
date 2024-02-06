@@ -2465,7 +2465,9 @@ class Trainer:
 
             # Maybe delete some older checkpoints.
             if self.args.should_save:
-                self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+                # Solely rely on numerical checkpoint id for rotation.
+                # mtime is not reliable especially on some fuse fs in cloud environments.
+                self._rotate_checkpoints(use_mtime=False, output_dir=run_dir)
 
         self.args.distributed_state.wait_for_everyone()
 
