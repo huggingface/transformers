@@ -151,13 +151,13 @@ sampling_rate = model.config.audio_encoder.sampling_rate
 Audio(audio_values[0].numpy(), rate=sampling_rate)
 ```
 
-Or save them as a `.wav` file using a third-party library, e.g. `scipy`:
+Or save them as a `.wav` file using a third-party library, e.g. `soundfile`:
 
 ```python
->>> import scipy
+>>> import soundfile as sf
 
 >>> sampling_rate = model.config.audio_encoder.sampling_rate
->>> scipy.io.wavfile.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0, 0].numpy())
+>>> sf.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0].T.numpy())
 ```
 
 
