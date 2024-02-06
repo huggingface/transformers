@@ -1966,7 +1966,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         return decoder_input_ids, model_kwargs
 
-    def _prepare_conditional_hidden_states_kwargs_for_generation(
+    def _prepare_encoder_hidden_states_kwargs_for_generation(
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
@@ -2220,7 +2220,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
 
         if "encoder_hidden_states" not in model_kwargs:
             # encoder_hidden_states are created and added to `model_kwargs`
-            model_kwargs = self._prepare_conditional_hidden_states_kwargs_for_generation(
+            model_kwargs = self._prepare_encoder_hidden_states_kwargs_for_generation(
                 inputs_tensor,
                 model_kwargs,
                 model_input_name,
