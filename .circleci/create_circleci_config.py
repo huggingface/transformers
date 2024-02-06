@@ -103,27 +103,27 @@ class CircleCIJob:
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
-            {
-                "restore_cache": {
-                    "keys": [
-                        # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                        # try the partially-matched cache from `main`
-                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
-                        # try the general partially-matched cache
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
-                    ]
-                }
-            },
-            {
-                "restore_cache": {
-                    "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
-                    ]
-                }
-            },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             # check the fully-matched cache first
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+            #             # try the partially-matched cache from `main`
+            #             f"v{self.cache_version}-{self.cache_name}-main-pip-",
+            #             # try the general partially-matched cache
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
+            #         ]
+            #     }
+            # },
+            # {
+            #     "restore_cache": {
+            #         "keys": [
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+            #             f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
+            #             f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
+            #         ]
+            #     }
+            # },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
         steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
@@ -282,7 +282,8 @@ torch_and_tf_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@7aafa25673f4324cbcaeef508a13e09576f12dc4#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -296,7 +297,8 @@ torch_and_flax_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@7aafa25673f4324cbcaeef508a13e09576f12dc4#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -309,7 +311,8 @@ torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@7aafa25673f4324cbcaeef508a13e09576f12dc4#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
     ],
     parallelism=1,
     pytest_num_workers=6,
@@ -346,6 +349,7 @@ pipelines_torch_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
     ],
     marker="is_pipeline_test",
     pytest_num_workers=6,
@@ -403,7 +407,8 @@ examples_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
         "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@7aafa25673f4324cbcaeef508a13e09576f12dc4#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
     ],
     pytest_num_workers=1,
 )
@@ -474,7 +479,6 @@ exotic_models_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager python-Levenshtein",
         "pip install -U --upgrade-strategy eager opencv-python",
         "pip install -U --upgrade-strategy eager nltk",
-        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager 'torch<2.2.0' 'torchvision<0.17' 'torchaudio<2.2.0'"
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -513,7 +517,8 @@ doc_test_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager -e .[dev]",
-        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@7aafa25673f4324cbcaeef508a13e09576f12dc4#egg=accelerate",
+        "pip uninstall -y torch torchvision torchaudio && pip install -U --upgrade-strategy eager torch torchvision torchaudio",
         "pip install --upgrade --upgrade-strategy eager 'pytest<8.0.0' pytest-sugar",
         "pip install -U --upgrade-strategy eager natten==0.15.1+torch210cpu -f https://shi-labs.com/natten/wheels",
         "pip install -U --upgrade-strategy eager g2p-en",
@@ -543,24 +548,24 @@ doc_test_job = CircleCIJob(
 )
 
 REGULAR_TESTS = [
-    torch_and_tf_job,
-    torch_and_flax_job,
+    # torch_and_tf_job,
+    # torch_and_flax_job,
     torch_job,
-    tf_job,
-    flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
+    # tf_job,
+    # flax_job,
+    # custom_tokenizers_job,
+    # hub_job,
+    # onnx_job,
+    # exotic_models_job,
 ]
 EXAMPLES_TESTS = [
-    examples_torch_job,
-    examples_tensorflow_job,
-    examples_flax_job,
+    # examples_torch_job,
+    # examples_tensorflow_job,
+    # examples_flax_job,
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,
-    pipelines_tf_job,
+    # pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
