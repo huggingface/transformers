@@ -72,6 +72,8 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             bugs.
 
             </Tip>
+        stem_indices (`List[int]`, *optional*, defaults to `[3, 2]`):
+            Stem channels to extract if demucs outputs are passed.
     """
 
     model_input_names = ["input_values"]
@@ -86,6 +88,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         num_chroma=12,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
+        stem_indices=[3, 2],
         **kwargs,
     ):
         super().__init__(
@@ -106,6 +109,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         self.spectrogram = torchaudio.transforms.Spectrogram(
             n_fft=n_fft, win_length=n_fft, hop_length=hop_length, power=2, center=True, pad=0, normalized=True
         )
+        self.stem_indices = stem_indices
 
     def _torch_extract_fbank_features(self, waveform: torch.Tensor) -> torch.Tensor:
         """
@@ -138,7 +142,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         return norm_chroma.int()
 
-    def _extract_stem_indices(self, audio, stem_indices=torch.tensor([3, 2]), input_sampling_rate=44000):
+    def _extract_stem_indices(self, audio, input_sampling_rate=None):
         """
         Extracts stems from the output of the [Demucs](https://github.com/adefossez/demucs/tree/main) audio separation model,
         then converts to mono-channel and resample to the feature extractor sampling rate.
@@ -146,16 +150,14 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`torch.Tensor` of shape `(batch_size, num_stems, channel_size, audio_length)`):
                 The output of the Demucs model to be processed.
-            stem_indices (`torch.Tensor`, *optional*, default to `[3,2]`):
-                Stem channels to extract.
-            input_sampling_rate (`int`, *optional*, defaults to `44000`):
-                Demucs sampling rate.
+            input_sampling_rate (`int`, *optional*):
+                Demucs sampling rate. If not specified, defaults to `44000`.
         """
-        if input_sampling_rate != self.sampling_rate and not is_torchaudio_available():
-            raise ValueError("")
+        input_sampling_rate = 44000 if input_sampling_rate is None else input_sampling_rate
+
         # extract "vocals" and "others" sources from audio encoder (demucs) output
         # [batch_size, num_stems, channel_size, audio_length]
-        wav = audio[:, stem_indices]
+        wav = audio[:, torch.tensor(self.stem_indices)]
 
         # merge extracted stems to single waveform
         wav = wav.sum(1)
@@ -165,7 +167,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         # resample to model sampling rate
         # not equivalent to julius.resample
-        if is_torchaudio_available():
+        if is_torchaudio_available() and input_sampling_rate != self.sampling_rate:
             wav = torchaudio.functional.resample(
                 wav, input_sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
             )
@@ -182,7 +184,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = True,  # TODO: Add
+        padding: Optional[str] = True,
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
         **kwargs,
@@ -234,16 +236,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
+                Note that if `audio` is the output of Demucs, `sampling_rate` must be the sampling rate at which Demucs operates.
         """
 
-        if sampling_rate is not None:
-            if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `audio` input"
-                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
-                )
-        else:
+        if sampling_rate is None:
             logger.warning_once(
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
@@ -252,10 +248,18 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         if isinstance(audio, torch.Tensor) and len(audio.shape) == 4:
             logger.warning_once(
                 "`audio` is a 4-dimensional torch tensor and has thus been recognized as the output of `Demucs`. "
-                "If this is not the case, make sure to read `MusicgenMelodyFeatureExtractor` docstrings and "
+                "If this is not the case, make sure to read Musicgen Melody docstrings and "
                 "to correct `audio` to get the right behaviour."
+                "Link to the docstrings: https://huggingface.co/docs/transformers/main/en/model_doc/musicgen_melody"
             )
-            audio = self._extract_stem_indices(audio)
+            audio = self._extract_stem_indices(audio, input_sampling_rate=sampling_rate)
+        else:
+            if sampling_rate is not None and sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `audio` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
+                )
 
         is_batched = isinstance(audio, (np.ndarray, torch.Tensor)) and len(audio.shape) > 1
         if is_batched and len(audio.shape) > 2:
