@@ -60,6 +60,9 @@ class FimPipeline(Pipeline):
     on [huggingface.co/models](https://huggingface.co/models?filter=text-generation).
     """
 
+    # There are two modes in which infilling is supported: PSM (Prefix-Suffix-Middle) and SPM (Suffix-Prefix-Middle)
+    # The placement of prefix and suffix along with their respective sentinel tokens depends on whether the mode is SPM or PSM
+    # More information on this: https://arxiv.org/abs/2207.14255
     DEFAULT_INFILL_MODE = "psm"
     DEFAULT_INFILL_TOKEN = "<FILL_ME>"
     DEFAULT_PREFIX_TOKEN = "<fim_prefix>"
