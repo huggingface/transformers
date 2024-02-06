@@ -36,7 +36,7 @@ embeddings and generates valid masks.
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/blob/main/transformers/tasks/sam.png" alt="SAM Architecture"/>
 </div>
 
-SAM is very powerful and serves as a foundation model for segmentation as it has large data coverage. It is trained on 
+SAM serves as a powerful foundation model for segmentation as it has large data coverage. It is trained on 
 SA-1B, a dataset with 1 million images and 1.1 billion masks. 
 
 In this guide, we will learn how to:
