@@ -697,6 +697,7 @@ _import_structure = {
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
+        "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageToImagePipeline",
         "ImageToTextPipeline",
@@ -2151,7 +2152,21 @@ else:
         ]
     )
     _import_structure["models.llama"].extend(
-        ["LlamaForCausalLM", "LlamaForSequenceClassification", "LlamaModel", "LlamaPreTrainedModel"]
+        [
+            "LlamaForCausalLM",
+            "LlamaForQuestionAnswering",
+            "LlamaForSequenceClassification",
+            "LlamaModel",
+            "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.llava"].extend(
+        [
+            "LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "LlavaForConditionalGeneration",
+            "LlavaPreTrainedModel",
+            "LlavaProcessor",
+        ]
     )
     _import_structure["models.longformer"].extend(
         [
@@ -4911,6 +4926,7 @@ if TYPE_CHECKING:
         FeatureExtractionPipeline,
         FillMaskPipeline,
         ImageClassificationPipeline,
+        ImageFeatureExtractionPipeline,
         ImageSegmentationPipeline,
         ImageToImagePipeline,
         ImageToTextPipeline,
@@ -6148,6 +6164,12 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
+        from .models.llava import (
+            LLAVA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LlavaForConditionalGeneration,
+            LlavaPreTrainedModel,
+            LlavaProcessor,
+        )
         from .models.longformer import (
             LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             LongformerForMaskedLM,

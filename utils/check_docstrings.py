@@ -324,6 +324,7 @@ OBJECTS_TO_IGNORE = [
     "IdeficsConfig",
     "IdeficsProcessor",
     "ImageClassificationPipeline",
+    "ImageFeatureExtractionPipeline",
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
     "ImageToImagePipeline",
