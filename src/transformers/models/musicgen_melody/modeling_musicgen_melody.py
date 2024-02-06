@@ -1497,6 +1497,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
+    # Copied from transformers.models.musicgen.modeling_musicgen.MusicgenForConditionalGeneration.from_sub_models_pretrained with Musicgen->MusicgenMelody, musicgen->musicgen-melody
     def from_sub_models_pretrained(
         cls,
         text_encoder_pretrained_model_name_or_path: str = None,
