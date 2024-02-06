@@ -667,4 +667,4 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         actual_probabilites = outputs.logits_per_image.softmax(dim=0)
         expected_probabilties = torch.tensor([[0.9974844, 0.9974844], [0.0025155, 0.0025155]])
-        self.assertTrue(torch.allclose(actual_probabilites, expected_probabilties,rtol=1e-04))
+        self.assertTrue(torch.allclose(actual_probabilites, expected_probabilties, rtol=1e-04))
