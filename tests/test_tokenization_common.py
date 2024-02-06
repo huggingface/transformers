@@ -1019,7 +1019,6 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers(do_lower_case=False)
         return_tensorses = [None] + list(TArrayType._value2member_map_.keys())
         for tokenizer, return_tensors in itertools.product(tokenizers, return_tensorses):
-            print(tokenizer)
             with self.subTest(f"{tokenizer.__class__.__name__} with {return_tensors=}"):
                 # Test consistency for `encode/decode` method pair.
                 items = [
@@ -1036,16 +1035,10 @@ class TokenizerTesterMixin:
                 for item in items:
                     if _excepted_skip(item, is_fast=tokenizer.is_fast, is_batch=False):
                         continue
-                    print(f"{item=}")
                     tokens = tokenizer.consistent_encode(item, return_tensors=return_tensors)
-                    print(f"{tokens=}")
                     decoded = tokenizer.consistent_decode(tokens, skip_special_tokens=True)
-                    print(f"{decoded=}")
                     excepted = _get_excepted(item, decoded)
-                    print(f"{excepted=}")
                     self.assertEqual(excepted, decoded)
-                    print()
-                print("==============")
 
                 # Test consistency for `encode_batch/decode_batch` method pair.
                 items = [
@@ -1063,16 +1056,10 @@ class TokenizerTesterMixin:
                 for item in items:
                     if _excepted_skip(item[0], is_fast=tokenizer.is_fast, is_batch=True):
                         continue
-                    print(f"{item=}")
                     tokens = tokenizer.consistent_encode_batch(item, return_tensors=return_tensors)
-                    print(f"{tokens=}")
                     decoded = tokenizer.consistent_decode_batch(tokens, skip_special_tokens=True)
-                    print(f"{decoded=}")
                     excepted = [_get_excepted(x, y) for x, y in zip(item, decoded)]
-                    print(f"{excepted=}")
                     self.assertEqual(excepted, decoded)
-                    print()
-                print("==============")
 
     @require_tokenizers
     def test_encode_decode_with_spaces(self):
