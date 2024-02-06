@@ -210,10 +210,10 @@ class BatchEncoding(UserDict):
             initialization.
         prepend_batch_axis (`bool`, *optional*, defaults to `False`):
             Whether or not to add a batch axis when converting to tensors (see `tensor_type` above).
-        n_sequences (`Optional[int]`, *optional*, defaults to `None`):
+        n_sequences (`Optional[int]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
-        data_is_tensor_list (`bool`, defaults to `False`):
+        data_is_tensor_list (`bool`, *optional*, defaults to `False`):
             Whether the data is already a list of tensors or not, tensors in list can have different length.
     """
 
