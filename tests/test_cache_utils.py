@@ -238,11 +238,12 @@ class CacheIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(decoded[0].endswith(last_output))
 
+    @require_torch_gpu
     @parameterized.expand(["eager", "sdpa", "flash_attention_2"])
     def test_static_cache_greedy_sampling(self, attn_implementation):
-        tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", padding_side="left", pad_token="<s>")
+        tokenizer = AutoTokenizer.from_pretrained("NousResearch/Llama-2-7b-chat-hf", padding_side="left", pad_token="<s>")
         model = AutoModelForCausalLM.from_pretrained(
-            "codellama/CodeLlama-7b-hf",
+            "NousResearch/Llama-2-7b-chat-hf",
             device_map="auto",
             torch_dtype=torch.bfloat16,
             attn_implementation=attn_implementation,
