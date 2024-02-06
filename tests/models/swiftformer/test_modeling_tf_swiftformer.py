@@ -250,9 +250,7 @@ def prepare_img():
 class TFSwiftFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
-        )
+        return ViTImageProcessor.from_pretrained("MBZUAI/swiftformer-xs") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

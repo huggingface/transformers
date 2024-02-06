@@ -840,9 +840,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (
-                    labels.dtype == tf.int64 or labels.dtype == tf.int32
-                ):
+                elif self.num_labels > 1 and (labels.dtype == tf.int64 or labels.dtype == tf.int32):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
