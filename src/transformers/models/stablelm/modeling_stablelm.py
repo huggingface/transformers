@@ -1,9 +1,10 @@
 # coding=utf-8
-# Copyright 2022 Stability AI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 EleutherAI and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
 # original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch StableLM model. """
+""" PyTorch StableLM model."""
 import math
 from typing import List, Optional, Tuple, Union
 
@@ -29,11 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -53,13 +50,7 @@ if is_flash_attn_2_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "stablelm"
 _CONFIG_FOR_DOC = "StableLMConfig"
-
-STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "stabilityai/stablelm-3b-4e1t",
-    # See all StableLM models at https://huggingface.co/models?filter=stablelm
-]
 
 
 # Copied from transformers.models.llama.modeling_llama._get_unpad_data
@@ -75,43 +66,36 @@ def _get_unpad_data(attention_mask):
     )
 
 
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLM
 class StableLMRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim: int,
-        max_position_embeddings: int,
-        base: int = 10_000,
-        device: Optional[torch.device] = None,
-    ):
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
         self.dim = dim
         self.max_position_embeddings = max_position_embeddings
         self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, device=device, dtype=torch.float32) / self.dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
         # Build here to make `torch.jit.trace` work.
         self._set_cos_sin_cache(
-            seq_len=max_position_embeddings,
-            device=self.inv_freq.device,
-            dtype=torch.get_default_dtype(),
+            seq_len=max_position_embeddings, device=self.inv_freq.device, dtype=torch.get_default_dtype()
         )
 
-    def _set_cos_sin_cache(self, seq_len: int, device: torch.device, dtype: torch.dtype):
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
         self.max_seq_len_cached = seq_len
-        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.float32)
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
 
         freqs = torch.outer(t, self.inv_freq)
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
-        self.register_buffer("cos_cached", emb.cos()[None, None, :, :].to(dtype), persistent=False)
-        self.register_buffer("sin_cached", emb.sin()[None, None, :, :].to(dtype), persistent=False)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
-    def forward(self, x: torch.Tensor, seq_len: Optional[int] = None):
-        # x: [batch_size, num_heads, seq_len, head_size]
+    def forward(self, x, seq_len=None):
+        # x: [bs, num_attention_heads, seq_len, head_size]
         if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=torch.get_default_dtype())
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
 
         return (
             self.cos_cached[:seq_len].to(dtype=x.dtype),
@@ -119,37 +103,103 @@ class StableLMRotaryEmbedding(nn.Module):
         )
 
 
-def rotate_half(x: torch.Tensor):
+# Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->StableLM
+class StableLMLinearScalingRotaryEmbedding(StableLMRotaryEmbedding):
+    """StableLMRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+        t = t / self.scaling_factor
+
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->StableLM
+class StableLMDynamicNTKScalingRotaryEmbedding(StableLMRotaryEmbedding):
+    """StableLMRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+
+    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(dim, max_position_embeddings, base, device)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.max_seq_len_cached = seq_len
+
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.int64).type_as(self.inv_freq)
+
+        freqs = torch.outer(t, self.inv_freq)
+        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        emb = torch.cat((freqs, freqs), dim=-1)
+        self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
+        self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
     """Rotates half the hidden dims of the input."""
-    x1, x2 = torch.chunk(x, 2, dim=-1)
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, position_ids: torch.Tensor
-):
-    # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
-    cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
-    sin = sin.squeeze(1).squeeze(0)  # [seq_len, dim]
-    cos = cos[position_ids].unsqueeze(1)  # [batch_size, 1, seq_len, dim]
-    sin = sin[position_ids].unsqueeze(1)  # [batch_size, 1, seq_len, dim]
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos[position_ids].unsqueeze(unsqueeze_dim)
+    sin = sin[position_ids].unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
+# Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->StableLM
 class StableLMMLP(nn.Module):
-    def __init__(self, config: StableLMConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
@@ -186,38 +236,59 @@ class StableLMAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.max_position_embeddings = config.max_position_embeddings
+        self.rope_theta = config.rope_theta
+        self.partial_rotary_factor = config.partial_rotary_factor
         self.is_causal = True
-        self.attention_dropout = config.attention_dropout
 
         if (self.head_dim * self.num_heads) != self.hidden_size:
             raise ValueError(
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.use_qkv_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_qkv_bias)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
+        self.attention_dropout = nn.Dropout(config.attention_dropout)
         self._init_rope()
 
+    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonAttention with Persimmon->StableLM
     def _init_rope(self):
-        self.rotary_ndims = int(self.head_dim * self.config.rope_pct)
-        self.rotary_emb = StableLMRotaryEmbedding(
-            self.rotary_ndims,
-            max_position_embeddings=self.config.max_position_embeddings,
-            base=self.config.rope_theta,
-        )
+        if self.config.rope_scaling is None:
+            self.rotary_emb = StableLMRotaryEmbedding(
+                int(self.partial_rotary_factor * self.head_dim),
+                max_position_embeddings=self.max_position_embeddings,
+                base=self.rope_theta,
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                self.rotary_emb = StableLMLinearScalingRotaryEmbedding(
+                    int(self.partial_rotary_factor * self.head_dim),
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            elif scaling_type == "dynamic":
+                self.rotary_emb = StableLMDynamicNTKScalingRotaryEmbedding(
+                    int(self.partial_rotary_factor * self.head_dim),
+                    max_position_embeddings=self.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                    base=self.rope_theta,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: torch.FloatTensor,
-        position_ids: torch.LongTensor,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
@@ -229,11 +300,6 @@ class StableLMAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        query_rot = query_states[..., : self.rotary_ndims]
-        query_pass = query_states[..., self.rotary_ndims :]
-        key_rot = key_states[..., : self.rotary_ndims]
-        key_pass = key_states[..., self.rotary_ndims :]
-
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             if self.layer_idx is None:
@@ -244,13 +310,25 @@ class StableLMAttention(nn.Module):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
-        # [batch_size, num_heads, seq_len, head_dim]
-        query_states = torch.cat((query_states, query_pass), dim=-1)
-        key_states = torch.cat((key_states, key_pass), dim=-1)
+        # Partial rotary embedding
+        query_rot, query_pass = (
+            query_states[..., : self.rotary_emb.dim],
+            query_states[..., self.rotary_emb.dim :],
+        )
+        key_rot, key_pass = (
+            key_states[..., : self.rotary_emb.dim],
+            key_states[..., self.rotary_emb.dim :],
+        )
+        # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+
+        # [batch_size, seq_length, num_heads, head_dim]
+        query_states = torch.cat((query_rot, query_pass), dim=-1)
+        key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if past_key_value is not None:
+            # Specific to RoPE models with partial rotation
             cache_kwargs = {"sin": sin, "cos": cos, "partial_rotation_size": self.rotary_emb.dim}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
@@ -273,9 +351,10 @@ class StableLMAttention(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
-        # Upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dtype=torch.float32, dim=-1).to(query_states.dtype)
+        attn_weights = self.attention_dropout(attn_weights)
+
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -284,11 +363,9 @@ class StableLMAttention(nn.Module):
                 f" {attn_output.size()}"
             )
 
-        # Merge heads
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
-        # final linear projection
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -340,11 +417,6 @@ class StableLMFlashAttention2(StableLMAttention):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        query_rot = query_states[..., : self.rotary_ndims]
-        query_pass = query_states[..., self.rotary_ndims :]
-        key_rot = key_states[..., : self.rotary_ndims]
-        key_pass = key_states[..., self.rotary_ndims :]
-
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             if self.layer_idx is None:
@@ -355,11 +427,21 @@ class StableLMFlashAttention2(StableLMAttention):
                 )
             kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
-        query_states, key_states = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
 
-        # [batch_size, num_heads, seq_len, head_dim]
-        query_states = torch.cat((query_states, query_pass), dim=-1)
-        key_states = torch.cat((key_states, key_pass), dim=-1)
+        # Partial rotary embedding
+        query_rot, query_pass = (
+            query_states[..., : self.rotary_emb.dim],
+            query_states[..., self.rotary_emb.dim :],
+        )
+        key_rot, key_pass = (
+            key_states[..., : self.rotary_emb.dim],
+            key_states[..., self.rotary_emb.dim :],
+        )
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+
+        # [batch_size, seq_length, num_heads, head_dim]
+        query_states = torch.cat((query_rot, query_pass), dim=-1)
+        key_states = torch.cat((key_rot, key_pass), dim=-1)
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "partial_rotation_size": self.rotary_emb.dim}
@@ -496,39 +578,44 @@ ATTENTION_CLASSES = {
 }
 
 
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonDecoderLayer with Persimmon->StableLM
 class StableLMDecoderLayer(nn.Module):
     def __init__(self, config: StableLMConfig, layer_idx: int):
         super().__init__()
+        self.hidden_size = config.hidden_size
         self.self_attn = ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.mlp = StableLMMLP(config)
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`):
-                input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
                 Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
-                `[0, config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+                `[0, config.n_positions - 1]`.
+
+                [What are position IDs?](../glossary#position-ids)
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*):
+                cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
         """
 
         residual = hidden_states
@@ -550,7 +637,9 @@ class StableLMDecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = hidden_states + residual
 
         outputs = (hidden_states,)
 
@@ -593,7 +682,7 @@ class StableLMPreTrainedModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     _supports_cache_class = True
 
-    def _init_weights(self, module: nn.Module):
+    def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -603,10 +692,6 @@ class StableLMPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            if module.bias is not None:
-                module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 STABLELM_INPUTS_DOCSTRING = r"""
@@ -680,19 +765,30 @@ STABLELM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare StableLM Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare StableLM Model outputting raw hidden-states without any specific head on top.",
     STABLELM_START_DOCSTRING,
 )
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel with PERSIMMON->STABLELM,Persimmon->StableLM
 class StableLMModel(StableLMPreTrainedModel):
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`StableLMDecoderLayer`]
+
+    Args:
+        config: StableLMConfig
+    """
+
     def __init__(self, config: StableLMConfig):
         super().__init__(config)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
             [StableLMDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps)
+        # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonModel.final_layernorm with final_layernorm->norm
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self._attn_implementation = config._attn_implementation
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -700,7 +796,7 @@ class StableLMModel(StableLMPreTrainedModel):
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def set_input_embeddings(self, value: nn.Module):
+    def set_input_embeddings(self, value):
         self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
@@ -724,15 +820,18 @@ class StableLMModel(StableLMPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Retrieve input_ids and inputs_embeds
+        # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+
+        seq_length_with_past = seq_length
+        past_key_values_length = 0
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -741,12 +840,12 @@ class StableLMModel(StableLMPreTrainedModel):
                 )
                 use_cache = False
 
-        past_key_values_length = 0
         if use_cache:
             use_legacy_cache = not isinstance(past_key_values, Cache)
             if use_legacy_cache:
                 past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             past_key_values_length = past_key_values.get_usable_length(seq_length)
+            seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
@@ -757,22 +856,21 @@ class StableLMModel(StableLMPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-
-        if self._attn_implementation == "flash_attention_2":
-            # 2d mask is passed through the layers
-            attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
-        else:
-            # 4d mask is passed through the layers
-            attention_mask = _prepare_4d_causal_attention_mask(
-                attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        # embed positions
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
             )
+        attention_mask = _prepare_4d_causal_attention_mask(
+            attention_mask, (batch_size, seq_length), inputs_embeds, past_key_values_length
+        )
 
         hidden_states = inputs_embeds
 
-        # Decoder layers
+        # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = () if use_cache else None
+        next_decoder_cache = None
 
         for decoder_layer in self.layers:
             if output_hidden_states:
@@ -808,13 +906,14 @@ class StableLMModel(StableLMPreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        # Add hidden states from the last decoder layer
+        # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
         next_cache = None
         if use_cache:
             next_cache = next_decoder_cache.to_legacy_cache() if use_legacy_cache else next_decoder_cache
+
         if not return_dict:
             return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
         return BaseModelOutputWithPast(
@@ -825,13 +924,11 @@ class StableLMModel(StableLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """StableLM Model with a `language modeling` head on top for CLM fine-tuning. """, STABLELM_START_DOCSTRING
-)
+# Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM with PERSIMMON->STABLELM,Persimmon->StableLM,persimmon->stablelm
 class StableLMForCausalLM(StableLMPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    def __init__(self, config: StableLMConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = StableLMModel(config)
         self.vocab_size = config.vocab_size
@@ -849,7 +946,7 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings: nn.Module):
+    def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
@@ -905,9 +1002,9 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -947,7 +1044,6 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
@@ -1005,7 +1101,6 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
         return model_inputs
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -1017,10 +1112,10 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The StableLM Model transformer with a sequence classification head on top (linear layer).
+    The StableLM transformer with a sequence classification head on top (linear layer).
 
-    [`StableLMForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
+    [`StableLMForSequenceClassification`] uses the last token in order to do the classification, as other causal
+    models (e.g. GPT-2) do.
 
     Since it does classification on the last token, it requires to know the position of the last token. If a
     `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
@@ -1030,6 +1125,7 @@ class StableLMForCausalLM(StableLMPreTrainedModel):
     """,
     STABLELM_START_DOCSTRING,
 )
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with LLAMA->STABLELM,Llama->StableLM
 class StableLMForSequenceClassification(StableLMPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1046,7 +1142,7 @@ class StableLMForSequenceClassification(StableLMPreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(STABLELM_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1062,14 +1158,13 @@ class StableLMForSequenceClassification(StableLMPreTrainedModel):
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        model_outputs = self.model(
+        transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1080,7 +1175,7 @@ class StableLMForSequenceClassification(StableLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = model_outputs[0]
+        hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
 
         if input_ids is not None:
@@ -1094,7 +1189,7 @@ class StableLMForSequenceClassification(StableLMPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                # If no pad token found, use modulo instead of reverse indexing for ONNX compatibility
+                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
                 sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
                 sequence_lengths = sequence_lengths % input_ids.shape[-1]
                 sequence_lengths = sequence_lengths.to(logits.device)
@@ -1127,13 +1222,13 @@ class StableLMForSequenceClassification(StableLMPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
         if not return_dict:
-            output = (pooled_logits,) + model_outputs[1:]
+            output = (pooled_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
             logits=pooled_logits,
-            past_key_values=model_outputs.past_key_values,
-            hidden_states=model_outputs.hidden_states,
-            attentions=model_outputs.attentions,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )

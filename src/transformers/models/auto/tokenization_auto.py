@@ -389,6 +389,13 @@ else:
                 ("SqueezeBertTokenizer", "SqueezeBertTokenizerFast" if is_tokenizers_available() else None),
             ),
             (
+                "stablelm",
+                (
+                    "GPTNeoXTokenizerFast" if is_sentencepiece_available() else None,
+                    "GPTNeoXTokenizerFastFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "switch_transformers",
                 (
                     "T5Tokenizer" if is_sentencepiece_available() else None,

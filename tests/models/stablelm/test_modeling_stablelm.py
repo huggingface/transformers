@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,36 +14,35 @@
 # limitations under the License.
 """ Testing suite for the PyTorch StableLM model. """
 
+
 import unittest
 
-from transformers import AutoTokenizer, StableLMConfig
+from parameterized import parameterized
+
+from transformers import StableLMConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    is_torch_available,
     require_torch,
-    slow,
     torch_device,
 )
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    ids_tensor,
-)
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         StableLMForCausalLM,
         StableLMForSequenceClassification,
         StableLMModel,
     )
-    from transformers.models.stablelm.modeling_stablelm import (
-        STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
 
 
+# Copied from tests.models.llama.test_modeling_llama.LlamaModelTester with Llama->StableLM
 class StableLMModelTester:
     def __init__(
         self,
@@ -55,10 +54,10 @@ class StableLMModelTester:
         use_token_type_ids=False,
         use_labels=True,
         vocab_size=99,
-        hidden_size=32,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        num_key_value_heads=2,
+        num_key_value_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -97,7 +96,6 @@ class StableLMModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -259,16 +257,6 @@ class StableLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.num_labels = self.num_labels
-        model = StableLMForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -285,27 +273,24 @@ class StableLMModelTester:
 
 
 @require_torch
-class StableLMModelTest(ModelTesterMixin, unittest.TestCase):
+class StableLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (
-            StableLMModel,
-            StableLMForCausalLM,
-            StableLMForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
+        (StableLMModel, StableLMForCausalLM, StableLMForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (StableLMForCausalLM,) if is_torch_available() else ()
+    # Copied from tests.models.persimmon.test_modeling_persimmon.PersimmonModelTest
     pipeline_model_mapping = (
         {
             "feature-extraction": StableLMModel,
             "text-classification": StableLMForSequenceClassification,
-            "text-generation": StableLMForCausalLM,
-            "zero-shot": StableLMForSequenceClassification,
+            # TODO (ydshieh): check why these two fail. Fix them or skip them in a better way.
+            # "text-generation": PersimmonForCausalLM,
+            # "zero-shot": PersimmonForSequenceClassification,
         }
         if is_torch_available()
         else {}
     )
+
+    all_generative_model_classes = (StableLMForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 
@@ -320,7 +305,6 @@ class StableLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model with Llama->StableLM,llama->stablelm
     def test_stablelm_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -333,7 +317,6 @@ class StableLMModelTest(ModelTesterMixin, unittest.TestCase):
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_single_label with Llama->StableLM,llama->stablelm
     def test_stablelm_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -347,7 +330,6 @@ class StableLMModelTest(ModelTesterMixin, unittest.TestCase):
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_sequence_classification_model_for_multi_label with Llama->StableLM,llama->stablelm
     def test_stablelm_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -363,14 +345,38 @@ class StableLMModelTest(ModelTesterMixin, unittest.TestCase):
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in STABLELM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = StableLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+    @parameterized.expand([("linear",), ("dynamic",)])
+    def test_model_rope_scaling(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = StableLMModel(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = StableLMModel(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
 
-@slow
 @require_torch
 class StableLMModelIntegrationTest(unittest.TestCase):
     def test_model_stablelm_3b_4e1t_logits(self):

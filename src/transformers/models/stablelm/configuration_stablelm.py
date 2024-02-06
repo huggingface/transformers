@@ -42,10 +42,10 @@ class StableLMConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 50304):
             Vocabulary size of the StableLM model. Defines the number of different tokens that
             can be represented by the `inputs_ids` passed when calling [`StableLMEpochModel`].
-        intermediate_size (`int`, *optional*, defaults to 6912):
-            Dimension of the MLP representations.
         hidden_size (`int`, *optional*, defaults to 2560):
             Dimension of the decoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 6912):
+            Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
@@ -60,46 +60,46 @@ class StableLMConfig(PretrainedConfig):
             `num_attention_heads`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string).
-        rope_pct (`float`, *optional*, defaults to 0.25):
-            Percentage of hidden dimensions to allocate to rotary embeddings.
-        rope_theta (`float`, *optional*, defaults to `10000.0`):
-            The base period of the RoPE embeddings.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with.
             Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing
              all weight matrices.
-        norm_eps (`float`, *optional*, defaults to 1e-05):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions
             (not used by all models). Only relevant if `config.is_decoder=True`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
+        rope_theta (`float`, *optional*, defaults to `10000.0`):
+            The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
+            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
+            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
+            these scaling strategies behave:
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This
+            is an experimental feature, subject to breaking API changes in future versions.
         use_qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not the model should use bias for qkv layers.
             Whether to tie weight embeddings
-        bos_token_id (`int`, *optional*, defaults to 0):
-            The id of the "beginning-of-sequence" token.
-        eos_token_id (`int`, *optional*, defaults to 0):
-            The id of the "end-of-sequence" token.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
+        hidden_dropout (`float`, *optional*, default to 0.0):
+            The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        partial_rotary_factor (`float`, *optional*, default to 0.5):
+            Percentage of the query and keys which will have rotary embedding.
 
     Example:
 
     ```python
     >>> from transformers import StableLMModel, StableLMConfig
 
-    >>> # Initializing a StableLM stablelm style configuration
-    >>> configuration = StableLMConfig("stabilityai/stablelm-3b-4e1t")
-
-    >>> # Initializing a model from the stablelm style configuration
-    >>> model = StableLMModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
+    >>> # Initializing a StableLM stablelm-3b style configuration
+    >>> configuration = StableLMConfig()
     ```"""
 
     model_type = "stablelm"
@@ -114,38 +114,65 @@ class StableLMConfig(PretrainedConfig):
         num_attention_heads=32,
         num_key_value_heads=32,
         hidden_act="silu",
-        rope_pct=0.25,
-        rope_theta=10_000,
         max_position_embeddings=4096,
         initializer_range=0.02,
-        norm_eps=1.0e-5,
+        layer_norm_eps=1.0e-5,
         use_cache=True,
+        tie_word_embeddings=False,
+        rope_theta=10_000,
+        rope_scaling=None,
         use_qkv_bias=True,
+        hidden_dropout=0.0,
+        attention_dropout=0.0,
+        partial_rotary_factor=0.25,
         bos_token_id=0,
         eos_token_id=0,
-        tie_word_embeddings=False,
-        attention_dropout=0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.intermediate_size = intermediate_size
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.rope_pct = rope_pct
-        self.rope_theta = rope_theta
         self.initializer_range = initializer_range
-        self.norm_eps = norm_eps
+        self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
         self.use_qkv_bias = use_qkv_bias
-        self.tie_word_embeddings = tie_word_embeddings
+        self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
+        self.partial_rotary_factor = partial_rotary_factor
+        self._rope_scaling_validation()
+
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
+    def _rope_scaling_validation(self):
+        """
+        Validate the `rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
+            raise ValueError(
+                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be a float > 1, got {rope_scaling_factor}")
