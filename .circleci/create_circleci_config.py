@@ -299,6 +299,8 @@ torch_and_flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager --upgrade pip",
         "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        # TODO: remove this one after fixing the dependency issue(s) above
+        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu"
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -312,6 +314,8 @@ torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
         "pip install -U --upgrade-strategy eager -e git+https://github.com/huggingface/accelerate@main#egg=accelerate",
+        # TODO: remove this one after fixing the dependency issue(s) above
+        "pip install -U --upgrade-strategy eager torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu"
     ],
     parallelism=1,
     pytest_num_workers=6,
