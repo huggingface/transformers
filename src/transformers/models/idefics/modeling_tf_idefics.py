@@ -530,11 +530,6 @@ class TFIdeficsRMSNorm(tf.keras.layers.Layer):
 
 class TFIdeficsEmbedding(tf.keras.layers.Layer):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, **kwargs):
-        # Matt: The PyTorch version of this layer does a lot of work to cache values, but we just rely on TF compilation
-        # and/or XLA to sort out constants like that. It actually may not seem like this layer needs to be stateful at
-        # all when we benefit from TF compilation, but it does. The reason is that self.inv_freq is a buffer in the
-        # original implementation, and fp16 conversion may cast the buffer to a different dtype, and we need to
-        # replicate those lower-precision values or our models give different outputs from the original.
         super().__init__(**kwargs)
 
         self.dim = dim
