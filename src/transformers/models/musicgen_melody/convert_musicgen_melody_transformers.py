@@ -178,7 +178,8 @@ def convert_musicgen_melody_checkpoint(checkpoint, pytorch_dump_folder=None, rep
     with torch.no_grad():
         logits = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
 
-    if logits.shape != (2 * decoder_config.num_codebooks, 1 + input_ids.shape[1], 2048):
+    output_length = 1 + input_ids.shape[1] + model.config.chroma_length
+    if logits.shape != (2 * decoder_config.num_codebooks, output_length, 2048):
         raise ValueError("Incorrect shape for logits")
 
     # now construct the processor
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint",
-        default="facebook/musicgen-stereo-melody-large",  # TODO: "facebook/musicgen-melody",
+        default="facebook/musicgen-melody",
         type=str,
         help="Checkpoint size of the Musicgen Melody model you'd like to convert. Can be one of: "
         "`['facebook/musicgen-melody', 'facebook/musicgen-melody-large']` for the mono checkpoints, or "
@@ -222,8 +223,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder",
-        required=False,  # TODO: True
-        default="/home/yoach/tmp/musicgen_melody",
+        required=True,
+        default=None,
         type=str,
         help="Path to the output PyTorch model directory.",
     )
