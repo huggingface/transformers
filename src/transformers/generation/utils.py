@@ -92,7 +92,7 @@ logger = logging.get_logger(__name__)
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
-ALL_COMPILE_CACHE_CLASSES_MAPPING = {
+NEED_SETUP_CACHE_CLASSES_MAPPING = {
     "static": StaticCache,
 }
 
@@ -1408,7 +1408,7 @@ class GenerationMixin:
         if generation_config.cache_implementation in NEED_SETUP_CACHE_CLASSES_MAPPING and not model_kwargs.get(
             "past_key_values", False
         ):
-            cache_cls = ALL_COMPILE_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
+            cache_cls = NEED_SETUP_CACHE_CLASSES_MAPPING[generation_config.cache_implementation]
             if not callable(getattr(self, "_setup_cache", None)):
                 raise ValueError(
                     "The `generation_config` defines a `cache_implementation` that is not compatible with this model."
