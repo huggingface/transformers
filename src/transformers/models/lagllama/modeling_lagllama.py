@@ -1230,7 +1230,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
 
         if past_time_features is not None:
             inputs = torch.cat(
-                (lags, expanded_static_feat, past_time_features[..., max(self.config.lags_sequence) :, :]), dim=-1
+                (lags, expanded_static_feat, past_time_features[..., -lags.shape[-2] :, :]), dim=-1
             )
         else:
             inputs = torch.cat((lags, expanded_static_feat), dim=-1)
