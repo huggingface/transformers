@@ -142,7 +142,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         return norm_chroma.int()
 
-    def _extract_stem_indices(self, audio, input_sampling_rate=None):
+    def _extract_stem_indices(self, audio, sampling_rate=None):
         """
         Extracts stems from the output of the [Demucs](https://github.com/adefossez/demucs/tree/main) audio separation model,
         then converts to mono-channel and resample to the feature extractor sampling rate.
@@ -150,10 +150,10 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`torch.Tensor` of shape `(batch_size, num_stems, channel_size, audio_length)`):
                 The output of the Demucs model to be processed.
-            input_sampling_rate (`int`, *optional*):
+            sampling_rate (`int`, *optional*):
                 Demucs sampling rate. If not specified, defaults to `44000`.
         """
-        input_sampling_rate = 44000 if input_sampling_rate is None else input_sampling_rate
+        sampling_rate = 44000 if sampling_rate is None else sampling_rate
 
         # extract "vocals" and "others" sources from audio encoder (demucs) output
         # [batch_size, num_stems, channel_size, audio_length]
@@ -167,9 +167,9 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
 
         # resample to model sampling rate
         # not equivalent to julius.resample
-        if is_torchaudio_available() and input_sampling_rate != self.sampling_rate:
+        if sampling_rate != self.sampling_rate:
             wav = torchaudio.functional.resample(
-                wav, input_sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
+                wav, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
             )
 
         # [batch_size, 1, audio_length] -> [batch_size, audio_length]
@@ -197,7 +197,7 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
                 The sequence or batch of sequences to be padded. Each sequence can be a torch tensor, a numpy array, a list of float
                 values, a list of numpy arrays, a list of torch tensors, or a list of list of float values.
                 If `audio` is the output of Demucs, it has to be a torch tensor of shape `(batch_size, num_stems, channel_size, audio_length)`.
-                Otherwise, it must be mono channel audio, not stereo, i.e. single float per timestep.
+                Otherwise, it must be mono or stereo channel audio.
             truncation (`bool`, *optional*, default to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             pad_to_multiple_of (`int`, *optional*, defaults to None):
@@ -252,18 +252,14 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
                 "to correct `audio` to get the right behaviour."
                 "Link to the docstrings: https://huggingface.co/docs/transformers/main/en/model_doc/musicgen_melody"
             )
-            audio = self._extract_stem_indices(audio, input_sampling_rate=sampling_rate)
+            audio = self._extract_stem_indices(audio, sampling_rate=sampling_rate)
         else:
             if sampling_rate is not None and sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
-                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `audio` input"
-                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
+                audio = torchaudio.functional.resample(
+                    audio, sampling_rate, self.sampling_rate, rolloff=0.945, lowpass_filter_width=24
                 )
 
         is_batched = isinstance(audio, (np.ndarray, torch.Tensor)) and len(audio.shape) > 1
-        if is_batched and len(audio.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
         is_batched = is_batched or (
             isinstance(audio, (list, tuple)) and (isinstance(audio[0], (torch.Tensor, np.ndarray, tuple, list)))
         )
@@ -281,6 +277,16 @@ class MusicgenMelodyFeatureExtractor(SequenceFeatureExtractor):
         # always return batch
         if not is_batched:
             audio = [audio]
+
+        if len(audio[0].shape) == 3:
+            logger.warning_once(
+                "`audio` has been detected as a batch of stereo signals. Will be convert to mono signals. "
+                "If this is an undesired behaviour, make sure to read Musicgen Melody docstrings and "
+                "to correct `audio` to get the right behaviour."
+                "Link to the docstrings: https://huggingface.co/docs/transformers/main/en/model_doc/musicgen_melody"
+            )
+            # convert to mono-channel waveform
+            audio = [stereo.mean(dim=0) for stereo in audio]
 
         batched_speech = BatchFeature({"input_features": audio})
 

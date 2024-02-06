@@ -4485,6 +4485,20 @@ else:
     _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
     _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
 
+try:
+    if not is_torchaudio_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import (
+        dummy_torchaudio_objects,
+    )
+
+    _import_structure["utils.dummy_torchaudio_objects"] = [
+        name for name in dir(dummy_torchaudio_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.musicgen_melody"].append("MusicgenMelodyFeatureExtractor")
+
 
 # FLAX-backed objects
 try:
@@ -8686,6 +8700,13 @@ if TYPE_CHECKING:
             Pop2PianoTokenizer,
         )
 
+    try:
+        if not is_torchaudio_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.torchaudio_objects import *
+    else:
+        from .models.musicgen_melody import MusicgenMelodyFeatureExtractor
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
