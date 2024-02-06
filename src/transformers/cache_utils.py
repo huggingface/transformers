@@ -327,18 +327,33 @@ class SinkCache(Cache):
 
 
 class StaticCache(Cache):
-    def __init__(self, config: PretrainedConfig, max_batch_size, max_cache_len, device) -> None:
+    """
+    Static Cache class to be used with `torch.compile(model)`.
+    
+    Parameters:
+        config (`PretrainedConfig):
+            The configuration file defining the `max_position_embeddings`, `hidden_size` and `num_attention_heads`
+            required to initialize the static cache.
+        max_batch_size (`int`):
+            The maximum batch size with which the model will be used.
+        max_cache_len (`int`):
+            The maximum sequence length with which the model will be used.
+        device (`torch.device`):
+            The device on which the cache should be initialized. Should be the same as the layer.
+        dtype (*optional*, `torch.dtype`, defaults to `torch.float32`):
+            The default `dtype` to use when initializing the layer.
+    """
+    def __init__(self, config: PretrainedConfig, max_batch_size:int, max_cache_len:int, device, dtype=torch.float32) -> None:
         super().__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_heads = config.num_attention_heads
-        self.dtype = config.torch_dtype if config.torch_dtype is not None else torch.float32
+        self.dtype = config.torch_dtype if config.torch_dtype is not None else dtype
 
         cache_shape = (max_batch_size, self.num_heads, self.max_cache_len, self.head_dim)
         self.key_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
         self.value_cache: torch.Tensor = torch.zeros(cache_shape, dtype=self.dtype, device=device)
-
         self.seen_tokens = 0
 
     def update(
@@ -358,15 +373,16 @@ class StaticCache(Cache):
             value_states (`torch.Tensor`):
                 The new value states to cache.
             layer_idx (`int`):
-                The index of the layer to cache the states for.
+                The index of the layer to cache the states for. Kept for backward compatibility
             cache_kwargs (`Dict[str, Any]`, `optional`):
-                Additional arguments for the cache subclass. The `StaticCache` needs to update the attention
-                mask to make sure the unseen tokens are not attended to.
+                Additional arguments for the cache subclass. The `StaticCache` just needs the `q_len`
+                to know how much of the cache it should overwrite.
 
         Return:
             A tuple containing the updated key and value states.
         """
-        position_ids = cache_kwargs.get("position_ids")
+        q_len = cache_kwargs.get("q_len", key_states.shape[1])
+        position_ids = torch.arange(self.seen_tokens, self.seen_tokens + q_len, device=key_states.device)
 
         k_out = self.key_cache
         v_out = self.value_cache
@@ -378,7 +394,7 @@ class StaticCache(Cache):
         return k_out, v_out
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states that were seen by the model. A layer index can be optionally passed."""
+        """Returns the sequence length of the cached states that were seen by the model. `layer_idx` kept for BC"""
         return self.seen_tokens
 
     def get_max_length(self) -> Optional[int]:
