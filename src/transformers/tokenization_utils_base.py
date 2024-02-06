@@ -3723,9 +3723,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, abc.ABC):
             )
 
             for key, value in outputs.items():
-                if key not in batch_outputs:
-                    batch_outputs[key] = []
-                batch_outputs[key].append(value)
+                batch_outputs.setdefault(key, []).append(value)
 
         return BatchEncoding(batch_outputs, tensor_type=return_tensors)
 
