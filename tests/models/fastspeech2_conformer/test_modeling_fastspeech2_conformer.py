@@ -303,7 +303,21 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                inputs = {'input_ids': torch.Tensor([[20,  1, 21, 17, 14, 23, 20],
+                        [14, 21, 13, 16, 12,  5,  2],
+                        [ 5, 13,  7, 11, 16, 13, 12],
+                        [ 1,  3, 12, 15, 14, 17, 23],
+                        [ 1, 21,  7,  6,  3, 13, 10],
+                        [20, 15, 17, 13, 19, 13, 16],
+                        [10,  9, 17,  0,  3, 18,  1],
+                        [21, 14,  5, 20,  8,  7, 21],
+                        [ 9, 11,  0, 20,  3, 19, 23],
+                        [11, 18, 10, 19, 22, 22,  4],
+                        [ 4,  9, 14, 21, 19,  4, 19],
+                        [ 4,  0, 11, 17, 21, 19,  6],
+                        [10, 10, 13, 15, 10,  7,  5]]).to(dtype=torch.int64), 'output_attentions': True, 'output_hidden_states': False}
+                outputs = model(**inputs)
+
             encoder_attentions = outputs.encoder_attentions
             self.assertEqual(len(encoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
