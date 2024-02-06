@@ -1765,8 +1765,7 @@ class MusicgenMelodyForConditionalGeneration(PreTrainedModel):
         }
 
         if encoder_hidden_states is None:
-            encoder_hidden_states = inputs_embeds
-            if inputs_embeds is None and input_ids is not None:
+            if inputs_embeds is not None or input_ids is not None:
                 encoder_outputs = self.text_encoder(
                     input_ids=input_ids,
                     attention_mask=attention_mask,
