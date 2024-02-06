@@ -2755,7 +2755,6 @@ else:
     _import_structure["models.musicgen_melody"].extend(
         [
             "MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MusicgenMelodyFeatureExtractor",
             "MusicgenMelodyForCausalLM",
             "MusicgenMelodyForConditionalGeneration",
             "MusicgenMelodyModel",
@@ -7262,7 +7261,6 @@ if TYPE_CHECKING:
         )
         from .models.musicgen_melody import (
             MUSICGEN_MELODY_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MusicgenMelodyFeatureExtractor,
             MusicgenMelodyForCausalLM,
             MusicgenMelodyForConditionalGeneration,
             MusicgenMelodyModel,

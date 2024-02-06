@@ -28,12 +28,12 @@ from transformers.testing_utils import (
     require_torch,
     require_torchaudio,
 )
-from transformers.utils.import_utils import is_torch_available
+from transformers.utils.import_utils import is_torchaudio_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
-if is_torch_available():
+if is_torchaudio_available():
     import torch
 
     from transformers import MusicgenMelodyFeatureExtractor
@@ -68,6 +68,7 @@ def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
 
 
 @require_torch
+@require_torchaudio
 class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
@@ -117,9 +118,10 @@ class MusicgenMelodyFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
+@require_torchaudio
 @require_torch
 class MusicgenMelodyFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = MusicgenMelodyFeatureExtractor if is_torch_available() else None
+    feature_extraction_class = MusicgenMelodyFeatureExtractor if is_torchaudio_available() else None
 
     def setUp(self):
         self.feat_extract_tester = MusicgenMelodyFeatureExtractionTester(self)
